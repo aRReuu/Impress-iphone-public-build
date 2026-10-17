@@ -555,7 +555,8 @@ extension ImpressV3ReviewViewController: SwipeCardStackDataSource, SwipeCardStac
                           let data = model.imageData,
                           let image = UIImage(data: data) else { return }
                     self.setRatingGesturesEnabled(false)
-                    self.present(ImImagePreviewViewController(image: image), animated: true)
+                    self.present(ImImagePreviewViewController(
+                        image: image, usesV3Appearance: true), animated: true)
                 }
             }
             card.content = content

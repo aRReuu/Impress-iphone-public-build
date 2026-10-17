@@ -216,9 +216,19 @@ enum ImpressV3Appearance {
     static let mutedAction = UIColor.systemGray
     static let quietControlSurface = UIColor.secondarySystemFill
     static let optionSurface = UIColor.tertiarySystemGroupedBackground
-    static let selectedOptionSurface = funBtnColor.withAlphaComponent(0.12)
-    static let correctOptionSurface = safeTipColor.withAlphaComponent(0.12)
-    static let incorrectOptionSurface = reviewCellColor.withAlphaComponent(0.12)
+    // Semantic colors already track the system theme. Feedback fills must
+    // also resolve their alpha in the active trait (not cache light RGB).
+    // Dark mode uses slightly more opacity so the state remains visible
+    // against elevated card surfaces without adding hard strokes.
+    private static func feedbackSurface(_ base: UIColor) -> UIColor {
+        UIColor { traits in
+            base.resolvedColor(with: traits)
+                .withAlphaComponent(traits.userInterfaceStyle == .dark ? 0.22 : 0.12)
+        }
+    }
+    static let selectedOptionSurface = feedbackSurface(funBtnColor)
+    static let correctOptionSurface = feedbackSurface(safeTipColor)
+    static let incorrectOptionSurface = feedbackSurface(reviewCellColor)
     static let accent = funBtnColor
     static let primaryText = titleColor
     static let secondaryText = contentColor
@@ -228,7 +238,82 @@ enum ImpressV3Appearance {
     static let caution = UIColor.systemOrange
     static let negative = reviewCellColor
     static let timelineInactive = UIColor.systemGray2
-    static let primaryButtonText = UIColor.white
+    // iOS systemBlue is brighter on dark surfaces; white-on-bright-blue
+    // becomes lower contrast. A dynamic on-accent role handles both themes.
+    // Segments and filled action buttons reuse this same semantic foreground.
+    static let primaryButtonText = UIColor { traits in
+        traits.userInterfaceStyle == .dark ? UIColor.black : UIColor.white
+    }
+    static let imagePreviewBackdrop = UIColor { traits in
+        let base: UIColor = traits.userInterfaceStyle == .dark ? .black : .white
+        return base.withAlphaComponent(0.94)
+    }
+
+    /// CSS is required because MarkdownView wraps a bundled WKWebView whose
+    /// vendor stylesheet fixes white backgrounds and dark ink. UIKit dynamic
+    /// UIColors do not penetrate HTML. CSS media queries switch in place as
+    /// the iPhone system appearance changes; do NOT touch third-party Pods,
+    /// reload user notes or inject CSS into the external DeepSeek website.
+    /// Only trusted static CSS is injected into the local read-only Markdown.
+    static let markdownReaderCSS: String = """
+    :root {
+      color-scheme: light dark;
+      --im-paper: #FFFFFF;
+      --im-ink: #1C1C1E;
+      --im-muted: #54545A;
+      --im-border: #D1D1D6;
+      --im-code: #F2F2F7;
+      --im-link: #0064CB;
+      --im-accent-quote: #8E8E93;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --im-paper: #1C1C1E;
+        --im-ink: #F2F2F7;
+        --im-muted: #AEAEB2;
+        --im-border: #48484A;
+        --im-code: #2C2C2E;
+        --im-link: #72B7FF;
+        --im-accent-quote: #98989D;
+      }
+    }
+    html, body, .container, .markdown-body {
+      background: var(--im-paper) !important;
+      color: var(--im-ink) !important;
+      -webkit-text-size-adjust: 100%;
+    }
+    .markdown-body h1, .markdown-body h2, .markdown-body h3,
+    .markdown-body h4, .markdown-body h5, .markdown-body h6,
+    .markdown-body p, .markdown-body li {
+      color: var(--im-ink) !important;
+    }
+    .markdown-body a, .markdown-body a:visited {
+      color: var(--im-link) !important;
+    }
+    .markdown-body pre, .markdown-body code, .markdown-body tt,
+    .markdown-body .highlight {
+      color: var(--im-ink) !important;
+      background-color: var(--im-code) !important;
+    }
+    .markdown-body pre code {
+      background: transparent !important;
+    }
+    .markdown-body table tr,
+    .markdown-body table tr:nth-child(2n),
+    .markdown-body table th, .markdown-body table td {
+      background-color: var(--im-paper) !important;
+      color: var(--im-ink) !important;
+      border-color: var(--im-border) !important;
+    }
+    .markdown-body blockquote {
+      color: var(--im-muted) !important;
+      border-left-color: var(--im-accent-quote) !important;
+    }
+    .markdown-body hr {
+      background-color: var(--im-border) !important;
+      border-color: var(--im-border) !important;
+    }
+    """
 
     /// Apply only tint colors; never paint over iOS 26+ floating Liquid Glass.
     /// The TabBar's content backdrop comes from the controller's page color.

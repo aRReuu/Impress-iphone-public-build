@@ -400,6 +400,100 @@ final class ImpressR042AppearanceTests: XCTestCase {
         XCTAssertEqual(navigation.tintColor, ImpressV3Appearance.accent)
     }
 
+    func testSystemLightAndDarkResolveDifferentSemanticSurfaces() {
+        // The app must not force Light/Dark; UIKit owns Automatic.
+        XCTAssertEqual(Bundle.main.object(
+            forInfoDictionaryKey: "UIUserInterfaceStyle") as? String, "Automatic")
+
+        let light = UITraitCollection(userInterfaceStyle: .light)
+        let dark = UITraitCollection(userInterfaceStyle: .dark)
+        for role in [ImpressV3Appearance.page, ImpressV3Appearance.surface,
+                     ImpressV3Appearance.primaryText, ImpressV3Appearance.optionSurface,
+                     ImpressV3Appearance.selectedOptionSurface,
+                     ImpressV3Appearance.correctOptionSurface,
+                     ImpressV3Appearance.incorrectOptionSurface,
+                     ImpressV3Appearance.imagePreviewBackdrop] {
+            XCTAssertNotEqual(role.resolvedColor(with: light),
+                              role.resolvedColor(with: dark),
+                              "Semantic visual roles must follow the active trait.")
+        }
+        XCTAssertEqual(
+            ImpressV3Appearance.primaryButtonText.resolvedColor(with: light),
+            UIColor.white)
+        XCTAssertEqual(
+            ImpressV3Appearance.primaryButtonText.resolvedColor(with: dark),
+            UIColor.black)
+    }
+
+    func testVisibleComposerAndSegmentsFollowLiveWindowAppearance() throws {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.overrideUserInterfaceStyle = .light
+        let composer = ImpressV3CardComposerViewController()
+        window.rootViewController = composer
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        composer.loadViewIfNeeded()
+        window.layoutIfNeeded()
+
+        func segments(in root: UIView) -> [UISegmentedControl] {
+            let own = (root as? UISegmentedControl).map { [$0] } ?? []
+            return own + root.subviews.flatMap(segments(in:))
+        }
+        let selected = try XCTUnwrap(
+            segments(in: composer.view).first { $0.numberOfSegments == 3 })
+        let lightTraits = window.traitCollection
+        XCTAssertEqual(lightTraits.userInterfaceStyle, .light)
+        let before = try XCTUnwrap(composer.view.backgroundColor)
+            .resolvedColor(with: lightTraits)
+        XCTAssertEqual(
+            selected.titleTextAttributes(for: .selected)?[.foregroundColor] as? UIColor,
+            ImpressV3Appearance.primaryButtonText)
+
+        window.overrideUserInterfaceStyle = .dark
+        window.layoutIfNeeded()
+        let darkTraits = window.traitCollection
+        XCTAssertEqual(darkTraits.userInterfaceStyle, .dark)
+        let after = try XCTUnwrap(composer.view.backgroundColor)
+            .resolvedColor(with: darkTraits)
+        XCTAssertNotEqual(before, after)
+        XCTAssertEqual(after,
+            ImpressV3Appearance.page.resolvedColor(with: darkTraits))
+        XCTAssertEqual(selected.selectedSegmentTintColor,
+                       ImpressV3Appearance.accent)
+    }
+
+    func testLocalVaultMarkdownHasNativeDarkCSSWithoutRemoteNetworkInjection() {
+        let css = ImpressV3Appearance.markdownReaderCSS
+        XCTAssertTrue(css.contains("prefers-color-scheme: dark"))
+        XCTAssertTrue(css.contains("color-scheme: light dark"))
+        XCTAssertTrue(css.contains("markdown-body"))
+        XCTAssertTrue(css.contains("--im-paper"))
+        XCTAssertTrue(css.contains("--im-ink"))
+        XCTAssertFalse(css.contains("@import"))
+        XCTAssertFalse(css.contains("url("))
+        XCTAssertFalse(css.contains("<script"))
+    }
+
+    func testSwipeOverlayReResolvesCGColorOnAppearanceChange() throws {
+        // Color for .down is UIColor.label: its border must invert in Dark.
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.overrideUserInterfaceStyle = .light
+        let root = UIViewController()
+        window.rootViewController = root
+        let overlay = ImMemoryCardOverlay(direction: .down)
+        root.view.addSubview(overlay)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        window.layoutIfNeeded()
+        let inner = try XCTUnwrap(overlay.subviews.first { $0.layer.borderWidth > 0 })
+        let lightBorder = try XCTUnwrap(inner.layer.borderColor)
+        window.overrideUserInterfaceStyle = .dark
+        window.layoutIfNeeded()
+        let darkBorder = try XCTUnwrap(inner.layer.borderColor)
+        XCTAssertFalse(CGColorEqualToColor(lightBorder, darkBorder),
+                       "Core Animation colors cannot remain frozen in Light.")
+    }
+
     func testNativeThreeTypeSelectorHasHighContrastActiveSegment() throws {
         let composer = ImpressV3CardComposerViewController()
         composer.loadViewIfNeeded()

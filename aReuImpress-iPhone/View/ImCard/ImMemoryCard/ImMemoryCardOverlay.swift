@@ -79,6 +79,7 @@ private class ImMemoryCardOverlayView: UIView
 {
     private let iconView: UIImageView
     private let label: UILabel
+    private let adaptiveStrokeColor: UIColor
     private var imageCache: [String: UIImage] = [:] // 简单的内存缓存
 
     init(direction: SwipeDirection, color: UIColor, rotation: CGFloat)
@@ -94,15 +95,16 @@ private class ImMemoryCardOverlayView: UIView
 
         self.iconView = iconView
         self.label = label
+        self.adaptiveStrokeColor = color
 
         super.init(frame: .zero)
 
         // 使用语义化颜色设置背景，提升视觉效果
         backgroundColor = color.withAlphaComponent(highlightAlpha)
-        layer.borderColor = color.cgColor
+        layer.borderColor = color.resolvedColor(with: traitCollection).cgColor
         layer.borderWidth = 2
         layer.cornerRadius = 12
-        layer.shadowColor = color.cgColor
+        layer.shadowColor = color.resolvedColor(with: traitCollection).cgColor
         layer.shadowOpacity = 0.3
         layer.shadowOffset = CGSize(width: 0, height: 4)
         layer.shadowRadius = 8
@@ -268,6 +270,18 @@ private class ImMemoryCardOverlayView: UIView
             iconView.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor),
             label.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor)
         ])
+    }
+
+    /// CALayer takes concrete CGColors: UIKit cannot automatically update
+    /// them when the user switches Light/Dark while a swipe is visible.
+    /// Keep the original semantic UIColor as authority and resolve on traits.
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        guard previousTraitCollection?.hasDifferentColorAppearance(
+            comparedTo: traitCollection) ?? true else { return }
+        let resolved = adaptiveStrokeColor.resolvedColor(with: traitCollection).cgColor
+        layer.borderColor = resolved
+        layer.shadowColor = resolved
     }
 
     required init?(coder aDecoder: NSCoder)

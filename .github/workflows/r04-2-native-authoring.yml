@@ -109,6 +109,18 @@ jobs:
           assert "usesNativeOptionButtons" in answers
           assert "ImpressV3Appearance.styleSegmentedControl(formatPicker" in Path(
               "aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3BatchImportViewController.swift").read_text()
+          from pathlib import Path
+          info=Path("aReuImpress-iPhone/Info.plist").read_text()
+          assert '<key>UIUserInterfaceStyle</key>' in info and '<string>Automatic</string>' in info
+          assert "markdownReaderCSS" in theme and "prefers-color-scheme: dark" in theme
+          assert "primaryButtonText = UIColor { traits in" in theme
+          assert "feedbackSurface" in theme
+          assert "css: ImpressV3Appearance.markdownReaderCSS" in vault_source
+          overlay=Path("aReuImpress-iPhone/View/ImCard/ImMemoryCard/ImMemoryCardOverlay.swift").read_text()
+          assert "adaptiveStrokeColor.resolvedColor(with: traitCollection)" in overlay
+          image=Path("aReuImpress-iPhone/VC/SubVCs/ImImagePreview/ImImagePreviewViewController.swift").read_text()
+          assert "ImpressV3Appearance.imagePreviewBackdrop" in image
+          print("AUTOMATIC_LIGHT_DARK_APPEARANCE_CONTRACT PASS")
           print("CENTRALIZED_V3_GEOMETRY_AND_CHOICES PASS")
           print("CENTRALIZED_V3_APPEARANCE PASS")
           print("SANITIZED_MIRROR_AND_VAULT_LOCK PASS")
@@ -207,7 +219,7 @@ jobs:
           python3 - "$NAME" <<'PY'
           import hashlib, json, pathlib, sys
           ipa=pathlib.Path("out")/sys.argv[1]
-          m=dict(private_source_sha="d19f439970f271efa902a1ba12636686a2f7fe1a",
+          m=dict(private_source_sha="675f48297e97252c9857d67b1bcec4522e385309",
                  public_snapshot_sha=__import__("subprocess").check_output(
                    ["git","rev-parse","HEAD"], text=True).strip(),
                  ipa_name=ipa.name,ipa_sha256=hashlib.sha256(ipa.read_bytes()).hexdigest(),
@@ -237,7 +249,7 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      EXPECTED_PRIVATE: d19f439970f271efa902a1ba12636686a2f7fe1a
+      EXPECTED_PRIVATE: 675f48297e97252c9857d67b1bcec4522e385309
     steps:
       - name: Download artifact from this exact successful SDK27 run
         shell: bash
@@ -280,5 +292,5 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Impress V3.1 R04.2 — Native Authoring and Notes QA Candidate" \
             --prerelease \
-              --notes "R04.2-D3 minimal native UI candidate: 3 system tabs, compact Settings, local prompts, timeline, read-only Obsidian Vault, CSV/TSV/MD batch import. ImColorConstants.swift alone controls grouped page/content tones and responsive 50pt segmented selectors (iPhone fills; 440pt wide-screen cap, 320pt compact cap), native 52pt primary/48pt quiet/44pt tertiary actions and multiline 52pt scrollable choice buttons for 12-option questions. WCDB.swift 1.1.0 and FSRS-6 unchanged; no automatic Web Chat send, production Vault writes DISABLED. CI verifies Swift Core, UIKit XCTest, ARM64/ZIP/SHA before release. iPhone 13 visual acceptance pending. Unsigned IPA requires personal AltStore signing; unlicensed source imagery replaced by neutral CI assets."
+              --notes "R04.2-D4 minimal native UI + Automatic Light/Dark candidate: 3 system tabs, compact Settings, local prompts, timeline, read-only Obsidian Vault, CSV/TSV/MD batch import. ImColorConstants.swift alone controls grouped page/content tones and responsive 50pt segmented selectors (iPhone fills; 440pt wide-screen cap, 320pt compact cap), native 52pt primary/48pt quiet/44pt tertiary actions and multiline 52pt scrollable choice buttons for 12-option questions. WCDB.swift 1.1.0 and FSRS-6 unchanged; no automatic Web Chat send, production Vault writes DISABLED. CI verifies Swift Core, UIKit XCTest, ARM64/ZIP/SHA before release. iPhone 13 Light/Dark physical visual acceptance pending. Unsigned IPA requires personal AltStore signing; unlicensed source imagery replaced by neutral CI assets."
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,assets

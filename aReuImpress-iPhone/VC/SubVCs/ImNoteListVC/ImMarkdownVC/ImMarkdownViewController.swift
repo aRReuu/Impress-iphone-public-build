@@ -765,7 +765,12 @@ final class ImVaultDocumentController: UIViewController {
             // Only the prepared projection has excluded all ordinary image
             // URLs and can allow data: image embeds. The initial fallback
             // prohibits all images, including remote images.
-            richView.load(markdown: safeMarkdown, enableImage: preparedMarkdown != nil)
+            // Bundled MarkdownView's original CSS hardcodes white surfaces.
+            // A central trusted media-query stylesheet adapts live to the
+            // system appearance without re-reading or modifying Vault files.
+            richView.load(markdown: safeMarkdown,
+                          enableImage: preparedMarkdown != nil,
+                          css: ImpressV3Appearance.markdownReaderCSS)
         }
         readingView.textAlignment = .left
     }

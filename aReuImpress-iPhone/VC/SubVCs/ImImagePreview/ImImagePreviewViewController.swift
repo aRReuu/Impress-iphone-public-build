@@ -12,9 +12,11 @@ class ImImagePreviewViewController: UIViewController, UIScrollViewDelegate {
     private var scrollView: UIScrollView!
     private var imageView: UIImageView!
     private var image: UIImage
+    private let usesV3Appearance: Bool
 
-    init(image: UIImage) {
+    init(image: UIImage, usesV3Appearance: Bool = false) {
         self.image = image
+        self.usesV3Appearance = usesV3Appearance
         super.init(nibName: nil, bundle: nil)
         self.modalPresentationStyle = .overFullScreen
     }
@@ -30,7 +32,8 @@ class ImImagePreviewViewController: UIViewController, UIScrollViewDelegate {
     }
 
     private func setupViews() {
-        view.backgroundColor = darkBlurBackgroundColor
+        view.backgroundColor = usesV3Appearance
+            ? ImpressV3Appearance.imagePreviewBackdrop : darkBlurBackgroundColor
 
         scrollView = UIScrollView(frame: view.bounds)
         scrollView.delegate = self
