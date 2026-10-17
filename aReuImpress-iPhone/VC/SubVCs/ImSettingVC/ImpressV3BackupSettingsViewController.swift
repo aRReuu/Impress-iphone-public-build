@@ -215,6 +215,8 @@ final class ImpressV3BackupSettingsViewController: UITableViewController,
                     "卡片：\(preview.cardCount) 张\n" +
                     "复习历史：\(preview.reviewCount) 条\n" +
                     "理解记录：\(preview.learningCount) 条\n" +
+                    (preview.calibrationCount.map { "校准历史：\($0) 天（V3.2）\n" }
+                     ?? "旧版备份不含校准历史；保留本机现有校准数据。\n") +
                     "提示词模板：已验证\n" +
                     "Obsidian 外部原件不会被修改。\n\n" +
                     "当前数据会先创建回滚备份，恢复在下次重新启动时生效。"

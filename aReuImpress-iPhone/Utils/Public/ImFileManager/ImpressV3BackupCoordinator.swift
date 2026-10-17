@@ -8,6 +8,8 @@ struct ImpressV3BackupInspection {
     let cardCount: Int
     let reviewCount: Int
     let learningCount: Int
+    /// Nil for V1 archives: do not erase existing calibration data.
+    let calibrationCount: Int?
 }
 
 /// File-provider access uses an explicit, user-selected Files folder. The
@@ -174,7 +176,11 @@ actor ImpressV3BackupCoordinator {
         let prompts = try JSONEncoder().encode(ImpressV3PromptLibrary.load())
         try prompts.write(to: staging.appendingPathComponent("prompts.json"),
                           options: .atomic)
-        let names = ["ReviewV3.sqlite", "LearningEntry-v1.json", "prompts.json"]
+        let calibration = try await ImpressCalibrationLocalStore.shared.archiveData()
+        try calibration.write(
+            to: staging.appendingPathComponent("checkins-v1.json"), options: .atomic)
+        let names = ["ReviewV3.sqlite", "LearningEntry-v1.json", "prompts.json",
+                     "checkins-v1.json"]
         let archiveName = "ImpressV3-" +
             ISO8601DateFormatter().string(from: Date())
                 .replacingOccurrences(of: ":", with: "-") +
@@ -201,6 +207,8 @@ actor ImpressV3BackupCoordinator {
             _ = try ImpressV3BackupArchive.extract(source: partial, destination: verification)
             try ImpressV3BackupArchive.verifySQLite(
                 verification.appendingPathComponent("ReviewV3.sqlite"))
+            _ = try ImpressCalibrationLocalStore.validateArchiveData(
+                Data(contentsOf: verification.appendingPathComponent("checkins-v1.json")))
             try FileManager.default.removeItem(at: verification)
             try FileManager.default.setAttributes([
                 .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication
@@ -312,9 +320,16 @@ actor ImpressV3BackupCoordinator {
             let manifest = try JSONDecoder().decode(
                 ImpressV3BackupManifest.self,
                 from: Data(contentsOf: container.appendingPathComponent("manifest.json")))
+            let calibrationCount: Int?
+            if manifest.formatVersion == 2 {
+                calibrationCount = try ImpressCalibrationLocalStore.validateArchiveData(
+                    Data(contentsOf: container.appendingPathComponent("checkins-v1.json")))
+            } else {
+                calibrationCount = nil
+            }
             return ImpressV3BackupInspection(manifest: manifest,
                 cardCount: counts.cards, reviewCount: counts.reviews,
-                learningCount: history.count)
+                learningCount: history.count, calibrationCount: calibrationCount)
         }.value
     }
 
@@ -334,6 +349,18 @@ actor ImpressV3BackupCoordinator {
                 try ImpressV3BackupArchive.extract(source: archive, destination: verified)
                 try ImpressV3BackupArchive.verifySQLite(
                     verified.appendingPathComponent("ReviewV3.sqlite"))
+                let manifest = try JSONDecoder().decode(
+                    ImpressV3BackupManifest.self, from: Data(contentsOf:
+                        verified.appendingPathComponent("manifest.json")))
+                _ = try JSONDecoder().decode([ImpressV3LearningEntry].self,
+                    from: Data(contentsOf:
+                        verified.appendingPathComponent("LearningEntry-v1.json")))
+                _ = try JSONDecoder().decode([ImpressV3PromptTemplate].self,
+                    from: Data(contentsOf: verified.appendingPathComponent("prompts.json")))
+                if manifest.formatVersion == 2 {
+                    _ = try ImpressCalibrationLocalStore.validateArchiveData(
+                        Data(contentsOf: verified.appendingPathComponent("checkins-v1.json")))
+                }
             }.value
             try FileManager.default.moveItem(at: verified, to: pending)
         } catch {
@@ -362,6 +389,15 @@ actor ImpressV3BackupCoordinator {
         let restoredPrompts = try JSONDecoder().decode(
             [ImpressV3PromptTemplate].self,
             from: Data(contentsOf: pending.appendingPathComponent("prompts.json")))
+        let restoredCalibration: Data?
+        if manifest.formatVersion == 2 {
+            let bytes = try Data(contentsOf: pending.appendingPathComponent("checkins-v1.json"))
+            _ = try ImpressCalibrationLocalStore.validateArchiveData(bytes)
+            restoredCalibration = bytes
+        } else {
+            // A V1 backup never had calibration; retain local V3.2 history.
+            restoredCalibration = nil
+        }
         let oldPromptData = UserDefaults.standard.data(
             forKey: ImpressV3PromptLibrary.storageKey)
         let liveFolder = FileManager.default.urls(
@@ -377,6 +413,9 @@ actor ImpressV3BackupCoordinator {
         let fileManager = FileManager.default
         let journalFolder = root.appendingPathComponent("ImpressV3", isDirectory: true)
         let journal = journalFolder.appendingPathComponent("LearningEntry-v1.json")
+        let calibration = ImpressCalibrationLocalStore.canonicalURL()
+        let previousCalibration = previous.appendingPathComponent("checkins-v1.json")
+        var touchedCalibration = false
         var installedDB = false
         do {
             for suffix in ["", "-wal", "-shm"] {
@@ -399,6 +438,18 @@ actor ImpressV3BackupCoordinator {
             try fileManager.copyItem(at: pending.appendingPathComponent(
                 "LearningEntry-v1.json"), to: journal)
             try ImpressV3PromptLibrary.save(restoredPrompts)
+            if let restoredCalibration {
+                try fileManager.createDirectory(
+                    at: calibration.deletingLastPathComponent(),
+                    withIntermediateDirectories: true)
+                touchedCalibration = true
+                if fileManager.fileExists(atPath: calibration.path) {
+                    try fileManager.moveItem(at: calibration, to: previousCalibration)
+                }
+                try restoredCalibration.write(to: calibration, options: .atomic)
+                _ = try ImpressCalibrationLocalStore.validateArchiveData(
+                    Data(contentsOf: calibration))
+            }
             // Moving staging away atomically prevents unintended repeat
             // recovery when temporary cleanup fails.
             let applied = root.appendingPathComponent(
@@ -409,6 +460,14 @@ actor ImpressV3BackupCoordinator {
             // The previous live database remains available as an emergency
             // rollback folder, without any automatic deletion of user data.
         } catch {
+            if touchedCalibration {
+                if fileManager.fileExists(atPath: calibration.path) {
+                    try? fileManager.removeItem(at: calibration)
+                }
+                if fileManager.fileExists(atPath: previousCalibration.path) {
+                    try? fileManager.moveItem(at: previousCalibration, to: calibration)
+                }
+            }
             if installedDB { try? fileManager.removeItem(at: current) }
             let previousJournal = previous.appendingPathComponent("LearningEntry-v1.json")
             if fileManager.fileExists(atPath: previousJournal.path) {
