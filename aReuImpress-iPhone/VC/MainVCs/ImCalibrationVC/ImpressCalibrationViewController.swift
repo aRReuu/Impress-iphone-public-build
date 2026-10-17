@@ -265,6 +265,10 @@ final class ImpressCalibrationViewController: UITableViewController {
             })
         }
         menu.addAction(UIAlertAction(title: "取消", style: .cancel))
+        // iPad must anchor action sheets; iPhone uses the same native menu.
+        menu.popoverPresentationController?.sourceView = tableView
+        menu.popoverPresentationController?.sourceRect = CGRect(
+            x: tableView.bounds.midX, y: tableView.bounds.midY, width: 1, height: 1)
         present(menu, animated: true)
     }
 
@@ -285,6 +289,10 @@ final class ImpressCalibrationViewController: UITableViewController {
             self?.updateCheckIn { try $0.setMood(nil, assessed: false) }
         })
         menu.addAction(UIAlertAction(title: "取消", style: .cancel))
+        // iPad must anchor action sheets; iPhone uses the same native menu.
+        menu.popoverPresentationController?.sourceView = tableView
+        menu.popoverPresentationController?.sourceRect = CGRect(
+            x: tableView.bounds.midX, y: tableView.bounds.midY, width: 1, height: 1)
         present(menu, animated: true)
     }
 
