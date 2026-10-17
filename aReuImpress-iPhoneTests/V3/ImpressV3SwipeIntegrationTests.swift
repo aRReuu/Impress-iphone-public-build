@@ -490,8 +490,8 @@ final class ImpressR042AppearanceTests: XCTestCase {
         window.overrideUserInterfaceStyle = .dark
         window.layoutIfNeeded()
         let darkBorder = try XCTUnwrap(inner.layer.borderColor)
-        XCTAssertFalse(CGColorEqualToColor(lightBorder, darkBorder),
-                       "Core Animation colors cannot remain frozen in Light.")
+        XCTAssertNotEqual(lightBorder, darkBorder,
+                          "Core Animation colors cannot remain frozen in Light.")
     }
 
     func testNativeThreeTypeSelectorHasHighContrastActiveSegment() throws {

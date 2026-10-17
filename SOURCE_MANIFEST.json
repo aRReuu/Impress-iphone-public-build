@@ -3,7 +3,7 @@
   "authority": {
     "repository": "aRReuu/Impress-iphone",
     "branch": "feature/impress-v3-r04-2-information-architecture",
-    "source_head_sha": "675f48297e97252c9857d67b1bcec4522e385309",
+    "source_head_sha": "8bc49e0ad85a98aa7003f16733c64693aecf82b6",
     "baseline_20261017_sha": "9078600d9be7be048a550d32d43322e55e7d866d",
     "original_r03_source_sha": "9804343b4998870ec8f6298ed9d1dde2c67e2911"
   },
@@ -50,7 +50,7 @@
     "R04 Xcode27: test target inherited CocoaPods search paths; SDK27 deployment floor 15 overridden in CI"
   ],
   "public_branch": "feature/impress-v3-r04-2-build",
-  "last_mirror_update": "D4 dynamic on-accent foreground, adaptive selected/correct/wrong answer fills, safe light/dark CSS for read-only Markdown web view, adaptive swipe CGColor, V3 image preview, and 4 new appearance regression tests.",
+  "last_mirror_update": "D4.1 correction: Xcode 27 no longer exposes CGColorEqualToColor as callable API; use CGColor Equatable in UIKit appearance regression. All other D4 source unchanged.",
   "screenshot_policy": "Screenshots only assessed in private conversation, not uploaded or mirrored; some show private content",
   "copy_summary": "6 V3 source/test files SHA-identical with private canonical tree. Private Docs, notes, originals and keys excluded.",
   "r04_2_batch": "Existing R04.2-C/C1 importer verified prior run; R04.2-D2 full XCTest/ARM64 pending CI",
@@ -72,7 +72,7 @@
     "aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImpressNoteListTableViewController.swift": "e5b489adf5fc04780da9b606c5f1bcc03d293c69",
     "aReuImpress-iPhone/View/ImCard/ImMultipleChoiceCardView.swift": "cff52c521a089e1476f7de34af95aac53e87354a",
     "aReuImpress-iPhone/View/ImCard/ImMemoryCard/ImMemoryCardView.swift": "cf3d78f672bc48c4f3afcbf2c2756c88bc65816c",
-    "aReuImpress-iPhoneTests/V3/ImpressV3SwipeIntegrationTests.swift": "965a12309446b88566dc3ca5c711360191953d25",
+    "aReuImpress-iPhoneTests/V3/ImpressV3SwipeIntegrationTests.swift": "c239e3590c8721781f0780a8d2b6b18f6b5a8fb6",
     "aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift": "d07818a503d6efc49ac87f086471e0cf871deb98",
     "aReuImpress-iPhone/VC/SubVCs/ImImagePreview/ImImagePreviewViewController.swift": "8fcf810fb0912b8ea119f48184b76ea69af6c81e",
     "aReuImpress-iPhone/View/ImCard/ImMemoryCard/ImMemoryCardOverlay.swift": "fdb7df57994517a26d9e5684faf0ac072434fcab"
@@ -82,5 +82,5 @@
   "appearance_authority": "aReuImpress-iPhone/Utils/Constansts/ImColorConstants.swift",
   "appearance_policy": "System UIUserInterfaceStyle Automatic; dynamic grouped/secondary surfaces; light/dark on-accent text, semantic feedback alpha; bundled Markdown fixed white CSS overridden via trusted CSS media query; swipe overlay CGColors re-resolved on trait change.",
   "physical_gate": "iPhone13 manual Light/Dark transition while visible, dark Markdown tables/code, segmented selected contrast, twelve options, status bar, image and accessibility to approve.",
-  "latest_public_ci_last_known_failure": "Prior D3 run #39025563886 succeeded (XCTest, Core, ARM64/ZIP/SHA and pre-release). D4 dark mode needs fresh CI."
+  "latest_public_ci_last_known_failure": "D4 run 39026316747 failed test compilation on CGColorEqualToColor unavailable; corrected in D4.1."
 }
