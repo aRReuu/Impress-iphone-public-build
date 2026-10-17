@@ -14,6 +14,7 @@ public enum ReviewWCDBError: Swift.Error {
     case missingCard
     case suspendedCard
     case revisionConflict
+    case contentConflict
     case eventIdentifierCollision
     case corruptRecord
     case invalidSchedulerOutput
@@ -52,6 +53,7 @@ private struct WCDBV3CardRow: TableCodable {
     var createdAt: Date?
     var updatedAt: Date?
     var revision: Int?
+    var contentRevision: Int?
     var isSuspended: Int?
     var state: Int?
     var dueAt: Date?
@@ -73,6 +75,7 @@ private struct WCDBV3CardRow: TableCodable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case revision
+        case contentRevision = "content_revision"
         case isSuspended = "is_suspended"
         case state
         case dueAt = "due_at"
@@ -169,6 +172,8 @@ public struct WCDBV3CardContent: Sendable {
     public let cardType: Int
     public let imageData: Data?
     public let sourceNotePath: String?
+    /// Independent of FSRS review revision. Incremented only by content edits.
+    public let contentRevision: Int
 }
 
 /// An actor serializes the review transactions. The underlying WCDB connection
@@ -293,6 +298,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
         row.createdAt = now
         row.updatedAt = now
         row.revision = 0
+        row.contentRevision = 0
         row.isSuspended = 0
         row.state = ReviewCardStatus.new.rawValue
         row.dueAt = initial.dueAt
@@ -301,34 +307,67 @@ public actor ReviewWCDBRepository: ReviewRepository {
         return row
     }
 
-    /// BLOB-free browse/search. Offset and limit are applied after filtering,
-    /// preserving results across card types without loading image_data.
-    /// An indexed database-side search can replace this projection later.
+    /// SQL-backed, BLOB-free sorted pagination for normal queries.
+    /// Literal SQL LIKE wildcards use a bounded fallback scan so searching for
+    /// "%" or "_" cannot broaden matches and never allocates the entire table.
     public func listManagedCards(matching search: String = "",
                                  offset: Int = 0,
                                  limit: Int = 100) throws -> [WCDBV3ManagedCard] {
         guard offset >= 0, (1...200).contains(limit) else {
             throw ReviewWCDBError.invalidSchedulerOutput
         }
-        let rows: [WCDBV3CardRow] = try database.getObjects(
-            on: [
-                WCDBV3CardRow.Properties.cardID,
-                WCDBV3CardRow.Properties.question,
-                WCDBV3CardRow.Properties.answerText,
-                WCDBV3CardRow.Properties.cardType,
-                WCDBV3CardRow.Properties.sourceNotePath,
-                WCDBV3CardRow.Properties.isSuspended,
-                WCDBV3CardRow.Properties.revision,
-                WCDBV3CardRow.Properties.updatedAt
-            ], fromTable: Self.cardsTable)
+        let selected = [
+            WCDBV3CardRow.Properties.cardID,
+            WCDBV3CardRow.Properties.question,
+            WCDBV3CardRow.Properties.answerText,
+            WCDBV3CardRow.Properties.cardType,
+            WCDBV3CardRow.Properties.sourceNotePath,
+            WCDBV3CardRow.Properties.isSuspended,
+            WCDBV3CardRow.Properties.revision,
+            WCDBV3CardRow.Properties.updatedAt
+        ]
+        // The secondary key makes pagination deterministic for equal timestamps.
+        let ordering = [
+            WCDBV3CardRow.Properties.updatedAt.asOrder(by: .descending),
+            WCDBV3CardRow.Properties.cardID.asOrder(by: .ascending)
+        ]
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        return try rows.filter { row in
-            query.isEmpty || [row.question, row.answerText, row.sourceNotePath]
-                .compactMap { $0 }
-                .contains { $0.localizedStandardContains(query) }
-        }.sorted {
-            ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast)
-        }.dropFirst(min(offset, rows.count)).prefix(limit).map { row in
+        let rows: [WCDBV3CardRow]
+        if query.isEmpty {
+            rows = try database.getObjects(on: selected, fromTable: Self.cardsTable,
+                orderBy: ordering, limit: limit, offset: offset)
+        } else if !query.contains("%") && !query.contains("_") {
+            // WCDB escapes SQL parameters: never interpolate into raw SQL.
+            // Common searches use SQLite filtering *before* LIMIT/OFFSET.
+            let pattern = "%" + query + "%"
+            let matching = WCDBV3CardRow.Properties.question.like(pattern)
+                || WCDBV3CardRow.Properties.answerText.like(pattern)
+                || WCDBV3CardRow.Properties.sourceNotePath.like(pattern)
+            rows = try database.getObjects(on: selected, fromTable: Self.cardsTable,
+                where: matching, orderBy: ordering, limit: limit, offset: offset)
+        } else {
+            // SQLite LIKE treats _ and % as wildcards. Use bounded chunks
+            // and a literal comparison to avoid false-positive search results.
+            var collected = [WCDBV3CardRow]()
+            var scanned = 0
+            var matched = 0
+            while collected.count < limit {
+                let block: [WCDBV3CardRow] = try database.getObjects(
+                    on: selected, fromTable: Self.cardsTable, orderBy: ordering,
+                    limit: 200, offset: scanned)
+                if block.isEmpty { break }
+                for row in block where [row.question, row.answerText, row.sourceNotePath]
+                    .compactMap({ $0 }).contains(where: { $0.localizedStandardContains(query) }) {
+                    if matched >= offset && collected.count < limit {
+                        collected.append(row)
+                    }
+                    matched += 1
+                }
+                scanned += block.count
+            }
+            rows = collected
+        }
+        return try rows.map { row in
             guard let rawID = row.cardID, let id = UUID(uuidString: rawID),
                   let question = row.question, let type = row.cardType,
                   let suspended = row.isSuspended, let revision = row.revision else {
@@ -343,10 +382,11 @@ public actor ReviewWCDBRepository: ReviewRepository {
     }
 
     /// Update only content fields. Card identity, FSRS revision/schedule and
-    /// immutable review events remain intact. Optimistic version check prevents
-    /// editing a row concurrently changed by an in-flight grading operation.
+    /// immutable review events remain intact. Two independent CAS tokens stop
+    /// a stale editor after either an FSRS commit or another content edit.
     public func updateManagedCard(_ input: WCDBV3CardInput,
                                   expectedRevision: Int,
+                                  expectedContentRevision: Int,
                                   now: Date = Date()) throws {
         guard !input.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               [0, 2, 3].contains(input.cardType),
@@ -367,6 +407,9 @@ public actor ReviewWCDBRepository: ReviewRepository {
             guard old.revision == expectedRevision else {
                 throw ReviewWCDBError.revisionConflict
             }
+            guard (old.contentRevision ?? 0) == expectedContentRevision else {
+                throw ReviewWCDBError.contentConflict
+            }
             let all: [WCDBV3CardRow] = try tx.getObjects(
                 on: [WCDBV3CardRow.Properties.cardID,
                      WCDBV3CardRow.Properties.question,
@@ -381,6 +424,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
             edited.imageData = input.imageData
             edited.sourceNotePath = input.sourceNotePath
             edited.updatedAt = now
+            edited.contentRevision = expectedContentRevision + 1
             guard !all.contains(where: {
                 $0.cardID != key && Self.duplicateKey($0) == Self.duplicateKey(edited)
             }) else { throw ReviewWCDBError.duplicateContent }
@@ -392,7 +436,8 @@ public actor ReviewWCDBRepository: ReviewRepository {
                 WCDBV3CardRow.Properties.cardType,
                 WCDBV3CardRow.Properties.imageData,
                 WCDBV3CardRow.Properties.sourceNotePath,
-                WCDBV3CardRow.Properties.updatedAt
+                WCDBV3CardRow.Properties.updatedAt,
+                WCDBV3CardRow.Properties.contentRevision
             ], with: edited,
                where: WCDBV3CardRow.Properties.cardID == key &&
                       WCDBV3CardRow.Properties.revision == expectedRevision)
@@ -639,7 +684,8 @@ public actor ReviewWCDBRepository: ReviewRepository {
             cardID: cardID, question: question, answerText: row.answerText,
             choices: row.choices, correctIndices: row.correctIndices,
             cardType: cardType, imageData: row.imageData,
-            sourceNotePath: row.sourceNotePath
+            sourceNotePath: row.sourceNotePath,
+            contentRevision: row.contentRevision ?? 0
         )
     }
 

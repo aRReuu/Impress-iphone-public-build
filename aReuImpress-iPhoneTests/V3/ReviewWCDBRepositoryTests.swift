@@ -47,11 +47,12 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         try await repo.updateManagedCard(
             WCDBV3CardInput(cardID: id, question: "Edited question",
                 answerText: "Edited answer", sourceNotePath: "source.md"),
-            expectedRevision: 1)
+            expectedRevision: 1, expectedContentRevision: 0)
         let edited = try await repo.content(for: id)
         XCTAssertEqual(edited?.cardID, id)
         XCTAssertEqual(edited?.question, "Edited question")
         XCTAssertEqual(edited?.answerText, "Edited answer")
+        XCTAssertEqual(edited?.contentRevision, 1)
         let candidate = try await repo.fetchQueueCandidates()
         XCTAssertEqual(candidate.first?.revision, 1,
             "Content editing must not reset FSRS scheduling state")
@@ -100,11 +101,58 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             try await repo.updateManagedCard(
                 WCDBV3CardInput(cardID: ids[0], question: "Stale",
                     answerText: "No write"),
-                expectedRevision: 999)
+                expectedRevision: 999, expectedContentRevision: 0)
             XCTFail("Stale update must be rejected")
         } catch ReviewWCDBError.revisionConflict { }
         let unchanged = try await repo.content(for: ids[0])
         XCTAssertEqual(unchanged?.question, "Search 0")
+    }
+
+    func testConcurrentContentEditorsRejectStaleSaveWithoutChangingFSRS() async throws {
+        let calculator = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(), calculator: calculator)
+        let id = UUID()
+        let now = Date(timeIntervalSince1970: 1_720_000_123)
+        try await repo.insertNewCard(
+            WCDBV3CardInput(cardID: id, question: "Initial", answerText: "A"),
+            initial: try calculator.newCardSnapshot(id: id, now: now), now: now)
+        let editorA = try XCTUnwrap(await repo.content(for: id))
+        let editorB = try XCTUnwrap(await repo.content(for: id))
+        XCTAssertEqual(editorA.contentRevision, 0)
+        try await repo.updateManagedCard(
+            WCDBV3CardInput(cardID: id, question: "Editor A", answerText: "A"),
+            expectedRevision: 0, expectedContentRevision: editorA.contentRevision)
+        do {
+            try await repo.updateManagedCard(
+                WCDBV3CardInput(cardID: id, question: "Editor B", answerText: "B"),
+                expectedRevision: 0, expectedContentRevision: editorB.contentRevision)
+            XCTFail("Stale content edit must not overwrite a newer saved edit")
+        } catch ReviewWCDBError.contentConflict { }
+        let current = try await repo.content(for: id)
+        XCTAssertEqual(current?.question, "Editor A")
+        XCTAssertEqual(current?.contentRevision, 1)
+        let queue = try await repo.fetchQueueCandidates()
+        XCTAssertEqual(queue.first?.revision, 0)
+        XCTAssertTrue(try await repo.reviewHistory(for: id).isEmpty)
+    }
+
+    func testManagedCardLiteralWildcardSearchAndEqualTimestampPaging() async throws {
+        let calculator = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(), calculator: calculator)
+        let now = Date(timeIntervalSince1970: 1_720_001_000)
+        let subjects = ["literal_% match", "literal_? match", "plain match", "literal_% other"]
+        for label in subjects {
+            let id = UUID()
+            try await repo.insertNewCard(
+                WCDBV3CardInput(cardID: id, question: label, answerText: "answer"),
+                initial: try calculator.newCardSnapshot(id: id, now: now), now: now)
+        }
+        let left = try await repo.listManagedCards(offset: 0, limit: 2)
+        let right = try await repo.listManagedCards(offset: 2, limit: 2)
+        XCTAssertEqual(Set((left + right).map(\.cardID)).count, 4)
+        let literal = try await repo.listManagedCards(matching: "_%", limit: 20)
+        XCTAssertEqual(literal.count, 2)
+        XCTAssertTrue(literal.allSatisfy { $0.question.contains("_%") })
     }
 
     func testV3BackupZIPRoundTripAndChecksumRejection() async throws {

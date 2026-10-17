@@ -194,7 +194,8 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
                 editor.onSave = { [weak self] input in
                     guard let self else { throw CocoaError(.userCancelled) }
                     try await self.repository.updateManagedCard(
-                        input, expectedRevision: item.revision)
+                        input, expectedRevision: item.revision,
+                        expectedContentRevision: stored.contentRevision)
                     self.onMutation?()
                     self.reloadCards()
                 }
