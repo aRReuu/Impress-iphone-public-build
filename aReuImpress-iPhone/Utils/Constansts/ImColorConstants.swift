@@ -125,36 +125,77 @@ let playBtnColor = UIColor.systemOrange
 // not to every card/background. UIKit supplies pressed/disabled states.
 @available(iOS 15.0, *)
 enum ImpressV3NativeButtonAppearance {
+    /// A filled action is reserved for the one primary step in a workflow.
     static func primary(_ button: UIButton, title: String) {
         var configuration = UIButton.Configuration.filled()
         configuration.title = title
         configuration.buttonSize = .large
-        configuration.cornerStyle = .medium
+        configuration.cornerStyle = .large
+        configuration.contentInsets = NSDirectionalEdgeInsets(
+            top: 12, leading: 18, bottom: 12, trailing: 18)
         configuration.baseBackgroundColor = ImpressV3Appearance.accent
         configuration.baseForegroundColor = ImpressV3Appearance.primaryButtonText
+        configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer {
+            attributes in
+            var next = attributes
+            next.font = ImpressV3Appearance.Typography.heading
+            return next
+        }
         button.configuration = configuration
-        button.titleLabel?.adjustsFontForContentSizeCategory = true
+        prepare(button, minimumHeight: ImpressV3Appearance.Metrics.primaryActionHeight)
     }
 
+    /// Lightweight tertiary actions in the compact review toolbar.
     static func secondary(_ button: UIButton, title: String) {
         button.configuration = secondaryConfiguration(title: title)
-        button.titleLabel?.adjustsFontForContentSizeCategory = true
+        prepare(button, minimumHeight: ImpressV3Appearance.Metrics.tapTarget)
     }
 
-    /// Native text-first action without a decorative outline. Centralized to
-    /// ensure Composer, batch import and context actions share one treatment.
     static func secondaryConfiguration(title: String, symbol: String? = nil)
     -> UIButton.Configuration {
         var configuration = UIButton.Configuration.plain()
         configuration.title = title
         configuration.buttonSize = .large
-        configuration.cornerStyle = .medium
+        configuration.cornerStyle = .large
         configuration.baseForegroundColor = ImpressV3Appearance.accent
+        configuration.contentInsets = NSDirectionalEdgeInsets(
+            top: 10, leading: 8, bottom: 10, trailing: 8)
         if let symbol {
             configuration.image = UIImage(systemName: symbol)
-            configuration.imagePadding = 8
+            configuration.imagePadding = ImpressV3Appearance.Metrics.symbolGap
         }
         return configuration
+    }
+
+    /// Quiet, tangible secondary buttons (file/photo/add option).
+    /// These are not Liquid Glass and have no decorative stroke or shadow.
+    static func quiet(_ button: UIButton, title: String, symbol: String? = nil) {
+        var configuration = UIButton.Configuration.gray()
+        configuration.title = title
+        configuration.buttonSize = .large
+        configuration.cornerStyle = .large
+        configuration.baseBackgroundColor = ImpressV3Appearance.quietControlSurface
+        configuration.baseForegroundColor = ImpressV3Appearance.primaryText
+        configuration.contentInsets = NSDirectionalEdgeInsets(
+            top: 12, leading: 12, bottom: 12, trailing: 12)
+        if let symbol {
+            configuration.image = UIImage(systemName: symbol)
+            configuration.imagePadding = ImpressV3Appearance.Metrics.symbolGap
+        }
+        button.configuration = configuration
+        prepare(button, minimumHeight: ImpressV3Appearance.Metrics.controlHeight)
+    }
+
+    private static func prepare(_ button: UIButton, minimumHeight: CGFloat) {
+        button.titleLabel?.adjustsFontForContentSizeCategory = true
+        if !button.constraints.contains(where: {
+            $0.firstAttribute == .height &&
+            $0.secondItem == nil &&
+            $0.relation == .greaterThanOrEqual &&
+            $0.constant >= minimumHeight
+        }) {
+            button.heightAnchor.constraint(greaterThanOrEqualToConstant: minimumHeight).isActive = true
+        }
     }
 }
 
@@ -173,6 +214,11 @@ enum ImpressV3Appearance {
     static let segmentTrack = UIColor.tertiarySystemFill
     static let secondarySegmentSelection = UIColor.tertiarySystemGroupedBackground
     static let mutedAction = UIColor.systemGray
+    static let quietControlSurface = UIColor.secondarySystemFill
+    static let optionSurface = UIColor.tertiarySystemGroupedBackground
+    static let selectedOptionSurface = funBtnColor.withAlphaComponent(0.12)
+    static let correctOptionSurface = safeTipColor.withAlphaComponent(0.12)
+    static let incorrectOptionSurface = reviewCellColor.withAlphaComponent(0.12)
     static let accent = funBtnColor
     static let primaryText = titleColor
     static let secondaryText = contentColor
@@ -214,7 +260,118 @@ enum ImpressV3Appearance {
         control.layer.cornerRadius = Radius.segment
         // Keep Apple's intrinsic segment geometry and pressed-state behavior.
         // An outer hard border would reintroduce the heavy boxed-button look.
-        control.heightAnchor.constraint(greaterThanOrEqualToConstant: 50).isActive = true
+        control.heightAnchor.constraint(
+            greaterThanOrEqualToConstant: Metrics.segmentHeight).isActive = true
+    }
+
+    /// Fill the available width on an iPhone, but stop before segments turn
+    /// into wide tiles on iPad/landscape. A soft fill constraint lets the
+    /// required maximum take precedence, without unsatisfiable constraints.
+    static func segmentedRow(_ control: UISegmentedControl, compact: Bool = false) -> UIView {
+        let container = UIView()
+        control.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(control)
+        let maxWidth = compact ? Metrics.compactSegmentWidth : Metrics.maximumSegmentWidth
+        let fill = control.widthAnchor.constraint(equalTo: container.widthAnchor)
+        fill.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            control.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            control.topAnchor.constraint(equalTo: container.topAnchor),
+            control.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            control.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor),
+            control.widthAnchor.constraint(lessThanOrEqualToConstant: maxWidth),
+            fill
+        ])
+        return container
+    }
+
+    /// Semantic measurements: iPhone 13 and larger Dynamic Type remain legible.
+    /// Visual sizing MUST NOT be redefined in individual V3 controllers.
+    enum Metrics {
+        static let screenInset: CGFloat = 20
+        static let compactInset: CGFloat = 16
+        static let sectionSpacing: CGFloat = 16
+        static let rowSpacing: CGFloat = 10
+        static let choiceSpacing: CGFloat = 10
+        static let symbolGap: CGFloat = 8
+        static let tapTarget: CGFloat = 44
+        static let controlHeight: CGFloat = 48
+        static let segmentHeight: CGFloat = 50
+        static let primaryActionHeight: CGFloat = 52
+        static let answerOptionHeight: CGFloat = 52
+        static let maximumSegmentWidth: CGFloat = 440
+        static let compactSegmentWidth: CGFloat = 320
+        static let cardInset: CGFloat = 16
+        static let fieldPadding: CGFloat = 14
+        static let optionTextPadding: CGFloat = 14
+        static let questionEditorMinHeight: CGFloat = 100
+        static let answerEditorMinHeight: CGFloat = 128
+        static let photoPreviewHeight: CGFloat = 220
+        static let batchEditorMinHeight: CGFloat = 260
+        static let promptEditorMinHeight: CGFloat = 230
+        static let timelineRailWidth: CGFloat = 1
+        static let timelineDotDiameter: CGFloat = 10
+        static let timelineRailOffset: CGFloat = 27
+        static let timelineTextOffset: CGFloat = 51
+    }
+
+    enum ChoiceFeedback {
+        case idle, selected, correct, incorrect
+    }
+
+    /// One reusable answer treatment for the active V3 review view.
+    /// A rounded inset surface is enough: never add per-answer heavy borders.
+    static func styleChoiceOption(_ button: UIButton, feedback: ChoiceFeedback) {
+        var configuration = UIButton.Configuration.plain()
+        configuration.title = button.title(for: .normal) ?? button.configuration?.title
+        configuration.buttonSize = .large
+        configuration.cornerStyle = .large
+        configuration.titleAlignment = .leading
+        configuration.contentInsets = NSDirectionalEdgeInsets(
+            top: 12, leading: Metrics.optionTextPadding,
+            bottom: 12, trailing: Metrics.optionTextPadding)
+        configuration.imagePadding = Metrics.symbolGap
+        configuration.baseForegroundColor = primaryText
+        switch feedback {
+        case .idle:
+            configuration.background.backgroundColor = optionSurface
+        case .selected:
+            configuration.background.backgroundColor = selectedOptionSurface
+            configuration.image = UIImage(systemName: "checkmark.circle.fill")
+        case .correct:
+            configuration.background.backgroundColor = correctOptionSurface
+            configuration.image = UIImage(systemName: "checkmark.circle.fill")
+        case .incorrect:
+            configuration.background.backgroundColor = incorrectOptionSurface
+            configuration.image = UIImage(systemName: "xmark.circle.fill")
+        }
+        configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer {
+            attributes in
+            var next = attributes
+            next.font = Typography.body
+            return next
+        }
+        button.configuration = configuration
+        button.contentHorizontalAlignment = .leading
+        button.titleLabel?.numberOfLines = 0
+        button.titleLabel?.adjustsFontForContentSizeCategory = true
+    }
+
+    static func styleGroupedCell(_ cell: UITableViewCell) {
+        cell.backgroundColor = surface
+    }
+
+    static func styleTextField(_ field: UITextField) {
+        field.borderStyle = .none
+        field.backgroundColor = surface
+        field.textColor = primaryText
+        field.font = Typography.body
+        field.adjustsFontForContentSizeCategory = true
+        field.layer.cornerRadius = Radius.field
+        let inset = UIView(frame: CGRect(
+            x: 0, y: 0, width: Metrics.fieldPadding, height: 1))
+        field.leftView = inset
+        field.leftViewMode = .always
     }
 
     enum Radius {
@@ -236,5 +393,13 @@ enum ImpressV3Appearance {
         static var footnote: UIFont { UIFont.preferredFont(forTextStyle: .footnote) }
         static var caption: UIFont { UIFont.preferredFont(forTextStyle: .caption1) }
         static var micro: UIFont { UIFont.preferredFont(forTextStyle: .caption2) }
+        static var code: UIFont {
+            UIFontMetrics(forTextStyle: .body).scaledFont(
+                for: UIFont.monospacedSystemFont(ofSize: 14, weight: .regular))
+        }
+        static var compactCode: UIFont {
+            UIFontMetrics(forTextStyle: .footnote).scaledFont(
+                for: UIFont.monospacedSystemFont(ofSize: 13, weight: .regular))
+        }
     }
 }

@@ -117,7 +117,7 @@ final class ImpressV3PromptLibraryViewController: UITableViewController {
         c.image = UIImage(systemName: "text.alignleft")
         c.imageProperties.tintColor = ImpressV3Appearance.secondaryText
         cell.contentConfiguration = c
-        cell.backgroundColor = ImpressV3Appearance.surface
+        ImpressV3Appearance.styleGroupedCell(cell)
         cell.accessoryType = .disclosureIndicator
         return cell
     }
@@ -216,7 +216,7 @@ final class ImpressV3PromptEditorViewController: UIViewController {
         scroll.keyboardDismissMode = .interactive
         let stack = UIStackView()
         stack.axis = .vertical
-        stack.spacing = 16
+        stack.spacing = ImpressV3Appearance.Metrics.sectionSpacing
         stack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(scroll)
         scroll.addSubview(stack)
@@ -224,11 +224,11 @@ final class ImpressV3PromptEditorViewController: UIViewController {
             scroll.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 20),
-            stack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: 20),
-            stack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -20),
+            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: ImpressV3Appearance.Metrics.screenInset),
+            stack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: ImpressV3Appearance.Metrics.screenInset),
+            stack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -ImpressV3Appearance.Metrics.screenInset),
             stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -20),
-            stack.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -40)
+            stack.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -2 * ImpressV3Appearance.Metrics.screenInset)
         ])
         if #available(iOS 15.0, *) {
             scroll.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor).isActive = true
@@ -239,27 +239,13 @@ final class ImpressV3PromptEditorViewController: UIViewController {
         titleLabel.text = "名称"
         titleLabel.font = ImpressV3Appearance.Typography.heading
         stack.addArrangedSubview(titleLabel)
-        titleField.borderStyle = .none
-        titleField.backgroundColor = ImpressV3Appearance.surface
-        titleField.font = ImpressV3Appearance.Typography.body
-        titleField.adjustsFontForContentSizeCategory = true
-        titleField.layer.cornerRadius = ImpressV3Appearance.Radius.compactField
+        ImpressV3Appearance.styleTextField(titleField)
         titleField.placeholder = "例如：费曼总结"
         titleField.text = original?.title
         titleField.accessibilityLabel = "提示词名称"
-        let nameRow = UIView()
-        nameRow.addSubview(titleField)
-        titleField.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            titleField.leadingAnchor.constraint(equalTo: nameRow.leadingAnchor, constant: 12),
-            titleField.trailingAnchor.constraint(equalTo: nameRow.trailingAnchor, constant: -12),
-            titleField.topAnchor.constraint(equalTo: nameRow.topAnchor),
-            titleField.bottomAnchor.constraint(equalTo: nameRow.bottomAnchor),
-            titleField.heightAnchor.constraint(greaterThanOrEqualToConstant: 48)
-        ])
-        nameRow.backgroundColor = ImpressV3Appearance.surface
-        nameRow.layer.cornerRadius = ImpressV3Appearance.Radius.compactField
-        stack.addArrangedSubview(nameRow)
+        titleField.heightAnchor.constraint(
+            greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.controlHeight).isActive = true
+        stack.addArrangedSubview(titleField)
         let instruction = UILabel()
         instruction.text = "内容"
         instruction.font = ImpressV3Appearance.Typography.heading
@@ -269,10 +255,11 @@ final class ImpressV3PromptEditorViewController: UIViewController {
         contentView.backgroundColor = ImpressV3Appearance.surface
         contentView.textColor = ImpressV3Appearance.primaryText
         contentView.layer.cornerRadius = ImpressV3Appearance.Radius.compactField
-        contentView.textContainerInset = UIEdgeInsets(top: 12, left: 9, bottom: 12, right: 9)
+        contentView.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding,
+                                                   bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
         contentView.text = original?.content ?? ""
         contentView.accessibilityLabel = "可复制的提示词正文"
-        contentView.heightAnchor.constraint(greaterThanOrEqualToConstant: 230).isActive = true
+        contentView.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.promptEditorMinHeight).isActive = true
         stack.addArrangedSubview(contentView)
         let note = UILabel()
         note.text = "只会在本机保存。调用时复制内容，不会自动发送到网页。"

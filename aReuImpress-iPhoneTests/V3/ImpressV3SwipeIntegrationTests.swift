@@ -112,9 +112,15 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
             XCTFail("Multiple choice card missing")
             return
         }
-        let options = answer.subviews.compactMap { $0 as? UIStackView }
-            .flatMap { $0.arrangedSubviews.compactMap { $0 as? UIButton } }
+        // R04.2-D2: native options live inside a vertically scrollable
+        // card container; no longer look only at immediate subviews.
+        func buttons(in root: UIView) -> [UIButton] {
+            let own = (root as? UIButton).map { [$0] } ?? []
+            return own + root.subviews.flatMap(buttons(in:))
+        }
+        let options = buttons(in: answer)
         XCTAssertEqual(options.count, 2)
+        XCTAssertEqual(answer.subviews.compactMap { $0 as? UIScrollView }.count, 1)
         XCTAssertTrue(options.allSatisfy { $0.buttonType == .system })
         answer.showAnswer()
         let revealed = try await eventually {
@@ -416,6 +422,105 @@ final class ImpressR042AppearanceTests: XCTestCase {
         XCTAssertEqual(attrs?[.foregroundColor] as? UIColor,
                        ImpressV3Appearance.primaryButtonText)
     }
+    func testCentralButtonTapTargetsAndQuietSecondaryFeedback() {
+        let main = UIButton(type: .system)
+        ImpressV3NativeButtonAppearance.primary(main, title: "查看答案")
+        XCTAssertEqual(main.configuration?.baseBackgroundColor,
+                       ImpressV3Appearance.accent)
+        XCTAssertTrue(main.constraints.contains {
+            $0.firstAttribute == .height &&
+            $0.relation == .greaterThanOrEqual &&
+            $0.constant >= ImpressV3Appearance.Metrics.primaryActionHeight
+        })
+
+        let secondary = UIButton(type: .system)
+        ImpressV3NativeButtonAppearance.quiet(
+            secondary, title: "选择图片", symbol: "photo")
+        XCTAssertEqual(secondary.configuration?.baseBackgroundColor,
+                       ImpressV3Appearance.quietControlSurface)
+        XCTAssertTrue(secondary.constraints.contains {
+            $0.firstAttribute == .height &&
+            $0.relation == .greaterThanOrEqual &&
+            $0.constant >= ImpressV3Appearance.Metrics.controlHeight
+        })
+    }
+
+    func testSegmentsHaveEqualItemsAndResponsiveMaximumWidth() {
+        let picker = UISegmentedControl(items: ["问答", "选择题", "图片"])
+        ImpressV3Appearance.styleSegmentedControl(picker, prominent: true)
+        let row = ImpressV3Appearance.segmentedRow(picker)
+        row.frame = CGRect(x: 0, y: 0, width: 350, height: 50)
+        row.setNeedsLayout()
+        row.layoutIfNeeded()
+        XCTAssertFalse(picker.apportionsSegmentWidthsByContent)
+        XCTAssertEqual(picker.numberOfSegments, 3)
+        XCTAssertGreaterThan(picker.bounds.width, 300)
+        XCTAssertTrue(picker.constraints.contains {
+            $0.firstAttribute == .height &&
+            $0.relation == .greaterThanOrEqual &&
+            $0.constant >= ImpressV3Appearance.Metrics.segmentHeight
+        })
+        row.frame.size.width = 900
+        row.setNeedsLayout()
+        row.layoutIfNeeded()
+        XCTAssertLessThanOrEqual(
+            picker.bounds.width, ImpressV3Appearance.Metrics.maximumSegmentWidth + 1)
+    }
+
+    func testBatchImportFormatSegmentsAreShortAndAccessible() throws {
+        let importer = ImpressV3BatchImportViewController()
+        importer.loadViewIfNeeded()
+        func segments(in root: UIView) -> [UISegmentedControl] {
+            let own = (root as? UISegmentedControl).map { [$0] } ?? []
+            return own + root.subviews.flatMap(segments(in:))
+        }
+        let selector = try XCTUnwrap(segments(in: importer.view).first)
+        XCTAssertEqual(selector.numberOfSegments, 4)
+        XCTAssertEqual(selector.titleForSegment(at: 3), "MD")
+        XCTAssertEqual(selector.accessibilityLabel, "导入格式")
+        XCTAssertEqual(selector.selectedSegmentTintColor,
+                       ImpressV3Appearance.secondarySegmentSelection)
+    }
+
+    func testTwelveAnswerChoicesRemainScrollableWithoutDuplicateRating() {
+        var model = ImCardModel()
+        model.question = "从 12 个选项中选择正确项"
+        model.cardType = CardType.multipleChoice.rawValue
+        model.choices = (1...12).map { "选项 \($0)" }.joined(separator: "\n")
+        model.correctAnswerIndices = "0,4"
+        let view = ImMultipleChoiceCardView(
+            model: model, usesNativeOptionButtons: true)
+        view.frame = CGRect(x: 0, y: 0, width: 350, height: 420)
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        func descendants<T: UIView>(_ root: UIView, _ type: T.Type) -> [T] {
+            let own = (root as? T).map { [$0] } ?? []
+            return own + root.subviews.flatMap { descendants($0, type) }
+        }
+        let options = descendants(view, UIButton.self)
+        XCTAssertEqual(options.count, 12)
+        XCTAssertEqual(descendants(view, UIScrollView.self).count, 1)
+        XCTAssertTrue(options.allSatisfy { button in
+            button.constraints.contains {
+                $0.firstAttribute == .height &&
+                $0.relation == .greaterThanOrEqual &&
+                $0.constant >= ImpressV3Appearance.Metrics.answerOptionHeight
+            }
+        })
+        XCTAssertTrue(options.allSatisfy {
+            $0.configuration?.background.backgroundColor == ImpressV3Appearance.optionSurface
+        })
+        XCTAssertFalse(view.answerIsRevealed)
+        view.showAnswer()
+        XCTAssertTrue(view.answerIsRevealed)
+        XCTAssertFalse(options[0].isUserInteractionEnabled)
+        XCTAssertTrue(options[0].isEnabled) // no dimmed correct-answer text
+        XCTAssertEqual(options[0].configuration?.background.backgroundColor,
+                       ImpressV3Appearance.correctOptionSurface)
+        XCTAssertEqual(options[1].configuration?.background.backgroundColor,
+                       ImpressV3Appearance.optionSurface)
+    }
+
 }
 
 // R04.2: native creation must be separate from legacy generic ImSubmit,

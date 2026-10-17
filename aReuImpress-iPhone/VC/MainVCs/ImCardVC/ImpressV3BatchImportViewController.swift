@@ -69,7 +69,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
                                                 UITextViewDelegate {
     var onCommit: (([WCDBV3CardInput]) async throws -> Void)?
 
-    private let formatPicker = UISegmentedControl(items: ["文本", "CSV", "TSV", "Markdown"])
+    private let formatPicker = UISegmentedControl(items: ["文本", "CSV", "TSV", "MD"])
     private let editor = UITextView()
     private let sourceLabel = UILabel()
     private var authorizedIdentity: ImVaultFileIdentity?
@@ -89,7 +89,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
         scroll.keyboardDismissMode = .interactive
         let stack = UIStackView()
         stack.axis = .vertical
-        stack.spacing = 16
+        stack.spacing = ImpressV3Appearance.Metrics.sectionSpacing
         stack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(scroll)
         scroll.addSubview(stack)
@@ -97,11 +97,11 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
             scroll.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 20),
-            stack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: 20),
-            stack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -20),
+            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: ImpressV3Appearance.Metrics.screenInset),
+            stack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: ImpressV3Appearance.Metrics.screenInset),
+            stack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -ImpressV3Appearance.Metrics.screenInset),
             stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -20),
-            stack.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -40)
+            stack.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -2 * ImpressV3Appearance.Metrics.screenInset)
         ])
         if #available(iOS 15.0, *) {
             scroll.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor).isActive = true
@@ -117,10 +117,13 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
         intro.textColor = ImpressV3Appearance.secondaryText
         stack.addArrangedSubview(intro)
         formatPicker.selectedSegmentIndex = 0
-        stack.addArrangedSubview(formatPicker)
+        ImpressV3Appearance.styleSegmentedControl(formatPicker, prominent: false)
+        formatPicker.accessibilityLabel = "导入格式"
+        formatPicker.accessibilityHint = "MD 表示 Markdown；选择一种格式后，输入文本并预览。"
+        stack.addArrangedSubview(ImpressV3Appearance.segmentedRow(formatPicker))
         let buttons = UIStackView()
         buttons.axis = .horizontal
-        buttons.spacing = 12
+        buttons.spacing = ImpressV3Appearance.Metrics.rowSpacing
         buttons.distribution = .fillEqually
         buttons.addArrangedSubview(actionButton("选择文件", icon: "doc", selector: #selector(chooseFile)))
         buttons.addArrangedSubview(actionButton("Obsidian 笔记", icon: "folder", selector: #selector(chooseVault)))
@@ -136,11 +139,12 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
         editor.backgroundColor = ImpressV3Appearance.surface
         editor.textColor = ImpressV3Appearance.primaryText
         editor.layer.cornerRadius = ImpressV3Appearance.Radius.field
-        editor.textContainerInset = UIEdgeInsets(top: 14, left: 12, bottom: 14, right: 12)
+        editor.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding,
+                                                  bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
         editor.accessibilityLabel = "本地批量导入原始文本"
         editor.delegate = self
         stack.addArrangedSubview(editor)
-        editor.heightAnchor.constraint(greaterThanOrEqualToConstant: 270).isActive = true
+        editor.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.batchEditorMinHeight).isActive = true
         let hint = UILabel()
         hint.numberOfLines = 0
         hint.font = ImpressV3Appearance.Typography.footnote
@@ -152,13 +156,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
 
     private func actionButton(_ title: String, icon: String, selector: Selector) -> UIButton {
         let button = UIButton(type: .system)
-        if #available(iOS 15.0, *) {
-            button.configuration = ImpressV3NativeButtonAppearance
-                .secondaryConfiguration(title: title, symbol: icon)
-        } else {
-            button.setTitle(title, for: .normal)
-            button.setImage(UIImage(systemName: icon), for: .normal)
-        }
+        ImpressV3NativeButtonAppearance.quiet(button, title: title, symbol: icon)
         button.addTarget(self, action: selector, for: .touchUpInside)
         button.titleLabel?.adjustsFontForContentSizeCategory = true
         return button
@@ -367,6 +365,9 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
         super.viewDidLoad()
         title = "导入预览"
         navigationItem.largeTitleDisplayMode = .never
+        tableView.backgroundColor = ImpressV3Appearance.page
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 78
         let commit = UIBarButtonItem(title: "全部导入", style: .done,
                                      target: self, action: #selector(commitBatch))
         commitButton = commit
@@ -426,6 +427,7 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
         cfg.image = UIImage(systemName: issue == nil ? "checkmark.circle" : "exclamationmark.circle")
         cfg.imageProperties.tintColor = issue == nil ? ImpressV3Appearance.positive : ImpressV3Appearance.caution
         cell.contentConfiguration = cfg
+        ImpressV3Appearance.styleGroupedCell(cell)
         cell.accessoryType = .detailDisclosureButton
         cell.accessibilityHint = "点按编辑本题，详情按钮查看原文与原始错误，左滑移除。"
         return cell
@@ -452,7 +454,8 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
         body.textColor = ImpressV3Appearance.primaryText
         body.backgroundColor = ImpressV3Appearance.surface
         body.layer.cornerRadius = ImpressV3Appearance.Radius.compactField
-        body.textContainerInset = UIEdgeInsets(top: 16, left: 12, bottom: 16, right: 12)
+        body.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding,
+                                              bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
         body.accessibilityLabel = "原始导入文本及解析问题"
         let diagnostics = record.issues.isEmpty
             ? "原始解析没有错误。"

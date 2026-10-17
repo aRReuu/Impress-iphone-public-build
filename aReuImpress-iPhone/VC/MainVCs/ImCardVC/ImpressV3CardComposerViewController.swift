@@ -134,7 +134,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.keyboardDismissMode = .interactive
         stack.axis = .vertical
-        stack.spacing = 16
+        stack.spacing = ImpressV3Appearance.Metrics.sectionSpacing
         stack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(scroll)
         scroll.addSubview(stack)
@@ -142,11 +142,11 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
             scroll.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 16),
-            stack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: 20),
-            stack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -20),
+            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: ImpressV3Appearance.Metrics.sectionSpacing),
+            stack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: ImpressV3Appearance.Metrics.screenInset),
+            stack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -ImpressV3Appearance.Metrics.screenInset),
             stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -24),
-            stack.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -40)
+            stack.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -2 * ImpressV3Appearance.Metrics.screenInset)
         ])
         if #available(iOS 15.0, *) {
             scroll.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor).isActive = true
@@ -160,7 +160,9 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         ImpressV3Appearance.styleSegmentedControl(typePicker, prominent: true)
         typePicker.accessibilityLabel = "卡片类型"
         typePicker.addTarget(self, action: #selector(typeDidChange), for: .valueChanged)
-        stack.addArrangedSubview(makeLabeledGroup("卡片类型", child: typePicker))
+        // The control labels already name the types; a second visible
+        // "卡片类型" heading would add friction without information.
+        stack.addArrangedSubview(ImpressV3Appearance.segmentedRow(typePicker))
 
         questionView.backgroundColor = ImpressV3Appearance.surface
         questionView.layer.cornerRadius = ImpressV3Appearance.Radius.field
@@ -168,8 +170,8 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         questionView.adjustsFontForContentSizeCategory = true
         questionView.textColor = ImpressV3Appearance.primaryText
         questionView.text = originalDraft.question
-        questionView.textContainerInset = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
-        questionView.heightAnchor.constraint(greaterThanOrEqualToConstant: 100).isActive = true
+        questionView.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding, bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
+        questionView.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.questionEditorMinHeight).isActive = true
         questionView.accessibilityLabel = "问题"
         stack.addArrangedSubview(makeLabeledGroup("问题", child: questionView))
 
@@ -182,7 +184,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         updateVisibleType()
     }
 
-    private func verticalStack(spacing: CGFloat = 10) -> UIStackView {
+    private func verticalStack(spacing: CGFloat = ImpressV3Appearance.Metrics.rowSpacing) -> UIStackView {
         let v = UIStackView()
         v.axis = .vertical
         v.spacing = spacing
@@ -212,35 +214,34 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
 
     private func configureQA() {
         qaSection.axis = .vertical
-        qaSection.spacing = 10
+        qaSection.spacing = ImpressV3Appearance.Metrics.rowSpacing
         answerView.backgroundColor = ImpressV3Appearance.surface
         answerView.layer.cornerRadius = ImpressV3Appearance.Radius.field
         answerView.font = ImpressV3Appearance.Typography.body
         answerView.adjustsFontForContentSizeCategory = true
         answerView.textColor = ImpressV3Appearance.primaryText
         answerView.text = originalDraft.answer
-        answerView.textContainerInset = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
-        answerView.heightAnchor.constraint(greaterThanOrEqualToConstant: 128).isActive = true
+        answerView.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding, bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
+        answerView.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.answerEditorMinHeight).isActive = true
         answerView.accessibilityLabel = "答案"
         qaSection.addArrangedSubview(makeLabeledGroup("答案", child: answerView))
     }
 
     private func configureChoices() {
         choiceSection.axis = .vertical
-        choiceSection.spacing = 14
+        choiceSection.spacing = ImpressV3Appearance.Metrics.sectionSpacing
         choiceMode.selectedSegmentIndex = originalDraft.allowsMultipleCorrect ? 1 : 0
         ImpressV3Appearance.styleSegmentedControl(choiceMode, prominent: false)
         choiceMode.accessibilityLabel = "单选或多选"
         choiceMode.addTarget(self, action: #selector(modeDidChange), for: .valueChanged)
-        choiceSection.addArrangedSubview(makeLabeledGroup("答案类型", child: choiceMode))
+        choiceSection.addArrangedSubview(
+            ImpressV3Appearance.segmentedRow(choiceMode, compact: true))
         optionList.axis = .vertical
-        optionList.spacing = 8
+        optionList.spacing = ImpressV3Appearance.Metrics.choiceSpacing
         choiceSection.addArrangedSubview(makeLabeledGroup("选项（点选正确答案）", child: optionList))
         addOptionButton.setTitle("添加选项", for: .normal)
-        if #available(iOS 15.0, *) {
-            addOptionButton.configuration = ImpressV3NativeButtonAppearance
-                .secondaryConfiguration(title: "添加选项", symbol: "plus")
-        }
+        ImpressV3NativeButtonAppearance.quiet(
+            addOptionButton, title: "添加选项", symbol: "plus")
         addOptionButton.addTarget(self, action: #selector(addOption), for: .touchUpInside)
         choiceSection.addArrangedSubview(addOptionButton)
         choiceSection.addArrangedSubview(caption("正确答案直接点击圆形标记；单选与多选均使用同一套 FSRS 复习评分。"))
@@ -249,19 +250,17 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
 
     private func configurePhoto() {
         photoSection.axis = .vertical
-        photoSection.spacing = 12
+        photoSection.spacing = ImpressV3Appearance.Metrics.sectionSpacing
         imageButton.setTitle("从照片选择图片", for: .normal)
-        if #available(iOS 15.0, *) {
-            imageButton.configuration = ImpressV3NativeButtonAppearance
-                .secondaryConfiguration(title: "从照片选择图片", symbol: "photo.on.rectangle")
-        }
+        ImpressV3NativeButtonAppearance.quiet(
+            imageButton, title: "从照片选择图片", symbol: "photo.on.rectangle")
         imageButton.addTarget(self, action: #selector(selectPhoto), for: .touchUpInside)
         photoSection.addArrangedSubview(imageButton)
         imagePreview.contentMode = .scaleAspectFit
         imagePreview.backgroundColor = ImpressV3Appearance.surface
         imagePreview.layer.cornerRadius = ImpressV3Appearance.Radius.field
         imagePreview.clipsToBounds = true
-        imagePreview.heightAnchor.constraint(equalToConstant: 225).isActive = true
+        imagePreview.heightAnchor.constraint(equalToConstant: ImpressV3Appearance.Metrics.photoPreviewHeight).isActive = true
         imagePreview.image = imageData.flatMap { UIImage(data: $0) }
         imagePreview.isHidden = imageData == nil
         photoSection.addArrangedSubview(imagePreview)
@@ -491,14 +490,14 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
             super.init(frame: .zero)
             axis = .horizontal
             alignment = .center
-            spacing = 8
+            spacing = ImpressV3Appearance.Metrics.rowSpacing
             let mark = UIButton(type: .system)
             mark.setImage(UIImage(systemName: correct
                                   ? (isMulti ? "checkmark.square.fill" : "largecircle.fill.circle")
                                   : (isMulti ? "square" : "circle")), for: .normal)
             mark.tintColor = ImpressV3Appearance.accent
-            mark.widthAnchor.constraint(equalToConstant: 44).isActive = true
-            mark.heightAnchor.constraint(equalToConstant: 44).isActive = true
+            mark.widthAnchor.constraint(equalToConstant: ImpressV3Appearance.Metrics.tapTarget).isActive = true
+            mark.heightAnchor.constraint(equalToConstant: ImpressV3Appearance.Metrics.tapTarget).isActive = true
             mark.accessibilityLabel = "选项 \(index + 1) \(correct ? "正确" : "未标记")"
             mark.addAction(UIAction { [weak self] _ in
                 guard let self else { return }
@@ -506,17 +505,14 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
             }, for: .touchUpInside)
             field.text = text
             field.placeholder = "选项 \(index + 1)"
-            field.font = ImpressV3Appearance.Typography.body
-            field.adjustsFontForContentSizeCategory = true
-            field.backgroundColor = ImpressV3Appearance.surface
-            field.borderStyle = .none
-            field.layer.cornerRadius = ImpressV3Appearance.Radius.field
+            ImpressV3Appearance.styleTextField(field)
             field.accessibilityLabel = "选项 \(index + 1) 内容"
-            field.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+            field.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.controlHeight).isActive = true
             let actions = UIButton(type: .system)
             actions.setImage(UIImage(systemName: "ellipsis"), for: .normal)
-            actions.widthAnchor.constraint(equalToConstant: 44).isActive = true
-            actions.heightAnchor.constraint(equalToConstant: 44).isActive = true
+            actions.widthAnchor.constraint(equalToConstant: ImpressV3Appearance.Metrics.tapTarget).isActive = true
+            actions.heightAnchor.constraint(equalToConstant: ImpressV3Appearance.Metrics.tapTarget).isActive = true
+            actions.tintColor = ImpressV3Appearance.secondaryText
             actions.accessibilityLabel = "调整或删除选项 \(index + 1)"
             actions.menu = UIMenu(children: [
                 UIAction(title: "上移", image: UIImage(systemName: "arrow.up")) { [weak self] _ in

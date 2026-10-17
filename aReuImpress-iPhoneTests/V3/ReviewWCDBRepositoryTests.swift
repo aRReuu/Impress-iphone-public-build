@@ -623,7 +623,8 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         XCTAssertEqual(ImpressV3Appearance.accent, funBtnColor)
         XCTAssertEqual(ImpressV3Appearance.primaryText, titleColor)
         XCTAssertEqual(ImpressV3Appearance.secondaryText, contentColor)
-        XCTAssertEqual(ImpressV3Appearance.surface, UIColor.secondarySystemBackground)
+        XCTAssertEqual(ImpressV3Appearance.page, UIColor.systemGroupedBackground)
+        XCTAssertEqual(ImpressV3Appearance.surface, UIColor.secondarySystemGroupedBackground)
         XCTAssertNotNil(ImpressV3Appearance.Typography.heading)
     }
 

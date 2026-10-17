@@ -68,7 +68,10 @@ jobs:
           theme=Path("aReuImpress-iPhone/Utils/Constansts/ImColorConstants.swift").read_text()
           for definition in ("enum ImpressV3Appearance", "enum Typography",
                              "enum Radius", "secondaryConfiguration",
-                             "styleSegmentedControl", "styleTabBar"):
+                             "styleSegmentedControl", "segmentedRow", "styleTabBar",
+                             "styleChoiceOption", "styleTextField", "enum Metrics",
+                             "answerOptionHeight", "maximumSegmentWidth",
+                             "compactSegmentWidth"):
               assert definition in theme, "Missing central token: " + definition
           appearance_files=[
               "aReuImpress-iPhone/Base/ImTabBarViewController.swift",
@@ -93,6 +96,20 @@ jobs:
               source=Path(file_name).read_text()
               clean="\n".join(line.partition("//")[0] for line in source.splitlines())
               assert not forbidden.search(clean), f"Noncentral V3 styling: {file_name}"
+          # Shared legacy screens are exempt, but V3-only Vault reader/draft/
+          # diff controllers must use the same theme class.
+          vault_source=Path("aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift").read_text()
+          assert "final class ImVaultDocumentController" in vault_source
+          vault_v3=vault_source.split("final class ImVaultDocumentController",1)[1]
+          vault_v3="\n".join(line.partition("//")[0] for line in vault_v3.splitlines())
+          assert not forbidden.search(vault_v3), "Noncentral Vault V3 appearance"
+          answers=Path("aReuImpress-iPhone/View/ImCard/ImMultipleChoiceCardView.swift").read_text()
+          assert "optionsScrollView.contentLayoutGuide" in answers
+          assert "styleChoiceOption" in answers
+          assert "usesNativeOptionButtons" in answers
+          assert "ImpressV3Appearance.styleSegmentedControl(formatPicker" in Path(
+              "aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3BatchImportViewController.swift").read_text()
+          print("CENTRALIZED_V3_GEOMETRY_AND_CHOICES PASS")
           print("CENTRALIZED_V3_APPEARANCE PASS")
           print("SANITIZED_MIRROR_AND_VAULT_LOCK PASS")
           PY
@@ -190,7 +207,7 @@ jobs:
           python3 - "$NAME" <<'PY'
           import hashlib, json, pathlib, sys
           ipa=pathlib.Path("out")/sys.argv[1]
-          m=dict(private_source_sha="8f8bd2034bfb8b82091f5882014ef77a9a105665",
+          m=dict(private_source_sha="ac7bd679455a73194a8e3c87a41ac07a2e0a9049",
                  public_snapshot_sha=__import__("subprocess").check_output(
                    ["git","rev-parse","HEAD"], text=True).strip(),
                  ipa_name=ipa.name,ipa_sha256=hashlib.sha256(ipa.read_bytes()).hexdigest(),
@@ -220,7 +237,7 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      EXPECTED_PRIVATE: 8f8bd2034bfb8b82091f5882014ef77a9a105665
+      EXPECTED_PRIVATE: ac7bd679455a73194a8e3c87a41ac07a2e0a9049
     steps:
       - name: Download artifact from this exact successful SDK27 run
         shell: bash
@@ -263,5 +280,5 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Impress V3.1 R04.2 — Native Authoring and Notes QA Candidate" \
             --prerelease \
-              --notes "R04.2-D1 candidate: 3 system tabs (Flashcards / Notes / Settings), compact Settings, editable local prompt library, read-only Vault, native chronological timeline, and independent paste/CSV/TSV/Markdown batch import under WCDB atomic transaction. Visual palette unifies grouped page, card/input surface and native selected type control through ImColorConstants.swift; iOS system TabBar glass retained. FSRS-6 and WCDB.swift 1.1.0 unchanged, production Vault writes locked, no user source notes uploaded. Automated Core, XCTest, Simulator, ARM64/ZIP/SHA verified only; physical iPhone visual approval PENDING. Unsigned IPA requires personal AltStore signing. Copyright-uncleared originals replaced by neutral CI assets."
+              --notes "R04.2-D2 minimal native UI candidate: 3 system tabs, compact Settings, local prompts, timeline, read-only Obsidian Vault, CSV/TSV/MD batch import. ImColorConstants.swift alone controls grouped page/content tones and responsive 50pt segmented selectors (iPhone fills; 440pt wide-screen cap, 320pt compact cap), native 52pt primary/48pt quiet/44pt tertiary actions and multiline 52pt scrollable choice buttons for 12-option questions. WCDB.swift 1.1.0 and FSRS-6 unchanged; no automatic Web Chat send, production Vault writes DISABLED. CI verifies Swift Core, UIKit XCTest, ARM64/ZIP/SHA before release. iPhone 13 visual acceptance pending. Unsigned IPA requires personal AltStore signing; unlicensed source imagery replaced by neutral CI assets."
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,assets

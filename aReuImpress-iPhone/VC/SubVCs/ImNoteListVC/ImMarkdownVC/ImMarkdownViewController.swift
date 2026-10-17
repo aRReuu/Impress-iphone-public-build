@@ -687,8 +687,9 @@ final class ImVaultDocumentController: UIViewController {
         super.viewDidLoad()
         title = URL(fileURLWithPath: document.identity.relativePath)
             .deletingPathExtension().lastPathComponent
-        view.backgroundColor = .systemBackground
-        readingView.backgroundColor = .systemBackground
+        view.backgroundColor = ImpressV3Appearance.page
+        readingView.backgroundColor = ImpressV3Appearance.surface
+        richView.backgroundColor = ImpressV3Appearance.surface
         readingView.isEditable = false
         readingView.isSelectable = true
         readingView.textAlignment = .left
@@ -746,7 +747,8 @@ final class ImVaultDocumentController: UIViewController {
         richView.isHidden = isSourceMode
         if isSourceMode {
             readingView.text = document.markdown
-            readingView.font = UIFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+            readingView.font = ImpressV3Appearance.Typography.code
+            readingView.adjustsFontForContentSizeCategory = true
         } else {
             // Existing bundled MarkdownView/markdown-it renders tables,
             // fenced code, lists and headings without exposing a mutable text
@@ -863,19 +865,22 @@ final class ImVaultDraftEditorController: UIViewController, UITextViewDelegate {
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "编辑私有草稿"
-        view.backgroundColor = .systemBackground
+        view.backgroundColor = ImpressV3Appearance.page
         let notice = UILabel()
         notice.text = "只保存在 Impress · 不直接修改 Obsidian"
-        notice.textColor = .secondaryLabel
+        notice.textColor = ImpressV3Appearance.secondaryText
         notice.textAlignment = .center
-        notice.font = UIFont.preferredFont(forTextStyle: .footnote)
+        notice.font = ImpressV3Appearance.Typography.footnote
+        notice.adjustsFontForContentSizeCategory = true
         notice.numberOfLines = 0
         notice.translatesAutoresizingMaskIntoConstraints = false
 
         sourceView.translatesAutoresizingMaskIntoConstraints = false
-        sourceView.backgroundColor = .secondarySystemGroupedBackground
-        sourceView.textColor = .label
-        sourceView.font = UIFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+        sourceView.backgroundColor = ImpressV3Appearance.surface
+        sourceView.textColor = ImpressV3Appearance.primaryText
+        sourceView.font = ImpressV3Appearance.Typography.code
+        sourceView.adjustsFontForContentSizeCategory = true
+        sourceView.layer.cornerRadius = ImpressV3Appearance.Radius.field
         sourceView.text = draft.editedText
         sourceView.textContainerInset = UIEdgeInsets(top: 15, left: 15,
                                                     bottom: 24, right: 15)
@@ -891,9 +896,12 @@ final class ImVaultDraftEditorController: UIViewController, UITextViewDelegate {
             notice.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             notice.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
             sourceView.topAnchor.constraint(equalTo: notice.bottomAnchor, constant: 8),
-            sourceView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
-            sourceView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
-            sourceView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
+            sourceView.leadingAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: ImpressV3Appearance.Metrics.screenInset),
+            sourceView.trailingAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -ImpressV3Appearance.Metrics.screenInset),
+            sourceView.bottomAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -ImpressV3Appearance.Metrics.compactInset)
         ])
         navigationItem.rightBarButtonItems = [
             UIBarButtonItem(title: "查看差异", style: .done, target: self,
@@ -1025,20 +1033,29 @@ final class ImVaultDiffController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "源文件差异"
-        view.backgroundColor = .systemBackground
+        view.backgroundColor = ImpressV3Appearance.page
         let text = UITextView()
         text.isEditable = false
         text.isSelectable = true
-        text.font = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        text.font = ImpressV3Appearance.Typography.compactCode
+        text.adjustsFontForContentSizeCategory = true
+        text.textColor = ImpressV3Appearance.primaryText
+        text.backgroundColor = ImpressV3Appearance.surface
+        text.layer.cornerRadius = ImpressV3Appearance.Radius.field
         text.text = summary
-        text.textContainerInset = UIEdgeInsets(top: 24, left: 12, bottom: 24, right: 12)
+        text.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding,
+                                             bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
         text.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(text)
         NSLayoutConstraint.activate([
-            text.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            text.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            text.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
-            text.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor)
+            text.topAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.topAnchor, constant: ImpressV3Appearance.Metrics.compactInset),
+            text.bottomAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -ImpressV3Appearance.Metrics.compactInset),
+            text.leadingAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: ImpressV3Appearance.Metrics.screenInset),
+            text.trailingAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -ImpressV3Appearance.Metrics.screenInset)
         ])
         let save = UIBarButtonItem(title: "确认写回", style: .done,
                                    target: self, action: #selector(confirmWrite))

@@ -307,7 +307,8 @@ extension ImpressNoteListTableViewController: UISearchBarDelegate
         let controller = UISearchController.init(searchResultsController: nil)
         controller.searchBar.placeholder = impressPageForNotesSearchBarDes
         controller.searchBar.delegate = self
-        controller.searchBar.tintColor = titleColor
+        controller.searchBar.tintColor = ImpressV3ReviewEnvironment.pilotEnabled
+            ? ImpressV3Appearance.accent : titleColor
         controller.obscuresBackgroundDuringPresentation = false
         navigationItem.searchController = controller
         navigationItem.hidesSearchBarWhenScrolling = false
@@ -423,7 +424,7 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
             content.textProperties.numberOfLines = 2
             content.secondaryTextProperties.numberOfLines = 2
             cell.contentConfiguration = content
-            cell.backgroundColor = ImpressV3Appearance.surface
+            ImpressV3Appearance.styleGroupedCell(cell)
             cell.accessoryType = .disclosureIndicator
             return cell
         }
@@ -433,6 +434,20 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
         }
         if let note = viewModel.getCurrentNote(indexPath: indexPath) {
             cell.configure(with: note)
+            if ImpressV3ReviewEnvironment.pilotEnabled {
+                ImpressV3Appearance.styleGroupedCell(cell)
+                cell.questionLabel.font = ImpressV3Appearance.Typography.heading
+                cell.contentLabel.font = ImpressV3Appearance.Typography.body
+                cell.sourceLabel.font = ImpressV3Appearance.Typography.caption
+                for label in [cell.questionLabel, cell.contentLabel, cell.sourceLabel] {
+                    label.adjustsFontForContentSizeCategory = true
+                }
+                cell.questionLabel.textColor = ImpressV3Appearance.primaryText
+                cell.contentLabel.textColor = ImpressV3Appearance.secondaryText
+                cell.sourceLabel.textColor = ImpressV3Appearance.mutedText
+                cell.statusIndicator.tintColor = (note.markdownText?.isEmpty ?? true)
+                    ? ImpressV3Appearance.mutedText : ImpressV3Appearance.accent
+            }
         }
         return cell
     }

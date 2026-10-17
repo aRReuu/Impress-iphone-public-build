@@ -37,6 +37,9 @@ class ImMultipleChoiceCardView: UIView {
     }()
     
     private let buttonMargin: CGFloat = 16
+    // V3 review can contain up to 12 answers. Scroll inside the card instead
+    // of squeezing equal-height options until content clips off-screen.
+    private let optionsScrollView = UIScrollView()
     
     private var model: ImCardModel
     private let usesNativeOptionButtons: Bool
@@ -55,9 +58,12 @@ class ImMultipleChoiceCardView: UIView {
         translatesAutoresizingMaskIntoConstraints = false
         if usesNativeOptionButtons {
             questionLabel.numberOfLines = 0
-            optionsStackView.spacing = 9
+            questionLabel.textAlignment = .left
+            optionsStackView.distribution = .fill
+            optionsStackView.spacing = ImpressV3Appearance.Metrics.choiceSpacing
             backgroundColor = ImpressV3Appearance.surface
             questionLabel.font = ImpressV3Appearance.Typography.cardTitle
+            questionLabel.adjustsFontForContentSizeCategory = true
             questionLabel.textColor = ImpressV3Appearance.primaryText
         }
         setupViews()
@@ -69,10 +75,45 @@ class ImMultipleChoiceCardView: UIView {
     }
     
     private func setupViews() {
-        // 将其他视图添加到容器中
         addSubview(questionLabel)
+        if usesNativeOptionButtons {
+            let metrics = ImpressV3Appearance.Metrics.self
+            optionsScrollView.translatesAutoresizingMaskIntoConstraints = false
+            optionsScrollView.alwaysBounceVertical = false
+            optionsScrollView.showsVerticalScrollIndicator = true
+            optionsScrollView.directionalLockEnabled = true
+            optionsScrollView.addSubview(optionsStackView)
+            addSubview(optionsScrollView)
+            NSLayoutConstraint.activate([
+                questionLabel.topAnchor.constraint(
+                    equalTo: safeAreaLayoutGuide.topAnchor, constant: metrics.cardInset),
+                questionLabel.leadingAnchor.constraint(
+                    equalTo: safeAreaLayoutGuide.leadingAnchor, constant: metrics.cardInset),
+                questionLabel.trailingAnchor.constraint(
+                    equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -metrics.cardInset),
+                optionsScrollView.topAnchor.constraint(
+                    equalTo: questionLabel.bottomAnchor, constant: metrics.rowSpacing),
+                optionsScrollView.leadingAnchor.constraint(
+                    equalTo: safeAreaLayoutGuide.leadingAnchor, constant: metrics.cardInset),
+                optionsScrollView.trailingAnchor.constraint(
+                    equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -metrics.cardInset),
+                optionsScrollView.bottomAnchor.constraint(
+                    equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -metrics.cardInset),
+                optionsStackView.topAnchor.constraint(
+                    equalTo: optionsScrollView.contentLayoutGuide.topAnchor),
+                optionsStackView.leadingAnchor.constraint(
+                    equalTo: optionsScrollView.contentLayoutGuide.leadingAnchor),
+                optionsStackView.trailingAnchor.constraint(
+                    equalTo: optionsScrollView.contentLayoutGuide.trailingAnchor),
+                optionsStackView.bottomAnchor.constraint(
+                    equalTo: optionsScrollView.contentLayoutGuide.bottomAnchor),
+                optionsStackView.widthAnchor.constraint(
+                    equalTo: optionsScrollView.frameLayoutGuide.widthAnchor)
+            ])
+            return
+        }
+        // Legacy screens keep their historical equal-height option layout.
         addSubview(optionsStackView)
-        // 设置内部视图约束
         NSLayoutConstraint.activate([
             questionLabel.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: defaultSpacing * 2),
             questionLabel.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor, constant: defaultSpacing),
@@ -109,24 +150,18 @@ class ImMultipleChoiceCardView: UIView {
         let button = UIButton(type: usesNativeOptionButtons ? .system : .custom)
         button.setTitle(title, for: .normal)
         button.tag = tag
-        button.titleLabel?.font = UIFont.preferredFont(forTextStyle: .body)
-        button.setTitleColor(titleColor, for: .normal)
-        button.backgroundColor = .clear
         button.contentHorizontalAlignment = .center
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.heightAnchor.constraint(greaterThanOrEqualToConstant:
-            usesNativeOptionButtons ? 44 : 48).isActive = true
         if usesNativeOptionButtons {
-            button.titleLabel?.font = ImpressV3Appearance.Typography.body
-            button.setTitleColor(ImpressV3Appearance.primaryText, for: .normal)
-            button.backgroundColor = ImpressV3Appearance.surface
-            button.layer.cornerRadius = ImpressV3Appearance.Radius.field
-            button.layer.borderWidth = 0
-            button.contentHorizontalAlignment = .leading
-            button.contentEdgeInsets = UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
-            button.titleLabel?.numberOfLines = 0
-            button.titleLabel?.adjustsFontForContentSizeCategory = true
+            ImpressV3Appearance.styleChoiceOption(button, feedback: .idle)
+            button.heightAnchor.constraint(greaterThanOrEqualToConstant:
+                ImpressV3Appearance.Metrics.answerOptionHeight).isActive = true
             button.accessibilityHint = "选项选择不计入复习评分"
+        } else {
+            button.titleLabel?.font = UIFont.preferredFont(forTextStyle: .body)
+            button.setTitleColor(titleColor, for: .normal)
+            button.backgroundColor = .clear
+            button.heightAnchor.constraint(greaterThanOrEqualToConstant: 48).isActive = true
         }
 
         // UIKit handles native pressed-state appearance in V3. Retain the
@@ -185,6 +220,14 @@ class ImMultipleChoiceCardView: UIView {
     }
 
     private func updateButtonAppearance() {
+        if usesNativeOptionButtons {
+            for button in optionButtons {
+                ImpressV3Appearance.styleChoiceOption(
+                    button, feedback: selectedIndices.contains(button.tag) ? .selected : .idle)
+                button.accessibilityValue = selectedIndices.contains(button.tag) ? "已选择" : "未选择"
+            }
+            return
+        }
         for button in optionButtons {
             if selectedIndices.contains(button.tag) {
                 // 选中的正确选项显示为蓝色
@@ -209,12 +252,22 @@ class ImMultipleChoiceCardView: UIView {
         let correctIndices = Set(correctIndicesString.split(separator: ",").compactMap { Int(String($0)) })
 
         for button in optionButtons {
-            button.isEnabled = false // 禁用所有按钮
             let tag = button.tag
-
             let isSelected = selectedIndices.contains(tag)
             let isCorrect = correctIndices.contains(tag)
 
+            if usesNativeOptionButtons {
+                // Retain full text contrast after reveal: disabling a UIKit
+                // button would dim even the correct-answer explanation.
+                button.isUserInteractionEnabled = false
+                ImpressV3Appearance.styleChoiceOption(button, feedback:
+                    isCorrect ? .correct : (isSelected ? .incorrect : .idle))
+                button.accessibilityValue = isCorrect
+                    ? "正确答案" : (isSelected ? "已选择，错误答案" : "未选择")
+                continue
+            }
+
+            button.isEnabled = false // Legacy screen only.
             // 默认样式
             button.backgroundColor = .clear
             button.layer.borderWidth = 0

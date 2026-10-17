@@ -79,7 +79,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
         answerTools.axis = .horizontal
         answerTools.distribution = .fillEqually
-        answerTools.spacing = 10
+        answerTools.spacing = ImpressV3Appearance.Metrics.rowSpacing
         answerTools.isHidden = true
         let reflect = UIButton(type: .system)
         reflect.setTitle("记录想法", for: .normal)
@@ -124,11 +124,11 @@ final class ImpressV3ReviewViewController: UIViewController {
         completionLabel.translatesAutoresizingMaskIntoConstraints = false
         repeatButton.translatesAutoresizingMaskIntoConstraints = false
 
-        statusLabel.font = ImpressV3Appearance.Typography.supporting
+        statusLabel.font = ImpressV3Appearance.Typography.caption
+        statusLabel.adjustsFontForContentSizeCategory = true
         statusLabel.textColor = ImpressV3Appearance.secondaryText
         statusLabel.textAlignment = .left
         statusLabel.text = "正在准备复习…"
-        statusLabel.font = ImpressV3Appearance.Typography.caption
 
         completionLabel.font = ImpressV3Appearance.Typography.body
         completionLabel.textColor = ImpressV3Appearance.secondaryText
@@ -137,9 +137,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         completionLabel.isHidden = true
 
         repeatButton.setTitle("刷新到期卡片", for: .normal)
-        if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.secondary(repeatButton, title: "刷新到期卡片")
-        }
+        ImpressV3NativeButtonAppearance.quiet(repeatButton, title: "刷新到期卡片")
         repeatButton.addTarget(self, action: #selector(refreshCards), for: .touchUpInside)
         repeatButton.isHidden = true
 
@@ -158,10 +156,10 @@ final class ImpressV3ReviewViewController: UIViewController {
             cardStack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
             cardStack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
             cardStack.bottomAnchor.constraint(equalTo: revealButton.topAnchor, constant: -12),
-            revealButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 24),
-            revealButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
+            revealButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: ImpressV3Appearance.Metrics.screenInset),
+            revealButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -ImpressV3Appearance.Metrics.screenInset),
             revealButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
-            revealButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 52),
+            revealButton.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.primaryActionHeight),
             answerTools.topAnchor.constraint(equalTo: revealButton.topAnchor),
             answerTools.leadingAnchor.constraint(equalTo: revealButton.leadingAnchor),
             answerTools.trailingAnchor.constraint(equalTo: revealButton.trailingAnchor),
@@ -939,16 +937,22 @@ final class ImpressV3TimelineViewController: UITableViewController {
         body.font = ImpressV3Appearance.Typography.body
         body.adjustsFontForContentSizeCategory = true
         body.textColor = ImpressV3Appearance.primaryText
-        body.backgroundColor = ImpressV3Appearance.page
+        body.backgroundColor = ImpressV3Appearance.surface
+        body.layer.cornerRadius = ImpressV3Appearance.Radius.field
         body.text = content
-        body.textContainerInset = UIEdgeInsets(top: 18, left: 16, bottom: 18, right: 16)
+        body.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding,
+                                             bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
         body.translatesAutoresizingMaskIntoConstraints = false
         detail.view.addSubview(body)
         NSLayoutConstraint.activate([
-            body.leadingAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.leadingAnchor),
-            body.trailingAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.trailingAnchor),
-            body.topAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.topAnchor),
-            body.bottomAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.bottomAnchor)
+            body.leadingAnchor.constraint(
+                equalTo: detail.view.safeAreaLayoutGuide.leadingAnchor, constant: ImpressV3Appearance.Metrics.screenInset),
+            body.trailingAnchor.constraint(
+                equalTo: detail.view.safeAreaLayoutGuide.trailingAnchor, constant: -ImpressV3Appearance.Metrics.screenInset),
+            body.topAnchor.constraint(
+                equalTo: detail.view.safeAreaLayoutGuide.topAnchor, constant: ImpressV3Appearance.Metrics.compactInset),
+            body.bottomAnchor.constraint(
+                equalTo: detail.view.safeAreaLayoutGuide.bottomAnchor, constant: -ImpressV3Appearance.Metrics.compactInset)
         ])
         return detail
     }
@@ -993,16 +997,16 @@ final class ImpressV3TimelineNodeCell: UITableViewCell {
         contentView.addSubview(excerptText)
         contentView.addSubview(footnoteText)
         NSLayoutConstraint.activate([
-            rail.widthAnchor.constraint(equalToConstant: 1),
-            rail.centerXAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 27),
+            rail.widthAnchor.constraint(equalToConstant: ImpressV3Appearance.Metrics.timelineRailWidth),
+            rail.centerXAnchor.constraint(equalTo: contentView.leadingAnchor, constant: ImpressV3Appearance.Metrics.timelineRailOffset),
             rail.topAnchor.constraint(equalTo: contentView.topAnchor),
             rail.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
             dot.centerXAnchor.constraint(equalTo: rail.centerXAnchor),
             dot.centerYAnchor.constraint(equalTo: dateText.centerYAnchor),
-            dot.widthAnchor.constraint(equalToConstant: 10),
-            dot.heightAnchor.constraint(equalToConstant: 10),
+            dot.widthAnchor.constraint(equalToConstant: ImpressV3Appearance.Metrics.timelineDotDiameter),
+            dot.heightAnchor.constraint(equalToConstant: ImpressV3Appearance.Metrics.timelineDotDiameter),
             dateText.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 15),
-            dateText.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 51),
+            dateText.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: ImpressV3Appearance.Metrics.timelineTextOffset),
             dateText.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
             titleText.topAnchor.constraint(equalTo: dateText.bottomAnchor, constant: 5),
             titleText.leadingAnchor.constraint(equalTo: dateText.leadingAnchor),
@@ -1031,7 +1035,7 @@ final class ImpressV3TimelineNodeCell: UITableViewCell {
         excerptText.text = excerpt
         footnoteText.text = footnote
         dot.backgroundColor = emphasized ? ImpressV3Appearance.accent : ImpressV3Appearance.timelineInactive
-        accessibilityLabel = dateText.text.map { $0 + "，" } ?? "" +
+        accessibilityLabel = (dateText.text ?? "") + "，" +
             title + "，" + excerpt + "，" + footnote
     }
 }
@@ -1100,6 +1104,7 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
         content.image = UIImage(systemName: item.symbol)
         content.imageProperties.tintColor = ImpressV3Appearance.secondaryText
         cell.contentConfiguration = content
+        ImpressV3Appearance.styleGroupedCell(cell)
         cell.accessoryType = .disclosureIndicator
         return cell
     }
@@ -1146,6 +1151,9 @@ final class ImpressV3ReminderSettingsController: UITableViewController {
                             cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
         cell.textLabel?.text = labels[indexPath.row]
+        cell.textLabel?.font = ImpressV3Appearance.Typography.body
+        cell.textLabel?.adjustsFontForContentSizeCategory = true
+        ImpressV3Appearance.styleGroupedCell(cell)
         let mode = UserDefaults.standard.string(forKey: modeKey) ?? "off"
         let current = ["off", "smart", "habit"][indexPath.row]
         cell.accessoryType = mode == current ? .checkmark : .none
