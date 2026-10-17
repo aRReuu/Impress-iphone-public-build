@@ -11,7 +11,8 @@
   "copied_text_candidates": 150,
   "copied_text_source_count": 150,
   "normalized_public_files": [
-    "aReuImpress-iPhone.xcodeproj/project.pbxproj (remove DEVELOPMENT_TEAM; Debug candidate flag)"
+    "aReuImpress-iPhone.xcodeproj/project.pbxproj (remove DEVELOPMENT_TEAM; Debug candidate flag)",
+    "Podfile (post_install: set generated Pods minimum iOS 14; fix Xcode 16 libarclite)"
   ],
   "source_copy_rule": "selected current-tree text snapshot; isolated independent public Git history",
   "excluded_paths": [
@@ -39,5 +40,9 @@
     "search_scope": "credential signatures, private absolute paths, literal emails, suspicious credential assignments; manual review of high-risk configuration files",
     "known_sanitizations": 4,
     "unverified": "independent third-party asset licensing requires owner review"
-  }
+  },
+  "build_fixes": [
+    "Swift 6.4 Testing macro: separate mutating call from #expect in 2 test assertions",
+    "Xcode 16.4 legacy Pods minimum iOS target: 14.0"
+  ]
 }

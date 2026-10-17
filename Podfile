@@ -13,3 +13,14 @@ target 'aReuImpress-iPhone' do
   pod 'IQKeyboardManagerSwift','~> 6.4.2'
   pod 'MarkdownView'
 end
+
+# Xcode 16+ no longer ships libarclite for obsolete iOS 8/9 Pods targets.
+# Apply the deployment floor to generated Pods only; preserve upstream code.
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+    end
+  end
+end
+
