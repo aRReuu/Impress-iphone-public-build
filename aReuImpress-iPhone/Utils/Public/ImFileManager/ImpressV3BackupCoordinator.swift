@@ -13,7 +13,7 @@ actor ImpressV3BackupCoordinator {
     static let cloudDateKey = "ImpressV3BackupCloudCopiedDate"
     static let failureKey = "ImpressV3BackupLastError"
 
-    private var active: Task<URL, Error>?
+    private var active: Task<URL, any Swift.Error>?
 
     static func markDataChanged() {
         UserDefaults.standard.set(true, forKey: dirtyKey)
@@ -189,7 +189,7 @@ actor ImpressV3BackupCoordinator {
         let target = folder.appendingPathComponent(archive.lastPathComponent)
         let coordinator = NSFileCoordinator(filePresenter: nil)
         var coordinatorError: NSError?
-        var copyError: Error?
+        var copyError: (any Swift.Error)?
         coordinator.coordinate(writingItemAt: target, options: [],
                                error: &coordinatorError) { location in
             do {

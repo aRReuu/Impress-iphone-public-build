@@ -200,9 +200,15 @@ enum ImpressV3BackupArchive {
                       let offset = UInt32(exactly: position) else {
                     throw ImpressV3BackupFailure.unsafeSize
                 }
-                try append(u32(0x04034b50) + u16(20) + u16(0) + u16(0) +
-                           u16(0) + u16(0) + u32(crc) + u32(size) + u32(size) +
-                           u16(nameLength) + u16(0) + label)
+                let localParts: [Data] = [
+                    u32(0x04034b50), u16(20), u16(0), u16(0),
+                    u16(0), u16(0), u32(crc), u32(size),
+                    u32(size), u16(nameLength), u16(0), label
+                ]
+                let localHeader = localParts.reduce(into: Data()) {
+                    $0.append(contentsOf: $1)
+                }
+                try append(localHeader)
                 let input = try FileHandle(forReadingFrom: url)
                 defer { try? input.close() }
                 while true {
@@ -215,11 +221,17 @@ enum ImpressV3BackupArchive {
             let directoryStart = position
             for member in members {
                 let name = Data(member.name.utf8)
-                try append(u32(0x02014b50) + u16(20) + u16(20) +
-                           u16(0) + u16(0) + u16(0) + u16(0) +
-                           u32(member.crc) + u32(member.bytes) + u32(member.bytes) +
-                           u16(UInt16(name.count)) + u16(0) + u16(0) + u16(0) +
-                           u16(0) + u32(0) + u32(member.offset) + name)
+                let centralParts: [Data] = [
+                    u32(0x02014b50), u16(20), u16(20),
+                    u16(0), u16(0), u16(0), u16(0),
+                    u32(member.crc), u32(member.bytes), u32(member.bytes),
+                    u16(UInt16(name.count)), u16(0), u16(0),
+                    u16(0), u16(0), u32(0), u32(member.offset), name
+                ]
+                let centralHeader = centralParts.reduce(into: Data()) {
+                    $0.append(contentsOf: $1)
+                }
+                try append(centralHeader)
             }
             guard let start = UInt32(exactly: directoryStart),
                   let size = UInt32(exactly: position - directoryStart) else {
