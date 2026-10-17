@@ -111,6 +111,7 @@ actor ImpressV3BackupCoordinator {
         let repository = try ImpressV3ReviewEnvironment.repository()
         // The WCDB actor serializes this with any pending FSRS commits.
         try await repository.createConsistentBackup(to: database)
+        try ImpressV3BackupArchive.verifySQLite(database)
 
         let history = try JSONEncoder().encode(ImpressV3LearningJournal.load())
         try history.write(to: staging.appendingPathComponent("LearningEntry-v1.json"),
@@ -138,6 +139,8 @@ actor ImpressV3BackupCoordinator {
                 }, destination: output)
             let verification = staging.appendingPathComponent(".verified-" + UUID().uuidString)
             _ = try ImpressV3BackupArchive.extract(source: output, destination: verification)
+            try ImpressV3BackupArchive.verifySQLite(
+                verification.appendingPathComponent("ReviewV3.sqlite"))
             try FileManager.default.removeItem(at: verification)
             try FileManager.default.setAttributes([
                 .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication
@@ -216,6 +219,8 @@ actor ImpressV3BackupCoordinator {
         defer { try? FileManager.default.removeItem(at: container) }
         _ = try await Task.detached(priority: .utility) {
             try ImpressV3BackupArchive.extract(source: archive, destination: container)
+            try ImpressV3BackupArchive.verifySQLite(
+                container.appendingPathComponent("ReviewV3.sqlite"))
         }.value
         return try JSONDecoder().decode(ImpressV3BackupManifest.self,
             from: Data(contentsOf: container.appendingPathComponent("manifest.json")))
@@ -235,6 +240,8 @@ actor ImpressV3BackupCoordinator {
         do {
             _ = try await Task.detached(priority: .utility) {
                 try ImpressV3BackupArchive.extract(source: archive, destination: verified)
+                try ImpressV3BackupArchive.verifySQLite(
+                    verified.appendingPathComponent("ReviewV3.sqlite"))
             }.value
             try FileManager.default.moveItem(at: verified, to: pending)
         } catch {
@@ -256,6 +263,15 @@ actor ImpressV3BackupCoordinator {
                 pending.appendingPathComponent($0.name), name: $0.name).0
         }
         try manifest.validate(records)
+        try ImpressV3BackupArchive.verifySQLite(
+            pending.appendingPathComponent("ReviewV3.sqlite"))
+        _ = try JSONDecoder().decode([ImpressV3LearningEntry].self,
+            from: Data(contentsOf: pending.appendingPathComponent("LearningEntry-v1.json")))
+        let restoredPrompts = try JSONDecoder().decode(
+            [ImpressV3PromptTemplate].self,
+            from: Data(contentsOf: pending.appendingPathComponent("prompts.json")))
+        let oldPromptData = UserDefaults.standard.data(
+            forKey: ImpressV3PromptLibrary.storageKey)
         let liveFolder = FileManager.default.urls(
             for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("ImpressV3", isDirectory: true)
@@ -267,6 +283,9 @@ actor ImpressV3BackupCoordinator {
         try FileManager.default.createDirectory(
             at: previous, withIntermediateDirectories: true)
         let fileManager = FileManager.default
+        let journalFolder = root.appendingPathComponent("ImpressV3", isDirectory: true)
+        let journal = journalFolder.appendingPathComponent("LearningEntry-v1.json")
+        var installedDB = false
         do {
             for suffix in ["", "-wal", "-shm"] {
                 let priorFile = URL(fileURLWithPath: current.path + suffix)
@@ -277,11 +296,9 @@ actor ImpressV3BackupCoordinator {
             }
             try fileManager.copyItem(
                 at: pending.appendingPathComponent("ReviewV3.sqlite"), to: current)
-            let journalFolder = root.appendingPathComponent(
-                "ImpressV3", isDirectory: true)
+            installedDB = true
             try fileManager.createDirectory(at: journalFolder,
                 withIntermediateDirectories: true)
-            let journal = journalFolder.appendingPathComponent("LearningEntry-v1.json")
             if fileManager.fileExists(atPath: journal.path) {
                 try fileManager.copyItem(at: journal,
                     to: previous.appendingPathComponent("LearningEntry-v1.json"))
@@ -289,14 +306,33 @@ actor ImpressV3BackupCoordinator {
             }
             try fileManager.copyItem(at: pending.appendingPathComponent(
                 "LearningEntry-v1.json"), to: journal)
-            let prompts = try JSONDecoder().decode([ImpressV3PromptTemplate].self,
-                from: Data(contentsOf: pending.appendingPathComponent("prompts.json")))
-            try ImpressV3PromptLibrary.save(prompts)
-            try fileManager.removeItem(at: pending)
+            try ImpressV3PromptLibrary.save(restoredPrompts)
+            // Moving staging away atomically prevents unintended repeat
+            // recovery when temporary cleanup fails.
+            let applied = root.appendingPathComponent(
+                "ImpressV3Applied-" + UUID().uuidString, isDirectory: true)
+            try fileManager.moveItem(at: pending, to: applied)
+            try? fileManager.removeItem(at: applied)
             markDataChanged()
             // The previous live database remains available as an emergency
             // rollback folder, without any automatic deletion of user data.
         } catch {
+            if installedDB { try? fileManager.removeItem(at: current) }
+            let previousJournal = previous.appendingPathComponent("LearningEntry-v1.json")
+            if fileManager.fileExists(atPath: previousJournal.path) {
+                if fileManager.fileExists(atPath: journal.path) {
+                    try? fileManager.removeItem(at: journal)
+                }
+                try? fileManager.copyItem(at: previousJournal, to: journal)
+            } else if installedDB {
+                try? fileManager.removeItem(at: journal)
+            }
+            if let oldPromptData {
+                UserDefaults.standard.set(oldPromptData,
+                    forKey: ImpressV3PromptLibrary.storageKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: ImpressV3PromptLibrary.storageKey)
+            }
             for suffix in ["", "-wal", "-shm"] {
                 let path = URL(fileURLWithPath: current.path + suffix)
                 let old = previous.appendingPathComponent(path.lastPathComponent)
