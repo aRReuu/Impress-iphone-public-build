@@ -107,6 +107,65 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(unchanged?.question, "Search 0")
     }
 
+    func testV3BackupZIPRoundTripAndChecksumRejection() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Backup-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dbPath = root.appendingPathComponent("live.sqlite").path
+        let calc = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(databasePath: dbPath, calculator: calc)
+        let now = Date(timeIntervalSince1970: 1_720_000_000)
+        let id = UUID()
+        try await repo.insertNewCard(
+            WCDBV3CardInput(cardID: id, question: "Remember this card",
+                            answerText: "My only answer"),
+            initial: try calc.newCardSnapshot(id: id, now: now), now: now)
+        let stage = root.appendingPathComponent("stage")
+        try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: true)
+        try await repo.createConsistentBackup(
+            to: stage.appendingPathComponent("ReviewV3.sqlite"))
+        try Data("[]".utf8).write(
+            to: stage.appendingPathComponent("LearningEntry-v1.json"))
+        try JSONEncoder().encode(ImpressV3PromptLibrary.defaults).write(
+            to: stage.appendingPathComponent("prompts.json"))
+        let names = ["ReviewV3.sqlite", "LearningEntry-v1.json", "prompts.json"]
+        let records = try names.map {
+            try ImpressV3BackupArchive.inspectFile(
+                stage.appendingPathComponent($0), name: $0).0
+        }
+        let manifest = ImpressV3BackupManifest.make(records)
+        try JSONEncoder().encode(manifest).write(
+            to: stage.appendingPathComponent("manifest.json"))
+        let destination = root.appendingPathComponent("valid.zip")
+        try ImpressV3BackupArchive.write(files:
+            (names + ["manifest.json"]).map { (name: $0,
+                url: stage.appendingPathComponent($0)) }, destination: destination)
+        let extracted = root.appendingPathComponent("restored")
+        let output = try ImpressV3BackupArchive.extract(
+            source: destination, destination: extracted)
+        XCTAssertEqual(output.count, 4)
+        XCTAssertTrue(FileManager.default.fileExists(atPath:
+            extracted.appendingPathComponent("ReviewV3.sqlite").path))
+        XCTAssertEqual(try Data(contentsOf: extracted.appendingPathComponent(
+            "ReviewV3.sqlite")), Data(contentsOf: stage.appendingPathComponent(
+            "ReviewV3.sqlite")))
+        let scanned = try JSONDecoder().decode(ImpressV3BackupManifest.self,
+            from: Data(contentsOf: extracted.appendingPathComponent("manifest.json")))
+        try scanned.validate(output.filter { $0.name != "manifest.json" })
+        XCTAssertFalse(scanned.includesExternalVault)
+        XCTAssertFalse(scanned.includesCredentials)
+        var broken = try Data(contentsOf: destination)
+        // The first ZIP member is ReviewV3.sqlite; flip its first data byte.
+        let nameBytes = "ReviewV3.sqlite".utf8.count
+        let firstDataByte = 30 + nameBytes
+        broken[firstDataByte] ^= 0x01
+        let tampered = root.appendingPathComponent("tampered.zip")
+        try broken.write(to: tampered)
+        XCTAssertThrowsError(try ImpressV3BackupArchive.extract(
+            source: tampered, destination: root.appendingPathComponent("rejected")))
+    }
+
     func testNewCardCommitsOneEventAndRetriesIdempotently() async throws {
         let path = temporaryPath()
         let calculator = FSRS6ReviewCalculator()
