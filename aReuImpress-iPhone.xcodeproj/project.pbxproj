@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		25F0332833EB8E0521BCBC1C /* Pods_aReuImpress_iPhone.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0A3F6E59D965B0F13319EF0A /* Pods_aReuImpress_iPhone.framework */; };
-		380034BC2E8BA37E00161000 /* ImSliderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 380034BB2E8BA37E00161000 /* ImSliderViewController.swift */; };
 		3801E8452F30DD5900987335 /* ImiCloudImportManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3801E8442F30DD5900987335 /* ImiCloudImportManager.swift */; };
 		380572072D13FB8A00CBC488 /* AttributedStringKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 380571E12D13FB8900CBC488 /* AttributedStringKey.swift */; };
 		3809472B2E94C738007FAD3D /* MarkdownKitRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3809472A2E94C738007FAD3D /* MarkdownKitRenderer.swift */; };
@@ -148,7 +147,6 @@
 		02A1E46EBC8241DE5405B83A /* Pods-aReuImpress-iPhone.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-aReuImpress-iPhone.debug.xcconfig"; path = "Target Support Files/Pods-aReuImpress-iPhone/Pods-aReuImpress-iPhone.debug.xcconfig"; sourceTree = "<group>"; };
 		0A3F6E59D965B0F13319EF0A /* Pods_aReuImpress_iPhone.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_aReuImpress_iPhone.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		30D9B0292B2B77E7E41A7AED /* Pods_ImpressTodoExtension.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_ImpressTodoExtension.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		380034BB2E8BA37E00161000 /* ImSliderViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImSliderViewController.swift; sourceTree = "<group>"; };
 		3801E8442F30DD5900987335 /* ImiCloudImportManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ImiCloudImportManager.swift; path = ImFileManager/ImiCloudImportManager.swift; sourceTree = "<group>"; };
 		380571E12D13FB8900CBC488 /* AttributedStringKey.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AttributedStringKey.swift; sourceTree = "<group>"; };
 		3808390D2E06DB1400C6F9C8 /* FeedKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = FeedKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -309,14 +307,6 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		380034BA2E8BA37E00161000 /* ImSliderVC */ = {
-			isa = PBXGroup;
-			children = (
-				380034BB2E8BA37E00161000 /* ImSliderViewController.swift */,
-			);
-			path = ImSliderVC;
-			sourceTree = "<group>";
-		};
 		380563DA2945C91A003A55A9 /* Public */ = {
 			isa = PBXGroup;
 			children = (
@@ -324,7 +314,6 @@
 				387C25762F18BA35000FF54C /* ImFloatingButtonManager */,
 				380E587A2E9F6FD000F3483C /* ImTTSManager */,
 
-				380034BA2E8BA37E00161000 /* ImSliderVC */,
 				385B90692E7C1831006336D5 /* ImFileManager */,
 				38C9375B2E1FCBC100BB0BEC /* ImExtractTextView */,
 				38BE34202E6562F200CB184F /* ImSwipQuickCard */,
@@ -1096,7 +1085,6 @@
 				388C1DED2D8FB6D600BF87D8 /* ImLoading.swift in Sources */,
 				38FE010F2E1F9102009B77CA /* UIVIew+.swift in Sources */,
 				389F85142E8D867200D9F052 /* ImiCloudBackupManager.swift in Sources */,
-				380034BC2E8BA37E00161000 /* ImSliderViewController.swift in Sources */,
 				38C625A82E5C254D00160852 /* ImMusicPlayer.swift in Sources */,
 				38E4B4802F19E4C7002AA600 /* ImGridViewController.swift in Sources */,
 				383869B229B22CDC004220FA /* ImpressRoute.swift in Sources */,
