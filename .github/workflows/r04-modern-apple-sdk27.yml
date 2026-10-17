@@ -1,0 +1,167 @@
+name: Impress R04 Modern Apple UIKit SDK 27 Validation
+
+on:
+  push:
+    branches:
+      - feature/apple-native-r04-sdk27
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  swift-core:
+    name: Pure Swift Core (unchanged)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test stable FSRS and Vault safety contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          swift test --package-path Packages/ImpressReviewCore --parallel 2>&1 | tee out/r04-swift-core.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: impress-r04-core-test-log
+          path: out/
+
+  apple-native:
+    name: Xcode 27 SDK UIKit compatibility and real iOS XCTest
+    runs-on: xcode-27
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate sanitized mirror, safety gate and Xcode SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          xcodebuild -version | tee out/xcode-version.txt
+          xcodebuild -showsdks | tee out/available-sdks.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess, re
+          files = subprocess.check_output(["git","ls-files"],text=True).splitlines()
+          assert not [p for p in files if p.startswith(("Docs/","docs/","Pods/"))
+                      or "/xcuserdata/" in p or p.endswith((".p12",".pem",".mobileprovision"))]
+          src = Path("aReuImpress-iPhone/Utils/Public/ImFileManager/ImObsidianManager.swift").read_text()
+          assert re.search(r'productionWriteEnabled\s*=\s*false\b',src)
+          assert not re.search(r'productionWriteEnabled\s*=\s*true\b',src)
+          route = Path("aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3ReviewViewController.swift").read_text()
+          assert "ImWebViewController.forReviewHandoff" in route
+          assert 'chat.title = "深入探讨"' not in route
+          print("SANITIZED_MIRROR_AND_VAULT_LOCK PASS")
+          PY
+      - name: Recreate copyright-safe CI raster assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/generate_neutral_assets.py > out/neutral-assets.json
+      - name: Resolve original locked dependencies (no WCDB upgrade)
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v pod
+          pod --version | tee out/cocoapods-version.txt
+          pod install --repo-update 2>&1 | tee out/pod-install.log
+          grep -A15 '^PODS:' Podfile.lock > out/resolved-pods.txt
+      - name: Build Debug UIKit Simulator app
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace \
+            -scheme aReuImpress-iPhone \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/R04Debug" \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee out/debug-simulator-build.log
+      - name: Execute real iOS Simulator XCTest suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available -j > out/simulator-devices.json
+          SIM_ID="$(python3 - <<'PY'
+          import json
+          obj=json.load(open("out/simulator-devices.json"))
+          available=[(key,item['udid']) for key,devices in obj['devices'].items()
+                     for item in devices if 'iOS' in key and item.get('isAvailable',False)
+                     and item.get('name','').startswith('iPhone')]
+          assert available, "No iPhone Simulator runtime on Xcode 27 preview"
+          available.sort(reverse=True)
+          print(available[0][1])
+          PY
+          )"
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace \
+            -scheme aReuImpress-iPhone \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$SIM_ID" \
+            -derivedDataPath "$RUNNER_TEMP/R04Debug" \
+            -resultBundlePath "$GITHUB_WORKSPACE/out/R04.xcresult" \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO \
+            test 2>&1 | tee out/ios-xctest.log
+          xcrun xcresulttool get test-results summary --path out/R04.xcresult --format json > out/xctest-summary.json || true
+      - name: Build Debug AltStore application only with minimum entitlements
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace \
+            -scheme aReuImpress-iPhone-AltStore \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/R04AltStore" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_ENTITLEMENTS= \
+            ENABLE_DEBUG_DYLIB=NO \
+            build 2>&1 | tee out/altstore-iphoneos-build.log
+      - name: Package and verify unsigned arm64 app
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/R04AltStore/Build/Products/Debug-iphoneos/aReuImpress-iPhone.app"
+          EXE="$APP/aReuImpress-iPhone"
+          test -s "$EXE"
+          file "$EXE" | tee out/executable-architecture.txt
+          lipo -info "$EXE" | tee -a out/executable-architecture.txt
+          grep -q arm64 out/executable-architecture.txt
+          if find "$APP" -name '*.xctest' -print -quit | grep -q .; then
+            echo "Unexpected XCTest bundle in user package"; exit 1
+          fi
+          test ! -e "$APP/embedded.mobileprovision"
+          if codesign --verify "$APP" >/dev/null 2>&1; then
+            echo "Unexpected signed app"; exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/R04Package/Payload"
+          ditto "$APP" "$RUNNER_TEMP/R04Package/Payload/aReuImpress-iPhone.app"
+          FULL_SHA="$(git rev-parse HEAD)"
+          NAME="Impress-V3.1-R04-AltStore-$(echo "$FULL_SHA" | cut -c1-12)-unsigned.ipa"
+          (cd "$RUNNER_TEMP/R04Package" && zip -qry "$GITHUB_WORKSPACE/out/$NAME" Payload)
+          unzip -tq "out/$NAME" | tee out/zip-integrity.txt
+          shasum -a 256 "out/$NAME" | tee out/IPA_SHA256.txt
+          python3 - "$NAME" <<'PY'
+          import hashlib, json, pathlib, sys
+          ipa=pathlib.Path("out")/sys.argv[1]
+          m=dict(private_source_sha="7795b2b5bdd8e1f44737f976ad221e10245251f3",
+                 public_snapshot_sha=__import__("subprocess").check_output(
+                   ["git","rev-parse","HEAD"], text=True).strip(),
+                 ipa_name=ipa.name,ipa_sha256=hashlib.sha256(ipa.read_bytes()).hexdigest(),
+                 signing="UNSIGNED / personal sign in AltStore",
+                 vault_production_write=False,
+                 wcdb_upgrade_performed=False,
+                 ios_device_verified=False,
+                 r03_visual_approved=False)
+          pathlib.Path("out/r04-manifest.json").write_text(json.dumps(m,indent=2))
+          print(json.dumps(m,indent=2))
+          PY
+      - name: Upload Xcode27 native XCTest results and IPA candidate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: impress-r04-sdk27-ios-evidence-and-unsigned-altstore
+          path: out/
+          retention-days: 14

@@ -38,8 +38,13 @@ class ImTabBarViewController: UITabBarController
         noteNav.tabBarItem.selectedImage = UIImage(systemName: "doc.text.fill")
 
         self.viewControllers = [cardNav, noteNav]
-        tabBar.barTintColor = bgColor
-        tabBar.tintColor = funBtnColor
-        tabBar.unselectedItemTintColor = subTitleColor
+        // Leave the tab bar material to UIKit. Manual barTintColor
+        // suppresses the platform's modern floating navigation treatment.
+        tabBar.tintColor = .systemBlue
+        tabBar.unselectedItemTintColor = .secondaryLabel
+        if #available(iOS 26.0, *) {
+            // The two-tab learning workflow must not jump as notes scroll.
+            tabBarMinimizeBehavior = .never
+        }
     }
 }

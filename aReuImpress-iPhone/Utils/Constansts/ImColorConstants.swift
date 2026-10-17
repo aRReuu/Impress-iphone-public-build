@@ -118,3 +118,30 @@ let semiTransparentBlack = UIColor.black.withAlphaComponent(0.5)
 
 /// 播放按钮颜色 - 音频播放按钮的系统橙色
 let playBtnColor = UIColor.systemOrange
+
+
+// MARK: - Native V3 control configurations (iOS 15+)
+// These are content-layer controls. Liquid Glass belongs to system navigation,
+// not to every card/background. UIKit supplies pressed/disabled states.
+@available(iOS 15.0, *)
+enum ImpressV3NativeButtonAppearance {
+    static func primary(_ button: UIButton, title: String) {
+        var configuration = UIButton.Configuration.filled()
+        configuration.title = title
+        configuration.buttonSize = .large
+        configuration.cornerStyle = .large
+        configuration.baseBackgroundColor = .systemBlue
+        configuration.baseForegroundColor = .white
+        button.configuration = configuration
+        button.titleLabel?.adjustsFontForContentSizeCategory = true
+    }
+
+    static func secondary(_ button: UIButton, title: String) {
+        var configuration = UIButton.Configuration.borderedTinted()
+        configuration.title = title
+        configuration.buttonSize = .large
+        configuration.cornerStyle = .large
+        button.configuration = configuration
+        button.titleLabel?.adjustsFontForContentSizeCategory = true
+    }
+}

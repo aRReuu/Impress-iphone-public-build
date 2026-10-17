@@ -324,3 +324,23 @@ private final class OneShotReviewCalculator: WCDBReviewCalculating, @unchecked S
             before: before, status: status, submission: submission)
     }
 }
+
+
+// R04 native web handoff is pure until the user copies/pastes in DeepSeek.
+// This must never create a second FSRS event or start a native chat.
+final class ImpressV3DeepSeekHandoffTests: XCTestCase {
+    func testDeepSeekPayloadUsesCurrentQuestionAndFirstPrinciplesByDefault() {
+        let payload = ImpressV3DeepSeekHandoff.makePayload(
+            question: "检验假设", answer: "观察因果", userPrompt: nil)
+        XCTAssertTrue(payload.contains("第一性原理"))
+        XCTAssertTrue(payload.contains("检验假设"))
+        XCTAssertTrue(payload.contains("观察因果"))
+    }
+
+    func testDeepSeekPayloadRespectsSavedUserPromptWithoutAutoSending() {
+        let payload = ImpressV3DeepSeekHandoff.makePayload(
+            question: "问题", answer: nil, userPrompt: "自定义学习方式")
+        XCTAssertTrue(payload.contains("自定义学习方式"))
+        XCTAssertTrue(payload.contains("没有可用的文字答案"))
+    }
+}

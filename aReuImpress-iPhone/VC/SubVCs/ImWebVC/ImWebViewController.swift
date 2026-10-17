@@ -9,6 +9,32 @@ import UIKit
 import WebKit
 import Combine
 
+/// Pure preparation: no network request, JavaScript injection or automatic send.
+/// The user's customized local prompt takes precedence over the fallback.
+enum ImpressV3DeepSeekHandoff {
+    static func makePayload(question: String,
+                            answer: String?,
+                            userPrompt: String?) -> String {
+        let custom = userPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let learningStyle = (custom?.isEmpty == false)
+            ? custom!
+            : "采用第一性原理和奥卡姆剃刀，辨别假设与证据，只保留必要的解释。"
+        let reference = answer?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return """
+        [学习方式]
+        \(learningStyle)
+
+        [当前卡片]
+        问题：\(question)
+        参考答案：\((reference?.isEmpty == false) ? reference! : "当前卡片没有可用的文字答案。")
+
+        [本次请求]
+        请帮助我检验理解中的假设、因果与遗漏，通过必要的追问引导我自主推导。不要直接假定参考答案正确。
+        """
+    }
+}
+
+
 /// WKWebView控制器单例
 /// 用于显示DeepSeek聊天页面，并提供生成复习卡片的功能
 class ImWebViewController: UIViewController, WKNavigationDelegate {
@@ -22,11 +48,20 @@ class ImWebViewController: UIViewController, WKNavigationDelegate {
     private var isDragging = false
     private var initialCenter: CGPoint = .zero
     private var cancellables = Set<AnyCancellable>()
+    private var reviewHandoffText: String?
     private let viewModel = ImCardViewModel() // 将viewModel作为属性保留
 
     // MARK: - Initialization
     private init() {
         super.init(nibName: nil, bundle: nil)
+    }
+
+    /// Every V3 learning handoff gets a fresh web controller. Legacy singleton
+    /// paths remain available until the old business routes are retired.
+    static func forReviewHandoff(text: String) -> ImWebViewController {
+        let controller = ImWebViewController()
+        controller.reviewHandoffText = text
+        return controller
     }
 
     required init?(coder: NSCoder) {
@@ -37,17 +72,17 @@ class ImWebViewController: UIViewController, WKNavigationDelegate {
     override func viewDidLoad() {
         super.viewDidLoad()
         setupViews()
-        bindAction()
+        if reviewHandoffText == nil { bindAction() }
         setupConstraints()
         setupNavigationBar()
         loadInitialURL()
-        setupFloatingButton()
+        if reviewHandoffText == nil { setupFloatingButton() }
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         idleSet(true)
-        floatingButton.isHidden = false
+        floatingButton.isHidden = reviewHandoffText != nil
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -128,7 +163,27 @@ class ImWebViewController: UIViewController, WKNavigationDelegate {
                                        target: self,
                                        action: #selector(closeWebView))
 
-        navigationItem.leftBarButtonItems = [closeItem,refreshItem]
+        if reviewHandoffText != nil {
+            // UIKit supplies the native back button. Keep learning context
+            // entirely local until the user explicitly copies it.
+            navigationItem.rightBarButtonItem = UIBarButtonItem(
+                title: "复制问题", style: .plain,
+                target: self, action: #selector(copyReviewHandoff))
+            navigationItem.rightBarButtonItem?.accessibilityLabel = "复制问题和参考答案"
+        } else {
+            navigationItem.leftBarButtonItems = [closeItem, refreshItem]
+        }
+    }
+
+    @objc private func copyReviewHandoff() {
+        guard let content = reviewHandoffText else { return }
+        UIPasteboard.general.string = content
+        UIAccessibility.post(notification: .announcement,
+                             argument: "已复制。请在 DeepSeek 网页输入框中粘贴并确认发送。")
+        navigationItem.rightBarButtonItem?.title = "已复制"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.navigationItem.rightBarButtonItem?.title = "复制问题"
+        }
     }
 
     private func loadInitialURL() {
@@ -174,7 +229,12 @@ class ImWebViewController: UIViewController, WKNavigationDelegate {
     @objc private func closeWebView() {
         // 取消订阅，避免在控制器不存在时仍尝试present alert
         cancellables.removeAll()
-        dismiss(animated: true, completion: nil)
+        if let navigation = navigationController,
+           navigation.viewControllers.count > 1 {
+            navigation.popViewController(animated: true)
+        } else {
+            dismiss(animated: true, completion: nil)
+        }
     }
 
     @objc private func createCard() {

@@ -82,25 +82,30 @@ final class ImpressV3ReviewViewController: UIViewController {
         let reflect = UIButton(type: .system)
         reflect.setTitle("记录想法", for: .normal)
         reflect.titleLabel?.font = UIFont.preferredFont(forTextStyle: .subheadline)
-        reflect.layer.cornerRadius = 12
-        reflect.layer.borderWidth = 1
-        reflect.layer.borderColor = UIColor.separator.cgColor
+        if #available(iOS 15.0, *) {
+            ImpressV3NativeButtonAppearance.secondary(reflect, title: "记录想法")
+        }
         reflect.addTarget(self, action: #selector(captureFromAnswer), for: .touchUpInside)
         let explore = UIButton(type: .system)
         explore.setTitle("深入探讨", for: .normal)
         explore.titleLabel?.font = UIFont.preferredFont(forTextStyle: .subheadline)
-        explore.layer.cornerRadius = 12
-        explore.layer.borderWidth = 1
-        explore.layer.borderColor = UIColor.separator.cgColor
+        if #available(iOS 15.0, *) {
+            ImpressV3NativeButtonAppearance.secondary(explore, title: "深入探讨")
+        }
+        explore.accessibilityHint = "在 DeepSeek 网页继续讨论当前问题"
         explore.addTarget(self, action: #selector(exploreFromAnswer), for: .touchUpInside)
         answerTools.addArrangedSubview(reflect)
         answerTools.addArrangedSubview(explore)
         revealButton.setTitle("查看答案", for: .normal)
         revealButton.titleLabel?.font = UIFont.preferredFont(forTextStyle: .headline)
         revealButton.titleLabel?.adjustsFontForContentSizeCategory = true
-        revealButton.setTitleColor(.white, for: .normal)
-        revealButton.backgroundColor = .systemIndigo
-        revealButton.layer.cornerRadius = 14
+        if #available(iOS 15.0, *) {
+            ImpressV3NativeButtonAppearance.primary(revealButton, title: "查看答案")
+        } else {
+            revealButton.setTitleColor(.white, for: .normal)
+            revealButton.backgroundColor = .systemBlue
+            revealButton.layer.cornerRadius = 14
+        }
         revealButton.addTarget(self, action: #selector(revealCurrentAnswer),
                                for: .touchUpInside)
         revealButton.accessibilityHint = "显示答案后才可以通过四向滑动进行复习评分"
@@ -122,6 +127,9 @@ final class ImpressV3ReviewViewController: UIViewController {
         completionLabel.isHidden = true
 
         repeatButton.setTitle("刷新到期卡片", for: .normal)
+        if #available(iOS 15.0, *) {
+            ImpressV3NativeButtonAppearance.secondary(repeatButton, title: "刷新到期卡片")
+        }
         repeatButton.addTarget(self, action: #selector(refreshCards), for: .touchUpInside)
         repeatButton.isHidden = true
 
@@ -359,16 +367,21 @@ final class ImpressV3ReviewViewController: UIViewController {
     @objc private func captureFromAnswer() { captureUnderstanding() }
 
     @objc private func exploreFromAnswer() {
-        let current = items[safe: currentIndex]
-        let model = current.flatMap { models[$0.cardID] }
-        let chat = ImPollingChatViewController()
-        chat.title = "深入探讨"
-        navigationController?.pushViewController(chat, animated: true)
-        chat.loadViewIfNeeded()
-        if let question = model?.question {
-            chat.startNewChat(with: "请基于第一性原理帮助我深入理解这个问题：\n" +
-                question + "\n\n我的当前参考答案：\n" + (model?.answer ?? "（图片或选择题）"))
-        }
+        guard let current = items[safe: currentIndex],
+              let model = models[current.cardID],
+              let question = model.question, !question.isEmpty else { return }
+
+        // Explicit handoff to DeepSeek Web, NOT the separate native API chat.
+        // Preparing clipboard text does not transmit a private question.
+        // The user explicitly chooses when to copy/paste and send.
+        let payload = ImpressV3DeepSeekHandoff.makePayload(
+            question: question,
+            answer: model.answer,
+            userPrompt: UserDefaults.standard.string(forKey: "kSystemPrompt"))
+        let web = ImWebViewController.forReviewHandoff(text: payload)
+        navigationController?.pushViewController(web, animated: true)
+        // The current ReviewSessionCoordinator/SwipeCardStack stays alive.
+        // Navigating back must not grade or reload the current card.
     }
 
     private func captureUnderstanding() {
@@ -986,6 +999,11 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
                icon: "slider.horizontal.3")
     ]
 
+    init() {
+        super.init(style: .insetGrouped)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "设置"
@@ -1000,10 +1018,13 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
                             cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let row = rows[indexPath.row]
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
-        cell.textLabel?.text = row.title
-        cell.detailTextLabel?.text = row.description
-        cell.detailTextLabel?.numberOfLines = 2
-        cell.imageView?.image = UIImage(systemName: row.icon)
+        // Use Apple's native list-content configuration instead of
+        // manually styling and sizing different label subviews.
+        var content = UIListContentConfiguration.subtitleCell()
+        content.text = row.title
+        content.secondaryText = row.description
+        content.image = UIImage(systemName: row.icon)
+        cell.contentConfiguration = content
         cell.accessoryType = .disclosureIndicator
         return cell
     }
