@@ -728,8 +728,10 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         let stacks = controller.view.subviews.compactMap { $0 as? SwipeCardStack }
         XCTAssertEqual(stacks.count, 1)
         XCTAssertTrue(stacks[0].protectsVerticalContentScroll)
-        // R04.2-D moves Settings to its own tab and removes the chat action.
-        XCTAssertTrue(controller.navigationItem.rightBarButtonItems?.isEmpty ?? true)
+        // Settings stays in its own tab; the right action is now the V3
+        // searchable card collection, never a legacy Chat/LLM menu.
+        XCTAssertEqual(controller.navigationItem.rightBarButtonItem?.accessibilityLabel,
+                       "卡片集")
         XCTAssertEqual(controller.navigationItem.leftBarButtonItem?.accessibilityLabel,
                        "添加内容")
         XCTAssertFalse(buttons.contains { $0.title(for: .normal) == "困难" })
