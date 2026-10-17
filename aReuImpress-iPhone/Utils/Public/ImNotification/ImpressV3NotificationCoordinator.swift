@@ -67,13 +67,30 @@ final class ImpressV3NotificationCoordinator: NSObject, UNUserNotificationCenter
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        // A foreground notification is NOT a navigation request.
+        // Leave FSRS's foreground policy unchanged; calibration alerts remain
+        // visible so the pending daily check-in does not silently disappear.
+        if CalibrationReminderPlan.isManaged(notification.request.identifier) {
+            if #available(iOS 14.0, *) {
+                completionHandler([.banner, .list, .sound])
+            } else {
+                completionHandler([.alert, .sound])
+            }
+            return
+        }
         completionHandler([])
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
+        if ImpressCalibrationReminderCoordinator.isCalibrationTap(response) {
+            DispatchQueue.main.async {
+                ImpressCalibrationNotificationRouteInbox.shared.enqueue()
+                ImpressCalibrationNotificationRouteInbox.shared.deliverUsingConnectedScenes()
+                completionHandler()
+            }
+            return
+        }
         guard Self.isReviewTap(actionIdentifier: response.actionIdentifier,
                                requestIdentifier: response.notification.request.identifier) else {
             completionHandler()
