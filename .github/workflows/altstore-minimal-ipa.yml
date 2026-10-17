@@ -1,0 +1,163 @@
+name: Impress V3.1 AltStore Minimal Signing IPA
+
+on:
+  push:
+    branches:
+      - feature/altstore-compat-ipa
+    paths:
+      - '.github/workflows/altstore-minimal-ipa.yml'
+      - 'aReuImpress-iPhone.xcodeproj/xcshareddata/xcschemes/aReuImpress-iPhone-AltStore.xcscheme'
+      - 'ALTSTORE_COMPAT_BUILD.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  altstore-candidate:
+    name: Build unsigned AltStore application-only IPA
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_AUTHORITY: 9078600d9be7be048a550d32d43322e55e7d866d
+      BASELINE_PUBLIC_SHA: a1e03e8926b0abb6606486f34569b0fcc87017e4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Verify variant scope and unchanged Vault policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          git diff --name-only HEAD^ HEAD | tee out/altstore-diff.txt
+          python3 - <<'PY'
+          import pathlib, subprocess, re
+          changed = subprocess.check_output(["git", "diff", "--name-only", "HEAD^", "HEAD"], text=True).splitlines()
+          allowed = {
+              "aReuImpress-iPhone.xcodeproj/xcshareddata/xcschemes/aReuImpress-iPhone-AltStore.xcscheme",
+              ".github/workflows/altstore-minimal-ipa.yml",
+              "ALTSTORE_COMPAT_BUILD.md",
+          }
+          assert changed and set(changed).issubset(allowed), changed
+          x = pathlib.Path("aReuImpress-iPhone/Utils/Public/ImFileManager/ImObsidianManager.swift").read_text()
+          assert re.search(r'productionWriteEnabled\s*=\s*false\b', x)
+          print("SCOPE_AND_VAULT_LOCK PASS")
+          PY
+      - name: Generate redistributable image placeholders
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/generate_neutral_assets.py > out/neutral-asset-hashes.json
+          xcodebuild -version | tee out/xcode-version.txt
+      - name: Install Pods
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v pod >/dev/null 2>&1; then sudo gem install cocoapods --no-document; fi
+          pod install --repo-update 2>&1 | tee out/pod-install.log
+      - name: Build APP ONLY for iPhoneOS with no restricted entitlements
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -workspace aReuImpress-iPhone.xcworkspace \
+            -scheme aReuImpress-iPhone-AltStore \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/AltStoreV3DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_ENTITLEMENTS= \
+            ENABLE_DEBUG_DYLIB=NO \
+            build 2>&1 | tee out/altstore-iphoneos-build.log
+      - name: Audit app, exclude test frameworks and generate IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/AltStoreV3DerivedData/Build/Products/Debug-iphoneos/aReuImpress-iPhone.app"
+          EXE="$APP/aReuImpress-iPhone"
+          test -d "$APP"
+          test -s "$EXE"
+          test -f "$APP/Info.plist"
+          file "$EXE" | tee out/mach-o-file.txt
+          lipo -info "$EXE" | tee out/mach-o-architecture.txt
+          grep -q arm64 out/mach-o-architecture.txt
+          otool -L "$EXE" > out/load-libraries.txt
+          if find "$APP" -name '*.xctest' -print -quit | grep -q .; then
+            echo "FAIL: XCTest plug-in present"; exit 1
+          fi
+          for FRAMEWORK in XCUnit XCTest XCTestCore XCTestSupport XCTAutomationSupport XCUIAutomation Testing; do
+            if [ -d "$APP/Frameworks/$FRAMEWORK.framework" ]; then
+              echo "FAIL: test-only framework $FRAMEWORK"; exit 1
+            fi
+          done
+          if find "$APP" -name 'libXCTest*.dylib' -print -quit | grep -q .; then
+            echo "FAIL: XCTest shared library present"; exit 1
+          fi
+          if [ -e "$APP/aReuImpress-iPhone.debug.dylib" ]; then
+            echo "FAIL: Xcode Debug dylib host still present"; exit 1
+          fi
+          if codesign --verify "$APP" >/dev/null 2>&1; then
+            echo "FAIL: unsigned build unexpectedly has an app signature"; exit 1
+          fi
+          test ! -e "$APP/embedded.mobileprovision"
+          FULL_SHA="$(git rev-parse HEAD)"
+          SHORT_SHA="$(printf "%s" "$FULL_SHA" | cut -c1-12)"
+          IPA_NAME="Impress-V3.1-P0P2-AltStore-$SHORT_SHA-unsigned.ipa"
+          ROOT="$RUNNER_TEMP/AltStorePayload"
+          mkdir -p "$ROOT/Payload"
+          ditto "$APP" "$ROOT/Payload/aReuImpress-iPhone.app"
+          (cd "$ROOT" && zip -qry "$GITHUB_WORKSPACE/out/$IPA_NAME" Payload)
+          unzip -tq "out/$IPA_NAME" | tee out/ipa-zip-check.txt
+          python3 - "$GITHUB_WORKSPACE/out/$IPA_NAME" "$APP/Info.plist" "$FULL_SHA" <<'PY'
+          import hashlib, json, plistlib, sys, pathlib, os
+          p, pl = map(pathlib.Path,sys.argv[1:3])
+          commit = sys.argv[3]
+          with pl.open("rb") as f:
+            info = plistlib.load(f)
+          assert p.stat().st_size > 100_000
+          m = {
+            "ipa_filename": p.name,
+            "ipa_bytes": p.stat().st_size,
+            "ipa_sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+            "source_public_sha": os.environ["BASELINE_PUBLIC_SHA"],
+            "altstore_build_sha": commit,
+            "authority_private_sha": os.environ["SOURCE_AUTHORITY"],
+            "bundle_identifier": info.get("CFBundleIdentifier"),
+            "app_only_scheme": "aReuImpress-iPhone-AltStore",
+            "debug_candidate": True,
+            "code_signed": False,
+            "restricted_icloud_or_app_group_entitlements": False,
+            "xctest_embedded": False,
+            "ios_device_install": "NOT TESTED",
+            "icloud_folder_picker_device_test": "NOT TESTED",
+            "vault_write_gate": "productionWriteEnabled=false",
+          }
+          pathlib.Path("out/altstore-package-manifest.json").write_text(json.dumps(m,indent=2)+"\n")
+          pathlib.Path("out/SHA256SUMS.txt").write_text(f"{m['ipa_sha256']}  {p.name}\n")
+          print(json.dumps(m,indent=2))
+          PY
+      - name: Preserve IPA and build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: impress-v3-altstore-unsigned-ipa-and-evidence
+          path: out/
+          retention-days: 14
+      - name: Publish publicly downloadable IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHORT_SHA="$(git rev-parse --short=12 HEAD)"
+          TAG="v3.1-p0p2-altstore-$SHORT_SHA"
+          IPA="out/Impress-V3.1-P0P2-AltStore-$SHORT_SHA-unsigned.ipa"
+          test -s "$IPA"
+          SHA="$(shasum -a 256 "$IPA" | awk '{print $1}')"
+          gh release create "$TAG" "$IPA" "out/altstore-package-manifest.json" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Impress V3.1 AltStore signing-minimal candidate ($SHORT_SHA)" \
+            --notes "Experimental AltStore Classic / free Personal Team signing-compatible unsigned candidate. Based on tested V3.1 R03 P0–P2 public source a1e03e8926b0abb6606486f34569b0fcc87017e4. APP-only Xcode scheme, no XCTest bundles, no private iCloud/App Group provisioning entitlements, no Debug dylib host. IPA SHA-256: $SHA. DOES NOT include Apple developer credentials or provisioning profile; AltStore must sign. Real iPhone installation, iCloud Files provider access, Vault bookmark persistence and two-way synchronization are NOT TESTED. Production Vault source writes remain disabled. Built using neutral placeholder images, not final branded artwork."
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,isDraft,assets | tee out/github-release.json
