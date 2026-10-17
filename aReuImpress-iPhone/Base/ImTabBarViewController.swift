@@ -44,10 +44,9 @@ class ImTabBarViewController: UITabBarController
         settingsNav.tabBarItem.selectedImage = UIImage(systemName: "gearshape.fill")
 
         self.viewControllers = [cardNav, noteNav, settingsNav]
-        // Leave the tab bar material to UIKit. Manual barTintColor
-        // suppresses the platform's modern floating navigation treatment.
-        tabBar.tintColor = ImpressV3Appearance.accent
-        tabBar.unselectedItemTintColor = ImpressV3Appearance.secondaryText
+        // Page extends underneath the native floating bar; no fake glass.
+        view.backgroundColor = ImpressV3Appearance.page
+        ImpressV3Appearance.styleTabBar(tabBar)
         if #available(iOS 26.0, *) {
             // Keep primary navigation stationary while reading or reviewing.
             tabBarMinimizeBehavior = .never

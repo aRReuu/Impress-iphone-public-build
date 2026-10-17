@@ -156,9 +156,11 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
 
         typePicker.selectedSegmentIndex = currentType == .standard ? 0 :
             (currentType == .multipleChoice ? 1 : 2)
-        // Use the iOS system-selected segment appearance, no faux glass tint.
+        // Native control, but with stronger selected contrast and hierarchy.
+        ImpressV3Appearance.styleSegmentedControl(typePicker, prominent: true)
+        typePicker.accessibilityLabel = "卡片类型"
         typePicker.addTarget(self, action: #selector(typeDidChange), for: .valueChanged)
-        stack.addArrangedSubview(typePicker)
+        stack.addArrangedSubview(makeLabeledGroup("卡片类型", child: typePicker))
 
         questionView.backgroundColor = ImpressV3Appearance.surface
         questionView.layer.cornerRadius = ImpressV3Appearance.Radius.field
@@ -227,6 +229,8 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         choiceSection.axis = .vertical
         choiceSection.spacing = 14
         choiceMode.selectedSegmentIndex = originalDraft.allowsMultipleCorrect ? 1 : 0
+        ImpressV3Appearance.styleSegmentedControl(choiceMode, prominent: false)
+        choiceMode.accessibilityLabel = "单选或多选"
         choiceMode.addTarget(self, action: #selector(modeDidChange), for: .valueChanged)
         choiceSection.addArrangedSubview(makeLabeledGroup("答案类型", child: choiceMode))
         optionList.axis = .vertical

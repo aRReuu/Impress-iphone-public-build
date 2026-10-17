@@ -165,8 +165,14 @@ enum ImpressV3NativeButtonAppearance {
 // system navigation/tab materials. Semantic UIColors follow Light/Dark Mode.
 // Never create shadow copies of these values inside individual controllers.
 enum ImpressV3Appearance {
-    static let page = UIColor.systemBackground
-    static let surface = UIColor.secondarySystemBackground
+    // Native grouped canvas under all primary screens and the floating TabBar.
+    // The slightly elevated surface belongs to content, input and grouped rows.
+    static let page = UIColor.systemGroupedBackground
+    static let surface = UIColor.secondarySystemGroupedBackground
+    // Segments keep a visible track without faux glass or custom shadow art.
+    static let segmentTrack = UIColor.tertiarySystemFill
+    static let secondarySegmentSelection = UIColor.tertiarySystemGroupedBackground
+    static let mutedAction = UIColor.systemGray
     static let accent = funBtnColor
     static let primaryText = titleColor
     static let secondaryText = contentColor
@@ -178,8 +184,42 @@ enum ImpressV3Appearance {
     static let timelineInactive = UIColor.systemGray2
     static let primaryButtonText = UIColor.white
 
+    /// Apply only tint colors; never paint over iOS 26+ floating Liquid Glass.
+    /// The TabBar's content backdrop comes from the controller's page color.
+    static func styleTabBar(_ bar: UITabBar) {
+        bar.tintColor = accent
+        bar.unselectedItemTintColor = secondaryText
+    }
+
+    static func styleNavigationBar(_ bar: UINavigationBar) {
+        bar.tintColor = accent
+    }
+
+    /// Native segmented control with an unmistakable selected state.
+    /// Primary type selection is prominent; single/multiple choice stays quiet.
+    /// This method is the sole owner of segment color, font and corner style.
+    static func styleSegmentedControl(_ control: UISegmentedControl,
+                                      prominent: Bool) {
+        control.backgroundColor = segmentTrack
+        control.selectedSegmentTintColor = prominent ? accent : secondarySegmentSelection
+        control.apportionsSegmentWidthsByContent = false
+        control.setTitleTextAttributes([
+            .font: Typography.supporting,
+            .foregroundColor: primaryText
+        ], for: .normal)
+        control.setTitleTextAttributes([
+            .font: Typography.heading,
+            .foregroundColor: prominent ? primaryButtonText : primaryText
+        ], for: .selected)
+        control.layer.cornerRadius = Radius.segment
+        // Keep Apple's intrinsic segment geometry and pressed-state behavior.
+        // An outer hard border would reintroduce the heavy boxed-button look.
+        control.heightAnchor.constraint(greaterThanOrEqualToConstant: 50).isActive = true
+    }
+
     enum Radius {
         static let card: CGFloat = 16
+        static let segment: CGFloat = 12
         static let field: CGFloat = 12
         static let compactField: CGFloat = 10
         static let timelineNode: CGFloat = 5

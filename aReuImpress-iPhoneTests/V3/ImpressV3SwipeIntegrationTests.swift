@@ -346,34 +346,77 @@ final class ImpressV3DeepSeekHandoffTests: XCTestCase {
 }
 
 
-// R04.1 regression: Settings separates API chat / DeepSeek Web and uses system
-// inset-grouped navigation instead of a single overloaded actions menu.
+// R04.2-D current navigation contract: Settings is a primary tab,
+// with prompt-library / reminder choices, not legacy chat and model rows.
 @MainActor
 final class ImpressR041NativeNavigationTests: XCTestCase {
-    func testSettingsUsesThreeNativeGroupedSections() {
+    func testSettingsHasTwoNativeGroupedSectionsWithNoOldModelEntries() {
         let settings = ImpressV3SettingsHubViewController()
         settings.loadViewIfNeeded()
-        XCTAssertEqual(settings.numberOfSections(in: settings.tableView), 3)
+        XCTAssertEqual(settings.numberOfSections(in: settings.tableView), 2)
         XCTAssertEqual(settings.tableView(settings.tableView,
-                          numberOfRowsInSection: 0), 4)
+                          numberOfRowsInSection: 0), 1)
         XCTAssertEqual(settings.tableView(settings.tableView,
                           numberOfRowsInSection: 1), 1)
-        XCTAssertEqual(settings.navigationItem.largeTitleDisplayMode, .never)
+        XCTAssertEqual(settings.navigationItem.largeTitleDisplayMode, .always)
         let cell = settings.tableView(settings.tableView,
-                          cellForRowAt: IndexPath(row: 1, section: 0))
+                          cellForRowAt: IndexPath(row: 0, section: 0))
         let content = cell.contentConfiguration as? UIListContentConfiguration
-        XCTAssertEqual(content?.text, "DeepSeek 网页")
+        XCTAssertEqual(content?.text, "提示词")
     }
 
-    func testDirectDeepSeekBrowserHasNoPrivateQuestionHandoff() {
+    func testDirectWebBrowserDoesNotAutoSendPrivateQuestions() {
         let browser = ImWebViewController.forDirectBrowse()
         browser.loadViewIfNeeded()
-        XCTAssertEqual(browser.title, "DeepSeek")
+        XCTAssertEqual(browser.title, "网页聊天")
         XCTAssertTrue(browser.navigationItem.leftBarButtonItems?.isEmpty ?? true)
-        XCTAssertNotEqual(browser.navigationItem.rightBarButtonItem?.title, "复制问题")
+        let actions = browser.navigationItem.rightBarButtonItems ?? []
+        XCTAssertFalse(actions.contains { $0.title == "复制问题" })
+        XCTAssertTrue(actions.contains { $0.accessibilityLabel == "从提示词库复制" })
     }
 }
 
+// CI alone cannot sign off the iPhone appearance. These tests guard the
+// actual semantic roles, tab coloring and native selected-control state.
+@MainActor
+final class ImpressR042AppearanceTests: XCTestCase {
+    func testGroupedCanvasAndElevatedSurfacesUseOneAuthority() {
+        XCTAssertEqual(ImpressV3Appearance.page, UIColor.systemGroupedBackground)
+        XCTAssertEqual(ImpressV3Appearance.surface,
+                       UIColor.secondarySystemGroupedBackground)
+        XCTAssertEqual(ImpressV3Appearance.accent, funBtnColor)
+        let bar = UITabBar()
+        ImpressV3Appearance.styleTabBar(bar)
+        XCTAssertEqual(bar.tintColor, ImpressV3Appearance.accent)
+        XCTAssertEqual(bar.unselectedItemTintColor, ImpressV3Appearance.secondaryText)
+        let navigation = UINavigationBar()
+        ImpressV3Appearance.styleNavigationBar(navigation)
+        XCTAssertEqual(navigation.tintColor, ImpressV3Appearance.accent)
+    }
+
+    func testNativeThreeTypeSelectorHasHighContrastActiveSegment() throws {
+        let composer = ImpressV3CardComposerViewController()
+        composer.loadViewIfNeeded()
+        func findSegments(_ view: UIView) -> [UISegmentedControl] {
+            let own = (view as? UISegmentedControl).map { [$0] } ?? []
+            return own + view.subviews.flatMap(findSegments)
+        }
+        let selectors = findSegments(composer.view)
+        let types = try XCTUnwrap(selectors.first(where: { $0.numberOfSegments == 3 }))
+        let answerMode = try XCTUnwrap(selectors.first(where: { $0.numberOfSegments == 2 }))
+        XCTAssertEqual(types.selectedSegmentTintColor, ImpressV3Appearance.accent)
+        XCTAssertEqual(types.backgroundColor, ImpressV3Appearance.segmentTrack)
+        XCTAssertEqual(types.accessibilityLabel, "卡片类型")
+        XCTAssertEqual(types.selectedSegmentIndex, 0)
+        XCTAssertEqual(answerMode.selectedSegmentTintColor,
+                       ImpressV3Appearance.secondarySegmentSelection)
+        XCTAssertEqual(answerMode.accessibilityLabel, "单选或多选")
+        let attrs = types.titleTextAttributes(for: .selected)
+        XCTAssertNotNil(attrs?[.font] as? UIFont)
+        XCTAssertEqual(attrs?[.foregroundColor] as? UIColor,
+                       ImpressV3Appearance.primaryButtonText)
+    }
+}
 
 // R04.2: native creation must be separate from legacy generic ImSubmit,
 // must preserve uncommitted content when switching card types, and must

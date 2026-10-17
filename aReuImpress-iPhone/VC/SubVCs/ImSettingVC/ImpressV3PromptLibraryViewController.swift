@@ -140,7 +140,7 @@ final class ImpressV3PromptLibraryViewController: UITableViewController {
             UIPasteboard.general.string = selected.content
             done(true)
         }
-        copy.backgroundColor = .systemGray
+        copy.backgroundColor = ImpressV3Appearance.mutedAction
         let delete = UIContextualAction(style: .destructive, title: "删除") { [weak self] _, _, done in
             guard let self else { done(false); return }
             let changed = self.templates.filter { $0.id != id }

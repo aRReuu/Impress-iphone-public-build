@@ -67,7 +67,8 @@ jobs:
           # button treatments. System controls retain native UIKit materials.
           theme=Path("aReuImpress-iPhone/Utils/Constansts/ImColorConstants.swift").read_text()
           for definition in ("enum ImpressV3Appearance", "enum Typography",
-                             "enum Radius", "secondaryConfiguration"):
+                             "enum Radius", "secondaryConfiguration",
+                             "styleSegmentedControl", "styleTabBar"):
               assert definition in theme, "Missing central token: " + definition
           appearance_files=[
               "aReuImpress-iPhone/Base/ImTabBarViewController.swift",
@@ -189,7 +190,7 @@ jobs:
           python3 - "$NAME" <<'PY'
           import hashlib, json, pathlib, sys
           ipa=pathlib.Path("out")/sys.argv[1]
-          m=dict(private_source_sha="d3a35a4489b7a508fdff758aefa4b97524c5cb39",
+          m=dict(private_source_sha="8f8bd2034bfb8b82091f5882014ef77a9a105665",
                  public_snapshot_sha=__import__("subprocess").check_output(
                    ["git","rev-parse","HEAD"], text=True).strip(),
                  ipa_name=ipa.name,ipa_sha256=hashlib.sha256(ipa.read_bytes()).hexdigest(),
@@ -219,7 +220,7 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      EXPECTED_PRIVATE: d3a35a4489b7a508fdff758aefa4b97524c5cb39
+      EXPECTED_PRIVATE: 8f8bd2034bfb8b82091f5882014ef77a9a105665
     steps:
       - name: Download artifact from this exact successful SDK27 run
         shell: bash
@@ -262,5 +263,5 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Impress V3.1 R04.2 — Native Authoring and Notes QA Candidate" \
             --prerelease \
-              --notes "R04.2-D native candidate: direct top-right AI and Settings actions, no overloaded menu, continuous Obsidian file list without the obsolete left viewer, new standalone native V3 QA/choice/image editor with user-controlled options and no draft loss across type changes. New card save reuses existing WCDB1.1.0/FSRS-6, does not restart live review; original private Vault writes remain DISABLED. Batch import (R04.2-C) not yet enabled. Only test builds verified. Unsigned ARM64 AltStore re-sign required; physical iPhone and R03 visual approval NOT TESTED. Third-party image originals replaced with neutral CI assets."
+              --notes "R04.2-D1 candidate: 3 system tabs (Flashcards / Notes / Settings), compact Settings, editable local prompt library, read-only Vault, native chronological timeline, and independent paste/CSV/TSV/Markdown batch import under WCDB atomic transaction. Visual palette unifies grouped page, card/input surface and native selected type control through ImColorConstants.swift; iOS system TabBar glass retained. FSRS-6 and WCDB.swift 1.1.0 unchanged, production Vault writes locked, no user source notes uploaded. Automated Core, XCTest, Simulator, ARM64/ZIP/SHA verified only; physical iPhone visual approval PENDING. Unsigned IPA requires personal AltStore signing. Copyright-uncleared originals replaced by neutral CI assets."
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,assets

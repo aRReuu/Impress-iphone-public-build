@@ -6,7 +6,7 @@ class ImNavigationViewController: UINavigationController {
     override func viewDidLoad() {
         super.viewDidLoad()
         navigationBar.prefersLargeTitles = true
-        navigationBar.tintColor = ImpressV3Appearance.accent
+        ImpressV3Appearance.styleNavigationBar(navigationBar)
     }
 
     override func pushViewController(_ viewController: UIViewController, animated: Bool) {
