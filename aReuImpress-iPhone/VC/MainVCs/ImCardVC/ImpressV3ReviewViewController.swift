@@ -137,7 +137,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         completionLabel.isHidden = true
 
         repeatButton.setTitle("刷新到期卡片", for: .normal)
-        ImpressV3NativeButtonAppearance.quiet(repeatButton, title: "刷新到期卡片")
+        ImpressV3Appearance.styleQuietButton(repeatButton, title: "刷新到期卡片")
         repeatButton.addTarget(self, action: #selector(refreshCards), for: .touchUpInside)
         repeatButton.isHidden = true
 

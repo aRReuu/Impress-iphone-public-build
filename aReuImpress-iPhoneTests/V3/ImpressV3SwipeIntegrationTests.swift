@@ -423,6 +423,7 @@ final class ImpressR042AppearanceTests: XCTestCase {
                        ImpressV3Appearance.primaryButtonText)
     }
     func testCentralButtonTapTargetsAndQuietSecondaryFeedback() {
+        guard #available(iOS 15.0, *) else { return }
         let main = UIButton(type: .system)
         ImpressV3NativeButtonAppearance.primary(main, title: "查看答案")
         XCTAssertEqual(main.configuration?.baseBackgroundColor,
@@ -483,6 +484,7 @@ final class ImpressR042AppearanceTests: XCTestCase {
     }
 
     func testTwelveAnswerChoicesRemainScrollableWithoutDuplicateRating() {
+        guard #available(iOS 15.0, *) else { return }
         var model = ImCardModel()
         model.question = "从 12 个选项中选择正确项"
         model.cardType = CardType.multipleChoice.rawValue

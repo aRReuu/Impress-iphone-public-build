@@ -75,43 +75,47 @@ class ImMultipleChoiceCardView: UIView {
     }
     
     private func setupViews() {
-        addSubview(questionLabel)
         if usesNativeOptionButtons {
+            // A long generated question and twelve answer options must share
+            // the same scrollable content column, not fight for card height.
+            // Tinder's protectsVerticalContentScroll retains vertical reading.
             let metrics = ImpressV3Appearance.Metrics.self
+            let contentColumn = UIStackView(arrangedSubviews: [
+                questionLabel, optionsStackView
+            ])
+            contentColumn.axis = .vertical
+            contentColumn.distribution = .fill
+            contentColumn.spacing = metrics.sectionSpacing
+            contentColumn.translatesAutoresizingMaskIntoConstraints = false
             optionsScrollView.translatesAutoresizingMaskIntoConstraints = false
             optionsScrollView.alwaysBounceVertical = false
             optionsScrollView.showsVerticalScrollIndicator = true
-            optionsScrollView.directionalLockEnabled = true
-            optionsScrollView.addSubview(optionsStackView)
+            optionsScrollView.isDirectionalLockEnabled = true
+            optionsScrollView.addSubview(contentColumn)
             addSubview(optionsScrollView)
             NSLayoutConstraint.activate([
-                questionLabel.topAnchor.constraint(
-                    equalTo: safeAreaLayoutGuide.topAnchor, constant: metrics.cardInset),
-                questionLabel.leadingAnchor.constraint(
-                    equalTo: safeAreaLayoutGuide.leadingAnchor, constant: metrics.cardInset),
-                questionLabel.trailingAnchor.constraint(
-                    equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -metrics.cardInset),
                 optionsScrollView.topAnchor.constraint(
-                    equalTo: questionLabel.bottomAnchor, constant: metrics.rowSpacing),
+                    equalTo: safeAreaLayoutGuide.topAnchor, constant: metrics.cardInset),
                 optionsScrollView.leadingAnchor.constraint(
                     equalTo: safeAreaLayoutGuide.leadingAnchor, constant: metrics.cardInset),
                 optionsScrollView.trailingAnchor.constraint(
                     equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -metrics.cardInset),
                 optionsScrollView.bottomAnchor.constraint(
                     equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -metrics.cardInset),
-                optionsStackView.topAnchor.constraint(
+                contentColumn.topAnchor.constraint(
                     equalTo: optionsScrollView.contentLayoutGuide.topAnchor),
-                optionsStackView.leadingAnchor.constraint(
+                contentColumn.leadingAnchor.constraint(
                     equalTo: optionsScrollView.contentLayoutGuide.leadingAnchor),
-                optionsStackView.trailingAnchor.constraint(
+                contentColumn.trailingAnchor.constraint(
                     equalTo: optionsScrollView.contentLayoutGuide.trailingAnchor),
-                optionsStackView.bottomAnchor.constraint(
+                contentColumn.bottomAnchor.constraint(
                     equalTo: optionsScrollView.contentLayoutGuide.bottomAnchor),
-                optionsStackView.widthAnchor.constraint(
+                contentColumn.widthAnchor.constraint(
                     equalTo: optionsScrollView.frameLayoutGuide.widthAnchor)
             ])
             return
         }
+        addSubview(questionLabel)
         // Legacy screens keep their historical equal-height option layout.
         addSubview(optionsStackView)
         NSLayoutConstraint.activate([

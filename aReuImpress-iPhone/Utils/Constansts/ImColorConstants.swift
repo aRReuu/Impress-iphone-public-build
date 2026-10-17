@@ -322,36 +322,45 @@ enum ImpressV3Appearance {
     /// One reusable answer treatment for the active V3 review view.
     /// A rounded inset surface is enough: never add per-answer heavy borders.
     static func styleChoiceOption(_ button: UIButton, feedback: ChoiceFeedback) {
-        var configuration = UIButton.Configuration.plain()
-        configuration.title = button.title(for: .normal) ?? button.configuration?.title
-        configuration.buttonSize = .large
-        configuration.cornerStyle = .large
-        configuration.titleAlignment = .leading
-        configuration.contentInsets = NSDirectionalEdgeInsets(
-            top: 12, leading: Metrics.optionTextPadding,
-            bottom: 12, trailing: Metrics.optionTextPadding)
-        configuration.imagePadding = Metrics.symbolGap
-        configuration.baseForegroundColor = primaryText
+        let fill: UIColor
         switch feedback {
-        case .idle:
-            configuration.background.backgroundColor = optionSurface
-        case .selected:
-            configuration.background.backgroundColor = selectedOptionSurface
-            configuration.image = UIImage(systemName: "checkmark.circle.fill")
-        case .correct:
-            configuration.background.backgroundColor = correctOptionSurface
-            configuration.image = UIImage(systemName: "checkmark.circle.fill")
-        case .incorrect:
-            configuration.background.backgroundColor = incorrectOptionSurface
-            configuration.image = UIImage(systemName: "xmark.circle.fill")
+        case .idle: fill = optionSurface
+        case .selected: fill = selectedOptionSurface
+        case .correct: fill = correctOptionSurface
+        case .incorrect: fill = incorrectOptionSurface
         }
-        configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer {
-            attributes in
-            var next = attributes
-            next.font = Typography.body
-            return next
+        if #available(iOS 15.0, *) {
+            var configuration = UIButton.Configuration.plain()
+            configuration.title = button.title(for: .normal) ?? button.configuration?.title
+            configuration.buttonSize = .large
+            configuration.cornerStyle = .large
+            configuration.titleAlignment = .leading
+            configuration.contentInsets = NSDirectionalEdgeInsets(
+                top: 12, leading: Metrics.optionTextPadding,
+                bottom: 12, trailing: Metrics.optionTextPadding)
+            configuration.imagePadding = Metrics.symbolGap
+            configuration.baseForegroundColor = primaryText
+            configuration.background.backgroundColor = fill
+            switch feedback {
+            case .idle: break
+            case .selected, .correct:
+                configuration.image = UIImage(systemName: "checkmark.circle.fill")
+            case .incorrect:
+                configuration.image = UIImage(systemName: "xmark.circle.fill")
+            }
+            configuration.titleTextAttributesTransformer =
+                UIConfigurationTextAttributesTransformer { attributes in
+                    var next = attributes
+                    next.font = Typography.body
+                    return next
+                }
+            button.configuration = configuration
+        } else {
+            button.backgroundColor = fill
+            button.setTitleColor(primaryText, for: .normal)
+            button.titleLabel?.font = Typography.body
+            button.layer.cornerRadius = Radius.field
         }
-        button.configuration = configuration
         button.contentHorizontalAlignment = .leading
         button.titleLabel?.numberOfLines = 0
         button.titleLabel?.adjustsFontForContentSizeCategory = true
@@ -359,6 +368,24 @@ enum ImpressV3Appearance {
 
     static func styleGroupedCell(_ cell: UITableViewCell) {
         cell.backgroundColor = surface
+    }
+
+    /// Respect the original iOS 14 deployment floor. Native UIButton.Configuration
+    /// applies on iOS 15+, with one centralized conventional fallback.
+    static func styleQuietButton(_ button: UIButton, title: String, symbol: String? = nil) {
+        if #available(iOS 15.0, *) {
+            ImpressV3NativeButtonAppearance.quiet(button, title: title, symbol: symbol)
+        } else {
+            button.setTitle(title, for: .normal)
+            if let symbol { button.setImage(UIImage(systemName: symbol), for: .normal) }
+            button.tintColor = primaryText
+            button.backgroundColor = quietControlSurface
+            button.titleLabel?.font = Typography.body
+            button.titleLabel?.adjustsFontForContentSizeCategory = true
+            button.layer.cornerRadius = Radius.field
+            button.heightAnchor.constraint(
+                greaterThanOrEqualToConstant: Metrics.controlHeight).isActive = true
+        }
     }
 
     static func styleTextField(_ field: UITextField) {

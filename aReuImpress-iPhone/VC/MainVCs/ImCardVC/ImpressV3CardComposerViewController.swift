@@ -240,7 +240,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         optionList.spacing = ImpressV3Appearance.Metrics.choiceSpacing
         choiceSection.addArrangedSubview(makeLabeledGroup("选项（点选正确答案）", child: optionList))
         addOptionButton.setTitle("添加选项", for: .normal)
-        ImpressV3NativeButtonAppearance.quiet(
+        ImpressV3Appearance.styleQuietButton(
             addOptionButton, title: "添加选项", symbol: "plus")
         addOptionButton.addTarget(self, action: #selector(addOption), for: .touchUpInside)
         choiceSection.addArrangedSubview(addOptionButton)
@@ -252,7 +252,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         photoSection.axis = .vertical
         photoSection.spacing = ImpressV3Appearance.Metrics.sectionSpacing
         imageButton.setTitle("从照片选择图片", for: .normal)
-        ImpressV3NativeButtonAppearance.quiet(
+        ImpressV3Appearance.styleQuietButton(
             imageButton, title: "从照片选择图片", symbol: "photo.on.rectangle")
         imageButton.addTarget(self, action: #selector(selectPhoto), for: .touchUpInside)
         photoSection.addArrangedSubview(imageButton)

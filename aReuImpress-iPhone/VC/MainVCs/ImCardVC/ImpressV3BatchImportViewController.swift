@@ -156,7 +156,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
 
     private func actionButton(_ title: String, icon: String, selector: Selector) -> UIButton {
         let button = UIButton(type: .system)
-        ImpressV3NativeButtonAppearance.quiet(button, title: title, symbol: icon)
+        ImpressV3Appearance.styleQuietButton(button, title: title, symbol: icon)
         button.addTarget(self, action: selector, for: .touchUpInside)
         button.titleLabel?.adjustsFontForContentSizeCategory = true
         return button
