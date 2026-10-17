@@ -1,0 +1,182 @@
+name: Impress V3.1 P0-P2 Public Build
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: impress-public-build-main
+  cancel-in-progress: true
+
+jobs:
+  swift-core:
+    name: Portable Swift core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify public scope and source policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python3 - <<'PY'
+          import pathlib, re, subprocess, sys
+          p = pathlib.Path(".")
+          files = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
+          disallowed = [
+              f for f in files
+              if f.startswith(("Docs/", "docs/", "Pods/"))
+              or "/xcuserdata/" in f or f.endswith((".xcuserstate", ".p12", ".mobileprovision", ".pem", ".p8"))
+              or f.endswith("grandmother.jpg")
+              or (f.endswith((".png", ".jpg")) and "/Resources/" in f)
+          ]
+          if disallowed:
+              raise SystemExit("Forbidden published paths: " + repr(disallowed))
+          x = (p / "aReuImpress-iPhone.xcodeproj/project.pbxproj").read_text()
+          guard = (p / "aReuImpress-iPhone/Utils/Public/ImFileManager/ImObsidianManager.swift").read_text()
+          assert not re.search(r"DEVELOPMENT_TEAM\s*=\s*[A-Z0-9]{8,}", x)
+          assert 'IMPRESS_V3_CANDIDATE' in x
+          assert re.search(r"productionWriteEnabled\s*=\s*false\b", guard)
+          assert not re.search(r"productionWriteEnabled\s*=\s*true\b", guard)
+          print("PUBLIC_SOURCE_POLICY PASS | files:", len(files))
+          PY
+      - name: Swift toolchain
+        run: swift --version
+      - name: Execute portable Swift tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          swift test --package-path Packages/ImpressReviewCore --parallel 2>&1 | tee out/swift-core-tests.log
+      - name: Upload portable Swift results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: impress-public-swift-core-logs
+          path: out/
+          retention-days: 14
+
+  ios-native:
+    name: macOS Xcode iOS XCTest and unsigned IPA
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain and neutral assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          xcodebuild -version | tee out/xcode-version.log
+          python3 -m py_compile .github/scripts/generate_neutral_assets.py
+          python3 .github/scripts/generate_neutral_assets.py | tee out/neutral-assets-manifest.json
+      - name: Install reproducible CocoaPods
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v pod >/dev/null 2>&1; then
+            sudo gem install cocoapods --no-document
+          fi
+          pod --version | tee out/cocoapods-version.log
+          pod install --repo-update 2>&1 | tee out/pod-install.log
+      - name: Build Debug iOS Simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/ImpressDebugSim" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee out/debug-simulator-build.log
+      - name: Run all scheme iOS XCTest
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available -j > out/simulators.json
+          SIM_ID=$(python3 - out/simulators.json <<'PY'
+          import json, sys
+          devices = json.load(open(sys.argv[1]))["devices"]
+          ids = [d["udid"] for runtime, group in devices.items()
+                 if "iOS" in runtime for d in group
+                 if d.get("isAvailable", False) and d.get("name", "").startswith("iPhone")]
+          print(ids[0] if ids else "")
+          PY
+          )
+          if [ -z "$SIM_ID" ]; then
+            echo "No available iPhone simulator" | tee out/simulator-error.log
+            exit 1
+          fi
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination "platform=iOS Simulator,id=$SIM_ID" -derivedDataPath "$RUNNER_TEMP/ImpressDebugSim" -resultBundlePath "$PWD/out/ImpressV3.xcresult" -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO test 2>&1 | tee out/simulator-xctest.log
+          xcrun xcresulttool get test-results summary --path out/ImpressV3.xcresult --format json > out/test-summary.json || true
+      - name: Build Release iOS Simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Release -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/ImpressReleaseSim" CODE_SIGNING_ALLOWED=NO ENABLE_TESTABILITY=YES build 2>&1 | tee out/release-simulator-build.log
+      - name: Compile unsigned Debug iPhoneOS arm64
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/ImpressPhone" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee out/iphoneos-arm64-build.log
+      - name: Package and hash unsigned iPhoneOS IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/ImpressPhone/Build/Products/Debug-iphoneos/aReuImpress-iPhone.app"
+          test -d "$APP"
+          test -f "$APP/Info.plist"
+          test -f "$APP/aReuImpress-iPhone"
+          file "$APP/aReuImpress-iPhone" | tee out/mach-o-file.txt
+          lipo -info "$APP/aReuImpress-iPhone" | tee out/mach-o-architecture.txt
+          grep -q arm64 out/mach-o-architecture.txt
+          mkdir -p "$RUNNER_TEMP/ImpressUnsigned/Payload"
+          ditto "$APP" "$RUNNER_TEMP/ImpressUnsigned/Payload/aReuImpress-iPhone.app"
+          find "$RUNNER_TEMP/ImpressUnsigned/Payload/aReuImpress-iPhone.app" -type d -name '*.xctest' -prune -exec rm -rf '{}' '+'
+          if find "$RUNNER_TEMP/ImpressUnsigned/Payload/aReuImpress-iPhone.app" -name '*.xctest' -print -quit | grep -q .; then
+            echo 'XCTest plug-in remained in Payload' >&2
+            exit 1
+          fi
+          PUBLIC_SHA=$(git rev-parse HEAD)
+          SHORT_SHA=$(printf '%s' "$PUBLIC_SHA" | cut -c1-12)
+          IPA="$PWD/out/Impress-V3.1-P0P2-$SHORT_SHA-unsigned.ipa"
+          ( cd "$RUNNER_TEMP/ImpressUnsigned" && zip -qry "$IPA" Payload )
+          unzip -tq "$IPA" | tee out/unzip-integrity.log
+          python3 - "$IPA" "$APP/Info.plist" "$PUBLIC_SHA" <<'PY'
+          import hashlib, json, plistlib, sys
+          from pathlib import Path
+          ipa, plist = map(Path, sys.argv[1:3])
+          public_sha = sys.argv[3]
+          source = json.loads(Path("SOURCE_MANIFEST.json").read_text())
+          with plist.open("rb") as f:
+              info = plistlib.load(f)
+          assert ipa.is_file() and ipa.stat().st_size > 100_000
+          report = {
+              "public_repository": "aRReuu/Impress-iphone-public-build",
+              "public_commit_sha": public_sha,
+              "private_source_commit_sha": source["authority"]["source_head_sha"],
+              "ipa_file": ipa.name,
+              "ipa_size_bytes": ipa.stat().st_size,
+              "ipa_sha256": hashlib.sha256(ipa.read_bytes()).hexdigest(),
+              "bundle_id": info.get("CFBundleIdentifier"),
+              "app_version": info.get("CFBundleShortVersionString"),
+              "configuration": "Debug / IMPRESS_V3_CANDIDATE",
+              "sdk": "iphoneos / arm64",
+              "code_signing": "UNSIGNED; PRIVATE RE-SIGNING REQUIRED",
+              "source_policy": "Obsidian production Vault write disabled",
+              "physical_device_validation": "NOT TESTED"
+          }
+          Path("out/package-manifest.json").write_text(json.dumps(report, indent=2))
+          Path("out/IPA_SHA256.txt").write_text(
+              report["ipa_sha256"] + "  " + ipa.name + "\n")
+          print(json.dumps(report, indent=2))
+          PY
+      - name: Upload IPA, logs and XCTest evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: impress-v3-p0p2-unsigned-iphoneos-and-evidence
+          path: out/
+          retention-days: 14

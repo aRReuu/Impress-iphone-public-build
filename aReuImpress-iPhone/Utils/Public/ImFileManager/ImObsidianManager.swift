@@ -1,0 +1,847 @@
+//
+//  ImObsidianManager.swift
+//  aReuImpress-iPhone
+//
+//  Created by aReu on 9/18/25.
+//  实现本地Obsidian数据库的文件管理业务
+
+import UIKit
+import MobileCoreServices
+import UniformTypeIdentifiers
+import ImpressReviewCore
+import ImageIO
+
+final class ImObsidianManager: NSObject
+{
+    static let shared = ImObsidianManager()
+  
+    // 默认要跳过的目录
+    private let ignoreDirectory: Set<String> = [".obsidian", "attachments"]
+
+    // MARK: - 1. 获取本地Vault URL
+    /// 直接返回本地Documents/ImpressDB目录的URL
+    /// - Parameters:
+    ///   - presenter: 用于呈现错误提示的视图控制器
+    ///   - body: 处理URL的闭包，包含结束访问回调
+    ///   - onError: 错误回调
+    func withVaultURL(from presenter: UIViewController,
+                      body: @escaping (_ url: URL, _ endAccess: @escaping () -> Void) -> Void,
+                      onError: ((Error) -> Void)? = nil)
+    {
+        // 获取Documents目录
+        guard let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            let err = NSError(domain: "ImObsidianManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取Documents目录"])
+            onError?(err)
+            return
+        }
+        
+        let vaultURL = documentsURL.appendingPathComponent(ObsidianFolderName)
+        
+        // P0-0: read-only browsing must not silently create an empty
+        // ImpressVault directory. Otherwise a safe first-time importer would
+        // always see a pre-existing target and refuse to initialize.
+        // Missing mirror is a valid empty state until explicit import.
+        // 直接调用body，无需安全域访问
+        body(vaultURL, {
+            // 空操作，本地目录无需停止访问
+        })
+    }
+
+    
+    // MARK: - 2. 文件读写
+    /// 读取指定文件内容并返回字符串
+    func readMarkdownFile(from presenter: UIViewController,
+                          at relativePath: String,
+                          completion: @escaping (String?) -> Void)
+    {
+        withVaultURL(from: presenter, body: { vaultURL, _ in
+            let fileURL = vaultURL.appendingPathComponent(relativePath)
+            
+            do {
+                let content = try String(contentsOf: fileURL, encoding: .utf8)
+                completion(content)
+            } catch {
+                zcLog("读取文件失败: \(error)")
+                completion(nil)
+            }
+        }, onError: { error in
+            zcLog("withVaultURL error: \(error)")
+            completion(nil)
+        })
+    }
+
+    // P0-0: The legacy write API could overwrite Markdown rendered by UITextView,
+    // losing Obsidian frontmatter, wikilinks and other source syntax. Fail closed.
+    // A future write gate must own source-version verification, backup, user
+    // confirmation, file coordination and post-write readback.
+    @available(*, deprecated, message: "Use the future verified Vault write coordinator after P0-4")
+    func writeMarkdownFile(from presenter: UIViewController,
+                           at relativePath: String,
+                           content: String,
+                           completion: ((Error?) -> Void)? = nil)
+    {
+        let error = NSError(
+            domain: "ImObsidianManager", code: -10,
+            userInfo: [NSLocalizedDescriptionKey:
+                "为保护 Obsidian 原始 Markdown，旧版覆盖写回已停用；请使用只读查看或保存独立草稿。"])
+        completion?(error)
+    }
+}
+
+
+// MARK: - P0-1: Authorized external Obsidian Vault READ-ONLY probe
+//
+// This is intentionally separate from the legacy sandbox mirror. A successful
+// picker/bookmark test must never redirect existing read/write APIs or modify
+// Obsidian files. Actual two-way writes require the P0-3/P0-4 gate.
+struct ImVaultReadOnlyReport {
+    let name: String
+    let markdownCount: Int
+    let sampleRelativePaths: [String]
+    let sampleBytesRead: Int
+    let restoredFromBookmark: Bool
+    let wasTruncated: Bool
+}
+
+enum ImVaultReadOnlyError: LocalizedError {
+    case busy
+    case noFolder
+    case notAuthorized
+    case missingBookmark
+    case staleBookmark
+    case notDirectory
+    case unableToEnumerate
+
+    var errorDescription: String? {
+        switch self {
+        case .busy: return "正在处理另一项 Vault 授权检查。"
+        case .noFolder: return "没有选择文件夹。"
+        case .notAuthorized: return "系统未授予此 Vault 的安全访问权限；原始笔记未修改。"
+        case .missingBookmark: return "尚未保存 Vault 目录授权，请先选择文件夹。"
+        case .staleBookmark: return "目录授权已失效或文件夹已移动，请重新选择；不会自动新建或修改文件。"
+        case .notDirectory: return "选中资源不是可读取的 Vault 文件夹。"
+        case .unableToEnumerate: return "无法枚举此 Vault，请检查 Files 中的访问与 iCloud 下载状态。"
+        }
+    }
+}
+
+final class ImVaultReadOnlyProbe: NSObject, UIDocumentPickerDelegate {
+    static let shared = ImVaultReadOnlyProbe()
+
+    private static let bookmarkKey = "ImpressV3P0VaultReadOnlyBookmark"
+    private static let vaultIDKey = "ImpressV3P0VaultID"
+    private var awaitingPicker: ((Result<ImVaultReadOnlyReport, Error>) -> Void)?
+
+    private override init() { super.init() }
+
+    /// Revokes the app's persisted capability reference only. Never touches
+    /// the provider's directory or any note and does not revoke iOS-wide grants.
+    func disconnectSavedPermission() {
+        UserDefaults.standard.removeObject(forKey: Self.bookmarkKey)
+        UserDefaults.standard.removeObject(forKey: Self.vaultIDKey)
+    }
+
+    func chooseFolder(from presenter: UIViewController,
+                      completion: @escaping (Result<ImVaultReadOnlyReport, Error>) -> Void) {
+        guard awaitingPicker == nil else {
+            completion(.failure(ImVaultReadOnlyError.busy))
+            return
+        }
+        awaitingPicker = completion
+        // iOS 14+: open the actual provider URL, never copy the Vault.
+        let picker = UIDocumentPickerViewController(
+            forOpeningContentTypes: [UTType.folder], asCopy: false)
+        picker.allowsMultipleSelection = false
+        picker.delegate = self
+        presenter.present(picker, animated: true)
+    }
+
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        // Cancelling only dismisses the picker; does not change the saved grant.
+        let callback = awaitingPicker
+        awaitingPicker = nil
+        callback?(.failure(ImVaultReadOnlyError.noFolder))
+    }
+
+    func documentPicker(_ controller: UIDocumentPickerViewController,
+                        didPickDocumentsAt urls: [URL]) {
+        guard let url = urls.first else {
+            let callback = awaitingPicker
+            awaitingPicker = nil
+            callback?(.failure(ImVaultReadOnlyError.noFolder))
+            return
+        }
+        DispatchQueue.global(qos: .utility).async {
+            let result: Result<(ImVaultReadOnlyReport, Data), Error> = Result {
+                guard url.startAccessingSecurityScopedResource() else {
+                    throw ImVaultReadOnlyError.notAuthorized
+                }
+                defer { url.stopAccessingSecurityScopedResource() }
+
+                let report = try Self.inspectAccessibleFolder(url, restored: false)
+                // On iOS an ordinary bookmark made from a picker scoped URL
+                // can be resolved to a scoped URL on a future launch.
+                let bookmark = try url.bookmarkData(
+                    options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+                return (report, bookmark)
+            }
+            DispatchQueue.main.async {
+                let callback = self.awaitingPicker
+                self.awaitingPicker = nil
+                switch result {
+                case let .success((report, bookmark)):
+                    // Only the URL authorization is persisted. No file content
+                    // or test files are written to Obsidian.
+                    // Re-selecting the very same authorized folder must
+                    // retain stable draft/index identity across sessions.
+                    var persistentID = UUID().uuidString
+                    if let oldBookmark = UserDefaults.standard.data(forKey: Self.bookmarkKey),
+                       let oldID = UserDefaults.standard.string(forKey: Self.vaultIDKey) {
+                        var wasStale = false
+                        if let oldURL = try? URL(resolvingBookmarkData: oldBookmark, options: [],
+                                                 relativeTo: nil, bookmarkDataIsStale: &wasStale),
+                           !wasStale && oldURL.standardizedFileURL.path == url.standardizedFileURL.path {
+                            persistentID = oldID
+                        }
+                    }
+                    UserDefaults.standard.set(bookmark, forKey: Self.bookmarkKey)
+                    UserDefaults.standard.set(persistentID, forKey: Self.vaultIDKey)
+                    callback?(.success(report))
+                case let .failure(error):
+                    callback?(.failure(error))
+                }
+            }
+        }
+    }
+
+    func inspectSavedPermission(
+        completion: @escaping (Result<ImVaultReadOnlyReport, Error>) -> Void
+    ) {
+        guard let bookmark = UserDefaults.standard.data(forKey: Self.bookmarkKey) else {
+            completion(.failure(ImVaultReadOnlyError.missingBookmark))
+            return
+        }
+        DispatchQueue.global(qos: .utility).async {
+            let result: Result<ImVaultReadOnlyReport, Error> = Result {
+                var isStale = false
+                let url = try URL(
+                    resolvingBookmarkData: bookmark, options: [],
+                    relativeTo: nil, bookmarkDataIsStale: &isStale)
+                guard !isStale else { throw ImVaultReadOnlyError.staleBookmark }
+                guard url.startAccessingSecurityScopedResource() else {
+                    throw ImVaultReadOnlyError.notAuthorized
+                }
+                defer { url.stopAccessingSecurityScopedResource() }
+                return try Self.inspectAccessibleFolder(url, restored: true)
+            }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    /// Pure read probe. No FileManager create/remove/move/copy/write calls.
+    private static func inspectAccessibleFolder(_ scopedURL: URL,
+                                                 restored: Bool) throws -> ImVaultReadOnlyReport {
+        let fileManager = FileManager.default
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        var coordinationError: NSError?
+        var inspectionError: Error?
+        var count = 0
+        var samples = [String]()
+        var firstNote: URL?
+        var capped = false
+        coordinator.coordinate(readingItemAt: scopedURL, options: [],
+                               error: &coordinationError) { folder in
+            do {
+                var isDirectory: ObjCBool = false
+                guard fileManager.fileExists(atPath: folder.path, isDirectory: &isDirectory),
+                      isDirectory.boolValue else { throw ImVaultReadOnlyError.notDirectory }
+                let prefix = folder.standardizedFileURL.path + "/"
+                guard let files = fileManager.enumerator(
+                    at: folder,
+                    includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
+                    options: [.skipsHiddenFiles],
+                    errorHandler: { _, error in
+                        inspectionError = error
+                        return false
+                    }) else { throw ImVaultReadOnlyError.unableToEnumerate }
+
+                while let file = files.nextObject() as? URL {
+                    if file.lastPathComponent == ".obsidian" {
+                        files.skipDescendants()
+                        continue
+                    }
+                    guard file.pathExtension.lowercased() == "md" else { continue }
+                    let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+                    guard values.isRegularFile == true,
+                          values.isSymbolicLink != true,
+                          file.standardizedFileURL.path.hasPrefix(prefix) else { continue }
+                    count += 1
+                    if firstNote == nil { firstNote = file }
+                    if samples.count < 3 {
+                        samples.append(String(file.standardizedFileURL.path.dropFirst(prefix.count)))
+                    }
+                    if count >= 5000 {
+                        capped = true
+                        break
+                    }
+                }
+            } catch { inspectionError = error }
+        }
+        if let error = coordinationError { throw error }
+        if let error = inspectionError { throw error }
+
+        // Verify real read permission on a sample Markdown file (max 4 KiB).
+        // No parsing, caching, upload, automatic deletion or modification.
+        var bytesRead = 0
+        if let firstNote = firstNote {
+            var fileCoordinationError: NSError?
+            var openError: Error?
+            coordinator.coordinate(readingItemAt: firstNote, options: [],
+                                   error: &fileCoordinationError) { file in
+                do {
+                    let handle = try FileHandle(forReadingFrom: file)
+                    defer { handle.closeFile() }
+                    bytesRead = handle.readData(ofLength: 4096).count
+                } catch { openError = error }
+            }
+            if let error = fileCoordinationError { throw error }
+            if let error = openError { throw error }
+        }
+        return ImVaultReadOnlyReport(
+            name: scopedURL.lastPathComponent,
+            markdownCount: count,
+            sampleRelativePaths: samples,
+            sampleBytesRead: bytesRead,
+            restoredFromBookmark: restored,
+            wasTruncated: capped)
+    }
+}
+
+
+// MARK: - P0-2 / authorized source-of-truth read-only index and raw Markdown
+
+enum ImVaultSyncFailure: LocalizedError {
+    case wrongVault, unsafePath, unavailable, tooLarge, notUTF8, incompleteIndex
+    case conflict, previewTruncated, approvalMissing, writesLocked, verificationFailed
+    var errorDescription: String? {
+        switch self {
+        case .wrongVault: return "Vault 与草稿身份不匹配，拒绝操作。"
+        case .unsafePath: return "路径不安全；禁止访问或写回。"
+        case .unavailable: return "源文件丢失、移动或不可读取，原内容未改变。"
+        case .tooLarge: return "Markdown 超过 8MB 安全编辑上限。"
+        case .notUTF8: return "该文件不是有效 UTF-8，原文件保持不变。"
+        case .incompleteIndex: return "Vault 索引扫描未完成，不能覆盖已有索引。"
+        case .conflict: return "Obsidian 已更新源文件，Impress 草稿保留，禁止自动覆盖。"
+        case .previewTruncated: return "Diff 未完整显示，禁止提交。"
+        case .approvalMissing: return "未确认本次修改，禁止提交。"
+        case .writesLocked: return "真实 Vault 写回尚未通过设备安全 Gate；草稿已保留。"
+        case .verificationFailed: return "备份或写后回读验证失败，保留草稿以供恢复。"
+        }
+    }
+}
+
+struct ImVaultIndexNote: Codable, Equatable {
+    let identity: ImVaultFileIdentity
+    let bytes: Int
+    let modified: Date?
+    var title: String {
+        URL(fileURLWithPath: identity.relativePath).deletingPathExtension().lastPathComponent
+    }
+}
+struct ImVaultIndexResult {
+    let notes: [ImVaultIndexNote]
+    let added: Int
+    let modified: Int
+    let removed: Int
+}
+struct ImVaultRawDocument {
+    let identity: ImVaultFileIdentity
+    let sourceBytes: Data
+    let markdown: String
+    let digest: String
+}
+
+extension ImVaultReadOnlyProbe {
+    var authorizedVaultID: String? {
+        guard UserDefaults.standard.data(forKey: Self.bookmarkKey) != nil else {
+            return nil
+        }
+        return UserDefaults.standard.string(forKey: Self.vaultIDKey)
+    }
+
+    var hasAuthorizedBookmark: Bool { authorizedVaultID != nil }
+
+    // Each callback owns exactly one scoped-access lease, then releases it.
+    func withAuthorizedRoot<T>(
+        _ operation: @escaping (URL, String) throws -> T,
+        completion: @escaping (Result<T, Error>) -> Void
+    ) {
+        guard let bookmark = UserDefaults.standard.data(forKey: Self.bookmarkKey),
+              let id = UserDefaults.standard.string(forKey: Self.vaultIDKey) else {
+            completion(.failure(ImVaultReadOnlyError.missingBookmark)); return
+        }
+        DispatchQueue.global(qos: .utility).async {
+            let result: Result<T, Error> = Result {
+                var stale = false
+                let root = try URL(resolvingBookmarkData: bookmark, options: [],
+                                   relativeTo: nil, bookmarkDataIsStale: &stale)
+                guard !stale else { throw ImVaultReadOnlyError.staleBookmark }
+                guard root.startAccessingSecurityScopedResource() else {
+                    throw ImVaultReadOnlyError.notAuthorized
+                }
+                defer { root.stopAccessingSecurityScopedResource() }
+                return try operation(root, id)
+            }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+}
+
+final class ImVaultReadSync {
+    static let shared = ImVaultReadSync()
+    private init() {}
+
+    func refresh(_ completion: @escaping (Result<ImVaultIndexResult, Error>) -> Void) {
+        ImVaultReadOnlyProbe.shared.withAuthorizedRoot({ root, id in
+            let next = try Self.list(root: root, vaultID: id)
+            let previous = (try? ImVaultPrivateStore.loadIndex(vaultID: id)) ?? []
+            let old = Dictionary(uniqueKeysWithValues: previous.map { ($0.identity, $0) })
+            let current = Set(next.map { $0.identity })
+            let added = next.filter { old[$0.identity] == nil }.count
+            let changed = next.filter { old[$0.identity] != nil && old[$0.identity] != $0 }.count
+            let removed = previous.filter { !current.contains($0.identity) }.count
+            // A full successful scan is required before updating private cache.
+            try ImVaultPrivateStore.saveIndex(next, vaultID: id)
+            return ImVaultIndexResult(notes: next, added: added,
+                                      modified: changed, removed: removed)
+        }, completion: completion)
+    }
+
+    func read(_ identity: ImVaultFileIdentity,
+              completion: @escaping (Result<ImVaultRawDocument, Error>) -> Void) {
+        ImVaultReadOnlyProbe.shared.withAuthorizedRoot({ root, vaultID in
+            guard identity.vaultID == vaultID else { throw ImVaultSyncFailure.wrongVault }
+            return try Self.load(root: root, identity: identity)
+        }, completion: completion)
+    }
+
+    static func enforceContainment(_ file: URL, root: URL) throws {
+        let parent = root.standardizedFileURL.resolvingSymlinksInPath().path + "/"
+        let child = file.standardizedFileURL.resolvingSymlinksInPath().path
+        guard child.hasPrefix(parent) else { throw ImVaultSyncFailure.unsafePath }
+    }
+
+    static func fileURL(root: URL, identity: ImVaultFileIdentity) throws -> URL {
+        // Revalidating decoded identity also rejects traversal from forged JSON.
+        _ = try ImVaultFileIdentity(vaultID: identity.vaultID,
+                                    relativePath: identity.relativePath)
+        let path = root.appendingPathComponent(identity.relativePath, isDirectory: false)
+        try enforceContainment(path, root: root)
+        return path
+    }
+
+    static func list(root: URL, vaultID: String) throws -> [ImVaultIndexNote] {
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        var coordinationError: NSError?
+        var operationError: Error?
+        var notes = [ImVaultIndexNote]()
+        coordinator.coordinate(readingItemAt: root, options: [],
+                               error: &coordinationError) { folder in
+            do {
+                let prefix = folder.standardizedFileURL.resolvingSymlinksInPath().path + "/"
+                guard let enumerator = FileManager.default.enumerator(
+                    at: folder, includingPropertiesForKeys: [
+                        .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey,
+                        .contentModificationDateKey],
+                    options: [.skipsHiddenFiles],
+                    errorHandler: { _, error in operationError = error; return false }
+                ) else { throw ImVaultSyncFailure.incompleteIndex }
+                while let url = enumerator.nextObject() as? URL {
+                    guard url.pathExtension.lowercased() == "md" else { continue }
+                    let resolved = url.standardizedFileURL.resolvingSymlinksInPath()
+                    guard resolved.path.hasPrefix(prefix) else { continue }
+                    let v = try url.resourceValues(forKeys: [
+                        .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey,
+                        .contentModificationDateKey])
+                    guard v.isRegularFile == true && v.isSymbolicLink != true else { continue }
+                    let relative = String(resolved.path.dropFirst(prefix.count))
+                    let id = try ImVaultFileIdentity(vaultID: vaultID, relativePath: relative)
+                    notes.append(ImVaultIndexNote(identity: id, bytes: v.fileSize ?? 0,
+                                                  modified: v.contentModificationDate))
+                    if notes.count > 5000 { throw ImVaultSyncFailure.incompleteIndex }
+                }
+            } catch { operationError = error }
+        }
+        if let error = coordinationError { throw error }
+        if let error = operationError { throw error }
+        return notes.sorted { $0.identity.relativePath < $1.identity.relativePath }
+    }
+
+    static func load(root: URL, identity: ImVaultFileIdentity) throws -> ImVaultRawDocument {
+        let source = try fileURL(root: root, identity: identity)
+        var coordinationError: NSError?
+        var operationError: Error?
+        var content: Data?
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        coordinator.coordinate(readingItemAt: source, options: [],
+                               error: &coordinationError) { file in
+            do {
+                try enforceContainment(file, root: root)
+                let v = try file.resourceValues(forKeys: [
+                    .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+                guard v.isRegularFile == true && v.isSymbolicLink != true else {
+                    throw ImVaultSyncFailure.unsafePath
+                }
+                guard (v.fileSize ?? 0) <= 8 * 1024 * 1024 else {
+                    throw ImVaultSyncFailure.tooLarge
+                }
+                let bytes = try Data(contentsOf: file)
+                guard bytes.count <= 8 * 1024 * 1024 else { throw ImVaultSyncFailure.tooLarge }
+                content = bytes
+            } catch { operationError = error }
+        }
+        if let error = coordinationError { throw error }
+        if let error = operationError { throw error }
+        guard let bytes = content else { throw ImVaultSyncFailure.unavailable }
+        guard let text = String(data: bytes, encoding: .utf8) else {
+            throw ImVaultSyncFailure.notUTF8
+        }
+        return ImVaultRawDocument(identity: identity, sourceBytes: bytes,
+                                  markdown: text, digest: ImVaultDigest.sha256(bytes))
+    }
+}
+
+
+// MARK: - P0-3 private drafts and retained recovery backups
+//
+// This service MUST NOT resolve any private path by the user's relativePath;
+// paths are SHA-256 names inside the Impress Application Support sandbox.
+enum ImVaultPrivateStore {
+    private static let draftLock = NSLock()
+    private static func protectPrivateFile(_ url: URL) {
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: url.path)
+    }
+    private static func directory(_ part: String) throws -> URL {
+        let root = try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true)
+        let target = root.appendingPathComponent("ImpressVaultSync", isDirectory: true)
+            .appendingPathComponent(part, isDirectory: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        return target
+    }
+
+    private static func opaqueKey(_ identity: ImVaultFileIdentity) -> String {
+        ImVaultDigest.sha256(Data((identity.vaultID + "\n" + identity.relativePath).utf8))
+    }
+
+    static func saveIndex(_ list: [ImVaultIndexNote], vaultID: String) throws {
+        let key = ImVaultDigest.sha256(Data(vaultID.utf8))
+        let url = try directory("Index").appendingPathComponent(key + ".json")
+        try JSONEncoder().encode(list).write(to: url, options: .atomic)
+        protectPrivateFile(url)
+    }
+
+    static func loadIndex(vaultID: String) throws -> [ImVaultIndexNote] {
+        let key = ImVaultDigest.sha256(Data(vaultID.utf8))
+        let url = try directory("Index").appendingPathComponent(key + ".json")
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        return try JSONDecoder().decode([ImVaultIndexNote].self,
+                                        from: Data(contentsOf: url))
+    }
+
+    static func saveDraft(_ draft: ImVaultDraft) throws {
+        try draft.validate()
+        draftLock.lock()
+        defer { draftLock.unlock() }
+        let url = try directory("Draft").appendingPathComponent(
+            opaqueKey(draft.identity) + ".json")
+        // A queued older autosave must never overwrite a newer explicit save.
+        if let newer = try loadDraft(identity: draft.identity),
+           newer.updatedAt > draft.updatedAt {
+            return
+        }
+        try JSONEncoder().encode(draft).write(to: url, options: .atomic)
+        protectPrivateFile(url)
+        let checked = try loadDraft(identity: draft.identity)
+        guard checked?.identity == draft.identity,
+              checked?.baseDigest == draft.baseDigest,
+              checked?.baseRawData == draft.baseRawData,
+              checked?.editedText == draft.editedText else {
+            throw ImVaultSyncFailure.verificationFailed
+        }
+    }
+
+    static func loadDraft(identity: ImVaultFileIdentity) throws -> ImVaultDraft? {
+        let url = try directory("Draft").appendingPathComponent(opaqueKey(identity) + ".json")
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let draft = try JSONDecoder().decode(ImVaultDraft.self, from: Data(contentsOf: url))
+        guard draft.identity == identity else { throw ImVaultCoreError.invalidDraft }
+        try draft.validate()
+        return draft
+    }
+
+    /// The only source pre-write backup location: private Application Support.
+    /// Recovery files are unique, verified and never automatically removed.
+    static func backupBeforeWrite(identity: ImVaultFileIdentity, data: Data) throws -> URL {
+        let path = try directory("Recovery").appendingPathComponent(
+            opaqueKey(identity) + "-" + UUID().uuidString + ".md")
+        try data.write(to: path, options: .atomic)
+        protectPrivateFile(path)
+        guard try Data(contentsOf: path) == data else {
+            throw ImVaultSyncFailure.verificationFailed
+        }
+        return path
+    }
+}
+
+enum ImVaultCommitOutcome {
+    case unchanged
+    case alreadyApplied
+    case written(recoveryURL: URL)
+}
+
+/// Full P0-4 compare-and-swap implementation with a deliberate production
+/// write lock. Test fixtures can exercise this implementation without ever
+/// enabling source Vault writes. The lock can only be changed after a future
+/// real File Provider/iCloud device-acceptance decision.
+enum ImVaultGuardedWrite {
+    static let productionWriteEnabled = false
+    private static let mutex = NSLock()
+
+    static func commitAuthorized(
+        draft: ImVaultDraft, userConfirmedDiff: Bool,
+        completion: @escaping (Result<ImVaultCommitOutcome, Error>) -> Void
+    ) {
+        guard productionWriteEnabled else {
+            completion(.failure(ImVaultSyncFailure.writesLocked))
+            return
+        }
+        ImVaultReadOnlyProbe.shared.withAuthorizedRoot({ root, vaultID in
+            guard draft.identity.vaultID == vaultID else {
+                throw ImVaultSyncFailure.wrongVault
+            }
+            return try commitFixture(root: root, draft: draft,
+                                     userConfirmedDiff: userConfirmedDiff)
+        }, completion: completion)
+    }
+
+    // XCTest ONLY: caller passes a unique disposable test-Vault directory.
+    // This does NOT take or restore security-scoped bookmarks.
+    static func commitFixture(root: URL, draft: ImVaultDraft,
+                              userConfirmedDiff: Bool) throws -> ImVaultCommitOutcome {
+        try draft.validate()
+        #if !DEBUG
+        // This fixture method is intentionally unusable in Release.
+        throw ImVaultSyncFailure.writesLocked
+        #else
+        // Defense in depth: a Debug build must also refuse to write the
+        // user's iCloud/File Provider Vault through the fixture API.
+        // Only disposable paths under the app's own temporary directory
+        // are permitted. Avoid string-prefix confusion such as tmp2.
+        let testRoot = FileManager.default.temporaryDirectory
+            .standardizedFileURL.resolvingSymlinksInPath().path
+        let fixtureRoot = root.standardizedFileURL.resolvingSymlinksInPath().path
+        guard fixtureRoot.hasPrefix(testRoot + "/") else {
+            throw ImVaultSyncFailure.writesLocked
+        }
+        #endif
+        guard userConfirmedDiff else { throw ImVaultSyncFailure.approvalMissing }
+        let preview = ImVaultDiff.summary(base: draft.baseText,
+                                          edited: draft.editedText, maximumLines: 200)
+        guard preview.complete else { throw ImVaultSyncFailure.previewTruncated }
+        guard draft.hasChanges else { return .unchanged }
+
+        mutex.lock()
+        defer { mutex.unlock() }
+
+        let url = try ImVaultReadSync.fileURL(root: root, identity: draft.identity)
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        var coordinatorError: NSError?
+        var operationError: Error?
+        var result: ImVaultCommitOutcome?
+        coordinator.coordinate(writingItemAt: url, options: .forReplacing,
+                               error: &coordinatorError) { coordinatedFile in
+            do {
+                try ImVaultReadSync.enforceContainment(coordinatedFile, root: root)
+                let v = try coordinatedFile.resourceValues(forKeys: [
+                    .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+                guard v.isRegularFile == true, v.isSymbolicLink != true else {
+                    throw ImVaultSyncFailure.unsafePath
+                }
+                guard (v.fileSize ?? 0) <= 8 * 1024 * 1024 else {
+                    throw ImVaultSyncFailure.tooLarge
+                }
+                let current = try Data(contentsOf: coordinatedFile)
+                guard current.count <= 8 * 1024 * 1024 else {
+                    throw ImVaultSyncFailure.tooLarge
+                }
+                switch draft.decision(against: current) {
+                case .unchanged:
+                    result = .unchanged
+                case .alreadyApplied:
+                    result = .alreadyApplied
+                case .conflict:
+                    throw ImVaultSyncFailure.conflict
+                case .safeToWrite:
+                    // A failure to persist the complete recovery byte copy
+                    // ABORTS before the first attempt to write source content.
+                    let backup = try ImVaultPrivateStore.backupBeforeWrite(
+                        identity: draft.identity, data: current)
+                    let bytes = Data(draft.editedText.utf8)
+                    try bytes.write(to: coordinatedFile, options: .atomic)
+                    guard try Data(contentsOf: coordinatedFile) == bytes else {
+                        throw ImVaultSyncFailure.verificationFailed
+                    }
+                    result = .written(recoveryURL: backup)
+                }
+            } catch { operationError = error }
+        }
+        if let e = coordinatorError { throw e }
+        if let e = operationError { throw e }
+        return result ?? .unchanged
+    }
+}
+
+
+// MARK: - P2 · private Markdown reading projection (inline local attachments)
+//
+// This projection deliberately cannot modify source Markdown. Images are
+// embedded as bounded in-memory data: URIs. Raw HTML and network images are
+// disabled to avoid accidentally contacting third-party servers when reading
+// personal Obsidian notes.
+extension ImVaultReadSync {
+    func prepareAuthorizedPreview(_ document: ImVaultRawDocument,
+                                  completion: @escaping (Result<String, Error>) -> Void) {
+        ImVaultReadOnlyProbe.shared.withAuthorizedRoot({ root, vaultID in
+            guard document.identity.vaultID == vaultID else {
+                throw ImVaultSyncFailure.wrongVault
+            }
+            return try Self.safeMarkdownProjection(root: root,
+                identity: document.identity, source: document.markdown)
+        }, completion: completion)
+    }
+
+    static func safeMarkdownProjection(root: URL,
+                                       identity: ImVaultFileIdentity,
+                                       source: String) throws -> String {
+        // Inert raw HTML; full unmodified source remains available in Src mode.
+        // Remove unsafe Markdown image syntax without affecting raw bytes;
+        // only Obsidian ![[local]] embeds are resolved below under Vault scope.
+        let formatted = ImVaultSafetyProjection.withCalloutHeadings(
+            ImVaultSafetyProjection.withWikiLinks(source))
+        var preview = ImVaultSafetyProjection.withoutUntrustedImages(formatted)
+        let embed = try NSRegularExpression(pattern: #"!\[\[([^\]]+)\]\]"#)
+        let allMatches = embed.matches(in: preview,
+            range: NSRange(preview.startIndex..., in: preview))
+        guard !allMatches.isEmpty else { return preview }
+
+        // Scan only if needed, at most 4000 assets and max 6 images embedded.
+        let fm = FileManager.default
+        let imageTypes: [String: String] = [
+            "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+            "heic": "image/jpeg", "webp": "image/jpeg"
+        ]
+        var candidates: [String: [URL]] = [:]
+        if let enumerator = fm.enumerator(at: root,
+            includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
+            options: [.skipsHiddenFiles]) {
+            var examined = 0
+            while let path = enumerator.nextObject() as? URL {
+                examined += 1
+                if examined > 4000 { break }
+                guard imageTypes[path.pathExtension.lowercased()] != nil else { continue }
+                let info = try path.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+                guard info.isRegularFile == true, info.isSymbolicLink != true else { continue }
+                // A malicious/broken symlink or File Provider alias must be
+                // isolated to this attachment. It must not make the entire
+                // Markdown reader fail or cause any out-of-Vault traversal.
+                do { try enforceContainment(path, root: root) }
+                catch { continue }
+                candidates[path.lastPathComponent, default: []].append(path)
+            }
+        }
+
+        var total = 0
+        var embedded = 0
+        // Reverse replacement preserves original UTF-16 match offsets.
+        for match in allMatches.reversed() {
+            guard let wrapped = Range(match.range, in: preview),
+                  let inner = Range(match.range(at: 1), in: preview) else { continue }
+            let named = String(preview[inner]).components(separatedBy: "|").first ?? ""
+            let name = named.trimmingCharacters(in: .whitespacesAndNewlines)
+            let comps = name.split(separator: "/", omittingEmptySubsequences: false)
+            var replacement = "（本地图片：\(name)）"
+            if embedded < 6 && total < 4 * 1024 * 1024,
+               comps.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }),
+               imageTypes[(name as NSString).pathExtension.lowercased()] != nil {
+                var file: URL?
+                if name.contains("/") {
+                    let candidate = root.appendingPathComponent(name, isDirectory: false)
+                    if fm.fileExists(atPath: candidate.path) {
+                        file = candidate
+                    }
+                } else if let matches = candidates[name], matches.count == 1 {
+                    file = matches[0]
+                }
+                if let sourceFile = file {
+                    do {
+                        try enforceContainment(sourceFile, root: root)
+                        let coordinator = NSFileCoordinator(filePresenter: nil)
+                        var fileCoordinationError: NSError?
+                        var fileError: Error?
+                        var bytes: Data?
+                        coordinator.coordinate(readingItemAt: sourceFile, options: [],
+                                               error: &fileCoordinationError) { safeFile in
+                            do {
+                                try enforceContainment(safeFile, root: root)
+                                let attr = try safeFile.resourceValues(forKeys: [
+                                    .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+                                guard attr.isRegularFile == true,
+                                      attr.isSymbolicLink != true,
+                                      (attr.fileSize ?? 0) < 6 * 1024 * 1024 else {
+                                    throw ImVaultSyncFailure.unsafePath
+                                }
+                                let handle = try FileHandle(forReadingFrom: safeFile)
+                                defer { handle.closeFile() }
+                                // Bound the read even when File Provider cannot
+                                // report its true size before hydration.
+                                bytes = handle.readData(ofLength: 6 * 1024 * 1024 + 1)
+                            } catch { fileError = error }
+                        }
+                        if let error = fileCoordinationError { throw error }
+                        if let error = fileError { throw error }
+                        guard let imageBytes = bytes, imageBytes.count < 6 * 1024 * 1024,
+                              let source = CGImageSourceCreateWithData(imageBytes as CFData, nil) else {
+                            throw ImpressImageOptimizationError.invalidImage
+                        }
+                        let thumbnailOptions: [CFString: Any] = [
+                            kCGImageSourceCreateThumbnailFromImageAlways: true,
+                            kCGImageSourceCreateThumbnailWithTransform: true,
+                            kCGImageSourceThumbnailMaxPixelSize: 2000
+                        ]
+                        guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(
+                            source, 0, thumbnailOptions as CFDictionary) else {
+                            throw ImpressImageOptimizationError.invalidImage
+                        }
+                        let compressed = try ImpressImageOptimizer.optimize(
+                            UIImage(cgImage: thumbnail), kind: .document,
+                            maxBytes: 480 * 1024)
+                        total += compressed.count
+                        replacement = "![本地图片](data:image/jpeg;base64," +
+                            compressed.base64EncodedString() + ")"
+                        embedded += 1
+                    } catch {
+                        // A bad attachment must never break the Markdown note
+                        // or cause access outside the authorized Vault.
+                        replacement = "（本地图片暂不可读：\(name)）"
+                    }
+                }
+            }
+            preview.replaceSubrange(wrapped, with: replacement)
+        }
+        return preview
+    }
+}

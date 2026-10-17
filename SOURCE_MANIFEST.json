@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "authority": {
+    "repository": "aRReuu/Impress-iphone",
+    "branch": "feature/impress-v3-review-foundation",
+    "source_head_sha": "9078600d9be7be048a550d32d43322e55e7d866d"
+  },
+  "public_repository": "aRReuu/Impress-iphone-public-build",
+  "public_commit_sha": "resolved by CI using git rev-parse HEAD; see package-manifest.json",
+  "baseline": "Impress V3.1 2026-10-15 / R03 2026-10-16",
+  "copied_text_candidates": 150,
+  "copied_text_source_count": 150,
+  "normalized_public_files": [
+    "aReuImpress-iPhone.xcodeproj/project.pbxproj (remove DEVELOPMENT_TEAM; Debug candidate flag)"
+  ],
+  "source_copy_rule": "selected current-tree text snapshot; isolated independent public Git history",
+  "excluded_paths": [
+    "Docs/**",
+    "docs/**",
+    "Pods/**",
+    "**/xcuserdata/**",
+    "**/*.xcuserstate",
+    "**/.cursorrules",
+    "impressBuild.sh",
+    "codemagic.yaml",
+    "upstream .github workflows",
+    "original raster images and photographs"
+  ],
+  "excluded_original_binary_files": 14,
+  "generated_neutral_assets_at_ci": 14,
+  "ui_artwork_note": "Neutral placeholders are used for raster art whose redistribution rights were not verified. They are not a pixel-perfect R03 artwork replacement.",
+  "policies": {
+    "production_vault_write_enabled": false,
+    "release_default_legacy_unchanged": true,
+    "personal_apple_certificates_in_repository": false
+  },
+  "audit": {
+    "text_files_individually_fetched": 150,
+    "search_scope": "credential signatures, private absolute paths, literal emails, suspicious credential assignments; manual review of high-risk configuration files",
+    "known_sanitizations": 4,
+    "unverified": "independent third-party asset licensing requires owner review"
+  }
+}
