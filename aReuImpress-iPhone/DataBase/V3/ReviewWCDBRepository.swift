@@ -17,6 +17,8 @@ public enum ReviewWCDBError: Swift.Error {
     case eventIdentifierCollision
     case corruptRecord
     case invalidSchedulerOutput
+    case duplicateCard
+    case duplicateContent
 }
 
 /// Opaque FSRS result; the scheduler owns mathematics, WCDB owns durability.
@@ -192,6 +194,67 @@ public actor ReviewWCDBRepository: ReviewRepository {
     public func insertNewCard(_ input: WCDBV3CardInput,
                               initial: ReviewScheduleSnapshot,
                               now: Date) throws {
+        let row = try Self.makeNewCardRow(input, initial: initial, now: now)
+        try database.insert(objects: [row], intoTable: Self.cardsTable)
+    }
+
+    /// One WCDB transaction for the entire reviewed batch. A collision or any
+    /// failed insertion rolls back even rows inserted earlier in this loop.
+    /// The actor serializes this against review events and ordinary card inserts.
+    public func insertBatchCards(
+        _ entries: [(input: WCDBV3CardInput, initial: ReviewScheduleSnapshot)],
+        now: Date
+    ) throws -> Int {
+        guard !entries.isEmpty, entries.count <= 500 else {
+            throw ReviewWCDBError.invalidSchedulerOutput
+        }
+        let rows = try entries.map {
+            try Self.makeNewCardRow($0.input, initial: $0.initial, now: now)
+        }
+        var ids = Set<String>()
+        var content = Set<String>()
+        for row in rows {
+            guard let id = row.cardID, ids.insert(id).inserted else {
+                throw ReviewWCDBError.duplicateCard
+            }
+            guard content.insert(Self.duplicateKey(row)).inserted else {
+                throw ReviewWCDBError.duplicateContent
+            }
+        }
+        let transaction = try database.getTransaction()
+        try transaction.run(transaction: {
+            // Look up old content *inside* the transaction, never from a
+            // possibly stale earlier preview. Never mutate user cards.
+            let prior: [WCDBV3CardRow] = try transaction.getObjects(
+                on: [WCDBV3CardRow.Properties.question,
+                     WCDBV3CardRow.Properties.sourceNotePath],
+                fromTable: Self.cardsTable
+            )
+            let existingContent = Set(prior.map(Self.duplicateKey))
+            for row in rows {
+                guard !existingContent.contains(Self.duplicateKey(row)) else {
+                    throw ReviewWCDBError.duplicateContent
+                }
+                let priorID: WCDBV3CardRow? = try transaction.getObject(
+                    fromTable: Self.cardsTable,
+                    where: WCDBV3CardRow.Properties.cardID == row.cardID!
+                )
+                guard priorID == nil else { throw ReviewWCDBError.duplicateCard }
+                try transaction.insert(objects: [row], intoTable: Self.cardsTable)
+            }
+        })
+        return rows.count
+    }
+
+    private static func duplicateKey(_ row: WCDBV3CardRow) -> String {
+        let question = (row.question ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+        return (row.sourceNotePath ?? "") + "\u{001F}" + question
+    }
+
+    private static func makeNewCardRow(_ input: WCDBV3CardInput,
+                                       initial: ReviewScheduleSnapshot,
+                                       now: Date) throws -> WCDBV3CardRow {
         guard !input.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               initial.cardID == input.cardID,
               initial.revision == 0,
@@ -221,7 +284,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
         row.dueAt = initial.dueAt
         row.schedulerPayload = initial.schedulerPayload
         row.schemaVersion = Self.schema
-        try database.insert(objects: [row], intoTable: Self.cardsTable)
+        return row
     }
 
     /// One transaction: event replay check, optimistic revision check, state

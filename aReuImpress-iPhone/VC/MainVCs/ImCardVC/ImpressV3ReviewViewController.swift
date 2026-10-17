@@ -175,9 +175,19 @@ final class ImpressV3ReviewViewController: UIViewController {
     }
 
     private func setupNavigation() {
-        // Context-free content creation lives at the + control.
+        // One authoring affordance, two explicit workflows; review's right
+        // actions remain AI chat and Settings (never the old ellipsis).
+        let single = UIAction(title: "新建卡片",
+                              image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
+            self?.createCard()
+        }
+        let batch = UIAction(title: "批量导入",
+                             image: UIImage(systemName: "square.stack.3d.up")) { [weak self] _ in
+            self?.startBatchImport()
+        }
         navigationItem.leftBarButtonItem = UIBarButtonItem(
-            barButtonSystemItem: .add, target: self, action: #selector(createCard))
+            image: UIImage(systemName: "plus"), menu: UIMenu(children: [single, batch]))
+        navigationItem.leftBarButtonItem?.accessibilityLabel = "添加内容"
         updateNavigationActions()
     }
 
@@ -380,6 +390,29 @@ final class ImpressV3ReviewViewController: UIViewController {
         let history = ImpressV3TimelineViewController(
             cardID: item?.cardID, repository: repository)
         navigationController?.pushViewController(history, animated: true)
+    }
+
+    private func startBatchImport() {
+        guard pending == nil, !isLoading else { return }
+        let importVC = ImpressV3BatchImportViewController()
+        importVC.onCommit = { [weak self] inputs in
+            guard let self else { throw CocoaError(.userCancelled) }
+            let store = try self.repository ?? ImpressV3ReviewEnvironment.repository()
+            let now = Date()
+            let calculator = FSRS6ReviewCalculator()
+            let entries = try inputs.map { input in
+                (input: input, initial: try calculator.newCardSnapshot(id: input.cardID, now: now))
+            }
+            _ = try await store.insertBatchCards(entries, now: now)
+            // Do not rewind a live review; new cards join a future session.
+            if self.items.isEmpty, self.pending == nil, !self.isLoading {
+                self.reloadSession()
+            }
+        }
+        let navigation = ImNavigationViewController(rootViewController: importVC)
+        navigation.modalPresentationStyle = .pageSheet
+        navigation.sheetPresentationController?.detents = [.large()]
+        present(navigation, animated: true)
     }
 
     @objc private func createCard() {

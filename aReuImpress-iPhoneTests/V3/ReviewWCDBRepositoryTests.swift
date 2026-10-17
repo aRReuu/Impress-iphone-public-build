@@ -648,3 +648,124 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         XCTAssertFalse(buttons.contains { $0.title(for: .normal) == "简单" })
     }
 }
+
+
+// R04.2-C: disposable WCDB fixtures; no production user database touched.
+final class ImpressV3AtomicBatchTests: XCTestCase {
+    private func fixture() throws -> ReviewWCDBRepository {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ImpressBatch-" + UUID().uuidString)
+            .appendingPathComponent("v3.sqlite")
+        return try ReviewWCDBRepository(databasePath: path.path,
+                                        calculator: FSRS6ReviewCalculator())
+    }
+
+    func testAtomicBatchPersistsAllWithFSRSZeroRevisionAndVaultPath() async throws {
+        let repo = try fixture()
+        let calculator = FSRS6ReviewCalculator()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let source = try ImpressBatchSourceKey.encode(ImVaultFileIdentity(
+            vaultID: "vault-A", relativePath: "First/Sub/笔记.md"))
+        let a = WCDBV3CardInput(question: "第一题", answerText: "回答一", sourceNotePath: source)
+        let b = WCDBV3CardInput(question: "第二题", answerText: "回答二")
+        let result = try await repo.insertBatchCards([
+            (a, try calculator.newCardSnapshot(id: a.cardID, now: now)),
+            (b, try calculator.newCardSnapshot(id: b.cardID, now: now))
+        ], now: now)
+        XCTAssertEqual(result, 2)
+        let candidates = try await repo.fetchQueueCandidates()
+        XCTAssertEqual(candidates.count, 2)
+        XCTAssertTrue(candidates.allSatisfy { $0.revision == 0 && $0.status == .new })
+        let stored = try await repo.content(for: a.cardID)
+        XCTAssertEqual(stored?.sourceNotePath, source)
+        XCTAssertEqual(try ImpressBatchSourceKey.decode(stored!.sourceNotePath!), try ImVaultFileIdentity(
+            vaultID: "vault-A", relativePath: "First/Sub/笔记.md"))
+    }
+
+    func testCollisionAfterFirstInsertRollsBackEntireTransaction() async throws {
+        let repo = try fixture()
+        let calculator = FSRS6ReviewCalculator()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let existing = WCDBV3CardInput(question: "原有", answerText: "不可变")
+        try await repo.insertNewCard(existing,
+            initial: try calculator.newCardSnapshot(id: existing.cardID, now: now), now: now)
+        let good = WCDBV3CardInput(question: "候选一", answerText: "只可全部提交")
+        let collision = WCDBV3CardInput(cardID: existing.cardID, question: "候选二", answerText: "重复 ID")
+        do {
+            _ = try await repo.insertBatchCards([
+                (good, try calculator.newCardSnapshot(id: good.cardID, now: now)),
+                (collision, try calculator.newCardSnapshot(id: collision.cardID, now: now))
+            ], now: now)
+            XCTFail("Must fail atomically")
+        } catch ReviewWCDBError.duplicateCard { }
+        let snapshot = try await repo.fetchQueueCandidates()
+        XCTAssertEqual(snapshot.count, 1)
+        let rolledBackContent = try await repo.content(for: good.cardID)
+        let existingContent = try await repo.content(for: existing.cardID)
+        XCTAssertNil(rolledBackContent)
+        XCTAssertEqual(existingContent?.answerText, "不可变")
+    }
+
+    func testInvalidAnswerOrDuplicateQuestionNeverPartiallyPersists() async throws {
+        let repo = try fixture()
+        let calculator = FSRS6ReviewCalculator()
+        let now = Date()
+        let a = WCDBV3CardInput(question: "Case", answerText: "A")
+        let invalid = WCDBV3CardInput(question: "Missing", answerText: nil)
+        do {
+            _ = try await repo.insertBatchCards([
+                (a, try calculator.newCardSnapshot(id: a.cardID, now: now)),
+                (invalid, try calculator.newCardSnapshot(id: invalid.cardID, now: now))
+            ], now: now)
+            XCTFail("Reject a malformed card before any write")
+        } catch ReviewWCDBError.invalidSchedulerOutput { }
+        let b = WCDBV3CardInput(question: " case ", answerText: "B")
+        do {
+            _ = try await repo.insertBatchCards([
+                (a, try calculator.newCardSnapshot(id: a.cardID, now: now)),
+                (b, try calculator.newCardSnapshot(id: b.cardID, now: now))
+            ], now: now)
+            XCTFail("Reject duplicate content")
+        } catch ReviewWCDBError.duplicateContent { }
+        let remaining = try await repo.fetchQueueCandidates()
+        XCTAssertEqual(remaining.count, 0)
+    }
+
+    @MainActor
+    func testCreatingBatchPreviewWithoutConfirmationDoesNotWrite() async throws {
+        let repo = try fixture()
+        let input = WCDBV3CardInput(question: "Not confirmed", answerText: "No write")
+        let parsed = ImpressBatchParser.parse("Q: Not confirmed\nA: No write", as: .text)
+        XCTAssertEqual(parsed.count, 1)
+        XCTAssertTrue(parsed[0].isValid)
+        let found = try await repo.content(for: input.cardID)
+        XCTAssertNil(found)
+        let remaining = try await repo.fetchQueueCandidates()
+        XCTAssertEqual(remaining.count, 0)
+
+    }
+}
+
+
+@MainActor
+final class ImpressV3BatchPreviewIntegrationTests: XCTestCase {
+    func testInvalidCandidateDisablesAtomicCommit() {
+        let parsed = ImpressBatchParser.parse("Q: 尚未回答", as: .text)
+        let preview = ImpressV3BatchPreviewViewController(
+            rows: parsed.map { ImpressV3BatchCandidate(parsed: $0, sourceKey: nil) })
+        preview.loadViewIfNeeded()
+        XCTAssertEqual(preview.rows.count, 1)
+        XCTAssertFalse(preview.navigationItem.rightBarButtonItem?.isEnabled ?? true)
+        XCTAssertEqual(preview.tableView.numberOfRows(inSection: 0), 1)
+    }
+
+    func testValidPreviewRequiresExplicitCommit() throws {
+        let parsed = ImpressBatchParser.parse("Q: Why?\nA: Because.", as: .text)
+        let preview = ImpressV3BatchPreviewViewController(
+            rows: parsed.map { ImpressV3BatchCandidate(parsed: $0, sourceKey: nil) })
+        preview.loadViewIfNeeded()
+        XCTAssertTrue(preview.navigationItem.rightBarButtonItem?.isEnabled ?? false)
+        XCTAssertEqual(preview.rows[0].draft.question, "Why?")
+        XCTAssertNotNil(try preview.rows[0].draft.validatedInput())
+    }
+}

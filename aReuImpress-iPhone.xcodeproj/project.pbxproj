@@ -134,6 +134,7 @@
 		F3A200000000000000000011 /* ImpressV3ReviewEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A200000000000000000001 /* ImpressV3ReviewEnvironment.swift */; };
 		F3A200000000000000000012 /* ImpressV3ReviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A200000000000000000002 /* ImpressV3ReviewViewController.swift */; };
 		F3A400000000000000000010 /* ImpressV3CardComposerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A400000000000000000011 /* ImpressV3CardComposerViewController.swift */; };
+		F3A500000000000000000010 /* ImpressV3BatchImportViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A500000000000000000011 /* ImpressV3BatchImportViewController.swift */; };
 		F3A200000000000000000013 /* ImpressV3NotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A200000000000000000003 /* ImpressV3NotificationCoordinator.swift */; };
 		F3A200000000000000000022 /* ImpressV3SwipeIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A200000000000000000021 /* ImpressV3SwipeIntegrationTests.swift */; };
 		F3A300000000000000000002 /* ImpressV3NotificationIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A300000000000000000001 /* ImpressV3NotificationIntegrationTests.swift */; };
@@ -320,6 +321,7 @@
 		F3A200000000000000000001 /* ImpressV3ReviewEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV3ReviewEnvironment.swift; sourceTree = "<group>"; };
 		F3A200000000000000000002 /* ImpressV3ReviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV3ReviewViewController.swift; sourceTree = "<group>"; };
 		F3A400000000000000000011 /* ImpressV3CardComposerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV3CardComposerViewController.swift; sourceTree = "<group>"; };
+		F3A500000000000000000011 /* ImpressV3BatchImportViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV3BatchImportViewController.swift; sourceTree = "<group>"; };
 		F3A200000000000000000003 /* ImpressV3NotificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV3NotificationCoordinator.swift; sourceTree = "<group>"; };
 		F3A200000000000000000021 /* ImpressV3SwipeIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV3SwipeIntegrationTests.swift; sourceTree = "<group>"; };
 		F3A300000000000000000001 /* ImpressV3NotificationIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV3NotificationIntegrationTests.swift; sourceTree = "<group>"; };
@@ -424,6 +426,7 @@
 				F3A200000000000000000001 /* ImpressV3ReviewEnvironment.swift */,
 				F3A200000000000000000002 /* ImpressV3ReviewViewController.swift */,
 				F3A400000000000000000011 /* ImpressV3CardComposerViewController.swift */,
+				F3A500000000000000000011 /* ImpressV3BatchImportViewController.swift */,
 				38AB8B9E2E96BB4C00D371A8 /* ImCardListVC */,
 				38A7A5FA2DCE30FA009AB957 /* ImCardViewController.swift */,
 			);
@@ -1285,6 +1288,7 @@
 				F3A200000000000000000011 /* ImpressV3ReviewEnvironment.swift in Sources */,
 				F3A200000000000000000012 /* ImpressV3ReviewViewController.swift in Sources */,
 				F3A400000000000000000010 /* ImpressV3CardComposerViewController.swift in Sources */,
+				F3A500000000000000000010 /* ImpressV3BatchImportViewController.swift in Sources */,
 				F3A200000000000000000013 /* ImpressV3NotificationCoordinator.swift in Sources */,
 				F3A100000000000000000001 /* ReviewWCDBRepository.swift in Sources */,
 				F3A100000000000000000002 /* FSRS6ReviewCalculator.swift in Sources */,

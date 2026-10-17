@@ -11,12 +11,12 @@ permissions:
 
 jobs:
   swift-core:
-    name: Pure Swift Core (unchanged)
+    name: Pure Swift Core and R04.2-C importer parser
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Test stable FSRS and Vault safety contracts
+      - name: Test FSRS, Vault and batch parser contracts
         shell: bash
         run: |
           set -euo pipefail
@@ -56,6 +56,9 @@ jobs:
           notes = Path("aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImpressNoteListTableViewController.swift").read_text()
           assert "ImpressV3CardComposerViewController" in composer
           assert "ImpressV3CardComposerViewController()" in route
+          assert "ImpressV3BatchImportViewController" in route
+          assert "insertBatchCards" in Path("aReuImpress-iPhone/DataBase/V3/ReviewWCDBRepository.swift").read_text()
+          assert "ImpressV3BatchPreviewViewController" in Path("aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3BatchImportViewController.swift").read_text()
           assert "openNoteViewer" not in notes
           assert "visibleExternalNotes.count" in notes
           assert "ImWebViewController.forReviewHandoff" in route
@@ -156,7 +159,7 @@ jobs:
           python3 - "$NAME" <<'PY'
           import hashlib, json, pathlib, sys
           ipa=pathlib.Path("out")/sys.argv[1]
-          m=dict(private_source_sha="42989d40a6a3cf081ec952a72dfe47ef94271822",
+          m=dict(private_source_sha="61f9694da4b0a15f608db9ba175ffdd85957f627",
                  public_snapshot_sha=__import__("subprocess").check_output(
                    ["git","rev-parse","HEAD"], text=True).strip(),
                  ipa_name=ipa.name,ipa_sha256=hashlib.sha256(ipa.read_bytes()).hexdigest(),
@@ -186,7 +189,7 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      EXPECTED_PRIVATE: 42989d40a6a3cf081ec952a72dfe47ef94271822
+      EXPECTED_PRIVATE: 61f9694da4b0a15f608db9ba175ffdd85957f627
     steps:
       - name: Download artifact from this exact successful SDK27 run
         shell: bash
@@ -229,5 +232,5 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Impress V3.1 R04.2 — Native Authoring and Notes QA Candidate" \
             --prerelease \
-              --notes "R04.2-A/B candidate: direct top-right AI and Settings actions, no overloaded menu, continuous Obsidian file list without the obsolete left viewer, new standalone native V3 QA/choice/image editor with user-controlled options and no draft loss across type changes. New card save reuses existing WCDB1.1.0/FSRS-6, does not restart live review; original private Vault writes remain DISABLED. Batch import (R04.2-C) not yet enabled. Only test builds verified. Unsigned ARM64 AltStore re-sign required; physical iPhone and R03 visual approval NOT TESTED. Third-party image originals replaced with neutral CI assets."
+              --notes "R04.2-A/B/C candidate: direct top-right AI and Settings actions, no overloaded menu, continuous Obsidian file list without the obsolete left viewer, new standalone native V3 QA/choice/image editor with user-controlled options and no draft loss across type changes. New card save reuses existing WCDB1.1.0/FSRS-6, does not restart live review; original private Vault writes remain DISABLED. Batch import (R04.2-C) not yet enabled. Only test builds verified. Unsigned ARM64 AltStore re-sign required; physical iPhone and R03 visual approval NOT TESTED. Third-party image originals replaced with neutral CI assets."
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,assets
