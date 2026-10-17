@@ -12,6 +12,12 @@ target 'aReuImpress-iPhone' do
   pod 'MarkdownKit'
   pod 'IQKeyboardManagerSwift','~> 6.4.2'
   pod 'MarkdownView'
+
+  # Xcode 27 uses explicit Swift module dependency scanning for @testable imports.
+  # The test bundle must inherit app Pod framework search paths.
+  target 'aReuImpress-iPhoneTests' do
+    inherit! :search_paths
+  end
 end
 
 # Xcode 16+ no longer ships libarclite for obsolete iOS 8/9 Pods targets.
