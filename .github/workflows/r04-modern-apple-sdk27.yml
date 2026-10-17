@@ -77,6 +77,7 @@ jobs:
             -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/R04Debug" \
+            IPHONEOS_DEPLOYMENT_TARGET=15.0 \
             CODE_SIGNING_ALLOWED=NO \
             build 2>&1 | tee out/debug-simulator-build.log
       - name: Execute real iOS Simulator XCTest suite
@@ -102,6 +103,7 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/R04Debug" \
             -resultBundlePath "$GITHUB_WORKSPACE/out/R04.xcresult" \
             -parallel-testing-enabled NO \
+            IPHONEOS_DEPLOYMENT_TARGET=15.0 \
             CODE_SIGNING_ALLOWED=NO \
             test 2>&1 | tee out/ios-xctest.log
           xcrun xcresulttool get test-results summary --path out/R04.xcresult --format json > out/xctest-summary.json || true
@@ -115,6 +117,7 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/R04AltStore" \
+            IPHONEOS_DEPLOYMENT_TARGET=15.0 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_ENTITLEMENTS= \
             ENABLE_DEBUG_DYLIB=NO \
