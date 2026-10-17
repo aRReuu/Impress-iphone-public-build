@@ -4,7 +4,14 @@ on:
   push:
     branches:
       - feature/impress-v3-r04-2-build
+    paths:
+      - 'aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/**'
+      - '.github/workflows/r04-2-native-authoring.yml'
   workflow_dispatch:
+
+concurrency:
+  group: impress-v3-r042-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

@@ -6,6 +6,10 @@ on:
       - feature/impress-v3-r04-2-build
   workflow_dispatch:
 
+concurrency:
+  group: impress-v3-r042-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
