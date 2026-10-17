@@ -123,27 +123,8 @@ jobs:
           print("AUTOMATIC_LIGHT_DARK_APPEARANCE_CONTRACT PASS")
           print("CENTRALIZED_V3_GEOMETRY_AND_CHOICES PASS")
           print("CENTRALIZED_V3_APPEARANCE PASS")
-          # Owner explicitly authorized original iPhone home-screen icons ONLY.
-          # These tracked PNGs must be byte-for-byte the private source blobs.
-          # Reject any other tracked raster, including wallpaper, photos and
-          # the private marketing 1024px App Store artwork.
-          import hashlib, json
-          icon_sha={"icon_40.png":"6b84184cc92c7087f67e0d4a04d58a35f3fd1857","icon_58.png":"894f3d52817c02158534936fd78e2a6601542f2e","icon_60.png":"fcb469c6d79da5286f798283057526eabdabb0a5","icon_80.png":"a78b88d4a2b010dfe5bdfa595828e5781493741e","icon_87.png":"4ace8e7e0954af127c9942e50924581ca7bdca0d","icon_120.png":"bd5bdf9a26ba2cae6d795c30d9f699bebeede322","icon_180.png":"65d28cc1984cf706cce3f4059647a9a8ded31f58"}
-          icon_dir="aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/"
-          allowed={icon_dir+name for name in icon_sha}
-          raster={p for p in files if p.lower().endswith((".png",".jpg",".jpeg",".gif",".webp",".heic",".tif",".tiff"))}
-          assert raster==allowed, ("Unauthorized original or missing AppIcon assets: ", sorted(raster^allowed))
-          for name,expected in icon_sha.items():
-              file_name=icon_dir+name
-              sha=subprocess.check_output(["git","hash-object",file_name],text=True).strip()
-              assert sha==expected, f"AppIcon original mismatch: {name} {sha} != {expected}"
-              assert Path(file_name).read_bytes().startswith(bytes.fromhex("89504e470d0a1a0a")), f"Not PNG: {name}"
-          icon_spec=json.loads(Path(icon_dir+"Contents.json").read_text())
-          assert not [x for x in icon_spec["images"] if x.get("idiom")=="ios-marketing"], "Private 1024px master must not be copied or synthesized"
-          assert {x["filename"] for x in icon_spec["images"]}==set(icon_sha), "App icon catalog references non-original content"
-          icon_builder=Path(".github/scripts/generate_neutral_assets.py").read_text()
-          assert "paint(icons" not in icon_builder and 'kind == "icon"' not in icon_builder, "Unauthorized icon generation"
-          print("ORIGINAL_IPHONE_APPICON_SHA_AND_PRIVATE_IMAGE_EXCLUSION PASS")
+          subprocess.run(["python3", ".github/scripts/verify_public_mirror.py"], check=True)
+
           print("SANITIZED_MIRROR_AND_VAULT_LOCK PASS")
           PY
       - name: Create only non-icon placeholder assets for legacy resource references
@@ -251,7 +232,7 @@ jobs:
           python3 - "$NAME" <<'PY'
           import hashlib, json, pathlib, sys
           ipa=pathlib.Path("out")/sys.argv[1]
-          m=dict(private_source_sha="8bc49e0ad85a98aa7003f16733c64693aecf82b6",
+          m=dict(private_source_sha="17af484dceaffc60989d1cb0efef2182e27272cf",
                  public_snapshot_sha=__import__("subprocess").check_output(
                    ["git","rev-parse","HEAD"], text=True).strip(),
                  ipa_name=ipa.name,ipa_sha256=hashlib.sha256(ipa.read_bytes()).hexdigest(),
@@ -281,7 +262,7 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      EXPECTED_PRIVATE: 8bc49e0ad85a98aa7003f16733c64693aecf82b6
+      EXPECTED_PRIVATE: 17af484dceaffc60989d1cb0efef2182e27272cf
     steps:
       - name: Download artifact from this exact successful SDK27 run
         shell: bash
@@ -324,5 +305,5 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Impress V3.1 R04.2 — Native Authoring and Notes QA Candidate" \
             --prerelease \
-              --notes "R04.2-D4.1 minimal native UI + Automatic Light/Dark candidate: 3 system tabs, compact Settings, local prompts, timeline, read-only Obsidian Vault, CSV/TSV/MD batch import. ImColorConstants.swift alone controls grouped page/content tones and responsive 50pt segmented selectors (iPhone fills; 440pt wide-screen cap, 320pt compact cap), native 52pt primary/48pt quiet/44pt tertiary actions and multiline 52pt scrollable choice buttons for 12-option questions. WCDB.swift 1.1.0 and FSRS-6 unchanged; no automatic Web Chat send, production Vault writes DISABLED. CI verifies Swift Core, UIKit XCTest, ARM64/ZIP/SHA before release. Original iPhone AppIcon PNGs are byte-exact from private; App Store 1024px master, wallpapers, launch art, and photos remain private; 6 non-icon stubs only. iPhone 13 Light/Dark physical visual acceptance pending. Unsigned IPA requires personal AltStore signing; unlicensed source imagery replaced by neutral CI assets."
+              --notes "R04.2-D4.1 minimal native UI + Automatic Light/Dark candidate: 3 system tabs, compact Settings, local prompts, timeline, read-only Obsidian Vault, CSV/TSV/MD batch import. ImColorConstants.swift alone controls grouped page/content tones and responsive 50pt segmented selectors (iPhone fills; 440pt wide-screen cap, 320pt compact cap), native 52pt primary/48pt quiet/44pt tertiary actions and multiline 52pt scrollable choice buttons for 12-option questions. WCDB.swift 1.1.0 and FSRS-6 unchanged; no automatic Web Chat send, production Vault writes DISABLED. CI verifies Swift Core, UIKit XCTest, ARM64/ZIP/SHA before release. All eight AppIcon PNGs (including the 1024px marketing master) are SHA-identical to private originals, subject to the mandatory pre-build P0 gate. Wallpapers, launch art and photos remain private; only six non-icon stubs are built in CI. iPhone 13 Light/Dark physical visual acceptance pending. Unsigned IPA requires personal AltStore signing; unlicensed source imagery replaced by neutral CI assets."
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,assets
