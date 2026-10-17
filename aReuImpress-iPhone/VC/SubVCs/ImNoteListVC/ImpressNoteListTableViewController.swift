@@ -12,37 +12,6 @@ import UIKit
 import Combine
 import ImpressReviewCore
 
-extension ImPreChatListCell {
-    func configure(with note: ImNoteModel) {
-        questionLabel.text = note.mainTitle ?? "无标题"
-        contentLabel.text = note.markdownText ?? "无内容"
-        if let source = note.directoryPath, !source.isEmpty {
-            sourceLabel.text = "目录: \(source)"
-            sourceLabel.isHidden = false
-        } else {
-            sourceLabel.isHidden = true
-        }
-
-        // 显示状态指示器 - 可以根据笔记是否有内容或其他条件来设置
-        let hasContent = !(note.markdownText?.isEmpty ?? true)
-        if hasContent {
-            statusIndicator.image = UIImage(systemName: "doc.text.fill")
-            statusIndicator.tintColor = ImpressV3Appearance.accent
-        } else {
-            statusIndicator.image = UIImage(systemName: "doc.text")
-            statusIndicator.tintColor = .systemGray
-        }
-    }
-}
-
-enum NetActionType:String
-{
-    case allNoti = "已设定通知"
-    case testAPI = "testAPI"
-    case llm = "大模型/提示词"
-}
-
-
 class ImpressNoteListTableViewController: ImBaseViewController
 {
     private var cancellables = Set<AnyCancellable>()
@@ -51,7 +20,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
     ///
     private var viewModel: ImNotesViewModelProtocol! = ImpressNotesViewModel()
     
-    private let reuseID = ImPreChatListCell.reuseIdentifier
+    private let reuseID = "impress-note-native-cell"
     // External Vault never merges into the legacy Note WCDB table.
     private var externalMode = false
     private var externalNotes: [ImVaultIndexNote] = []
@@ -382,8 +351,6 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
         ])
         tableView.delegate = self
         tableView.dataSource = self
-        tableView.register(ImPreChatListCell.self,
-                           forCellReuseIdentifier: reuseID)
         tableView.tableFooterView = UIView(frame: .zero)
         let refresh = UIRefreshControl()
         refresh.addTarget(self, action: #selector(refreshNotes), for: .valueChanged)
@@ -428,31 +395,29 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
             cell.accessoryType = .disclosureIndicator
             return cell
         }
-        guard let cell = tableView.dequeueReusableCell(withIdentifier: reuseID,
-                   for: indexPath) as? ImPreChatListCell else {
-            return UITableViewCell()
-        }
+        let cell = tableView.dequeueReusableCell(withIdentifier: reuseID)
+            ?? UITableViewCell(style: .subtitle, reuseIdentifier: reuseID)
         if let note = viewModel.getCurrentNote(indexPath: indexPath) {
-            cell.configure(with: note)
+            var content = UIListContentConfiguration.subtitleCell()
+            content.text = note.mainTitle ?? "无标题"
+            let excerpt = (note.markdownText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let directory = (note.directoryPath ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let preview = excerpt.isEmpty ? "无内容" : String(excerpt.prefix(160))
+            content.secondaryText = directory.isEmpty ? preview : directory + " · " + preview
+            content.image = UIImage(systemName: excerpt.isEmpty ? "doc.text" : "doc.text.fill")
+            content.imageProperties.tintColor = ImpressV3Appearance.accent
+            content.textProperties.numberOfLines = 2
+            content.secondaryTextProperties.numberOfLines = 3
+            cell.contentConfiguration = content
+            cell.accessoryType = .disclosureIndicator
             if ImpressV3ReviewEnvironment.pilotEnabled {
                 ImpressV3Appearance.styleGroupedCell(cell)
-                cell.questionLabel.font = ImpressV3Appearance.Typography.heading
-                cell.contentLabel.font = ImpressV3Appearance.Typography.body
-                cell.sourceLabel.font = ImpressV3Appearance.Typography.caption
-                for label in [cell.questionLabel, cell.contentLabel, cell.sourceLabel] {
-                    label.adjustsFontForContentSizeCategory = true
-                }
-                cell.questionLabel.textColor = ImpressV3Appearance.primaryText
-                cell.contentLabel.textColor = ImpressV3Appearance.secondaryText
-                cell.sourceLabel.textColor = ImpressV3Appearance.mutedText
-                cell.statusIndicator.tintColor = (note.markdownText?.isEmpty ?? true)
-                    ? ImpressV3Appearance.mutedText : ImpressV3Appearance.accent
             }
         }
         return cell
     }
-
-    func tableView(_ tableView: UITableView,
+    
+        func tableView(_ tableView: UITableView,
                    didSelectRowAt indexPath: IndexPath)
     {
         tableView.deselectRow(at: indexPath, animated: false)
@@ -490,56 +455,7 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
         return nil
     }
 
-    func tableView(_ tableView: UITableView,
-                   contextMenuConfigurationForRowAt indexPath: IndexPath,
-                   point: CGPoint) -> UIContextMenuConfiguration?
-    {
-        if externalMode { return nil }
-        return UIContextMenuConfiguration.init(identifier: nil) { () -> UIViewController? in
-            guard let cell = tableView.cellForRow(at: indexPath) else { return nil }
-            let copiedView = cell.snapshotView(afterScreenUpdates: false)
-            copiedView?.frame = CGRect(origin: .zero, size: cell.frame.size)
-            copiedView?.backgroundColor = tableViewBGColor
-            let previewVC = UIViewController()
-            previewVC.view.backgroundColor = .clear
-            previewVC.view.addSubview(copiedView!)
-            previewVC.preferredContentSize = cell.frame.size
-            return previewVC
-        } actionProvider: { [weak self] _ in
-            return self?.makeContextMenu(for: indexPath)
-        }
-    }
-    
-    /// 跳转AI问答
-    /// - Parameters:
-    ///   - isPrompt: <#isPrompt description#>
-    ///   - content: <#content description#>
-    func pushInjectContent(isPrompt:Bool,_ note: ImNoteModel)
-    {
-        // TODO: 重新实现注入
 
-    }
-    
-    // 创建上下文菜单
-    private func makeContextMenu(for indexPath: IndexPath) -> UIMenu
-    {
-        guard let note = viewModel.getCurrentNote(indexPath: indexPath) else {return UIMenu()}
-        let contentAction = UIAction(title: "注入:默认内容") {[weak self] _ in
-            self?.pushInjectContent(isPrompt: false,note)
-        }
-        let contentPromptAction = UIAction(title: "注入:默认内容+提示词") { [weak self] _ in
-            self?.pushInjectContent(isPrompt: true, note)
-        }
-        //
-        let getContentAction = UIAction(title: "获取当前笔记内容") { [weak self] _ in
-//            if let chat = self?.viewModel.getQuestionFromCurrentNote(indexPath: indexPath){
-//                self?.chatResult?(chat,.note)
-//            }
-        }
-        return UIMenu(title:"", children: [contentAction,
-                                           contentPromptAction,
-                                           getContentAction])
-    }
 }
 
 // MARK: - 绑定事件逻辑业务
