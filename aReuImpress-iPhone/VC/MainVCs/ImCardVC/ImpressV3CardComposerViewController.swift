@@ -156,7 +156,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
 
         typePicker.selectedSegmentIndex = currentType == .standard ? 0 :
             (currentType == .multipleChoice ? 1 : 2)
-        typePicker.selectedSegmentTintColor = .systemBlue.withAlphaComponent(0.18)
+        // Use the iOS system-selected segment appearance, no faux glass tint.
         typePicker.addTarget(self, action: #selector(typeDidChange), for: .valueChanged)
         stack.addArrangedSubview(typePicker)
 

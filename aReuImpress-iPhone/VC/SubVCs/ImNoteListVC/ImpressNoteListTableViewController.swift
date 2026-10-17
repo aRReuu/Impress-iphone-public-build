@@ -109,7 +109,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
     /// 初始化UI
     private func initUISetting()
     {
-        title = imNotesTitle 
+        title = ImpressV3ReviewEnvironment.pilotEnabled ? "笔记" : imNotesTitle 
         view.backgroundColor = bgColor
 //        navigationItem.largeTitleDisplayMode = .always
         searchControllerSetting()

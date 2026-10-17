@@ -637,8 +637,13 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         let stacks = controller.view.subviews.compactMap { $0 as? SwipeCardStack }
         XCTAssertEqual(stacks.count, 1)
         XCTAssertTrue(stacks[0].protectsVerticalContentScroll)
-        let menu = controller.navigationItem.rightBarButtonItems?.first?.menu
-        XCTAssertNotNil(menu)
+        // R04.2 removed the overloaded ellipsis; both actionable
+        // native toolbar destinations must now be explicit and menu-free.
+        let actions = try XCTUnwrap(controller.navigationItem.rightBarButtonItems)
+        XCTAssertEqual(actions.count, 2)
+        XCTAssertNil(actions.first?.menu)
+        XCTAssertEqual(actions.first?.accessibilityLabel, "设置")
+        XCTAssertEqual(actions.last?.accessibilityLabel, "原生 AI 问答")
         XCTAssertFalse(buttons.contains { $0.title(for: .normal) == "困难" })
         XCTAssertFalse(buttons.contains { $0.title(for: .normal) == "简单" })
     }
