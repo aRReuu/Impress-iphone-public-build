@@ -55,19 +55,25 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         let candidate = try await repo.fetchQueueCandidates()
         XCTAssertEqual(candidate.first?.revision, 1,
             "Content editing must not reset FSRS scheduling state")
-        XCTAssertEqual(try await repo.reviewHistory(for: id).count, 1)
+        let retainedHistory = try await repo.reviewHistory(for: id)
+        XCTAssertEqual(retainedHistory.count, 1)
 
         let found = try await repo.listManagedCards(matching: "Edited answer")
         XCTAssertEqual(found.count, 1)
         try await repo.setManagedCardSuspended(true, id: id, expectedRevision: 1)
-        XCTAssertTrue(try await repo.listManagedCards().first?.isSuspended ?? false)
+        let suspended = try await repo.listManagedCards()
+        XCTAssertTrue(suspended.first?.isSuspended ?? false)
         try await repo.setManagedCardSuspended(false, id: id, expectedRevision: 1)
-        XCTAssertFalse(try await repo.listManagedCards().first?.isSuspended ?? true)
+        let resumed = try await repo.listManagedCards()
+        XCTAssertFalse(resumed.first?.isSuspended ?? true)
 
         try await repo.deleteManagedCard(id: id, expectedRevision: 1)
-        XCTAssertNil(try await repo.content(for: id))
-        XCTAssertTrue(try await repo.reviewHistory(for: id).isEmpty)
-        XCTAssertTrue(try await repo.listManagedCards().isEmpty)
+        let deletedContent = try await repo.content(for: id)
+        let deletedHistory = try await repo.reviewHistory(for: id)
+        let deletedList = try await repo.listManagedCards()
+        XCTAssertNil(deletedContent)
+        XCTAssertTrue(deletedHistory.isEmpty)
+        XCTAssertTrue(deletedList.isEmpty)
     }
 
     func testManagedCardSearchPagingAndStaleEditFailsClosed() async throws {
@@ -97,7 +103,8 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
                 expectedRevision: 999)
             XCTFail("Stale update must be rejected")
         } catch ReviewWCDBError.revisionConflict { }
-        XCTAssertEqual((try await repo.content(for: ids[0]))?.question, "Search 0")
+        let unchanged = try await repo.content(for: ids[0])
+        XCTAssertEqual(unchanged?.question, "Search 0")
     }
 
     func testNewCardCommitsOneEventAndRetriesIdempotently() async throws {
