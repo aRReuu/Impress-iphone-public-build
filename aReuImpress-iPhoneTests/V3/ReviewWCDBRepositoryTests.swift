@@ -26,6 +26,80 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         return folder.appendingPathComponent("v3.sqlite").path
     }
 
+    func testManagedCardCRUDPreservesIdentityAndFSRSReviewEvents() async throws {
+        let calculator = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(
+            databasePath: temporaryPath(), calculator: calculator)
+        let id = UUID()
+        let now = Date(timeIntervalSince1970: 1_720_000_000)
+        try await repo.insertNewCard(
+            WCDBV3CardInput(cardID: id, question: "Original question",
+                            answerText: "Original answer", sourceNotePath: "source.md"),
+            initial: try calculator.newCardSnapshot(id: id, now: now), now: now)
+        let before = try await repo.listManagedCards(matching: "Original")
+        XCTAssertEqual(before.count, 1)
+        XCTAssertEqual(before.first?.cardID, id)
+        XCTAssertEqual(before.first?.revision, 0)
+
+        _ = try await repo.commit(ReviewSubmission(
+            eventID: UUID(), cardID: id, expectedRevision: 0,
+            rating: .good, reviewedAt: now.addingTimeInterval(2)))
+        try await repo.updateManagedCard(
+            WCDBV3CardInput(cardID: id, question: "Edited question",
+                answerText: "Edited answer", sourceNotePath: "source.md"),
+            expectedRevision: 1)
+        let edited = try await repo.content(for: id)
+        XCTAssertEqual(edited?.cardID, id)
+        XCTAssertEqual(edited?.question, "Edited question")
+        XCTAssertEqual(edited?.answerText, "Edited answer")
+        let candidate = try await repo.fetchQueueCandidates()
+        XCTAssertEqual(candidate.first?.revision, 1,
+            "Content editing must not reset FSRS scheduling state")
+        XCTAssertEqual(try await repo.reviewHistory(for: id).count, 1)
+
+        let found = try await repo.listManagedCards(matching: "Edited answer")
+        XCTAssertEqual(found.count, 1)
+        try await repo.setManagedCardSuspended(true, id: id, expectedRevision: 1)
+        XCTAssertTrue(try await repo.listManagedCards().first?.isSuspended ?? false)
+        try await repo.setManagedCardSuspended(false, id: id, expectedRevision: 1)
+        XCTAssertFalse(try await repo.listManagedCards().first?.isSuspended ?? true)
+
+        try await repo.deleteManagedCard(id: id, expectedRevision: 1)
+        XCTAssertNil(try await repo.content(for: id))
+        XCTAssertTrue(try await repo.reviewHistory(for: id).isEmpty)
+        XCTAssertTrue(try await repo.listManagedCards().isEmpty)
+    }
+
+    func testManagedCardSearchPagingAndStaleEditFailsClosed() async throws {
+        let calculator = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(
+            databasePath: temporaryPath(), calculator: calculator)
+        let now = Date(timeIntervalSince1970: 1_720_000_100)
+        var ids = [UUID]()
+        for i in 0..<4 {
+            let id = UUID()
+            ids.append(id)
+            try await repo.insertNewCard(
+                WCDBV3CardInput(cardID: id, question: "Search \(i)",
+                    answerText: "Search answer \(i)"),
+                initial: try calculator.newCardSnapshot(id: id, now: now),
+                now: now.addingTimeInterval(Double(i)))
+        }
+        let page1 = try await repo.listManagedCards(matching: "Search", offset: 0, limit: 2)
+        let page2 = try await repo.listManagedCards(matching: "Search", offset: 2, limit: 2)
+        XCTAssertEqual(page1.count, 2)
+        XCTAssertEqual(page2.count, 2)
+        XCTAssertEqual(Set((page1 + page2).map(\.cardID)).count, 4)
+        do {
+            try await repo.updateManagedCard(
+                WCDBV3CardInput(cardID: ids[0], question: "Stale",
+                    answerText: "No write"),
+                expectedRevision: 999)
+            XCTFail("Stale update must be rejected")
+        } catch ReviewWCDBError.revisionConflict { }
+        XCTAssertEqual((try await repo.content(for: ids[0]))?.question, "Search 0")
+    }
+
     func testNewCardCommitsOneEventAndRetriesIdempotently() async throws {
         let path = temporaryPath()
         let calculator = FSRS6ReviewCalculator()
