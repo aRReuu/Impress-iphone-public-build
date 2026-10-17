@@ -33,6 +33,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
         do { _ = try ImpressV3ReviewEnvironment.repository() }
         catch { showDatabaseUnavailable(); return }
         initRootVC()
+        // Silent V3 backup check: no file picker or cloud permission prompt.
+        Task(priority: .utility) {
+            await ImpressV3BackupCoordinator.shared.backupIfNeeded()
+        }
         ImpressV3NotificationRouteInbox.shared.deliverIfPossible(
             in: window?.rootViewController)
         initKeyboard()
@@ -47,8 +51,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
 
     @available(iOS 13.0, *)
     func sceneDidEnterBackground(_ scene: UIScene) {
-        // Post a notification for any interested parts of the app to save their state.
         NotificationCenter.default.post(name: .appDidEnterBackground, object: nil)
+        // Best-effort only: iOS may suspend this work.
+        Task(priority: .utility) {
+            await ImpressV3BackupCoordinator.shared.backupIfNeeded()
+        }
     }
     
     @available(iOS 13.0, *)

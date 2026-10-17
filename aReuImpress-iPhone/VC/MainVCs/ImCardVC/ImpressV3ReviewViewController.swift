@@ -1068,7 +1068,7 @@ final class ImpressV3TimelineNodeCell: UITableViewCell {
 @MainActor
 final class ImpressV3SettingsHubViewController: UITableViewController {
     private enum Destination {
-        case promptLibrary, reminders
+        case promptLibrary, reminders, backup
     }
     private struct Item {
         let title: String
@@ -1084,6 +1084,10 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
         ("学习节奏", [
             Item(title: "复习通知", detail: "关闭、到期提醒或每日习惯提醒",
                  symbol: "bell", destination: .reminders)
+        ]),
+        ("数据安全", [
+            Item(title: "数据与备份", detail: "静默自动备份、iCloud 副本与受控恢复",
+                 symbol: "externaldrive", destination: .backup)
         ])
     ]
 
@@ -1111,9 +1115,11 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
     }
     override func tableView(_ tableView: UITableView,
                             titleForFooterInSection section: Int) -> String? {
-        section == 0
-            ? "本地模板在网页聊天中只会复制到剪贴板，不会自动发送私人笔记或内容。"
-            : "本轮默认最多 6 张、新卡最多 3 张；每日上限和推送频次策略待单独审核，不在此版本擅自改变 FSRS。"
+        switch section {
+        case 0: return "本地模板仅在用户明确操作后复制，不自动上传私人内容。"
+        case 1: return "FSRS-6 决定到期时间；通知仅负责提醒。"
+        default: return "备份保存在本机；连接 iCloud Drive 文件夹后可自动创建副本。"
+        }
     }
     override func tableView(_ tableView: UITableView,
                             cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -1142,6 +1148,9 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
         case .reminders:
             navigationController?.pushViewController(
                 ImpressV3ReminderSettingsController(), animated: true)
+        case .backup:
+            navigationController?.pushViewController(
+                ImpressV3BackupSettingsViewController(), animated: true)
         }
     }
 }

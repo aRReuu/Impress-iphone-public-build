@@ -109,6 +109,9 @@
 		F3A200000000000000000013 /* ImpressV3NotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A200000000000000000003 /* ImpressV3NotificationCoordinator.swift */; };
 		F3A200000000000000000022 /* ImpressV3SwipeIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A200000000000000000021 /* ImpressV3SwipeIntegrationTests.swift */; };
 		F3A300000000000000000002 /* ImpressV3NotificationIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A300000000000000000001 /* ImpressV3NotificationIntegrationTests.swift */; };
+		F3B700000000000000000010 /* ImpressV3BackupArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B700000000000000000011 /* ImpressV3BackupArchive.swift */; };
+		F3B800000000000000000010 /* ImpressV3BackupCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B800000000000000000011 /* ImpressV3BackupCoordinator.swift */; };
+		F3B900000000000000000010 /* ImpressV3BackupSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B900000000000000000011 /* ImpressV3BackupSettingsViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -267,6 +270,9 @@
 		F3A200000000000000000003 /* ImpressV3NotificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV3NotificationCoordinator.swift; sourceTree = "<group>"; };
 		F3A200000000000000000021 /* ImpressV3SwipeIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV3SwipeIntegrationTests.swift; sourceTree = "<group>"; };
 		F3A300000000000000000001 /* ImpressV3NotificationIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV3NotificationIntegrationTests.swift; sourceTree = "<group>"; };
+		F3B700000000000000000011 /* ImpressV3BackupArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV3BackupArchive.swift; sourceTree = "<group>"; };
+		F3B800000000000000000011 /* ImpressV3BackupCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV3BackupCoordinator.swift; sourceTree = "<group>"; };
+		F3B900000000000000000011 /* ImpressV3BackupSettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV3BackupSettingsViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -361,6 +367,7 @@
 			children = (
 				382E7ED42E9286BC005D8EAE /* ImSettingsViewController.swift */,
 				F3B600000000000000000011 /* ImpressV3PromptLibraryViewController.swift */,
+				F3B900000000000000000011 /* ImpressV3BackupSettingsViewController.swift */,
 			);
 			path = ImSettingVC;
 			sourceTree = "<group>";
@@ -387,6 +394,8 @@
 			children = (
 				389F85132E8D867100D9F052 /* ImiCloudBackupManager.swift */,
 				385B906C2E7C184C006336D5 /* ImObsidianManager.swift */,
+				F3B800000000000000000011 /* ImpressV3BackupCoordinator.swift */,
+				F3B700000000000000000011 /* ImpressV3BackupArchive.swift */,
 			);
 			path = ImFileManager;
 			sourceTree = "<group>";
@@ -1046,6 +1055,9 @@
 				F3A400000000000000000010 /* ImpressV3CardComposerViewController.swift in Sources */,
 				F3A500000000000000000010 /* ImpressV3BatchImportViewController.swift in Sources */,
 				F3A600000000000000000010 /* ImpressV3CardCollectionViewController.swift in Sources */,
+				F3B900000000000000000010 /* ImpressV3BackupSettingsViewController.swift in Sources */,
+				F3B800000000000000000010 /* ImpressV3BackupCoordinator.swift in Sources */,
+				F3B700000000000000000010 /* ImpressV3BackupArchive.swift in Sources */,
 				F3A200000000000000000013 /* ImpressV3NotificationCoordinator.swift in Sources */,
 				F3A100000000000000000001 /* ReviewWCDBRepository.swift in Sources */,
 				F3A100000000000000000002 /* FSRS6ReviewCalculator.swift in Sources */,

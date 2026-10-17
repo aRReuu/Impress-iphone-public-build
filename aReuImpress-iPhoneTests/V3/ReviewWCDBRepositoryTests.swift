@@ -687,12 +687,13 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         XCTAssertEqual(try ImpressV3LearningJournal.load().filter { $0.id == id }.count, 1)
     }
 
-    func testModernSettingsKeepsPromptAndReminderOnly() {
+    func testModernSettingsIncludesDataAndBackup() {
         let settings = ImpressV3SettingsHubViewController()
         settings.loadViewIfNeeded()
-        XCTAssertEqual(settings.tableView.numberOfSections, 2)
+        XCTAssertEqual(settings.tableView.numberOfSections, 3)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 0), 1)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 1), 1)
+        XCTAssertEqual(settings.tableView.numberOfRows(inSection: 2), 1)
         let prompts = settings.tableView(settings.tableView,
             cellForRowAt: IndexPath(row: 0, section: 0))
         XCTAssertEqual(prompts.contentConfiguration is UIListContentConfiguration, true)
