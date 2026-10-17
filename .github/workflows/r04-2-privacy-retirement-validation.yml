@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: impress-v3-r042-${{ github.workflow }}-${{ github.ref }}
+  group: impress-v3-r042-efficient-v2-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -149,13 +149,12 @@ jobs:
           shasum -a 256 "out/$IPA" | tee out/IPA_SHA256.txt
           echo 'CANDIDATE ONLY: missing private original marketing icon, NO FINAL RELEASE' | tee out/P0_NOT_COMPLETE.txt
       - name: Upload testing evidence and explicitly incomplete candidate
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: impress-r04-2-privacy-clean-qa-not-final
           path: |
             out/*.txt
             out/*.json
-            out/*.log
             out/*.ipa
           retention-days: 14
