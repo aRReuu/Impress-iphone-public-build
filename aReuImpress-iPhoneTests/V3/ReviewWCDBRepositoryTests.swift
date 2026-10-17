@@ -755,6 +755,10 @@ final class ImpressV3BatchPreviewIntegrationTests: XCTestCase {
             rows: parsed.map { ImpressV3BatchCandidate(parsed: $0, sourceKey: nil) })
         preview.loadViewIfNeeded()
         XCTAssertEqual(preview.rows.count, 1)
+        XCTAssertEqual(preview.rows[0].raw, "Q: 尚未回答")
+        let cell = preview.tableView(preview.tableView,
+                                     cellForRowAt: IndexPath(row: 0, section: 0))
+        XCTAssertEqual(cell.accessoryType, .detailDisclosureButton)
         XCTAssertFalse(preview.navigationItem.rightBarButtonItem?.isEnabled ?? true)
         XCTAssertEqual(preview.tableView.numberOfRows(inSection: 0), 1)
     }
@@ -768,4 +772,28 @@ final class ImpressV3BatchPreviewIntegrationTests: XCTestCase {
         XCTAssertEqual(preview.rows[0].draft.question, "Why?")
         XCTAssertNotNil(try preview.rows[0].draft.validatedInput())
     }
+    func testConfirmAlertMustPrecedeAnyDatabaseCallback() {
+        let parsed = ImpressBatchParser.parse("Q: What?\nA: A fact.", as: .text)
+        let screen = ImpressV3BatchPreviewViewController(
+            rows: parsed.map { ImpressV3BatchCandidate(parsed: $0, sourceKey: nil) })
+        let navigation = UINavigationController(rootViewController: screen)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 375, height: 667))
+        window.rootViewController = navigation
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        var calls = 0
+        screen.onCommit = { _ in calls += 1 }
+        screen.loadViewIfNeeded()
+        guard let button = screen.navigationItem.rightBarButtonItem,
+              let action = button.action else {
+            return XCTFail("Native import action missing")
+        }
+        UIApplication.shared.sendAction(action, to: button.target, from: button, for: nil)
+        XCTAssertEqual(calls, 0)
+        let alert = screen.presentedViewController as? UIAlertController
+        XCTAssertNotNil(alert)
+        XCTAssertEqual(alert?.actions.map(\.title), ["返回预览", "确认导入"])
+        alert?.dismiss(animated: false)
+    }
+
 }

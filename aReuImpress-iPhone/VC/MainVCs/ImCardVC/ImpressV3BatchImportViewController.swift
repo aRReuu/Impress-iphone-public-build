@@ -408,7 +408,7 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
     override func tableView(_ tableView: UITableView,
                             titleForHeaderInSection section: Int) -> String? {
         let valid = problems().filter { $0 == nil }.count
-        return "可导入 \(valid) / \(rows.count) · 点选修正，左滑可移除"
+        return "可导入 \(valid) / \(rows.count) · 点选编辑 · 详情可查看原文"
     }
 
     override func tableView(_ tableView: UITableView,
@@ -429,8 +429,47 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
         cfg.image = UIImage(systemName: issue == nil ? "checkmark.circle" : "exclamationmark.circle")
         cfg.imageProperties.tintColor = issue == nil ? .systemGreen : .systemOrange
         cell.contentConfiguration = cfg
-        cell.accessoryType = .disclosureIndicator
+        cell.accessoryType = .detailDisclosureButton
+        cell.accessibilityHint = "点按编辑本题，详情按钮查看原文与原始错误，左滑移除。"
         return cell
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            accessoryButtonTappedForRowWith indexPath: IndexPath) {
+        showRawCandidate(at: indexPath.row)
+    }
+
+    private func showRawCandidate(at index: Int) {
+        guard !saving, rows.indices.contains(index) else { return }
+        let record = rows[index]
+        let detail = UIViewController()
+        detail.title = "原始记录 · 第 \(record.line) 行"
+        detail.navigationItem.largeTitleDisplayMode = .never
+        detail.view.backgroundColor = .systemGroupedBackground
+        let body = UITextView()
+        body.isEditable = false
+        body.isSelectable = true
+        body.isScrollEnabled = true
+        body.font = .preferredFont(forTextStyle: .body)
+        body.adjustsFontForContentSizeCategory = true
+        body.textColor = .label
+        body.backgroundColor = .secondarySystemGroupedBackground
+        body.layer.cornerRadius = 10
+        body.textContainerInset = UIEdgeInsets(top: 16, left: 12, bottom: 16, right: 12)
+        body.accessibilityLabel = "原始导入文本及解析问题"
+        let diagnostics = record.issues.isEmpty
+            ? "原始解析没有错误。"
+            : record.issues.map { "• " + $0 }.joined(separator: "\n")
+        body.text = "原始解析信息\n" + diagnostics + "\n\n原始文本（只读）\n" + record.raw
+        body.translatesAutoresizingMaskIntoConstraints = false
+        detail.view.addSubview(body)
+        NSLayoutConstraint.activate([
+            body.topAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.topAnchor, constant: 12),
+            body.leadingAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            body.trailingAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            body.bottomAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.bottomAnchor, constant: -12)
+        ])
+        navigationController?.pushViewController(detail, animated: true)
     }
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
@@ -463,6 +502,19 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
 
     @objc private func commitBatch() {
         guard !saving, !rows.isEmpty, problems().allSatisfy({ $0 == nil }),
+              onCommit != nil else { return }
+        let alert = UIAlertController(title: "确认导入 \(rows.count) 张卡片？",
+            message: "先确保所有候选正确。本次操作使用一次 WCDB 事务，源文件不会改变。",
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "返回预览", style: .cancel))
+        alert.addAction(UIAlertAction(title: "确认导入", style: .default) { [weak self] _ in
+            self?.performBatchCommit()
+        })
+        present(alert, animated: true)
+    }
+
+    private func performBatchCommit() {
+        guard !saving, !rows.isEmpty, problems().allSatisfy({ $0 == nil }),
               let commit = onCommit else { return }
         let inputs: [WCDBV3CardInput]
         do { inputs = try rows.map { try $0.draft.validatedInput() } }
@@ -476,8 +528,11 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
             guard let self else { return }
             do {
                 try await commit(inputs)
-                let alert = UIAlertController(title: "已原子导入 \(inputs.count) 张卡片",
-                    message: "全部写入成功。正在进行的复习队列未重置；原始文件未修改。",
+                let choices = inputs.filter { $0.cardType == CardType.multipleChoice.rawValue }.count
+                let images = inputs.filter { $0.cardType == CardType.image.rawValue }.count
+                let qa = inputs.count - choices - images
+                let alert = UIAlertController(title: "成功导入 \(inputs.count) 张卡片",
+                    message: "问答 \(qa) 张 · 选择题 \(choices) 张 · 图片 \(images) 张。\n当前复习队列未重置；原始文件未修改。",
                     preferredStyle: .alert)
                 alert.addAction(UIAlertAction(title: "完成", style: .default) { [weak self] _ in
                     self?.dismiss(animated: true)
@@ -486,7 +541,7 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
             } catch {
                 self.saving = false
                 self.refreshValidation()
-                self.showError("整批导入失败", "没有提交任何部分数据。\n" + error.localizedDescription)
+                self.showError("导入未确认完成", "请先核对卡片列表，再决定是否重试。整批事务不会持久化部分记录。\n" + error.localizedDescription)
             }
         }
     }

@@ -159,7 +159,7 @@ jobs:
           python3 - "$NAME" <<'PY'
           import hashlib, json, pathlib, sys
           ipa=pathlib.Path("out")/sys.argv[1]
-          m=dict(private_source_sha="61f9694da4b0a15f608db9ba175ffdd85957f627",
+          m=dict(private_source_sha="62457964b31331b9d91db78fa031e9961788b90f",
                  public_snapshot_sha=__import__("subprocess").check_output(
                    ["git","rev-parse","HEAD"], text=True).strip(),
                  ipa_name=ipa.name,ipa_sha256=hashlib.sha256(ipa.read_bytes()).hexdigest(),
@@ -189,7 +189,7 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      EXPECTED_PRIVATE: 61f9694da4b0a15f608db9ba175ffdd85957f627
+      EXPECTED_PRIVATE: 62457964b31331b9d91db78fa031e9961788b90f
     steps:
       - name: Download artifact from this exact successful SDK27 run
         shell: bash

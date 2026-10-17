@@ -3,13 +3,13 @@
   "authority": {
     "repository": "aRReuu/Impress-iphone",
     "branch": "feature/impress-v3-r04-2-information-architecture",
-    "source_head_sha": "61f9694da4b0a15f608db9ba175ffdd85957f627",
+    "source_head_sha": "62457964b31331b9d91db78fa031e9961788b90f",
     "baseline_20261017_sha": "9078600d9be7be048a550d32d43322e55e7d866d",
     "original_r03_source_sha": "9804343b4998870ec8f6298ed9d1dde2c67e2911"
   },
   "public_repository": "aRReuu/Impress-iphone-public-build",
-  "public_commit_sha": "Resolved by CI using git rev-parse HEAD; Release r04-2-manifest.json contains exact public HEAD and IPA SHA.",
-  "baseline": "Impress V3.1 / R03 frozen / R04.2-A,B,C CI candidate 2026-10-17",
+  "public_commit_sha": "Resolved by CI with git rev-parse HEAD; Release r04-2-manifest.json is exact build attestation",
+  "baseline": "Impress V3.1 / R03 frozen / R04.2-A,B,C+C1 UI audit CI candidate",
   "copied_text_candidates": 153,
   "copied_text_source_count": 153,
   "normalized_public_files": [
@@ -50,18 +50,18 @@
     "R04 Xcode27: test target inherited CocoaPods search paths; SDK27 deployment floor 15 overridden in CI"
   ],
   "public_branch": "feature/impress-v3-r04-2-build",
-  "last_mirror_update": "R04.2-C native batch parser, preview, WCDB transaction and regression tests",
+  "last_mirror_update": "R04.2-C1: raw-source diagnostics viewer, explicit native import confirmation, accurate transaction acknowledgement, extra iOS test",
   "screenshot_policy": "Screenshots only assessed in private conversation, not uploaded or mirrored; some show private content",
-  "copy_summary": "R04.2-A/B/C sanitized source snapshot, unchanged WCDB 1.1.0/FSRS-6, private Docs and image assets excluded.",
-  "r04_2_batch": "R04.2-C new candidate; public availability only after full CI success. iPhone 13 visual QA pending.",
+  "copy_summary": "A/B/C native workflow and C1 fidelity patch, updated six-file private source SHA inventory, sanitizations maintained, no private Docs",
+  "r04_2_batch": "R04.2-C1 pending full CI; R04.2-C prior e675c723 baseline validated and available",
   "r04_2_test_fix": "legacy native XCTest menu assertion replaced with two toolbar action semantics (no removal of existing tests)",
   "source_files_sha": {
     "Packages/ImpressReviewCore/Sources/ImpressReviewCore/ImpressBatchParser.swift": "3616994dee6c931a3c5dd4ac3d429f382190dc38",
     "Packages/ImpressReviewCore/Tests/ImpressReviewCoreTests/ImpressBatchParserTests.swift": "8d61d83c9e1cc035e19d3f9a2144da6a5cda2d82",
     "aReuImpress-iPhone/DataBase/V3/ReviewWCDBRepository.swift": "c877a86a05da8b88dc6fea6ed0e802c28e6dd78c",
-    "aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3BatchImportViewController.swift": "2fac407c4e019ce383966ea8cf488ab331ac5554",
+    "aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3BatchImportViewController.swift": "d38751018e77026a6ef9b238b9c51ac0818525fb",
     "aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3ReviewViewController.swift": "9feb9e929cbc4cb2f163e3431fe1b1d2cee04fbf",
-    "aReuImpress-iPhoneTests/V3/ReviewWCDBRepositoryTests.swift": "24d6556a05b2f12b940db70cf3e3236f9daae186"
+    "aReuImpress-iPhoneTests/V3/ReviewWCDBRepositoryTests.swift": "87294501396872b7d30cfa124abc3dabaf97d431"
   },
   "sanitized_project": "Public project.pbxproj preserved; only added R04.2-C source reference to public sanitized file, no private DEVELOPMENT_TEAM copied.",
   "provenance_gate": "Full Core + iOS XCTest + ARM64 + ZIP + SHA required for release"
