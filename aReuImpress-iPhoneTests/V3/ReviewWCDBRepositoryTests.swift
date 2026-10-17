@@ -116,8 +116,10 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         try await repo.insertNewCard(
             WCDBV3CardInput(cardID: id, question: "Initial", answerText: "A"),
             initial: try calculator.newCardSnapshot(id: id, now: now), now: now)
-        let editorA = try XCTUnwrap(await repo.content(for: id))
-        let editorB = try XCTUnwrap(await repo.content(for: id))
+        let initialA = try await repo.content(for: id)
+        let initialB = try await repo.content(for: id)
+        let editorA = try XCTUnwrap(initialA)
+        let editorB = try XCTUnwrap(initialB)
         XCTAssertEqual(editorA.contentRevision, 0)
         try await repo.updateManagedCard(
             WCDBV3CardInput(cardID: id, question: "Editor A", answerText: "A"),
@@ -133,7 +135,8 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(current?.contentRevision, 1)
         let queue = try await repo.fetchQueueCandidates()
         XCTAssertEqual(queue.first?.revision, 0)
-        XCTAssertTrue(try await repo.reviewHistory(for: id).isEmpty)
+        let history = try await repo.reviewHistory(for: id)
+        XCTAssertTrue(history.isEmpty)
     }
 
     func testManagedCardLiteralWildcardSearchAndEqualTimestampPaging() async throws {
