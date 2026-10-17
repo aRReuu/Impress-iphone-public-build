@@ -67,8 +67,10 @@ final class ImDBHandler
     private func purgeRetiredChatTables() -> Bool {
         let retiredTables = ["impress_llm_model", "impress_polling_chat", "impress_chat"]
         do {
-            for table in retiredTables where try imDatabase.isTableExists(table) {
-                try imDatabase.drop(table: table)
+            for table in retiredTables {
+                if try imDatabase.isTableExists(table) {
+                    try imDatabase.drop(table: table)
+                }
             }
             return true
         } catch {
@@ -88,7 +90,7 @@ final class ImDBHandler
     }
 
     // MARK: - Legacy-independent database operations
-        /// Delete
+    /// Delete
     /// - Parameter fromTable: 表
     /// - Parameter condition: 条件
     func deleteFromTable(table: String,

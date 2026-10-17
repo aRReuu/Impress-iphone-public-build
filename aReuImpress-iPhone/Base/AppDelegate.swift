@@ -19,7 +19,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate
     {
         // Retired local model and GitHub backup credentials must never survive an upgrade.
         ImRetiredCredentialCleanup.eraseLegacyBackupToken()
-        for key in ["kIsAutoGenerateEnabled", "kAutoGenerateIntervalHours", "kLastAutoGenerateFetchDate"] {
+        for key in ["kIsAutoGenerateEnabled", "kAutoGenerateIntervalHours", "kLastAutoGenerateFetchDate",
+                    "kSystemPrompt", "kSystemPromptMigrated"] {
             UserDefaults.standard.removeObject(forKey: key)
         }
         // A notification delegate must be installed before launch finishes.

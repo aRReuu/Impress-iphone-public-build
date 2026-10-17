@@ -46,14 +46,14 @@ class ImCardListViewController: ImBaseViewController {
         searchControllerSetting()
         view.backgroundColor = bgColor
 
-            let addButton = UIBarButtonItem(
-                image: UIImage(systemName: "plus.circle.fill"),
-                style: .plain,
-                target: self,
-                action: #selector(addNewCard)
-            )
-            addButton.accessibilityLabel = "添加新卡片"
-            navigationItem.rightBarButtonItem = addButton
+        let addButton = UIBarButtonItem(
+            image: UIImage(systemName: "plus.circle.fill"),
+            style: .plain,
+            target: self,
+            action: #selector(addNewCard)
+        )
+        addButton.accessibilityLabel = "添加新卡片"
+        navigationItem.rightBarButtonItem = addButton
     }
     
     private func setupTableView() {
