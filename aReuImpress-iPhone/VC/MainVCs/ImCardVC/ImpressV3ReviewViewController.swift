@@ -22,6 +22,7 @@ final class ImpressV3ReviewViewController: UIViewController {
     private var pending: PendingSwipe?
     private var isLoading = false
     private var hasLoaded = false
+    private var needsReloadAfterCollection = false
 
     private let cardStack = SwipeCardStack()
     private let revealButton = UIButton(type: .system)
@@ -57,7 +58,12 @@ final class ImpressV3ReviewViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        if hasLoaded && pending == nil { setRatingGesturesEnabled(canRateCurrentCard) }
+        if needsReloadAfterCollection && pending == nil {
+            needsReloadAfterCollection = false
+            reloadSession()
+        } else if hasLoaded && pending == nil {
+            setRatingGesturesEnabled(canRateCurrentCard)
+        }
     }
 
     private var canRateCurrentCard: Bool {
@@ -191,8 +197,24 @@ final class ImpressV3ReviewViewController: UIViewController {
     }
 
     private func updateNavigationActions() {
-        // Settings has its own primary tab; no chat or gear action on review.
-        navigationItem.rightBarButtonItems = nil
+        // One quiet collection entry; grading/navigation remain independent.
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            image: UIImage(systemName: "square.stack"),
+            style: .plain, target: self,
+            action: #selector(openCardCollection))
+        navigationItem.rightBarButtonItem?.accessibilityLabel = "卡片集"
+    }
+
+    @objc private func openCardCollection() {
+        guard pending == nil, !isLoading else { return }
+        do {
+            let store = try repository ?? ImpressV3ReviewEnvironment.repository()
+            let collection = ImpressV3CardCollectionViewController(repository: store)
+            collection.onMutation = { [weak self] in
+                self?.needsReloadAfterCollection = true
+            }
+            navigationController?.pushViewController(collection, animated: true)
+        } catch { displayFailure(error) }
     }
 
     @objc private func openCurrentTimeline() {

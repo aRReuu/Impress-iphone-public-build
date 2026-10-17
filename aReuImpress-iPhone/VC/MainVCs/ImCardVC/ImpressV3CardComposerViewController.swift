@@ -107,8 +107,11 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
     private var originalDraft: ImpressV3CardDraft
     private var currentType: CardType
     private var saveItem: UIBarButtonItem?
+    private let editingCardID: UUID?
 
-    init(draft: ImpressV3CardDraft = ImpressV3CardDraft()) {
+    init(draft: ImpressV3CardDraft = ImpressV3CardDraft(),
+         editingCardID: UUID? = nil) {
+        self.editingCardID = editingCardID
         self.originalDraft = draft
         self.currentType = draft.kind
         self.choiceDrafts = draft.choices
@@ -121,7 +124,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "新增卡片"
+        title = editingCardID == nil ? "新增卡片" : "编辑卡片"
         navigationItem.largeTitleDisplayMode = .never
         view.backgroundColor = ImpressV3Appearance.page
         navigationItem.leftBarButtonItem = UIBarButtonItem(
@@ -360,7 +363,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         guard !saving, !processingPhoto else { return }
         let input: WCDBV3CardInput
         do {
-            input = try draft().validatedInput()
+            input = try draft().validatedInput(cardID: editingCardID ?? UUID())
         } catch {
             showProblem(error.localizedDescription)
             return
