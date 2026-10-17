@@ -2,6 +2,14 @@ import Foundation
 import CryptoKit
 import WCDBSwift
 
+/// Recovered totals reflect the archive, not the device's active database.
+struct ImpressV3BackupInspection {
+    let manifest: ImpressV3BackupManifest
+    let cardCount: Int
+    let reviewCount: Int
+    let learningCount: Int
+}
+
 /// File-provider access uses an explicit, user-selected Files folder. The
 /// application never sends data to an HTTP endpoint or stores API credentials.
 actor ImpressV3BackupCoordinator {
@@ -285,17 +293,29 @@ actor ImpressV3BackupCoordinator {
     }
 
     /// Import is read-only until the user explicitly confirms recovery.
-    func inspectRecovery(_ archive: URL) async throws -> ImpressV3BackupManifest {
+    func inspectRecovery(_ archive: URL) async throws -> ImpressV3BackupInspection {
         let container = try Self.supportDirectory().appendingPathComponent(
             "ImpressV3RestoreInspection-" + UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: container) }
-        _ = try await Task.detached(priority: .utility) {
+        return try await Task.detached(priority: .utility) {
             try ImpressV3BackupArchive.extract(source: archive, destination: container)
-            try ImpressV3BackupArchive.verifySQLite(
-                container.appendingPathComponent("ReviewV3.sqlite"))
+            let database = container.appendingPathComponent("ReviewV3.sqlite")
+            try ImpressV3BackupArchive.verifySQLite(database)
+            let counts = try ImpressV3BackupArchive.recordCounts(database)
+            // Malformed JSON must be rejected before destructive confirmation.
+            let history = try JSONDecoder().decode(
+                [ImpressV3LearningEntry].self,
+                from: Data(contentsOf: container.appendingPathComponent("LearningEntry-v1.json")))
+            _ = try JSONDecoder().decode(
+                [ImpressV3PromptTemplate].self,
+                from: Data(contentsOf: container.appendingPathComponent("prompts.json")))
+            let manifest = try JSONDecoder().decode(
+                ImpressV3BackupManifest.self,
+                from: Data(contentsOf: container.appendingPathComponent("manifest.json")))
+            return ImpressV3BackupInspection(manifest: manifest,
+                cardCount: counts.cards, reviewCount: counts.reviews,
+                learningCount: history.count)
         }.value
-        return try JSONDecoder().decode(ImpressV3BackupManifest.self,
-            from: Data(contentsOf: container.appendingPathComponent("manifest.json")))
     }
 
     func stageRecovery(_ archive: URL) async throws {

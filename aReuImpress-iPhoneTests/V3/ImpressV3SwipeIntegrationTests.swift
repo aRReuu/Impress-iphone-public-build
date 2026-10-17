@@ -381,19 +381,22 @@ final class ImpressV3DeepSeekHandoffTests: XCTestCase {
 // with prompt-library / reminder choices, not legacy chat and model rows.
 @MainActor
 final class ImpressR041NativeNavigationTests: XCTestCase {
-    func testSettingsHasTwoNativeGroupedSectionsWithNoOldModelEntries() {
+    func testSettingsHasThreeNativeGroupedSectionsIncludingDataSafety() {
         let settings = ImpressV3SettingsHubViewController()
         settings.loadViewIfNeeded()
-        XCTAssertEqual(settings.numberOfSections(in: settings.tableView), 2)
-        XCTAssertEqual(settings.tableView(settings.tableView,
-                          numberOfRowsInSection: 0), 1)
-        XCTAssertEqual(settings.tableView(settings.tableView,
-                          numberOfRowsInSection: 1), 1)
+        XCTAssertEqual(settings.numberOfSections(in: settings.tableView), 3)
         XCTAssertEqual(settings.navigationItem.largeTitleDisplayMode, .always)
-        let cell = settings.tableView(settings.tableView,
-                          cellForRowAt: IndexPath(row: 0, section: 0))
-        let content = cell.contentConfiguration as? UIListContentConfiguration
-        XCTAssertEqual(content?.text, "提示词")
+        // R04.2 added data safety as a distinct native settings group.
+        for (section, title) in ["提示词", "复习通知", "数据与备份"].enumerated() {
+            XCTAssertEqual(settings.tableView(settings.tableView,
+                              numberOfRowsInSection: section), 1)
+            let cell = settings.tableView(settings.tableView,
+                              cellForRowAt: IndexPath(row: 0, section: section))
+            let content = cell.contentConfiguration as? UIListContentConfiguration
+            XCTAssertEqual(content?.text, title)
+        }
+        XCTAssertEqual(settings.tableView(settings.tableView,
+                          titleForHeaderInSection: 2), "数据安全")
     }
 
     func testDirectWebBrowserDoesNotAutoSendPrivateQuestions() {

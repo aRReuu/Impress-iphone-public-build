@@ -157,6 +157,10 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         try scanned.validate(output.filter { $0.name != "manifest.json" })
         XCTAssertFalse(scanned.includesExternalVault)
         XCTAssertFalse(scanned.includesCredentials)
+        let preview = try await ImpressV3BackupCoordinator.shared.inspectRecovery(destination)
+        XCTAssertEqual(preview.cardCount, 1)
+        XCTAssertEqual(preview.reviewCount, 0)
+        XCTAssertEqual(preview.learningCount, 0)
         var broken = try Data(contentsOf: destination)
         // The first ZIP member is ReviewV3.sqlite; flip its first data byte.
         let nameBytes = "ReviewV3.sqlite".utf8.count
@@ -166,6 +170,24 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         try broken.write(to: tampered)
         XCTAssertThrowsError(try ImpressV3BackupArchive.extract(
             source: tampered, destination: root.appendingPathComponent("rejected")))
+
+        // Correct ZIP CRC/SHA is not enough: logical JSON must also decode.
+        try Data("malformed-json".utf8).write(
+            to: stage.appendingPathComponent("LearningEntry-v1.json"))
+        let invalidRecords = try names.map {
+            try ImpressV3BackupArchive.inspectFile(
+                stage.appendingPathComponent($0), name: $0).0
+        }
+        try JSONEncoder().encode(ImpressV3BackupManifest.make(invalidRecords)).write(
+            to: stage.appendingPathComponent("manifest.json"))
+        let invalidArchive = root.appendingPathComponent("invalid-json.zip")
+        try ImpressV3BackupArchive.write(files:
+            (names + ["manifest.json"]).map { (name: $0,
+                url: stage.appendingPathComponent($0)) }, destination: invalidArchive)
+        do {
+            _ = try await ImpressV3BackupCoordinator.shared.inspectRecovery(invalidArchive)
+            XCTFail("A complete ZIP with invalid learning JSON must be rejected")
+        } catch is DecodingError { }
     }
 
     func testNewCardCommitsOneEventAndRetriesIdempotently() async throws {

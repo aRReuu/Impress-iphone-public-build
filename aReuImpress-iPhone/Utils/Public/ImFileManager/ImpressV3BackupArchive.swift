@@ -150,6 +150,36 @@ enum ImpressV3BackupArchive {
         guard tables == 2 else { throw ImpressV3BackupFailure.invalidArchive }
     }
 
+    /// Read counts from the verified backup instead of the current live DB.
+    static func recordCounts(_ file: URL) throws -> (cards: Int, reviews: Int) {
+        var connection: OpaquePointer?
+        let rc = file.path.withCString {
+            sqlite3_open_v2($0, &connection, SQLITE_OPEN_READONLY, nil)
+        }
+        guard rc == SQLITE_OK, let db = connection else {
+            if let connection { sqlite3_close(connection) }
+            throw ImpressV3BackupFailure.invalidArchive
+        }
+        defer { sqlite3_close(db) }
+        func count(_ table: String) throws -> Int {
+            var statement: OpaquePointer?
+            let sql = "SELECT COUNT(*) FROM " + table + ";"
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK,
+                  let statement else { throw ImpressV3BackupFailure.invalidArchive }
+            defer { sqlite3_finalize(statement) }
+            guard sqlite3_step(statement) == SQLITE_ROW else {
+                throw ImpressV3BackupFailure.invalidArchive
+            }
+            let value = sqlite3_column_int64(statement, 0)
+            guard value >= 0, sqlite3_step(statement) == SQLITE_DONE else {
+                throw ImpressV3BackupFailure.invalidArchive
+            }
+            return Int(value)
+        }
+        return (try count("impress_v3_memory_card"),
+                try count("impress_v3_review_event"))
+    }
+
     static func inspectFile(_ url: URL, name: String) throws -> (ImpressV3BackupFileRecord, UInt32) {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }

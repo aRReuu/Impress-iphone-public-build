@@ -46,13 +46,15 @@ final class ImpressV3BackupSettingsViewController: UITableViewController,
                 forKey: ImpressV3BackupCoordinator.localDateKey) as? Date
             let last = timestamp.map { Self.dateFormatter.string(from: $0) } ?? "尚无成功备份"
             return "V3 数据变化后自动生成一致性快照。最近成功：\(last)。" +
-                "不包含旧数据库、外部 Obsidian 原件、API Key 或 Vault 授权。"
+                "不包含旧数据库、外部 Obsidian 原件、API Key 或 Vault 授权。" +
+                "当前 ZIP 未加密，获取文件者可读取其中学习数据。"
         case 1:
             let last = UserDefaults.standard.object(
                 forKey: ImpressV3BackupCoordinator.cloudDateKey) as? Date
             let copied = last.map { Self.dateFormatter.string(from: $0) } ?? "尚未写入"
             return "首次手动授权文件夹，此后尝试静默复制。最近写入文件提供者：\(copied)。" +
-                "系统 iCloud 上传可能延迟，此状态不代表云端服务器已完成同步。"
+                "副本为未加密 ZIP，请只授权个人可信目录。系统 iCloud 上传可能延迟；" +
+                "此状态不代表云端服务器已完成同步。"
         default:
             return "恢复前验证归档，并创建当前数据的回滚备份。" +
                 "确认后仅暂存，新数据在下次完全退出并重新启动 App 时载入。"
@@ -135,6 +137,18 @@ final class ImpressV3BackupSettingsViewController: UITableViewController,
     }
 
     private func chooseCloudFolder() {
+        let warning = UIAlertController(
+            title: "确认备份隐私范围",
+            message: "Impress 备份 ZIP 当前没有密码加密，任何获得该文件的人都可能读取卡片、复习历史、理解记录与提示词。请选择仅自己可以访问的 iCloud Drive 文件夹。授权后将尝试静默复制，上传到 iCloud 服务器是否完成由系统决定。",
+            preferredStyle: .alert)
+        warning.addAction(UIAlertAction(title: "取消", style: .cancel))
+        warning.addAction(UIAlertAction(title: "继续选择文件夹", style: .default) {
+            [weak self] _ in self?.presentCloudFolderPicker()
+        })
+        present(warning, animated: true)
+    }
+
+    private func presentCloudFolderPicker() {
         pendingPurpose = .cloudFolder
         let picker = UIDocumentPickerViewController(
             forOpeningContentTypes: [UTType.folder], asCopy: false)
@@ -196,9 +210,12 @@ final class ImpressV3BackupSettingsViewController: UITableViewController,
                 self.tableView.reloadData()
             }
             do {
-                let manifest = try await ImpressV3BackupCoordinator.shared.inspectRecovery(archive)
-                let info = "日期：\(Self.dateFormatter.string(from: manifest.createdAt))\n" +
-                    "内容：V3 卡片、复习记录、理解历史和提示词。\n" +
+                let preview = try await ImpressV3BackupCoordinator.shared.inspectRecovery(archive)
+                let info = "日期：\(Self.dateFormatter.string(from: preview.manifest.createdAt))\n" +
+                    "卡片：\(preview.cardCount) 张\n" +
+                    "复习历史：\(preview.reviewCount) 条\n" +
+                    "理解记录：\(preview.learningCount) 条\n" +
+                    "提示词模板：已验证\n" +
                     "Obsidian 外部原件不会被修改。\n\n" +
                     "当前数据会先创建回滚备份，恢复在下次重新启动时生效。"
                 let alert = UIAlertController(
