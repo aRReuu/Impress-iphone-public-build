@@ -38,16 +38,23 @@ struct ImpressV3BackupManifest: Codable {
     let includesCredentials: Bool
 
     static func make(_ records: [ImpressV3BackupFileRecord]) -> Self {
-        .init(formatVersion: 1, appData: "ImpressV3",
+        .init(formatVersion: records.contains(where: { $0.name == "checkins-v1.json" }) ? 2 : 1,
+              appData: "ImpressV3",
               createdAt: Date(), files: records,
               includesExternalVault: false, includesCredentials: false)
     }
 
     func validate(_ actual: [ImpressV3BackupFileRecord]) throws {
-        guard formatVersion == 1, appData == "ImpressV3",
+        let legacy = Set(["ReviewV3.sqlite", "LearningEntry-v1.json", "prompts.json"])
+        let expected = formatVersion == 2
+            ? legacy.union(["checkins-v1.json"]) : legacy
+        guard (formatVersion == 1 || formatVersion == 2),
+              appData == "ImpressV3",
               !includesExternalVault, !includesCredentials,
-              Set(files.map(\.name)) == Set(["ReviewV3.sqlite", "LearningEntry-v1.json", "prompts.json"]),
-              Set(files.map(\.name)).count == files.count else {
+              Set(files.map(\.name)) == expected,
+              Set(actual.map(\.name)) == expected,
+              files.count == expected.count,
+              actual.count == expected.count else {
             throw ImpressV3BackupFailure.invalidManifest
         }
         for expected in files {
@@ -63,9 +70,10 @@ struct ImpressV3BackupManifest: Codable {
 /// Minimal, standards-compliant ZIP with stored (method 0) entries.
 /// No third-party SDK, unzip command, shell invocation or remote HTTP.
 enum ImpressV3BackupArchive {
-    private static let allowedNames: Set<String> = [
+    private static let legacyNames: Set<String> = [
         "ReviewV3.sqlite", "LearningEntry-v1.json", "prompts.json", "manifest.json"
     ]
+    private static let allowedNames: Set<String> = legacyNames.union(["checkins-v1.json"])
     private struct ZIPMember {
         let name: String
         let bytes: UInt32
@@ -199,8 +207,9 @@ enum ImpressV3BackupArchive {
     }
 
     static func write(files: [(name: String, url: URL)], destination: URL) throws {
-        guard Set(files.map(\.name)) == allowedNames,
-              files.count == allowedNames.count else {
+        let actual = Set(files.map(\.name))
+        guard (actual == allowedNames || actual == legacyNames),
+              files.count == actual.count else {
             throw ImpressV3BackupFailure.invalidManifest
         }
         let manager = FileManager.default
@@ -338,7 +347,9 @@ enum ImpressV3BackupArchive {
                 found.append(.init(name: name, size: UInt64(uncompressed),
                     sha256: sha.finalize().map { String(format: "%02x", $0) }.joined()))
             }
-            guard names == allowedNames else { throw ImpressV3BackupFailure.missingData }
+            guard names == allowedNames || names == legacyNames else {
+                throw ImpressV3BackupFailure.missingData
+            }
             let manifest = try JSONDecoder().decode(ImpressV3BackupManifest.self,
                 from: Data(contentsOf: destination.appendingPathComponent("manifest.json")))
             try manifest.validate(found.filter { $0.name != "manifest.json" })

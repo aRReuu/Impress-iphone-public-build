@@ -270,6 +270,98 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         } catch is DecodingError { }
     }
 
+
+    func testCalibrationV2ZIPRoundTripAndLegacyManifestCompatibility() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CalV2ZIP-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = try ReviewWCDBRepository(
+            databasePath: root.appendingPathComponent("source.sqlite").path,
+            calculator: FSRS6ReviewCalculator())
+        let id = UUID()
+        let calc = FSRS6ReviewCalculator()
+        let now = Date(timeIntervalSince1970: 1_720_000_000)
+        let image = Data([0xFF, 0xD8, 0xFF, 0xD9])
+        try await repository.insertNewCard(
+            WCDBV3CardInput(cardID: id, question: "Image V3.2",
+                cardType: 3, imageData: image),
+            initial: try calc.newCardSnapshot(id: id, now: now), now: now)
+        _ = try await repository.commit(ReviewSubmission(
+            eventID: UUID(), cardID: id, expectedRevision: 0,
+            rating: .good, reviewedAt: now.addingTimeInterval(1)))
+        let stage = root.appendingPathComponent("stage", isDirectory: true)
+        try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: true)
+        try await repository.createConsistentBackup(
+            to: stage.appendingPathComponent("ReviewV3.sqlite"))
+        try Data("[]".utf8).write(to: stage.appendingPathComponent("LearningEntry-v1.json"))
+        let prompts = [ImpressV3PromptTemplate(title: "Custom prompt", content: "Remember me")]
+        try JSONEncoder().encode(prompts).write(to: stage.appendingPathComponent("prompts.json"))
+        let store = ImpressCalibrationLocalStore(
+            storageURL: root.appendingPathComponent("checkins-v1.json"))
+        var day = try await store.checkIn(on: now)
+        for kind in CalibrationIndicator.behaviorIndicators {
+            try day.setOutcome(.completed, for: kind)
+        }
+        try day.setMood(nil, assessed: true)
+        try await store.save(day)
+        try await store.archiveData().write(
+            to: stage.appendingPathComponent("checkins-v1.json"))
+        let names = ["ReviewV3.sqlite", "LearningEntry-v1.json",
+                     "prompts.json", "checkins-v1.json"]
+        let records = try names.map {
+            try ImpressV3BackupArchive.inspectFile(
+                stage.appendingPathComponent($0), name: $0).0
+        }
+        let manifest = ImpressV3BackupManifest.make(records)
+        XCTAssertEqual(manifest.formatVersion, 2)
+        try JSONEncoder().encode(manifest).write(
+            to: stage.appendingPathComponent("manifest.json"))
+        let zip = root.appendingPathComponent("v2.zip")
+        try ImpressV3BackupArchive.write(files:
+            (names + ["manifest.json"]).map {
+                (name: $0, url: stage.appendingPathComponent($0))
+            }, destination: zip)
+        let checked = try await ImpressV3BackupCoordinator.shared.inspectRecovery(zip)
+        XCTAssertEqual(checked.manifest.formatVersion, 2)
+        XCTAssertEqual(checked.cardCount, 1)
+        XCTAssertEqual(checked.reviewCount, 1)
+        XCTAssertEqual(checked.calibrationCount, 1)
+        let unpack = root.appendingPathComponent("unpacked")
+        let extracted = try ImpressV3BackupArchive.extract(source: zip, destination: unpack)
+        XCTAssertEqual(extracted.count, 5)
+        let calibratedBytes = try Data(contentsOf:
+            unpack.appendingPathComponent("checkins-v1.json"))
+        XCTAssertEqual(try ImpressCalibrationLocalStore.validateArchiveData(
+            calibratedBytes), 1)
+        let restoredDB = try ReviewWCDBRepository(
+            databasePath: unpack.appendingPathComponent("ReviewV3.sqlite").path,
+            calculator: calc)
+        let actualImage = try await restoredDB.content(for: id)
+        XCTAssertEqual(actualImage?.imageData, image)
+        let persisted = try await restoredDB.reviewHistory(for: id)
+        XCTAssertEqual(persisted.count, 1)
+
+        // A matching CRC/SHA does not make an invalid calibration ledger safe.
+        try Data("corrupt-ledger".utf8).write(
+            to: stage.appendingPathComponent("checkins-v1.json"))
+        let brokenRecords = try names.map {
+            try ImpressV3BackupArchive.inspectFile(
+                stage.appendingPathComponent($0), name: $0).0
+        }
+        try JSONEncoder().encode(ImpressV3BackupManifest.make(brokenRecords)).write(
+            to: stage.appendingPathComponent("manifest.json"))
+        let bad = root.appendingPathComponent("bad-v2.zip")
+        try ImpressV3BackupArchive.write(files:
+            (names + ["manifest.json"]).map {
+                (name: $0, url: stage.appendingPathComponent($0))
+            }, destination: bad)
+        do {
+            _ = try await ImpressV3BackupCoordinator.shared.inspectRecovery(bad)
+            XCTFail("Malformed calibration ledger must prevent recovery")
+        } catch is DecodingError { }
+    }
+
     func testNewCardCommitsOneEventAndRetriesIdempotently() async throws {
         let path = temporaryPath()
         let calculator = FSRS6ReviewCalculator()
