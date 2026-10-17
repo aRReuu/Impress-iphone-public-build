@@ -1,0 +1,143 @@
+name: Impress R04.2 Retired Chat Privacy and Native Regression
+
+on:
+  push:
+    branches:
+      - feature/impress-v3-r04-2-build
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  privacy-and-core:
+    name: No legacy LLM/Chat secrets; Swift review core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce native Chat removal and saved-secret retirement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/verify_retired_native_chat.py
+      - name: Test local FSRS and Vault core
+        shell: bash
+        run: |
+          set -euo pipefail
+          swift test --package-path Packages/ImpressReviewCore --parallel
+
+  native-qa:
+    name: Xcode 27 UIKit XCTest and unsigned iPhoneOS compile (not release)
+    runs-on: xcode-27
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source privacy audit and test-only missing-icon workaround
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          xcodebuild -version | tee out/toolchain.txt
+          python3 .github/scripts/verify_retired_native_chat.py | tee out/privacy-audit.txt
+          # P0 remains blocked: icon_1024.png is missing from public. This
+          # ephemeral build-only workaround never changes tracked source,
+          # regenerates icon art or publishes a Release.
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path("aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json")
+          spec=json.loads(p.read_text())
+          masters=[x for x in spec["images"] if x.get("idiom") == "ios-marketing"]
+          master=Path("aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_1024.png")
+          assert len(masters)==1 and masters[0].get("filename")=="icon_1024.png"
+          assert not master.exists(), "Do not bypass P0 when the original 1024px asset exists"
+          spec["images"]=[x for x in spec["images"] if x.get("idiom") != "ios-marketing"]
+          p.write_text(json.dumps(spec,indent=2)+"\n")
+          print("TEST_ONLY: original marketing icon missing; P0 RELEASE REMAINS BLOCKED")
+          PY
+          python3 .github/scripts/generate_neutral_assets.py > out/non-icon-stubs.json
+      - name: Install pinned CocoaPods
+        shell: bash
+        run: |
+          set -euo pipefail
+          pod install --repo-update 2>&1 | tee out/pod-install.log
+      - name: Compile iPhone Simulator UIKit app
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace \
+            -scheme aReuImpress-iPhone -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/PrivacyDebug" \
+            IPHONEOS_DEPLOYMENT_TARGET=15.0 CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee out/simulator-build.log
+      - name: Run real XCTest on available iPhone Simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available -j > out/simulator-devices.json
+          SIM_ID="$(python3 - <<'PY'
+          import json
+          d=json.load(open("out/simulator-devices.json"))["devices"]
+          candidates=[(runtime,device["udid"])
+              for runtime,devices in d.items() for device in devices
+              if "iOS" in runtime and device.get("isAvailable")
+              and device.get("name","").startswith("iPhone")]
+          assert candidates, "iPhone Simulator is unavailable"
+          candidates.sort(reverse=True)
+          print(candidates[0][1])
+          PY
+          )"
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace \
+            -scheme aReuImpress-iPhone -configuration Debug \
+            -destination "platform=iOS Simulator,id=$SIM_ID" \
+            -derivedDataPath "$RUNNER_TEMP/PrivacyDebug" \
+            -resultBundlePath "$GITHUB_WORKSPACE/out/Privacy.xcresult" \
+            -parallel-testing-enabled NO IPHONEOS_DEPLOYMENT_TARGET=15.0 \
+            CODE_SIGNING_ALLOWED=NO test 2>&1 | tee out/ios-xctest.log
+          xcrun xcresulttool get test-results summary \
+            --path out/Privacy.xcresult --format json > out/xctest-summary.json
+      - name: Compile unsigned ARM64 iPhoneOS candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace \
+            -scheme aReuImpress-iPhone-AltStore -configuration Debug \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/PrivacyPhone" \
+            IPHONEOS_DEPLOYMENT_TARGET=15.0 CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_ENTITLEMENTS= ENABLE_DEBUG_DYLIB=NO \
+            build 2>&1 | tee out/iphoneos-build.log
+      - name: Verify packaging candidate but do not release incomplete original Icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/PrivacyPhone/Build/Products/Debug-iphoneos/aReuImpress-iPhone.app"
+          test -s "$APP/Assets.car"
+          test -s "$APP/aReuImpress-iPhone"
+          lipo -info "$APP/aReuImpress-iPhone" | tee out/architecture.txt
+          grep -q arm64 out/architecture.txt
+          test ! -e "$APP/embedded.mobileprovision"
+          if codesign --verify "$APP" >/dev/null 2>&1; then
+            echo "Unexpected signature"; exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/PrivacyPayload/Payload"
+          ditto "$APP" "$RUNNER_TEMP/PrivacyPayload/Payload/aReuImpress-iPhone.app"
+          SHORT="$(git rev-parse --short=12 HEAD)"
+          IPA="Impress-V3.1-R04.2-PrivacyClean-$SHORT-7icon-INCOMPLETE-unsigned.ipa"
+          (cd "$RUNNER_TEMP/PrivacyPayload" && zip -qry "$GITHUB_WORKSPACE/out/$IPA" Payload)
+          unzip -tq "out/$IPA" | tee out/zip-integrity.txt
+          shasum -a 256 "out/$IPA" | tee out/IPA_SHA256.txt
+          echo 'CANDIDATE ONLY: missing private original marketing icon, NO FINAL RELEASE' | tee out/P0_NOT_COMPLETE.txt
+      - name: Upload testing evidence and explicitly incomplete candidate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: impress-r04-2-privacy-clean-qa-not-final
+          path: |
+            out/*.txt
+            out/*.json
+            out/*.log
+            out/*.ipa
+          retention-days: 14
