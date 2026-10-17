@@ -29,6 +29,13 @@ class ImTabBarViewController: UITabBarController
         cardNav.tabBarItem.image = UIImage(systemName: "square.stack.3d.up")
         cardNav.tabBarItem.selectedImage = UIImage(systemName: "square.stack.3d.up.fill")
         
+        // Isolated calibration root. Never replaces or modifies existing review/notes routes.
+        let calibrationVC = ImpressCalibrationViewController()
+        let calibrationNav = ImNavigationViewController(rootViewController: calibrationVC)
+        calibrationNav.tabBarItem.title = "校准"
+        calibrationNav.tabBarItem.image = UIImage(systemName: "chart.xyaxis.line")
+        calibrationNav.tabBarItem.selectedImage = UIImage(systemName: "chart.xyaxis.line")
+
         let noteVC = ImpressNoteListTableViewController()
         let noteNav = ImNavigationViewController(rootViewController: noteVC)
         noteNav.tabBarItem.title = "笔记"
@@ -41,7 +48,7 @@ class ImTabBarViewController: UITabBarController
         settingsNav.tabBarItem.image = UIImage(systemName: "gearshape")
         settingsNav.tabBarItem.selectedImage = UIImage(systemName: "gearshape.fill")
 
-        self.viewControllers = [cardNav, noteNav, settingsNav]
+        self.viewControllers = [cardNav, calibrationNav, noteNav, settingsNav]
         // Page extends underneath the native floating bar; no fake glass.
         view.backgroundColor = ImpressV3Appearance.page
         ImpressV3Appearance.styleTabBar(tabBar)
