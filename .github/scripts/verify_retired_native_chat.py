@@ -55,7 +55,7 @@ def assert_clean() -> None:
     for path in swift:
         data = path.read_text()
         for prefix in retired_prefixes:
-            assert not re.search(r"\\b" + re.escape(prefix) + r"[A-Za-z0-9_]*\\b", data), (
+            assert not re.search(r"\b" + re.escape(prefix) + r"[A-Za-z0-9_]*\b", data), (
                 "RETIRED_TYPE_REFERENCE", str(path.relative_to(ROOT)), prefix)
     project = (ROOT / "aReuImpress-iPhone.xcodeproj/project.pbxproj").read_text()
     for identifier in RETIRED_IDENTIFIERS:
