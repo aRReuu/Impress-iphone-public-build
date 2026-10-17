@@ -12,10 +12,13 @@ actor ImpressV3BackupCoordinator {
     static let localDateKey = "ImpressV3BackupLocalDate"
     static let cloudDateKey = "ImpressV3BackupCloudCopiedDate"
     static let failureKey = "ImpressV3BackupLastError"
+    private static let lastMutationKey = "ImpressV3LastMutationTimestamp"
+    private static let pendingCloudFileKey = "ImpressV3PendingCloudFile"
 
     private var active: Task<URL, any Swift.Error>?
 
     static func markDataChanged() {
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastMutationKey)
         UserDefaults.standard.set(true, forKey: dirtyKey)
     }
 
@@ -58,6 +61,7 @@ actor ImpressV3BackupCoordinator {
 
     static func disconnectCloudFolder() {
         UserDefaults.standard.removeObject(forKey: bookmarkKey)
+        UserDefaults.standard.removeObject(forKey: pendingCloudFileKey)
     }
 
     /// Called at launch and after data changes; no UI or export panel.
@@ -70,10 +74,18 @@ actor ImpressV3BackupCoordinator {
             let elapsed = Date().timeIntervalSince(last ?? .distantPast)
             if previous == nil || (dirty && elapsed >= 20 * 60) {
                 _ = try await createBackup(force: true)
-            } else if let previous, Self.cloudFolderSelected {
-                // Cloud provider could have been offline on the last attempt.
-                if UserDefaults.standard.object(forKey: Self.cloudDateKey) == nil {
-                    try Self.copyToAuthorizedCloud(previous)
+            } else if Self.cloudFolderSelected {
+                // Retry the exact last failed local snapshot, rather than
+                // assuming an old successful cloud timestamp is up to date.
+                let pendingName = UserDefaults.standard.string(
+                    forKey: Self.pendingCloudFileKey)
+                let pending = pendingName.flatMap { name in
+                    try? Self.localDirectory().appendingPathComponent(name)
+                }
+                if let candidate = pending ?? previous,
+                   pendingName != nil ||
+                   UserDefaults.standard.object(forKey: Self.cloudDateKey) == nil {
+                    try Self.copyToAuthorizedCloud(candidate)
                 }
             }
         } catch {
@@ -101,6 +113,7 @@ actor ImpressV3BackupCoordinator {
     }
 
     private func buildSnapshot() async throws -> URL {
+        let mutationAtStart = UserDefaults.standard.double(forKey: Self.lastMutationKey)
         let root = try Self.localDirectory()
         let staging = root.appendingPathComponent(".stage-" + UUID().uuidString,
                                                    isDirectory: true)
@@ -147,12 +160,17 @@ actor ImpressV3BackupCoordinator {
             ], ofItemAtPath: output.path)
             return output
         }.value
-        UserDefaults.standard.set(false, forKey: Self.dirtyKey)
+        // A new card/review commit may have arrived while this snapshot was
+        // being assembled. Keep it pending for the next backup cycle.
+        let mutationAfter = UserDefaults.standard.double(forKey: Self.lastMutationKey)
+        UserDefaults.standard.set(mutationAfter > mutationAtStart, forKey: Self.dirtyKey)
         UserDefaults.standard.set(Date(), forKey: Self.localDateKey)
         UserDefaults.standard.removeObject(forKey: Self.failureKey)
         Self.pruneOlderLocalBackups(keeping: 7)
         // Failure to reach iCloud never invalidates the verified local backup.
         if Self.cloudFolderSelected {
+            UserDefaults.standard.set(result.lastPathComponent,
+                forKey: Self.pendingCloudFileKey)
             do { try Self.copyToAuthorizedCloud(result) }
             catch {
                 UserDefaults.standard.set(
@@ -209,6 +227,7 @@ actor ImpressV3BackupCoordinator {
             throw ImpressV3BackupFailure.invalidChecksum
         }
         UserDefaults.standard.set(Date(), forKey: cloudDateKey)
+        UserDefaults.standard.removeObject(forKey: pendingCloudFileKey)
         UserDefaults.standard.removeObject(forKey: failureKey)
     }
 
