@@ -9,8 +9,6 @@
 import UIKit
 
 // MARK: - Home
-/// 默认拉取智慧重温数量
-let defaultChatedNum: Int = 3
 let convertToCardDes = "生成卡片"
 
 // MARK: - NotesController
@@ -52,9 +50,6 @@ let imReviewIntervalHour: Int = 6
 // MARK: - ExtracController
 let imExtractTitle = "摘录"
 let imSearchTitle = "搜索"
-
-// MARK: - ImLLMConfigViewController
-let impressLLMTitle = "获取大模型配置"
 
 
 

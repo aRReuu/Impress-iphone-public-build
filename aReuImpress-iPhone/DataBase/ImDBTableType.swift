@@ -14,20 +14,11 @@ enum ImDBTableType:String, CustomStringConvertible
     case notes
     /// 卡片数据集
     case card
-    /// 轮询对话
-    case pollingChat
-    /// LLM 模型
-    case llmModel
-    /// 标记问题
-    case preChat
     
     var description:String {
         switch self {
             case .notes: return "impress_notes"
             case .card: return "impress_card"
-            case .preChat: return "impress_chat"
-            case .pollingChat: return "impress_polling_chat"
-            case .llmModel: return "impress_llm_model"
         }
     }
 }

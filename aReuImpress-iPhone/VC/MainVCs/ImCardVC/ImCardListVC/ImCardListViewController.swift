@@ -19,19 +19,11 @@ class ImCardListViewController: ImBaseViewController {
 
     // MARK: - Properties
     private var viewModel: ImCardListViewModelProtocol!
-    private var isSelectionMode: Bool = false
-    private var chatSessionId: Int?
 
     // MARK: - Initialization
     init() {
         self.viewModel = ImCardListViewModel()
         super.init(nibName: nil, bundle: nil)
-    }
-
-    convenience init(isSelectionMode: Bool = false, chatSessionId: Int? = nil) {
-        self.init()
-        self.isSelectionMode = isSelectionMode
-        self.chatSessionId = chatSessionId
     }
 
     required init?(coder: NSCoder) {
@@ -49,17 +41,11 @@ class ImCardListViewController: ImBaseViewController {
     
     // MARK: - Setup
     private func setupUI() {
-        if isSelectionMode {
-            title = "选择要绑定的卡片"
-        } else {
-            title = "卡片列表"
-        }
+        title = "卡片列表"
         navigationItem.largeTitleDisplayMode = .always
         searchControllerSetting()
         view.backgroundColor = bgColor
 
-        if !isSelectionMode {
-            // Only show add button in normal mode
             let addButton = UIBarButtonItem(
                 image: UIImage(systemName: "plus.circle.fill"),
                 style: .plain,
@@ -68,7 +54,6 @@ class ImCardListViewController: ImBaseViewController {
             )
             addButton.accessibilityLabel = "添加新卡片"
             navigationItem.rightBarButtonItem = addButton
-        }
     }
     
     private func setupTableView() {
@@ -146,36 +131,6 @@ class ImCardListViewController: ImBaseViewController {
         }
     }
 
-    private func selectCard(at indexPath: IndexPath) {
-        guard isSelectionMode, let card = viewModel.getItem(at: indexPath.row), let chatSessionId = chatSessionId else { return }
-
-        // 检查卡片是否已有绑定
-        if let existingSessionId = card.chatSessionId, existingSessionId != 0 {
-            ImAlertController.alert(message: "该卡片已绑定其他会话，是否覆盖？", buttons: alertDescription) { [weak self] (result) in
-                if case .ok = result {
-                    self?.performBinding(card: card, sessionId: chatSessionId)
-                }
-            }
-            return
-        }
-
-        // 直接绑定
-        performBinding(card: card, sessionId: chatSessionId)
-    }
-
-    private func performBinding(card: ImCardModel, sessionId: Int) {
-        var updatedCard = card
-        updatedCard.chatSessionId = sessionId
-
-        do {
-            try viewModel.updateItem(updatedCard)
-            ImAlertController.alert(message: "绑定成功")
-            navigationController?.popViewController(animated: true)
-        } catch {
-            ImAlertController.warningAlert("绑定失败: \(error.localizedDescription)")
-        }
-    }
-
     private func searchControllerSetting() {
         let controller = UISearchController(searchResultsController: nil)
         controller.searchBar.placeholder = "问题/答案搜索..."
@@ -212,11 +167,7 @@ extension ImCardListViewController: UITableViewDelegate, UITableViewDataSource {
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        if isSelectionMode {
-            selectCard(at: indexPath)
-        } else {
-            editCard(at: indexPath)
-        }
+        editCard(at: indexPath)
     }
     
     func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
@@ -230,11 +181,10 @@ extension ImCardListViewController: UITableViewDelegate, UITableViewDataSource {
     }
 
     func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
-        return !isSelectionMode // 选择模式下不允许编辑
+        return true
     }
 
     func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
-        if isSelectionMode { return nil } // 选择模式下不显示长按菜单
 
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { suggestedActions in
             let editAction = UIAction(title: "编辑", image: UIImage(systemName: "pencil")) { [weak self] action in

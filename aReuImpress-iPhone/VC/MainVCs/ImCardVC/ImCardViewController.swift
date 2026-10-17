@@ -6,7 +6,7 @@
 //
 //  卡片记忆视图控制器 - 主要的卡片学习界面
 //  功能：展示卡片栈、处理滑动交互、管理复习逻辑
-//  特色：支持壁纸显示、多种卡片类型、AI对话集成
+//  特色：支持壁纸显示、多种卡片类型；不集成原生 AI 对话
 //
 //  20241101 只做复习和巩固，本页面模块为简单的卡片记忆，后续优化
 //  202503 实现历史回答分析
@@ -33,8 +33,6 @@ class ImCardViewController: ImBaseViewController, CAAnimationDelegate
     private let viewModel: ImCardProtocol
     /// 卡片栈
     private let cardStack = SwipeCardStack()
-    /// 预设聊天列表视图模型
-    private let preChatViewModel = ImPreChatListViewModel()
     
     
     
@@ -59,21 +57,14 @@ class ImCardViewController: ImBaseViewController, CAAnimationDelegate
         ImMusicPlayer.shared.stopPlaying()
     }
 
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        // 每次进入页面时更新badge数值
-        preChatViewModel.fetchPreChats()
-    }
-    
     override func viewDidLoad()
     {
         super.viewDidLoad()
         setupViews()
         initUISetting()
         setupBindings()
-        // 获取卡片队列和预设聊天数据
+        // Native chat and automatic AI requests are retired.
         viewModel.fetchStudyCardQueue()
-        preChatViewModel.fetchPreChats()
         ImMusicPlayer.shared.startPlaying()
     }
     
@@ -336,7 +327,7 @@ extension ImCardViewController
     private func initActionButtons()
     {
         let btnWidth: CGFloat = defaultSpacing * 3
-        let notesButton = createActionButton(imageName: "tag.fill",
+        let notesButton = createActionButton(imageName: "doc.text",
                                              color: SwipeDirection.up.toLevelColor,
                                              size: CGSize(width: btnWidth * 2,
                                                           height: btnWidth),
@@ -345,8 +336,6 @@ extension ImCardViewController
         let webButton = createActionButton(imageName: "globe", color: SwipeDirection.right.toLevelColor, size: CGSize(width: btnWidth * 2.0, height: btnWidth), isOval: true, tag: 3)
         let editButton = createActionButton(imageName: "pencil", color: SwipeDirection.left.toLevelColor, size: CGSize(width: btnWidth * 2.0, height: btnWidth), tag: 0)
 
-        // 为笔记按钮添加badge
-        setupBadgeForButton(notesButton)
 
         // 不再使用UIStackView，改为手动布局以实现与卡片边距对齐
         btnsView.addSubview(editButton)
@@ -369,63 +358,6 @@ extension ImCardViewController
         ])
     }
 
-    /// 为按钮设置badge
-    private func setupBadgeForButton(_ button: UIButton) {
-        let badgeLabel = UILabel()
-//        badgeLabel.text = "0" // 默认显示0
-        badgeLabel.font = UIFont.preferredFont(forTextStyle: .body)
-        badgeLabel.textColor = .white
-        badgeLabel.backgroundColor = .systemRed
-        badgeLabel.textAlignment = .center
-        badgeLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        // 设置最小尺寸，增大以提高可见性
-        let labelWidth = defaultSpacing * 1.2
-        NSLayoutConstraint.activate([
-            badgeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: labelWidth),
-            badgeLabel.heightAnchor.constraint(equalToConstant: labelWidth)
-        ])
-        button.addSubview(badgeLabel)
-        // 设置圆角，确保在添加到父视图后设置
-        badgeLabel.layer.cornerRadius = labelWidth / 2
-        badgeLabel.layer.masksToBounds = true
-
-        // 定位在按钮右上角，优化位置以符合HIG
-        NSLayoutConstraint.activate([
-            badgeLabel.topAnchor.constraint(equalTo: button.topAnchor, constant: -3),
-            badgeLabel.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -3),
-            badgeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: labelWidth),
-            badgeLabel.heightAnchor.constraint(equalToConstant: labelWidth)
-        ])
-        // 获取笔记数量并更新badge
-        updateNotesBadge(badgeLabel)
-    }
-
-    /// 更新预设问题数量badge
-    private func updateNotesBadge(_ badgeLabel: UILabel) {
-        let count = preChatViewModel.itemCount
-        if count == 0 {
-            badgeLabel.isHidden = true
-        } else {
-            badgeLabel.isHidden = false
-            badgeLabel.text = count > 99 ? "99+" : "\(count)"
-        }
-    }
-
-    /// 每次进入页面时更新badge数值
-    private func updateNotesBadgeForButton() {
-        // 找到notesButton（tag=2）并更新其badge
-        for subview in btnsView.subviews {
-            if let button = subview as? UIButton, button.tag == 2 {
-                // 找到notesButton，更新其badge
-                if let badgeLabel = button.subviews.first(where: { $0 is UILabel }) as? UILabel {
-                    updateNotesBadge(badgeLabel)
-                }
-                break
-            }
-        }
-    }
-    
     @objc private func handleButtonAnimation(_ sender: UIButton) {
         UIView.animate(withDuration: 0.1) {
             sender.transform = sender.isTouchInside ? CGAffineTransform(scaleX: 0.9, y: 0.9) : .identity
@@ -449,7 +381,7 @@ extension ImCardViewController
 //            playFillWave()
         break
         case 2: // 笔记列表
-            showPreChatList()
+            showNotesList()
         case 3: // Web视图
             showWebView()
         default:
@@ -554,95 +486,11 @@ extension ImCardViewController: SwipeCardStackDataSource, SwipeCardStackDelegate
         }
     }
 
-    private func searchAIAction()
-    {
-        guard let card = viewModel.getCurrentCard(), let title = card.question else {
-            ImAlertController.warningAlert("当前为无效卡片.")
-            return
-        }
-
-        // 检查是否有关联的历史会话
-        if let sessionId = card.chatSessionId {
-            // 检查会话是否存在
-            let chatListVM = ImPollingChatListViewModel()
-            chatListVM.checkChatSessionExists(sessionId: sessionId) { [weak self] exists, session in
-                guard let self = self else { return }
-
-                if exists, let validSession = session {
-                    // 弹窗提示是否打开历史会话
-                    self.promptUserToOpenHistoricalSession(with: title, session: validSession)
-                } else {
-                    // 会话不存在，执行原业务逻辑
-                    self.startNewChat(with: title)
-                }
-            }
-        } else {
-            // 没有关联会话，直接执行原业务逻辑
-            self.startNewChat(with: title)
-        }
-    }
-
-    /// 提示用户是否打开历史会话
-    private func promptUserToOpenHistoricalSession(with cardTitle: String, session: ImPollingChatModel) {
-        ImAlertController.alert(message: "检测到有对应的历史会话记录，是否直接打开？",
-                                buttons: alertDescription) {[weak self] (result) in
-            guard let self = self else {return}
-            switch result{
-            case .ok:
-                self.loadHistoricalSession(session)
-                break
-            case .cancel:
-                self.startNewChat(with: cardTitle)
-                break
-            }
-        }
-    }
-
-    /// 加载历史会话
-    private func loadHistoricalSession(_ session: ImPollingChatModel) {
-        guard let tabBarVC = self.tabBarController as? ImTabBarViewController else { return }
-
-        // 切换到聊天Tab
-        tabBarVC.selectedIndex = 1
-
-        // 遍历所有Tabs，找到聊天控制器并加载历史会话
-        for vc in tabBarVC.viewControllers ?? [] {
-            if let navVC = vc as? ImNavigationViewController,
-               let chatVC = navVC.viewControllers.first as? ImPollingChatViewController {
-                chatVC.startNewChat(with: "") // 先清空输入
-
-                // 使用Notification来传递会话ID，因为直接调用loadSession需要参数改造
-                if let sessionId = session.identifier {
-                    NotificationCenter.default.post(name: .didSelectChatSession, object: "\(sessionId)")
-                }
-                break
-            }
-        }
-    }
-
-    /// 开始新聊天
-    private func startNewChat(with title: String) {
-        guard let tabBarVC = self.tabBarController as? ImTabBarViewController else { return }
-
-        // 切换到聊天Tab
-        tabBarVC.selectedIndex = 1
-
-        // 遍历所有Tabs，找到聊天控制器并开始新对话
-        for vc in tabBarVC.viewControllers ?? [] {
-            if let navVC = vc as? ImNavigationViewController,
-               let chatVC = navVC.viewControllers.first as? ImPollingChatViewController {
-                chatVC.startNewChat(with: title)
-                break
-            }
-        }
-    }
-
-    /// 显示标记问题列表
-    private func showPreChatList() {
-        let preChatVC = ImPreChatListViewController()
-        let navVC = ImNavigationViewController(rootViewController: preChatVC)
-        navVC.modalPresentationStyle = .fullScreen
-        present(navVC, animated: true, completion: nil)
+    /// The retired Chat tab must not be reopened. Use the existing read-only
+    /// notes screen; external Web Chat remains a separate, explicit action.
+    private func showNotesList() {
+        navigationController?.pushViewController(
+            ImpressNoteListTableViewController(), animated: true)
     }
 
     /// 显示随机笔记
@@ -679,14 +527,6 @@ extension ImCardViewController
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _, _ in
                 self?.cardStack.reloadData()
-            }
-            .store(in: &cancellables)
-
-        // 订阅预设聊天列表数据变化
-        preChatViewModel.itemsPublisher
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.updateNotesBadgeForButton()
             }
             .store(in: &cancellables)
 

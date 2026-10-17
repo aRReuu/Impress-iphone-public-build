@@ -18,10 +18,7 @@ final class ImDBHandler
     /// lazy database
     lazy private var imDatabase:Database = {
         let path = documentPath + "/" + dbName
-        zcLog(path)
         let db = Database(withPath: path)
-//        let password = "test".data(using: .ascii)
-//        db.setCipher(key: password)
         return db
     }()
     
@@ -48,14 +45,6 @@ final class ImDBHandler
        })
     }
     
-    /// 打印请求语句日志
-    private func printSqlText()
-    {
-        Database.globalTrace(ofSQL: { (sql) in
-            zcLog("SQL: \(sql)")
-        })
-    }
-    
     /// 创建数据表
     /// A failed table creation must be reported to the scene bootstrap.
     /// Running the UI against a partially initialized database is unsafe.
@@ -71,42 +60,35 @@ final class ImDBHandler
 
     /// Returns false if ANY required table failed to initialize.
     /// Keep every creation attempt independent for diagnostics and recovery.
+    /// Keep the notes/cards schema intact. Purge only retired LLM credentials
+    /// and native-chat history, as authorized by the owner. The purge is
+    /// idempotent: fresh installs have no retired tables to drop.
+    /// Never log table contents, SQL statements or API credentials.
+    private func purgeRetiredChatTables() -> Bool {
+        let retiredTables = ["impress_llm_model", "impress_polling_chat", "impress_chat"]
+        do {
+            for table in retiredTables where try imDatabase.isTableExists(table) {
+                try imDatabase.drop(table: table)
+            }
+            return true
+        } catch {
+            zcLog("Retired credential cleanup failed; database bootstrap halted: \(error.localizedDescription)")
+            return false
+        }
+    }
+
     @discardableResult
     public func createAllDB() -> Bool {
+        guard purgeRetiredChatTables() else { return false }
         let statuses = [
             createTable(ImDBTableType.notes.description, ImNoteModel.self),
-            createTable(ImDBTableType.card.description, ImCardModel.self),
-            createTable(ImDBTableType.preChat.description, ImPreChatModel.self),
-            createTable(ImDBTableType.pollingChat.description, ImPollingChatModel.self),
-            createTable(ImDBTableType.llmModel.description, ImLLMModel.self)
+            createTable(ImDBTableType.card.description, ImCardModel.self)
         ]
-        #if DEBUG
-        printSqlText()
-        #endif
         return statuses.allSatisfy { $0 }
     }
 
-    private func dropTables()
-    {
-//        dropTable(table: ImDBTableType.notes.description)
-//        dropTable(table: ImDBTableType.card.description)
-//        dropTable(table: ImDBTableType.chat.description)
-    }
-
-    
-    // MARK: - Warning Function
-    /// Delete Table
-    private func dropTable(table:String) -> Void
-    {
-        do {
-            try imDatabase.drop(table: table)
-        } catch let error {
-            // ImAlertController.warningAlert(error.localizedDescription)
-            zcLog("delete table fail: \(error.localizedDescription)")
-        }
-    }
-    
-    /// Delete
+    // MARK: - Legacy-independent database operations
+        /// Delete
     /// - Parameter fromTable: 表
     /// - Parameter condition: 条件
     func deleteFromTable(table: String,

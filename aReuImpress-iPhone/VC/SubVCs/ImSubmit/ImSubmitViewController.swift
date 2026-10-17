@@ -113,18 +113,7 @@ class ImSubmitViewController<T: ImSubmitConfigureProtocol>: ImBaseViewController
     
     private func updateSections(for type: CardType) {
         if isDraftMode {
-            // 草稿模式下不显示卡片类型选择，仅显示标题和摘录内容
-            if submitModel.submitType == .chat {
-                sections = [
-                    [.inputTitle],
-                    [.input] // 标记答案，显示摘录内容
-                ]
-            } else {
-                sections = [
-                    [.inputTitle],
-                    [.input]
-                ]
-            }
+            sections = [[.inputTitle], [.input]]
         } else {
             sections = [
                 [.selectCardType]
@@ -361,25 +350,8 @@ class ImSubmitViewController<T: ImSubmitConfigureProtocol>: ImBaseViewController
                                                  for: indexPath) as! ImSubmitCell
         let type = sections[indexPath.section][indexPath.row]
 
-        // 特殊处理聊天草稿模式的"标记答案"Cell - 显示摘录内容
-        if isDraftMode && submitModel.submitType == .chat && type == .input {
-            // 创建显示摘录内容的cell，允许编辑模式
-            cell.updateConfig(cellType: type, model: submitModel, cardType: selectedCardType, isEditMode: isEditMode)
-
-            // 获取摘录文本数组并格式化显示
-            if let extractedTexts = submitModel.submitExtractedTexts, !extractedTexts.isEmpty {
-                let formattedText = extractedTexts.joined(separator: "\n\n")
-                cell.shareTextView.text = formattedText
-                cell.shareTextView.isEditable = true
-                cell.shareTextView.textColor = contentColor
-            } else {
-                // 无摘录内容时显示空状态
-                cell.shareTextView.text = ""
-                cell.shareTextView.isEditable = true
-            }
-        } else {
-            cell.updateConfig(cellType: type, model: submitModel, cardType: selectedCardType, isEditMode: isEditMode)
-        }
+        cell.updateConfig(cellType: type, model: submitModel,
+                          cardType: selectedCardType, isEditMode: isEditMode)
 
         cell.delegate = self
 
@@ -482,8 +454,7 @@ class ImSubmitViewController<T: ImSubmitConfigureProtocol>: ImBaseViewController
         let type = sections[indexPath.section][indexPath.row]
 
         // 点击输入框时隐藏键盘
-        // 特殊处理：聊天草稿模式的"标记答案"Cell为只读，不响应键盘操作
-        if type.isInput && !(isDraftMode && submitModel.submitType == .chat) {
+        if type.isInput {
             let cell = tableView.dequeueReusableCell(withIdentifier: reuseID,
                                                      for: indexPath) as! ImSubmitCell
             cell.shareTextView.resignFirstResponder()

@@ -15,14 +15,11 @@ enum ImSubmitType
     case cardEdit
     /// 摘录页面
     case extract
-    /// 对话页面总结
-    case chat
     
     var itemTitle: String {
         switch self {
         case .card: return "新增卡片"
         case .cardEdit: return "修改卡片"
-        case .chat: return "费曼总结"
         case .extract: return "碎片化摘录"
         }
     }
@@ -31,7 +28,6 @@ enum ImSubmitType
         switch self {
         case .card: return ["新增标题","新增答案"]
         case .cardEdit: return ["编辑标题","编辑答案"]
-        case .chat: return ["费曼标题","标记答案"]
         case .extract: return ["摘录标题","摘录内容"]
         }
     }

@@ -11,43 +11,26 @@
 		380034BC2E8BA37E00161000 /* ImSliderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 380034BB2E8BA37E00161000 /* ImSliderViewController.swift */; };
 		3801E8452F30DD5900987335 /* ImiCloudImportManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3801E8442F30DD5900987335 /* ImiCloudImportManager.swift */; };
 		380572072D13FB8A00CBC488 /* AttributedStringKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 380571E12D13FB8900CBC488 /* AttributedStringKey.swift */; };
-		3807308E2E895D8700CA566B /* ImLLMDetailViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3807308C2E895D8700CA566B /* ImLLMDetailViewController.swift */; };
-		380730922E895DDB00CA566B /* ImLLMModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 380730912E895DDB00CA566B /* ImLLMModel.swift */; };
 		3809472B2E94C738007FAD3D /* MarkdownKitRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3809472A2E94C738007FAD3D /* MarkdownKitRenderer.swift */; };
-		380E3A5D2E8E597D001C5A2F /* ImPollingChatListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 380E3A5C2E8E597D001C5A2F /* ImPollingChatListViewController.swift */; };
 		380E587C2E9F6FD000F3483C /* ImTTSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 380E587B2E9F6FD000F3483C /* ImTTSManager.swift */; };
 		38134ECB2978EF4100EE8786 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 38134EC92978EF4100EE8786 /* Main.storyboard */; };
-		38140C9D2E8B800200991F47 /* TypingIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38140C9C2E8B800200991F47 /* TypingIndicatorView.swift */; };
 		3823CC892970531C00CCAAD3 /* ImBaseTableViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3823CC882970531B00CCAAD3 /* ImBaseTableViewCell.swift */; };
 		382B981C2E8D6B3500F33388 /* ImImagePreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382B981B2E8D6B3500F33388 /* ImImagePreviewViewController.swift */; };
 		382E7ED52E9286BC005D8EAE /* ImSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382E7ED42E9286BC005D8EAE /* ImSettingsViewController.swift */; };
 		F3B600000000000000000010 /* ImpressV3PromptLibraryViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B600000000000000000011 /* ImpressV3PromptLibraryViewController.swift */; };
-		382E7ED92E9286F2005D8EAE /* ImSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382E7ED82E9286F2005D8EAE /* ImSettingsViewModel.swift */; };
 		382E7EDE2E928729005D8EAE /* ImSettingSliderCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382E7EDC2E928729005D8EAE /* ImSettingSliderCell.swift */; };
 		382E7EDF2E928729005D8EAE /* ImSettingSwitchCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382E7EDD2E928729005D8EAE /* ImSettingSwitchCell.swift */; };
-		382E7EE32E928789005D8EAE /* ImAutoGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382E7EE22E928789005D8EAE /* ImAutoGenerator.swift */; };
-		3831161B2E978CCC00826A85 /* ImPreChatListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383116192E978CCC00826A85 /* ImPreChatListViewModel.swift */; };
-		3831161C2E978CCC00826A85 /* ImPreChatListViewModelProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3831161A2E978CCC00826A85 /* ImPreChatListViewModelProtocol.swift */; };
-		383116212E978E7500826A85 /* ImPollingChatListViewModelProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3831161F2E978E7500826A85 /* ImPollingChatListViewModelProtocol.swift */; };
-		383116222E978E7500826A85 /* ImPollingChatListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383116202E978E7500826A85 /* ImPollingChatListViewModel.swift */; };
 		383869B229B22CDC004220FA /* ImpressRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383869B129B22CDC004220FA /* ImpressRoute.swift */; };
 		383AB5932E8E8BE9007955FB /* ImNotificationName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383AB5922E8E8BE9007955FB /* ImNotificationName.swift */; };
-		384885E72E88DBCD00CAE576 /* ImPollingChatViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 384885E62E88DBCD00CAE576 /* ImPollingChatViewController.swift */; };
-		384885ED2E88DBF800CAE576 /* ImPollingChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 384885EA2E88DBF800CAE576 /* ImPollingChatViewModel.swift */; };
-		384885F32E88DC0900CAE576 /* ImPollingChatCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 384885F22E88DC0900CAE576 /* ImPollingChatCell.swift */; };
-		384885F72E88DC2E00CAE576 /* ImPollingChatModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 384885F62E88DC2E00CAE576 /* ImPollingChatModel.swift */; };
 		3859A3952E9B907400C5FA37 /* imcard_wallpaper.png in Resources */ = {isa = PBXBuildFile; fileRef = 3859A3942E9B907400C5FA37 /* imcard_wallpaper.png */; };
 		385B906D2E7C184C006336D5 /* ImObsidianManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 385B906C2E7C184C006336D5 /* ImObsidianManager.swift */; };
-		385D59DE2E942441009E15D0 /* ChatInputContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 385D59DB2E942441009E15D0 /* ChatInputContainerView.swift */; };
 		3868B61F2D3F540700A1C9F4 /* ImTabBarViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3868B61E2D3F540700A1C9F4 /* ImTabBarViewController.swift */; };
 		386DEC7B29E07CDD0058FCD1 /* ImNavigationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 386DEC7929E07CDD0058FCD1 /* ImNavigationViewController.swift */; };
 		386DEC7C29E07CDD0058FCD1 /* ImBaseViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 386DEC7A29E07CDD0058FCD1 /* ImBaseViewController.swift */; };
 		386F384B2D02A4F50048A694 /* ImpressNoteListTableViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 386F38422D02A4F50048A694 /* ImpressNoteListTableViewController.swift */; };
-		387322462E8E67AC0016EFB1 /* ImPreChatModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 387322452E8E67AC0016EFB1 /* ImPreChatModel.swift */; };
 		387B5F7F2E3249DD00035E79 /* ImBaseProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 387B5F7E2E3249DD00035E79 /* ImBaseProtocol.swift */; };
 		387C25742F189363000FF54C /* ImWebViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 387C25722F189363000FF54C /* ImWebViewController.swift */; };
 		387C25782F18BA36000FF54C /* ImFloatingButtonManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 387C25772F18BA35000FF54C /* ImFloatingButtonManager.swift */; };
-		387EF4AA2D3A3AF000D99F55 /* ImLLMTableViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 387EF4A92D3A3AF000D99F55 /* ImLLMTableViewCell.swift */; };
 		3888C95F2E8809300085A7A4 /* ImImageCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3888C95D2E88092F0085A7A4 /* ImImageCardView.swift */; };
 		3888C9602E8809300085A7A4 /* ImMultipleChoiceCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3888C95E2E8809300085A7A4 /* ImMultipleChoiceCardView.swift */; };
 		3889854329979431009ABE26 /* ImNoteModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3889853F29979431009ABE26 /* ImNoteModel.swift */; };
@@ -56,10 +39,7 @@
 		388E53AF2D86A9EE00B55722 /* ImCardModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 388E53AE2D86A9EE00B55722 /* ImCardModel.swift */; };
 		388EFA71299513970028A82A /* ImNotificationHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 388EFA70299513970028A82A /* ImNotificationHandler.swift */; };
 		388FA8302DD382C800849CFB /* ImSubmitViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 388FA82E2DD382C800849CFB /* ImSubmitViewController.swift */; };
-		38913DD52E97A690008003A8 /* ImSystemPromptViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38913DD42E97A690008003A8 /* ImSystemPromptViewController.swift */; };
 		38922C1C2E96C97A004F9C39 /* ImCardListViewModelProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38922C1B2E96C97A004F9C39 /* ImCardListViewModelProtocol.swift */; };
-		38922C1F2E96C9E7004F9C39 /* ImPreChatListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38922C1E2E96C9E7004F9C39 /* ImPreChatListCell.swift */; };
-		389264092E8A4E8800A0ED1C /* ImPollingChatViewModelProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 389264082E8A4E8800A0ED1C /* ImPollingChatViewModelProtocol.swift */; };
 		3892F3942E3757630005AF2E /* ImSubmitCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3892F3932E3757630005AF2E /* ImSubmitCell.swift */; };
 		3895E167293B8C1A006939DA /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3895E166293B8C1A006939DA /* AppDelegate.swift */; };
 		3895E169293B8C1A006939DA /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3895E168293B8C1A006939DA /* SceneDelegate.swift */; };
@@ -67,8 +47,6 @@
 		3895E173293B8C1D006939DA /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 3895E171293B8C1D006939DA /* LaunchScreen.storyboard */; };
 		3896560D2E92AC8A009334BA /* UITextView+Typing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3896560C2E92AC8A009334BA /* UITextView+Typing.swift */; };
 		3897F89F2DDB0D6B005B8534 /* ImpressNotesViewModelProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3897F89E2DDB0D6B005B8534 /* ImpressNotesViewModelProtocol.swift */; };
-		389993632E9D5D1700FF043D /* PresetQuestionCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 389993612E9D5D1700FF043D /* PresetQuestionCell.swift */; };
-		389993642E9D5D1700FF043D /* PresetQuestionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 389993622E9D5D1700FF043D /* PresetQuestionsView.swift */; };
 		389C7341295C4E500012A7E0 /* ImDBHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 389C7340295C4E500012A7E0 /* ImDBHandler.swift */; };
 		389F85142E8D867200D9F052 /* ImiCloudBackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 389F85132E8D867100D9F052 /* ImiCloudBackupManager.swift */; };
 		38A7A5FB2DCE30FA009AB957 /* ImCardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38A7A5FA2DCE30FA009AB957 /* ImCardViewController.swift */; };
@@ -78,7 +56,6 @@
 		38B00CC82D17DE68002898A3 /* aReuImpress_iPhoneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38B00CC72D17DE68002898A3 /* aReuImpress_iPhoneTests.swift */; };
 		38B896862990AB3E00C6E13B /* ImAlertController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38B896852990AB3D00C6E13B /* ImAlertController.swift */; };
 		38B8968B2990ABB600C6E13B /* LXFNibloadable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38B8968A2990ABB600C6E13B /* LXFNibloadable.swift */; };
-		38B911AE2D84950C001DDE0E /* ImLLMConfigViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38B911AA2D84950C001DDE0E /* ImLLMConfigViewController.swift */; };
 		38BE34772E6562F200CB184F /* CardAnimationOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38BE34222E6562F200CB184F /* CardAnimationOptions.swift */; };
 		38BE34782E6562F200CB184F /* SwipeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38BE34232E6562F200CB184F /* SwipeView.swift */; };
 		38BE34792E6562F200CB184F /* CardAnimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38BE34242E6562F200CB184F /* CardAnimator.swift */; };
@@ -104,13 +81,7 @@
 		38C531662E58C2A400743E12 /* ImSubmitProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C531652E58C2A400743E12 /* ImSubmitProtocol.swift */; };
 		38C605582DCBB6FA00376834 /* ImCardViewModelProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C605572DCBB6FA00376834 /* ImCardViewModelProtocol.swift */; };
 		38C625A82E5C254D00160852 /* ImMusicPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C625A72E5C254D00160852 /* ImMusicPlayer.swift */; };
-		38C673A72E97873C00E629EF /* ImPreChatListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C673A62E97873C00E629EF /* ImPreChatListViewController.swift */; };
-		38C954B32CF1AF02006D5092 /* ImGeminiResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C954B22CF1AF02006D5092 /* ImGeminiResponse.swift */; };
 		38CE3EA02E8CDCAF00EF7C7A /* UIImage+.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38CE3E9F2E8CDCAF00EF7C7A /* UIImage+.swift */; };
-		38D3D1692CD48F8300FCED2F /* ImNetWorkRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D3D1682CD48F8300FCED2F /* ImNetWorkRequest.swift */; };
-		38D6FFCE2E9A05C700C4F311 /* ImNetWorkRequest+Mock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D6FFCD2E9A05C700C4F311 /* ImNetWorkRequest+Mock.swift */; };
-		38DA861A2E950C9A007F4ECE /* CustomChatSearchBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38DA86192E950C9A007F4ECE /* CustomChatSearchBar.swift */; };
-		38DA861F2E952380007F4ECE /* ChatSelectableTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38DA861E2E952380007F4ECE /* ChatSelectableTextView.swift */; };
 		38DE4CEC293C3C7E005308B3 /* ImBaseViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38DE4CEB293C3C7E005308B3 /* ImBaseViewModel.swift */; };
 		38DE4D1E293C4090005308B3 /* ImConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38DE4D1C293C4090005308B3 /* ImConstants.swift */; };
 		38DE4D1F293C4090005308B3 /* ImColorConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38DE4D1D293C4090005308B3 /* ImColorConstants.swift */; };
@@ -118,7 +89,6 @@
 		38DE72E82E9A23EC00E8909F /* imcard_hard@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 38DE72E42E9A23EC00E8909F /* imcard_hard@2x.png */; };
 		38DE72E92E9A23EC00E8909F /* imcard_easy@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 38DE72E52E9A23EC00E8909F /* imcard_easy@2x.png */; };
 		38DE72EA2E9A23EC00E8909F /* imcard_normal@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 38DE72E62E9A23EC00E8909F /* imcard_normal@2x.png */; };
-		38E4856D2CEEDBD400AC9FA5 /* ImpressResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E4856C2CEEDBD400AC9FA5 /* ImpressResponse.swift */; };
 		38E4B4802F19E4C7002AA600 /* ImGridViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E4B47F2F19E4C7002AA600 /* ImGridViewController.swift */; };
 		38F297CA2D088F4500372746 /* ImExtractTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F297C92D088F4400372746 /* ImExtractTextView.swift */; };
 		38FCE9B52E7D243800702FE8 /* ImMarkdownViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38FCE9B42E7D243800702FE8 /* ImMarkdownViewController.swift */; };
@@ -181,14 +151,10 @@
 		380034BB2E8BA37E00161000 /* ImSliderViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImSliderViewController.swift; sourceTree = "<group>"; };
 		3801E8442F30DD5900987335 /* ImiCloudImportManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ImiCloudImportManager.swift; path = ImFileManager/ImiCloudImportManager.swift; sourceTree = "<group>"; };
 		380571E12D13FB8900CBC488 /* AttributedStringKey.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AttributedStringKey.swift; sourceTree = "<group>"; };
-		3807308C2E895D8700CA566B /* ImLLMDetailViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImLLMDetailViewController.swift; sourceTree = "<group>"; };
-		380730912E895DDB00CA566B /* ImLLMModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImLLMModel.swift; sourceTree = "<group>"; };
 		3808390D2E06DB1400C6F9C8 /* FeedKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = FeedKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		3809472A2E94C738007FAD3D /* MarkdownKitRenderer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MarkdownKitRenderer.swift; sourceTree = "<group>"; };
-		380E3A5C2E8E597D001C5A2F /* ImPollingChatListViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImPollingChatListViewController.swift; sourceTree = "<group>"; };
 		380E587B2E9F6FD000F3483C /* ImTTSManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImTTSManager.swift; sourceTree = "<group>"; };
 		38134ECA2978EF4100EE8786 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
-		38140C9C2E8B800200991F47 /* TypingIndicatorView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TypingIndicatorView.swift; sourceTree = "<group>"; };
 		3819E37C2DCA573D002088F4 /* ImCardDebugViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImCardDebugViewModel.swift; sourceTree = "<group>"; };
 		381F19292E6429120073B673 /* libiconv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libiconv.tbd; path = usr/lib/libiconv.tbd; sourceTree = SDKROOT; };
 		381F192D2E6429280073B673 /* libz.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libz.tbd; path = usr/lib/libz.tbd; sourceTree = SDKROOT; };
@@ -196,37 +162,24 @@
 		382B981B2E8D6B3500F33388 /* ImImagePreviewViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImImagePreviewViewController.swift; sourceTree = "<group>"; };
 		382E7ED42E9286BC005D8EAE /* ImSettingsViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImSettingsViewController.swift; sourceTree = "<group>"; };
 		F3B600000000000000000011 /* ImpressV3PromptLibraryViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV3PromptLibraryViewController.swift; sourceTree = "<group>"; };
-		382E7ED82E9286F2005D8EAE /* ImSettingsViewModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImSettingsViewModel.swift; sourceTree = "<group>"; };
 		382E7EDC2E928729005D8EAE /* ImSettingSliderCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImSettingSliderCell.swift; sourceTree = "<group>"; };
 		382E7EDD2E928729005D8EAE /* ImSettingSwitchCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImSettingSwitchCell.swift; sourceTree = "<group>"; };
-		382E7EE22E928789005D8EAE /* ImAutoGenerator.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImAutoGenerator.swift; sourceTree = "<group>"; };
-		383116192E978CCC00826A85 /* ImPreChatListViewModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImPreChatListViewModel.swift; sourceTree = "<group>"; };
-		3831161A2E978CCC00826A85 /* ImPreChatListViewModelProtocol.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImPreChatListViewModelProtocol.swift; sourceTree = "<group>"; };
-		3831161F2E978E7500826A85 /* ImPollingChatListViewModelProtocol.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImPollingChatListViewModelProtocol.swift; sourceTree = "<group>"; };
-		383116202E978E7500826A85 /* ImPollingChatListViewModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImPollingChatListViewModel.swift; sourceTree = "<group>"; };
 		383869B129B22CDC004220FA /* ImpressRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressRoute.swift; sourceTree = "<group>"; };
 		383AB5922E8E8BE9007955FB /* ImNotificationName.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImNotificationName.swift; sourceTree = "<group>"; };
-		384885E62E88DBCD00CAE576 /* ImPollingChatViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImPollingChatViewController.swift; sourceTree = "<group>"; };
-		384885EA2E88DBF800CAE576 /* ImPollingChatViewModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImPollingChatViewModel.swift; sourceTree = "<group>"; };
-		384885F22E88DC0900CAE576 /* ImPollingChatCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImPollingChatCell.swift; sourceTree = "<group>"; };
-		384885F62E88DC2E00CAE576 /* ImPollingChatModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImPollingChatModel.swift; sourceTree = "<group>"; };
 		3855FADE294DA3F700FB90C8 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		3859A3942E9B907400C5FA37 /* imcard_wallpaper.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = imcard_wallpaper.png; sourceTree = "<group>"; };
 		385B906C2E7C184C006336D5 /* ImObsidianManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImObsidianManager.swift; sourceTree = "<group>"; };
-		385D59DB2E942441009E15D0 /* ChatInputContainerView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChatInputContainerView.swift; sourceTree = "<group>"; };
 		386840E12E25638C007391BA /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		3868B61E2D3F540700A1C9F4 /* ImTabBarViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImTabBarViewController.swift; sourceTree = "<group>"; };
 		386DEC7929E07CDD0058FCD1 /* ImNavigationViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImNavigationViewController.swift; sourceTree = "<group>"; };
 		386DEC7A29E07CDD0058FCD1 /* ImBaseViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImBaseViewController.swift; sourceTree = "<group>"; };
 		386F38422D02A4F50048A694 /* ImpressNoteListTableViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImpressNoteListTableViewController.swift; sourceTree = "<group>"; };
-		387322452E8E67AC0016EFB1 /* ImPreChatModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImPreChatModel.swift; sourceTree = "<group>"; };
 		387B4ECA298DFBB90067C688 /* aReuImpress-iPhoneDebug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "aReuImpress-iPhoneDebug.entitlements"; sourceTree = "<group>"; };
 		387B5F7E2E3249DD00035E79 /* ImBaseProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImBaseProtocol.swift; sourceTree = "<group>"; };
 		387C25722F189363000FF54C /* ImWebViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImWebViewController.swift; sourceTree = "<group>"; };
 		387C25772F18BA35000FF54C /* ImFloatingButtonManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImFloatingButtonManager.swift; sourceTree = "<group>"; };
 		387DDFC72AC1E77600502FD0 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		387DDFC92AC1E77600502FD0 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
-		387EF4A92D3A3AF000D99F55 /* ImLLMTableViewCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImLLMTableViewCell.swift; sourceTree = "<group>"; };
 		3888C95D2E88092F0085A7A4 /* ImImageCardView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImImageCardView.swift; sourceTree = "<group>"; };
 		3888C95E2E8809300085A7A4 /* ImMultipleChoiceCardView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImMultipleChoiceCardView.swift; sourceTree = "<group>"; };
 		3889853F29979431009ABE26 /* ImNoteModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImNoteModel.swift; sourceTree = "<group>"; };
@@ -235,10 +188,7 @@
 		388E53AE2D86A9EE00B55722 /* ImCardModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImCardModel.swift; sourceTree = "<group>"; };
 		388EFA70299513970028A82A /* ImNotificationHandler.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImNotificationHandler.swift; sourceTree = "<group>"; };
 		388FA82E2DD382C800849CFB /* ImSubmitViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImSubmitViewController.swift; sourceTree = "<group>"; };
-		38913DD42E97A690008003A8 /* ImSystemPromptViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImSystemPromptViewController.swift; sourceTree = "<group>"; };
 		38922C1B2E96C97A004F9C39 /* ImCardListViewModelProtocol.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImCardListViewModelProtocol.swift; sourceTree = "<group>"; };
-		38922C1E2E96C9E7004F9C39 /* ImPreChatListCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ImPreChatListCell.swift; path = "aReuImpress-iPhone/View/ImPollingChat/ImPreChatListCell.swift"; sourceTree = SOURCE_ROOT; };
-		389264082E8A4E8800A0ED1C /* ImPollingChatViewModelProtocol.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImPollingChatViewModelProtocol.swift; sourceTree = "<group>"; };
 		3892F3932E3757630005AF2E /* ImSubmitCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImSubmitCell.swift; sourceTree = "<group>"; };
 		3895E163293B8C1A006939DA /* aReuImpress-iPhone.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "aReuImpress-iPhone.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3895E166293B8C1A006939DA /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -248,8 +198,6 @@
 		3895E174293B8C1D006939DA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		3896560C2E92AC8A009334BA /* UITextView+Typing.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "UITextView+Typing.swift"; sourceTree = "<group>"; };
 		3897F89E2DDB0D6B005B8534 /* ImpressNotesViewModelProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressNotesViewModelProtocol.swift; sourceTree = "<group>"; };
-		389993612E9D5D1700FF043D /* PresetQuestionCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PresetQuestionCell.swift; sourceTree = "<group>"; };
-		389993622E9D5D1700FF043D /* PresetQuestionsView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PresetQuestionsView.swift; sourceTree = "<group>"; };
 		389C7340295C4E500012A7E0 /* ImDBHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImDBHandler.swift; sourceTree = "<group>"; };
 		389F85132E8D867100D9F052 /* ImiCloudBackupManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImiCloudBackupManager.swift; sourceTree = "<group>"; };
 		38A7A5FA2DCE30FA009AB957 /* ImCardViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImCardViewController.swift; sourceTree = "<group>"; };
@@ -262,7 +210,6 @@
 		38B00CC92D17DE68002898A3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		38B896852990AB3D00C6E13B /* ImAlertController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImAlertController.swift; sourceTree = "<group>"; };
 		38B8968A2990ABB600C6E13B /* LXFNibloadable.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LXFNibloadable.swift; sourceTree = "<group>"; };
-		38B911AA2D84950C001DDE0E /* ImLLMConfigViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImLLMConfigViewController.swift; sourceTree = "<group>"; };
 		38BE34222E6562F200CB184F /* CardAnimationOptions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CardAnimationOptions.swift; sourceTree = "<group>"; };
 		38BE34232E6562F200CB184F /* SwipeView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SwipeView.swift; sourceTree = "<group>"; };
 		38BE34242E6562F200CB184F /* CardAnimator.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CardAnimator.swift; sourceTree = "<group>"; };
@@ -288,13 +235,7 @@
 		38C531652E58C2A400743E12 /* ImSubmitProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImSubmitProtocol.swift; sourceTree = "<group>"; };
 		38C605572DCBB6FA00376834 /* ImCardViewModelProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImCardViewModelProtocol.swift; sourceTree = "<group>"; };
 		38C625A72E5C254D00160852 /* ImMusicPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImMusicPlayer.swift; sourceTree = "<group>"; };
-		38C673A62E97873C00E629EF /* ImPreChatListViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImPreChatListViewController.swift; sourceTree = "<group>"; };
-		38C954B22CF1AF02006D5092 /* ImGeminiResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImGeminiResponse.swift; sourceTree = "<group>"; };
 		38CE3E9F2E8CDCAF00EF7C7A /* UIImage+.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "UIImage+.swift"; sourceTree = "<group>"; };
-		38D3D1682CD48F8300FCED2F /* ImNetWorkRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImNetWorkRequest.swift; sourceTree = "<group>"; };
-		38D6FFCD2E9A05C700C4F311 /* ImNetWorkRequest+Mock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ImNetWorkRequest+Mock.swift"; sourceTree = "<group>"; };
-		38DA86192E950C9A007F4ECE /* CustomChatSearchBar.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CustomChatSearchBar.swift; sourceTree = "<group>"; };
-		38DA861E2E952380007F4ECE /* ChatSelectableTextView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChatSelectableTextView.swift; sourceTree = "<group>"; };
 		38DE4CDD293C37D8005308B3 /* bridge-header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "bridge-header.h"; sourceTree = "<group>"; };
 		38DE4CEB293C3C7E005308B3 /* ImBaseViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImBaseViewModel.swift; sourceTree = "<group>"; };
 		38DE4D1C293C4090005308B3 /* ImConstants.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImConstants.swift; sourceTree = "<group>"; };
@@ -303,7 +244,6 @@
 		38DE72E42E9A23EC00E8909F /* imcard_hard@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "imcard_hard@2x.png"; sourceTree = "<group>"; };
 		38DE72E52E9A23EC00E8909F /* imcard_easy@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "imcard_easy@2x.png"; sourceTree = "<group>"; };
 		38DE72E62E9A23EC00E8909F /* imcard_normal@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "imcard_normal@2x.png"; sourceTree = "<group>"; };
-		38E4856C2CEEDBD400AC9FA5 /* ImpressResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressResponse.swift; sourceTree = "<group>"; };
 		38E4B47F2F19E4C7002AA600 /* ImGridViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImGridViewController.swift; sourceTree = "<group>"; };
 		38ECB60C2E64228700C40C2A /* ObjectiveGit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ObjectiveGit.framework; path = ../../Carthage/Build/iOS/ObjectiveGit.framework; sourceTree = "<group>"; };
 		38F297C92D088F4400372746 /* ImExtractTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImExtractTextView.swift; sourceTree = "<group>"; };
@@ -398,7 +338,6 @@
 		380E3A5B2E8E597D001C5A2F /* ImPollingChatListVC */ = {
 			isa = PBXGroup;
 			children = (
-				380E3A5C2E8E597D001C5A2F /* ImPollingChatListViewController.swift */,
 			);
 			path = ImPollingChatListVC;
 			sourceTree = "<group>";
@@ -414,10 +353,6 @@
 		3828F98F2E942D6200B66EC4 /* PollCell */ = {
 			isa = PBXGroup;
 			children = (
-				38922C1E2E96C9E7004F9C39 /* ImPreChatListCell.swift */,
-				38DA861E2E952380007F4ECE /* ChatSelectableTextView.swift */,
-				38140C9C2E8B800200991F47 /* TypingIndicatorView.swift */,
-				384885F22E88DC0900CAE576 /* ImPollingChatCell.swift */,
 			);
 			path = PollCell;
 			sourceTree = "<group>";
@@ -446,7 +381,6 @@
 		382E7ED32E9286BC005D8EAE /* ImSettingVC */ = {
 			isa = PBXGroup;
 			children = (
-				38913DD42E97A690008003A8 /* ImSystemPromptViewController.swift */,
 				382E7ED42E9286BC005D8EAE /* ImSettingsViewController.swift */,
 				F3B600000000000000000011 /* ImpressV3PromptLibraryViewController.swift */,
 			);
@@ -456,7 +390,6 @@
 		382E7ED72E9286F2005D8EAE /* ImSettings */ = {
 			isa = PBXGroup;
 			children = (
-				382E7ED82E9286F2005D8EAE /* ImSettingsViewModel.swift */,
 			);
 			path = ImSettings;
 			sourceTree = "<group>";
@@ -473,7 +406,6 @@
 		382E7EE12E928789005D8EAE /* ImAutoGenerator */ = {
 			isa = PBXGroup;
 			children = (
-				382E7EE22E928789005D8EAE /* ImAutoGenerator.swift */,
 			);
 			path = ImAutoGenerator;
 			sourceTree = "<group>";
@@ -481,8 +413,6 @@
 		3831161E2E978E7500826A85 /* ImPollingChatList */ = {
 			isa = PBXGroup;
 			children = (
-				3831161F2E978E7500826A85 /* ImPollingChatListViewModelProtocol.swift */,
-				383116202E978E7500826A85 /* ImPollingChatListViewModel.swift */,
 			);
 			path = ImPollingChatList;
 			sourceTree = "<group>";
@@ -498,7 +428,6 @@
 		384885E52E88DBCD00CAE576 /* ImPollingChatVC */ = {
 			isa = PBXGroup;
 			children = (
-				384885E62E88DBCD00CAE576 /* ImPollingChatViewController.swift */,
 			);
 			path = ImPollingChatVC;
 			sourceTree = "<group>";
@@ -507,8 +436,6 @@
 			isa = PBXGroup;
 			children = (
 				3831161E2E978E7500826A85 /* ImPollingChatList */,
-				389264082E8A4E8800A0ED1C /* ImPollingChatViewModelProtocol.swift */,
-				384885EA2E88DBF800CAE576 /* ImPollingChatViewModel.swift */,
 			);
 			path = ImPollingChat;
 			sourceTree = "<group>";
@@ -527,7 +454,6 @@
 		384885F52E88DC2E00CAE576 /* ImPollingChat */ = {
 			isa = PBXGroup;
 			children = (
-				384885F62E88DC2E00CAE576 /* ImPollingChatModel.swift */,
 			);
 			path = ImPollingChat;
 			sourceTree = "<group>";
@@ -572,7 +498,6 @@
 		387322442E8E67AC0016EFB1 /* ImPreChat */ = {
 			isa = PBXGroup;
 			children = (
-				387322452E8E67AC0016EFB1 /* ImPreChatModel.swift */,
 			);
 			path = ImPreChat;
 			sourceTree = "<group>";
@@ -607,7 +532,6 @@
 		387EF4A82D3A3AB800D99F55 /* ImLLM */ = {
 			isa = PBXGroup;
 			children = (
-				387EF4A92D3A3AF000D99F55 /* ImLLMTableViewCell.swift */,
 			);
 			path = ImLLM;
 			sourceTree = "<group>";
@@ -750,8 +674,6 @@
 			isa = PBXGroup;
 			children = (
 				38E4856B2CEEDBAA00AC9FA5 /* ImResponse */,
-				38D3D1682CD48F8300FCED2F /* ImNetWorkRequest.swift */,
-				38D6FFCD2E9A05C700C4F311 /* ImNetWorkRequest+Mock.swift */,
 			);
 			path = NetWork;
 			sourceTree = "<group>";
@@ -791,8 +713,6 @@
 		389993602E9D5D1700FF043D /* PreQuestion */ = {
 			isa = PBXGroup;
 			children = (
-				389993612E9D5D1700FF043D /* PresetQuestionCell.swift */,
-				389993622E9D5D1700FF043D /* PresetQuestionsView.swift */,
 			);
 			path = PreQuestion;
 			sourceTree = "<group>";
@@ -800,7 +720,6 @@
 		389993662E9D5D3000FF043D /* SearchBar */ = {
 			isa = PBXGroup;
 			children = (
-				38DA86192E950C9A007F4ECE /* CustomChatSearchBar.swift */,
 			);
 			path = SearchBar;
 			sourceTree = "<group>";
@@ -808,7 +727,6 @@
 		389993672E9D5D3900FF043D /* InputView */ = {
 			isa = PBXGroup;
 			children = (
-				385D59DB2E942441009E15D0 /* ChatInputContainerView.swift */,
 			);
 			path = InputView;
 			sourceTree = "<group>";
@@ -885,8 +803,6 @@
 		38B911A82D84950C001DDE0E /* ImLLMConfigVC */ = {
 			isa = PBXGroup;
 			children = (
-				3807308C2E895D8700CA566B /* ImLLMDetailViewController.swift */,
-				38B911AA2D84950C001DDE0E /* ImLLMConfigViewController.swift */,
 			);
 			path = ImLLMConfigVC;
 			sourceTree = "<group>";
@@ -953,7 +869,6 @@
 		38C673A52E97873C00E629EF /* ImPreChatVC */ = {
 			isa = PBXGroup;
 			children = (
-				38C673A62E97873C00E629EF /* ImPreChatListViewController.swift */,
 			);
 			path = ImPreChatVC;
 			sourceTree = "<group>";
@@ -961,8 +876,6 @@
 		38C673A92E9787DA00E629EF /* ImPreChatList */ = {
 			isa = PBXGroup;
 			children = (
-				383116192E978CCC00826A85 /* ImPreChatListViewModel.swift */,
-				3831161A2E978CCC00826A85 /* ImPreChatListViewModelProtocol.swift */,
 			);
 			path = ImPreChatList;
 			sourceTree = "<group>";
@@ -1030,8 +943,6 @@
 		38E4856B2CEEDBAA00AC9FA5 /* ImResponse */ = {
 			isa = PBXGroup;
 			children = (
-				38E4856C2CEEDBD400AC9FA5 /* ImpressResponse.swift */,
-				38C954B22CF1AF02006D5092 /* ImGeminiResponse.swift */,
 			);
 			path = ImResponse;
 			sourceTree = "<group>";
@@ -1072,7 +983,6 @@
 		38F858972CEF38B100E6FD77 /* ImLLM */ = {
 			isa = PBXGroup;
 			children = (
-				380730912E895DDB00CA566B /* ImLLMModel.swift */,
 			);
 			path = ImLLM;
 			sourceTree = "<group>";
@@ -1295,39 +1205,28 @@
 				F3A200000000000000000013 /* ImpressV3NotificationCoordinator.swift in Sources */,
 				F3A100000000000000000001 /* ReviewWCDBRepository.swift in Sources */,
 				F3A100000000000000000002 /* FSRS6ReviewCalculator.swift in Sources */,
-				38D3D1692CD48F8300FCED2F /* ImNetWorkRequest.swift in Sources */,
 				380E587C2E9F6FD000F3483C /* ImTTSManager.swift in Sources */,
 				3809472B2E94C738007FAD3D /* MarkdownKitRenderer.swift in Sources */,
 				38BE34772E6562F200CB184F /* CardAnimationOptions.swift in Sources */,
 				38DE4D1E293C4090005308B3 /* ImConstants.swift in Sources */,
 				382B981C2E8D6B3500F33388 /* ImImagePreviewViewController.swift in Sources */,
 				38BE34852E6562F300CB184F /* UIView+Extensions.swift in Sources */,
-				389993632E9D5D1700FF043D /* PresetQuestionCell.swift in Sources */,
 				3868B61F2D3F540700A1C9F4 /* ImTabBarViewController.swift in Sources */,
 				38BE34842E6562F300CB184F /* CGVector+Extensions.swift in Sources */,
-				384885F32E88DC0900CAE576 /* ImPollingChatCell.swift in Sources */,
 				38BE34832E6562F300CB184F /* Array+Extensions.swift in Sources */,
 				38B8968B2990ABB600C6E13B /* LXFNibloadable.swift in Sources */,
 				3801E8452F30DD5900987335 /* ImiCloudImportManager.swift in Sources */,
-				382E7EE32E928789005D8EAE /* ImAutoGenerator.swift in Sources */,
-				3807308E2E895D8700CA566B /* ImLLMDetailViewController.swift in Sources */,
-				383116222E978E7500826A85 /* ImPollingChatListViewModel.swift in Sources */,
-				387322462E8E67AC0016EFB1 /* ImPreChatModel.swift in Sources */,
-				38DA861A2E950C9A007F4ECE /* CustomChatSearchBar.swift in Sources */,
 				38B896862990AB3E00C6E13B /* ImAlertController.swift in Sources */,
 				382E7EDF2E928729005D8EAE /* ImSettingSwitchCell.swift in Sources */,
 				387B5F7F2E3249DD00035E79 /* ImBaseProtocol.swift in Sources */,
 				38C605582DCBB6FA00376834 /* ImCardViewModelProtocol.swift in Sources */,
-				38922C1F2E96C9E7004F9C39 /* ImPreChatListCell.swift in Sources */,
 				38BE347F2E6562F300CB184F /* SwipeCardStack.swift in Sources */,
 				38BE34872E6562F300CB184F /* PanGestureRecognizer.swift in Sources */,
-				38DA861F2E952380007F4ECE /* ChatSelectableTextView.swift in Sources */,
 				38FE014C2E1F928B009B77CA /* ImMemoryCardView.swift in Sources */,
 				380572072D13FB8A00CBC488 /* AttributedStringKey.swift in Sources */,
 				386DEC7B29E07CDD0058FCD1 /* ImNavigationViewController.swift in Sources */,
 				38BE34822E6562F300CB184F /* SwipeDirection.swift in Sources */,
 				388E53AF2D86A9EE00B55722 /* ImCardModel.swift in Sources */,
-				384885ED2E88DBF800CAE576 /* ImPollingChatViewModel.swift in Sources */,
 				3889854B29979453009ABE26 /* ImpressNotesViewModel.swift in Sources */,
 				38BE34882E6562F300CB184F /* Animator.swift in Sources */,
 				38A7A5FB2DCE30FA009AB957 /* ImCardViewController.swift in Sources */,
@@ -1344,8 +1243,6 @@
 				38BE34892E6562F300CB184F /* CGPoint+Extensions.swift in Sources */,
 				3895E167293B8C1A006939DA /* AppDelegate.swift in Sources */,
 				388C1DED2D8FB6D600BF87D8 /* ImLoading.swift in Sources */,
-				389993642E9D5D1700FF043D /* PresetQuestionsView.swift in Sources */,
-				383116212E978E7500826A85 /* ImPollingChatListViewModelProtocol.swift in Sources */,
 				38FE010F2E1F9102009B77CA /* UIVIew+.swift in Sources */,
 				389F85142E8D867200D9F052 /* ImiCloudBackupManager.swift in Sources */,
 				380034BC2E8BA37E00161000 /* ImSliderViewController.swift in Sources */,
@@ -1355,14 +1252,10 @@
 				38C055512DD0888A005F3E6E /* ImCardViewModel.swift in Sources */,
 				382E7ED52E9286BC005D8EAE /* ImSettingsViewController.swift in Sources */,
 				F3B600000000000000000010 /* ImpressV3PromptLibraryViewController.swift in Sources */,
-				380E3A5D2E8E597D001C5A2F /* ImPollingChatListViewController.swift in Sources */,
-				380730922E895DDB00CA566B /* ImLLMModel.swift in Sources */,
 				3897F89F2DDB0D6B005B8534 /* ImpressNotesViewModelProtocol.swift in Sources */,
 				3823CC892970531C00CCAAD3 /* ImBaseTableViewCell.swift in Sources */,
 				389C7341295C4E500012A7E0 /* ImDBHandler.swift in Sources */,
 				386F384B2D02A4F50048A694 /* ImpressNoteListTableViewController.swift in Sources */,
-				382E7ED92E9286F2005D8EAE /* ImSettingsViewModel.swift in Sources */,
-				387EF4AA2D3A3AF000D99F55 /* ImLLMTableViewCell.swift in Sources */,
 				388EFA71299513970028A82A /* ImNotificationHandler.swift in Sources */,
 				387C25742F189363000FF54C /* ImWebViewController.swift in Sources */,
 				3895E169293B8C1A006939DA /* SceneDelegate.swift in Sources */,
@@ -1370,38 +1263,25 @@
 				38BE347C2E6562F300CB184F /* SwipeCardStackDataSource.swift in Sources */,
 				388FA8302DD382C800849CFB /* ImSubmitViewController.swift in Sources */,
 				38DE4D1F293C4090005308B3 /* ImColorConstants.swift in Sources */,
-				38C673A72E97873C00E629EF /* ImPreChatListViewController.swift in Sources */,
 				38BE34862E6562F300CB184F /* StringUtils.swift in Sources */,
 				386DEC7C29E07CDD0058FCD1 /* ImBaseViewController.swift in Sources */,
-				3831161B2E978CCC00826A85 /* ImPreChatListViewModel.swift in Sources */,
 				38F297CA2D088F4500372746 /* ImExtractTextView.swift in Sources */,
 				38922C1C2E96C97A004F9C39 /* ImCardListViewModelProtocol.swift in Sources */,
-				389264092E8A4E8800A0ED1C /* ImPollingChatViewModelProtocol.swift in Sources */,
-				38D6FFCE2E9A05C700C4F311 /* ImNetWorkRequest+Mock.swift in Sources */,
-				38C954B32CF1AF02006D5092 /* ImGeminiResponse.swift in Sources */,
 				3892F3942E3757630005AF2E /* ImSubmitCell.swift in Sources */,
 				38FCE9B52E7D243800702FE8 /* ImMarkdownViewController.swift in Sources */,
-				38913DD52E97A690008003A8 /* ImSystemPromptViewController.swift in Sources */,
 				3889854329979431009ABE26 /* ImNoteModel.swift in Sources */,
-				38E4856D2CEEDBD400AC9FA5 /* ImpressResponse.swift in Sources */,
 				38AB8BA32E96BB8B00D371A8 /* ImCardListViewModel.swift in Sources */,
 				38BE347E2E6562F300CB184F /* CardStackAnimator.swift in Sources */,
-				384885E72E88DBCD00CAE576 /* ImPollingChatViewController.swift in Sources */,
 				38BE347A2E6562F300CB184F /* SwipeCardDelegate.swift in Sources */,
 				382E7EDE2E928729005D8EAE /* ImSettingSliderCell.swift in Sources */,
 				38BE347D2E6562F300CB184F /* CardStackAnimationOptions.swift in Sources */,
 				3888C95F2E8809300085A7A4 /* ImImageCardView.swift in Sources */,
-				385D59DE2E942441009E15D0 /* ChatInputContainerView.swift in Sources */,
 				3888C9602E8809300085A7A4 /* ImMultipleChoiceCardView.swift in Sources */,
 				38BE34792E6562F200CB184F /* CardAnimator.swift in Sources */,
-				3831161C2E978CCC00826A85 /* ImPreChatListViewModelProtocol.swift in Sources */,
 				3896560D2E92AC8A009334BA /* UITextView+Typing.swift in Sources */,
-				384885F72E88DC2E00CAE576 /* ImPollingChatModel.swift in Sources */,
 				38BE34812E6562F300CB184F /* CardStackStateManager.swift in Sources */,
 				38BE34782E6562F200CB184F /* SwipeView.swift in Sources */,
 				38AB8BA02E96BB4C00D371A8 /* ImCardListViewController.swift in Sources */,
-				38140C9D2E8B800200991F47 /* TypingIndicatorView.swift in Sources */,
-				38B911AE2D84950C001DDE0E /* ImLLMConfigViewController.swift in Sources */,
 				383AB5932E8E8BE9007955FB /* ImNotificationName.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
