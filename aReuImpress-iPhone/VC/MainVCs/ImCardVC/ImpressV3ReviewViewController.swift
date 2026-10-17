@@ -94,8 +94,16 @@ final class ImpressV3ReviewViewController: UIViewController {
         }
         explore.accessibilityHint = "在 DeepSeek 网页继续讨论当前问题"
         explore.addTarget(self, action: #selector(exploreFromAnswer), for: .touchUpInside)
+        let timeline = UIButton(type: .system)
+        timeline.setTitle("历史", for: .normal)
+        if #available(iOS 15.0, *) {
+            ImpressV3NativeButtonAppearance.secondary(timeline, title: "历史")
+        }
+        timeline.accessibilityLabel = "查看当前卡片的理解时间线"
+        timeline.addTarget(self, action: #selector(openCurrentTimeline), for: .touchUpInside)
         answerTools.addArrangedSubview(reflect)
         answerTools.addArrangedSubview(explore)
+        answerTools.addArrangedSubview(timeline)
         revealButton.setTitle("查看答案", for: .normal)
         revealButton.titleLabel?.font = UIFont.preferredFont(forTextStyle: .headline)
         revealButton.titleLabel?.adjustsFontForContentSizeCategory = true
@@ -167,74 +175,39 @@ final class ImpressV3ReviewViewController: UIViewController {
     }
 
     private func setupNavigation() {
+        // Context-free content creation lives at the + control.
         navigationItem.leftBarButtonItem = UIBarButtonItem(
-            barButtonSystemItem: .add, target: self, action: #selector(createCard)
-        )
+            barButtonSystemItem: .add, target: self, action: #selector(createCard))
         updateNavigationActions()
     }
 
     private func updateNavigationActions() {
-        // Keep the primary menu short. Low-frequency notifications and
-        // model administration belong in native submenus / settings.
-        let capture = UIAction(title: "记录理解",
-                               image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
-            self?.captureUnderstanding()
-        }
-        let timeline = UIAction(title: "理解时间线",
-                                image: UIImage(systemName: "clock.arrow.circlepath")) { [weak self] _ in
-            self?.showUnderstandingTimeline()
-        }
+        // Do not overload one ellipsis with capture, FSRS, notifications,
+        // model providers and debug actions. Review tools remain contextual.
+        let settings = UIBarButtonItem(
+            image: UIImage(systemName: "gearshape"),
+            style: .plain, target: self, action: #selector(openSettings))
+        settings.accessibilityLabel = "设置"
+        let chat = UIBarButtonItem(
+            image: UIImage(systemName: "bubble.left.and.bubble.right"),
+            style: .plain, target: self, action: #selector(openNativeChat))
+        chat.accessibilityLabel = "原生 AI 问答"
+        navigationItem.rightBarButtonItems = [settings, chat]
+    }
 
-        let nativeChat = UIAction(title: "AI 问答（API）",
-                                  image: UIImage(systemName: "bubble.left.and.bubble.right")) { [weak self] _ in
-            let chat = ImPollingChatViewController()
-            chat.title = "AI 问答"
-            self?.navigationController?.pushViewController(chat, animated: true)
-        }
-        let deepSeek = UIAction(title: "DeepSeek 网页",
-                                image: UIImage(systemName: "globe")) { [weak self] _ in
-            self?.exploreFromAnswer()
-        }
-        let models = UIAction(title: "模型配置",
-                              image: UIImage(systemName: "cpu")) { [weak self] _ in
-            self?.present(ImNavigationViewController(
-                rootViewController: ImLLMConfigViewController()), animated: true)
-        }
-        let aiMenu = UIMenu(title: "AI 工具",
-                            image: UIImage(systemName: "sparkles"),
-                            children: [nativeChat, deepSeek, models])
+    @objc private func openSettings() {
+        navigationController?.pushViewController(
+            ImpressV3SettingsHubViewController(), animated: true)
+    }
 
-        let refresh = UIAction(title: "刷新复习队列",
-                               image: UIImage(systemName: "arrow.clockwise")) { [weak self] _ in
-            self?.reloadSession()
-        }
-        let notifications = UIAction(title: "提醒设置",
-                                     image: UIImage(systemName: "bell")) { [weak self] _ in
-            self?.navigationController?.pushViewController(
-                ImpressV3ReminderSettingsController(), animated: true)
-        }
-        var reviewActions: [UIMenuElement] = [refresh, notifications]
-        #if DEBUG
-        reviewActions.append(UIAction(
-            title: "下次启动恢复旧版闪卡（测试）",
-            image: UIImage(systemName: "arrow.uturn.backward")) { _ in
-            ImpressV3ReviewEnvironment.pilotEnabled = false
-            ImpressV3NotificationCoordinator.shared.disableReminders()
-        })
-        #endif
-        let reviewMenu = UIMenu(title: "复习与提醒",
-                                image: UIImage(systemName: "rectangle.stack"),
-                                children: reviewActions)
+    @objc private func openNativeChat() {
+        let chat = ImPollingChatViewController()
+        chat.title = "AI 问答"
+        navigationController?.pushViewController(chat, animated: true)
+    }
 
-        let settings = UIAction(title: "设置",
-                                image: UIImage(systemName: "gearshape")) { [weak self] _ in
-            self?.navigationController?.pushViewController(
-                ImpressV3SettingsHubViewController(), animated: true)
-        }
-        let more = UIBarButtonItem(image: UIImage(systemName: "ellipsis.circle"),
-                                   style: .plain, target: nil, action: nil)
-        more.menu = UIMenu(children: [capture, timeline, aiMenu, reviewMenu, settings])
-        navigationItem.rightBarButtonItem = more
+    @objc private func openCurrentTimeline() {
+        showUnderstandingTimeline()
     }
 
     private func displayFailure(_ error: Swift.Error) {
@@ -411,33 +384,28 @@ final class ImpressV3ReviewViewController: UIViewController {
 
     @objc private func createCard() {
         guard pending == nil, !isLoading else { return }
-        let submit = ImSubmitViewController(submitModel: ImCardModel())
-        submit.submitActionResult = { [weak self] card in
-            guard let self = self else { return }
-            Task { [weak self] in
-                guard let self = self else { return }
-                do {
-                    let repo = try self.repository ?? ImpressV3ReviewEnvironment.repository()
-                    let id = UUID()
-                    let now = Date()
-                    let initial = try FSRS6ReviewCalculator().newCardSnapshot(id: id, now: now)
-                    let input = WCDBV3CardInput(
-                        cardID: id,
-                        question: card.question ?? "",
-                        answerText: card.answer,
-                        choices: card.choices,
-                        correctIndices: card.correctAnswerIndices,
-                        cardType: card.cardType ?? 0,
-                        imageData: card.imageData
-                    )
-                    try await repo.insertNewCard(input, initial: initial, now: now)
-                    if self.pending == nil { self.reloadSession() }
-                } catch {
-                    self.displayFailure(error)
-                }
+        // Dedicated V3 native editor. Legacy generic ImSubmit remains for
+        // other callers; new cards use the same V3 WCDB and FSRS-6 authority.
+        let composer = ImpressV3CardComposerViewController()
+        composer.onSave = { [weak self] input in
+            guard let self else { throw CocoaError(.userCancelled) }
+            let store = try self.repository ?? ImpressV3ReviewEnvironment.repository()
+            let now = Date()
+            let initial = try FSRS6ReviewCalculator().newCardSnapshot(
+                id: input.cardID, now: now)
+            try await store.insertNewCard(input, initial: initial, now: now)
+            // Never restart a live review or reveal/grade a card as a side
+            // effect of creating content. Empty sessions may reload once.
+            if self.items.isEmpty, self.pending == nil, !self.isLoading {
+                self.reloadSession()
             }
         }
-        present(submit, animated: true)
+        let navigation = ImNavigationViewController(rootViewController: composer)
+        navigation.modalPresentationStyle = .pageSheet
+        if #available(iOS 15.0, *) {
+            navigation.sheetPresentationController?.detents = [.large()]
+        }
+        present(navigation, animated: true)
     }
 
     private func enableReminders() {

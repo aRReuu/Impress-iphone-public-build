@@ -2,13 +2,14 @@
   "schema_version": 1,
   "authority": {
     "repository": "aRReuu/Impress-iphone",
-    "branch": "feature/impress-v3-apple-native-r04",
-    "source_head_sha": "9804343b4998870ec8f6298ed9d1dde2c67e2911",
-    "baseline_20261017_sha": "9078600d9be7be048a550d32d43322e55e7d866d"
+    "branch": "feature/impress-v3-r04-2-information-architecture",
+    "source_head_sha": "3d2e0f064610e8f28c7803a845616490e84702c7",
+    "baseline_20261017_sha": "9078600d9be7be048a550d32d43322e55e7d866d",
+    "original_r03_source_sha": "9804343b4998870ec8f6298ed9d1dde2c67e2911"
   },
   "public_repository": "aRReuu/Impress-iphone-public-build",
   "public_commit_sha": "resolved by CI using git rev-parse HEAD; see package-manifest.json",
-  "baseline": "Impress V3.1 2026-10-15 / R03 2026-10-16",
+  "baseline": "Impress V3.1 / R03 frozen / R04.2-A,B candidate 2026-10-17",
   "copied_text_candidates": 150,
   "copied_text_source_count": 150,
   "normalized_public_files": [
@@ -48,12 +49,9 @@
     "Xcode 16.4 legacy Pods minimum iOS target: 14.0",
     "R04 Xcode27: test target inherited CocoaPods search paths; SDK27 deployment floor 15 overridden in CI"
   ],
-  "public_branch": "feature/apple-native-r04-sdk27",
+  "public_branch": "feature/impress-v3-r04-2-build",
   "last_mirror_update": "R04.1 screenshot-guided source changes (6 Swift production/test files); SDK27 testing and unsigned candidate",
   "screenshot_policy": "Screenshots only assessed in private conversation, not uploaded or mirrored; some show private content",
-  "copy_summary": {
-    "source": "six individually compared and pattern-screened files",
-    "private_commit": "9804343b4998870ec8f6298ed9d1dde2c67e2911",
-    "unchanged": "WCDB.swift 1.1.0, ReviewWCDBRepository, FSRS-6, Obsidian productionWriteEnabled=false; original private docs"
-  }
+  "copy_summary": "R04.2-A/B source snapshot: native standalone composer, consistent home actions, contiguous Vault list. Private docs not mirrored. WCDB/FSRS/productionWriteEnabled unchanged.",
+  "r04_2_batch": "R04.2-C not yet implemented or available in UI"
 }

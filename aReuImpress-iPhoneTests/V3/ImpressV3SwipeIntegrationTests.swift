@@ -373,3 +373,79 @@ final class ImpressR041NativeNavigationTests: XCTestCase {
         XCTAssertNotEqual(browser.navigationItem.rightBarButtonItem?.title, "复制问题")
     }
 }
+
+
+// R04.2: native creation must be separate from legacy generic ImSubmit,
+// must preserve uncommitted content when switching card types, and must
+// serialize choice answers without changing WCDB schema or FSRS semantics.
+@MainActor
+final class ImpressR042CardComposerTests: XCTestCase {
+    func testChoiceSerializesWithoutSpecialSyntax() throws {
+        var draft = ImpressV3CardDraft()
+        draft.kind = .multipleChoice
+        draft.question = "唐朝开国皇帝是谁？"
+        draft.choices = [
+            .init(text: "李世民", isCorrect: false),
+            .init(text: "李渊", isCorrect: true),
+            .init(text: "李白", isCorrect: false)
+        ]
+        let input = try draft.validatedInput()
+        XCTAssertEqual(input.cardType, CardType.multipleChoice.rawValue)
+        XCTAssertEqual(input.question, "唐朝开国皇帝是谁？")
+        XCTAssertEqual(input.choices, "李世民\n李渊\n李白")
+        XCTAssertEqual(input.correctIndices, "1")
+        XCTAssertEqual(input.answerText, "李渊")
+    }
+
+    func testMultipleAnswerSerializesSortedIndicesAndSourcePath() throws {
+        var draft = ImpressV3CardDraft()
+        draft.kind = .multipleChoice
+        draft.question = "选择正确选项"
+        draft.allowsMultipleCorrect = true
+        draft.sourceNotePath = "知识/物理/问题.md"
+        draft.choices = [
+            .init(text: "C", isCorrect: true),
+            .init(text: "A", isCorrect: false),
+            .init(text: "B", isCorrect: true)
+        ]
+        let card = try draft.validatedInput()
+        XCTAssertEqual(card.correctIndices, "0,2")
+        XCTAssertEqual(card.sourceNotePath, "知识/物理/问题.md")
+    }
+
+    func testInvalidChoiceRefusesSaveAndDoesNotGuessCorrectAnswer() {
+        var draft = ImpressV3CardDraft()
+        draft.kind = .multipleChoice
+        draft.question = "Question"
+        draft.choices = [.init(text: "A"), .init(text: "B")]
+        XCTAssertThrowsError(try draft.validatedInput())
+        draft.choices[0].isCorrect = true
+        draft.choices[1].text = "A"
+        XCTAssertThrowsError(try draft.validatedInput())
+    }
+
+    func testSwitchingVisibleEditorPreservesQuestionAndAnswer() throws {
+        let composer = ImpressV3CardComposerViewController()
+        composer.loadViewIfNeeded()
+        func descendants<T: UIView>(_ root: UIView, matching type: T.Type) -> [T] {
+            (root as? T).map { [$0] } ?? root.subviews.flatMap { descendants($0, matching: type) }
+        }
+        let fields = descendants(composer.view, matching: UITextView.self)
+        XCTAssertEqual(fields.count, 2)
+        guard fields.count == 2 else { return }
+        fields[0].text = "问题草稿"
+        fields[1].text = "答案草稿"
+        let switchers = descendants(composer.view, matching: UISegmentedControl.self)
+        guard let picker = switchers.first(where: { $0.numberOfSegments == 3 }) else {
+            return XCTFail("Missing native card type switcher")
+        }
+        picker.selectedSegmentIndex = 1
+        picker.sendActions(for: .valueChanged)
+        picker.selectedSegmentIndex = 2
+        picker.sendActions(for: .valueChanged)
+        picker.selectedSegmentIndex = 0
+        picker.sendActions(for: .valueChanged)
+        XCTAssertEqual(fields[0].text, "问题草稿")
+        XCTAssertEqual(fields[1].text, "答案草稿")
+    }
+}

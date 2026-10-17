@@ -47,7 +47,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
 {
     private var cancellables = Set<AnyCancellable>()
     
-    let tableView = UITableView(frame: .zero, style: .insetGrouped)
+    let tableView = UITableView(frame: .zero, style: .plain)
     ///
     private var viewModel: ImNotesViewModelProtocol! = ImpressNotesViewModel()
     
@@ -120,14 +120,9 @@ class ImpressNoteListTableViewController: ImBaseViewController
     /// 设置导航栏按钮
     private func setupNavigationBarItems()
     {
-        // 笔记查看器按钮（左上角）
-        let viewerButton = UIBarButtonItem(
-            barButtonSystemItem: .bookmarks,
-            target: self,
-            action: #selector(openNoteViewer)
-        )
-        navigationItem.leftBarButtonItem = viewerButton
-        
+        // R04.2: No legacy database-ID viewer in the V3 Notes tab.
+        navigationItem.leftBarButtonItem = nil
+
         // P0-1: explicit read-only external Vault probe. The old importer
         // is still available only as a first-time, NON-overwriting local copy.
         let connectVault = UIAction(title: "选择 Obsidian Vault（只读）",
@@ -148,13 +143,6 @@ class ImpressNoteListTableViewController: ImBaseViewController
             connectVault, inspectSaved, disconnectVault
         ])
         navigationItem.rightBarButtonItem = vaultItem
-    }
-    
-    /// 打开笔记查看器
-    @objc private func openNoteViewer()
-    {
-        let gridVC = ImGridViewController()
-        navigationController?.pushViewController(gridVC, animated: true)
     }
     
     // The picker grants scoped access; all file probes run off the main
@@ -377,9 +365,11 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
     {
         view.addSubview(tableView)
         tableView.backgroundColor = bgColor
-        tableView.contentInsetAdjustmentBehavior = .never
+        tableView.contentInsetAdjustmentBehavior = .automatic
         tableView.translatesAutoresizingMaskIntoConstraints = false
-        tableView.showsVerticalScrollIndicator = false
+        tableView.showsVerticalScrollIndicator = true
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 65
         let safeArea = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
             tableView.topAnchor.constraint(equalTo: safeArea.topAnchor),
@@ -389,7 +379,6 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
         ])
         tableView.delegate = self
         tableView.dataSource = self
-        tableView.showsVerticalScrollIndicator = false
         tableView.register(ImPreChatListCell.self,
                            forCellReuseIdentifier: reuseID)
         tableView.tableFooterView = UIView(frame: .zero)
@@ -398,48 +387,48 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
         tableView.refreshControl = refresh
     }
     
-    func numberOfSections(in tableView: UITableView) -> Int
-    {
-        return externalMode ? visibleExternalNotes.count : viewModel.currentNotesCount
-    }
-    
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int
-    {
-        return 1
+    func numberOfSections(in tableView: UITableView) -> Int {
+        // External Vault is one continuous list, not one giant rounded
+        // section for every Markdown file. Legacy section identities remain.
+        externalMode ? 1 : viewModel.currentNotesCount
     }
 
     func tableView(_ tableView: UITableView,
-                   willDisplay cell: UITableViewCell,
-                   forRowAt indexPath: IndexPath)
-    {
-        cell.accessoryType = .none
-        cell.subviews.forEach { $0.alpha = 0 }
-        UIView.animate(withDuration: ImAnimationConfig.cellMiniDuration,
-                       delay: ImAnimationConfig.cellMiniDuration,
-                       options: [.curveEaseInOut]) {
-            cell.subviews.forEach { $0.alpha = 1 }
-        } completion: { (flag) in}
+                   numberOfRowsInSection section: Int) -> Int {
+        externalMode ? visibleExternalNotes.count : 1
     }
-    
+
     func tableView(_ tableView: UITableView,
-                   cellForRowAt indexPath: IndexPath) -> UITableViewCell
-    {
-        guard let cell = tableView.dequeueReusableCell(withIdentifier: reuseID,
-                                                     for: indexPath) as? ImPreChatListCell else {
-            return UITableViewCell()
-        }
+                   titleForHeaderInSection section: Int) -> String? {
+        externalMode ? "当前来源 · Obsidian（只读）" : nil
+    }
+
+    func tableView(_ tableView: UITableView,
+                   cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         if externalMode {
-            guard visibleExternalNotes.indices.contains(indexPath.section) else {
+            guard visibleExternalNotes.indices.contains(indexPath.row) else {
                 return UITableViewCell()
             }
-            let item = visibleExternalNotes[indexPath.section]
-            cell.questionLabel.text = item.title
-            cell.contentLabel.text = "Obsidian 共享笔记 · 只读"
-            cell.sourceLabel.text = item.identity.relativePath
-            cell.sourceLabel.isHidden = false
-            cell.statusIndicator.image = UIImage(systemName: "doc.text")
-            cell.statusIndicator.tintColor = .systemBlue
-        } else if let note = viewModel.getCurrentNote(indexPath: indexPath) {
+            let note = visibleExternalNotes[indexPath.row]
+            let identifier = "vault-note-row"
+            let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
+                ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
+            var content = UIListContentConfiguration.subtitleCell()
+            content.text = note.title
+            content.secondaryText = note.identity.relativePath
+            content.image = UIImage(systemName: "doc.text")
+            content.imageProperties.tintColor = .systemBlue
+            content.textProperties.numberOfLines = 2
+            content.secondaryTextProperties.numberOfLines = 2
+            cell.contentConfiguration = content
+            cell.accessoryType = .disclosureIndicator
+            return cell
+        }
+        guard let cell = tableView.dequeueReusableCell(withIdentifier: reuseID,
+                   for: indexPath) as? ImPreChatListCell else {
+            return UITableViewCell()
+        }
+        if let note = viewModel.getCurrentNote(indexPath: indexPath) {
             cell.configure(with: note)
         }
         return cell
@@ -450,8 +439,8 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
     {
         tableView.deselectRow(at: indexPath, animated: false)
         if externalMode {
-            guard visibleExternalNotes.indices.contains(indexPath.section) else { return }
-            let item = visibleExternalNotes[indexPath.section]
+            guard visibleExternalNotes.indices.contains(indexPath.row) else { return }
+            let item = visibleExternalNotes[indexPath.row]
             ImVaultReadSync.shared.read(item.identity) { [weak self] result in
                 guard let self = self,
                       self.externalMode,
