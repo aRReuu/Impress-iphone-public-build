@@ -1,24 +1,30 @@
-# BUILD_AND_SIGN — Unsigned iPhoneOS arm64 Debug candidate
+# BUILD_AND_SIGN — Impress V3.2 public feature branch
 
-## GitHub-hosted build
-Open the Actions tab in this public repository and select Impress V3.1 P0-P2 Public Build. A push to main also initiates the build. The workflow installs Pods, generates independently authored neutral build assets, tests portable Swift, builds Debug/Release Simulator, runs Xcode XCTest, builds Debug iphoneos and packages only Payload/aReuImpress-iPhone.app into an unsigned IPA. It verifies ZIP integrity and publishes an IPA SHA-256 manifest and logs.
+## Current executable workflow
+For active V3.2 use `feature/impress-v3-r04-2-build` and `.github/workflows/r04-2-privacy-retirement-validation.yml`. Other older R03/main or calibration-v01 workflows have different trigger rules and must not be treated as sign-off of the active branch.
 
-The IPA is named Impress-V3.1-P0P2-<PUBLIC_SHA12>-unsigned.ipa. The commit SHA in this name is the sanitized public snapshot, not the private upstream commit. The package manifest records both. If CI fails, do not treat an uploaded partial log as proof of a complete IPA.
+GitHub Actions installs pinned CocoaPods, runs all portable Swift Core tests (including calibration), audits retired native Chat and public Git history for credentials, compiles the Simulator app, runs full UIKit XCTest, compiles the `aReuImpress-iPhone-AltStore` iPhoneOS ARM64 app with `CODE_SIGNING_ALLOWED=NO`, verifies executable, unsigned state, ZIP and SHA-256, and uploads the testing Artifact.
 
-## Reproducible local macOS build (no Apple signing credentials)
-Use a compatible Xcode installation and CocoaPods. In the repository root:
+## Explicitly incomplete original App Icon
+Public source intentionally includes seven unchanged original iPhone AppIcon PNGs but lacks byte-identical `AppIcon.appiconset/icon_1024.png` (expected Git blob `f5a0edd2f317c7104441ee8798fb0fbf00cff9e5`). No image is generated or scaled to replace it.
+The native-qa CI modifies `Contents.json` **only inside its ephemeral runner** to omit the unavailable App Store marketing slot. An artifact whose IPA name includes `7icon-INCOMPLETE-unsigned` is thus a development candidate, never a Release PASS. `.github/scripts/verify_public_mirror.py` intentionally continues to fail the full eight-icon release gate until the owner explicitly supplies the authentic binary. Do not turn the gate off.
 
-    python3 .github/scripts/generate_neutral_assets.py
-    pod install
-    swift test --package-path Packages/ImpressReviewCore
-    xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
+## Validation commands
+On a trusted Mac with matching Xcode/CocoaPods:
 
-Find the app under the selected DerivedData/Build/Products/Debug-iphoneos directory, package a Payload directory into a ZIP with an .ipa suffix, and verify with unzip -tq. Do not publish device credentials to CI.
+```bash
+swift test --package-path Packages/ImpressReviewCore --parallel
+python3 .github/scripts/verify_retired_native_chat.py
+python3 .github/scripts/check_git_history_secrets.py
+pod install --repo-update
+xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination 'generic/platform=iOS Simulator' IPHONEOS_DEPLOYMENT_TARGET=15.0 CODE_SIGNING_ALLOWED=NO build
+xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone-AltStore -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' IPHONEOS_DEPLOYMENT_TARGET=15.0 CODE_SIGNING_ALLOWED=NO CODE_SIGN_ENTITLEMENTS= ENABLE_DEBUG_DYLIB=NO build
+```
 
-## Private personal-account re-signing
-An unsigned IPA cannot be installed directly. Use a device-side sideload/resigning tool that supports an IPA, or sign the built app with your own free Personal Team provisioning profile using Xcode on a Mac. For Windows-based sideloading, verify the chosen tool supports the iOS release and Apple personal-account restrictions.
+The full XCTest requires a real available iPhone Simulator destination and the project's shared XCTest scheme; consult CI rather than substituting a build-only command for the test result. Do not run the six non-icon placeholder generator on original icons.
 
-Free personal provisioning commonly limits certificate lifetime (often seven days) and may not provide iCloud or App Groups capabilities. This project's entitlements request App Groups and iCloud. A signing attempt may fail unless **a separate local signing copy** uses an eligible Bundle ID and strips unsupported entitlements and matching capabilities. Keep the repository and original private project unchanged. Disabling those entitlements may make iCloud-dependent features unavailable even when the app launches; validate and disclose this limitation. Never remove Vault conflict controls or enable production writes to work around signing constraints.
+## User signing and iCloud limitations
+The IPA is unsigned and must be signed with the user's own Apple identity/provisioning on a compatible tool. A free Personal Team can restrict iCloud and App Groups entitlements; removing entitlement requests may allow installation **but does not certify iCloud Files Provider access**. iCloud backup folder selection, security-scoped bookmarks, notification delivery after reboot, time-zone changes and dark/light UI require iPhone 13 physical QA.
 
 ## Provenance
-SOURCE_MANIFEST.json pins private upstream revision and public source rules; the Actions package-manifest.json embeds the actual public HEAD, upstream HEAD, SHA-256, build mode and unsigned status. Compare sha256sum / shasum -a 256 to the downloaded IPA before trusting it.
+Use GitHub Actions Artifact URL from the exact target SHA, SHA256SUMS / IPA_SHA256, Xcode job logs, and the application's bundle ID. `SOURCE_MANIFEST.json` preserves historical mirror provenance but its historical blob digests are not a claim that current V3.2 files are byte-identical to that snapshot. Never declare a Release, or modify private/main branches, without separate authorization.

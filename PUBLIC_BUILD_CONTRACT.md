@@ -1,31 +1,28 @@
-# PUBLIC_BUILD_CONTRACT — Impress V3.1 R03 P0–P2
+# PUBLIC_BUILD_CONTRACT — Impress V3.2 active public branch
 
-## Authority and scope
-The private feature branch aRReuu/Impress-iphone / feature/impress-v3-review-foundation is authoritative. This public repository contains a sanitized, single-snapshot source mirror and technical build rules only. It has an independent Git history. Do not copy upstream Docs, docs, notes, histories, or personal images.
+## Authority and provenance
+Development authority is `aRReuu/Impress-iphone-public-build`, branch `feature/impress-v3-r04-2-build`. The earlier private repository and private revision listed in `SOURCE_MANIFEST.json` are historical source lineage, not the current workflow, and shall not be modified under this contract. `feature/impress-calibration-v01` at `c16c4a605c5b6018861ff1691d6e6abbba0d8901` supplied V0.2 calibration business code. Do not merge public main or cherry-pick unrelated private work.
 
-## Startup and navigation
-AppDelegate -> SceneDelegate.initRootVC() -> ImTabBarViewController. In Debug, the public candidate compilation condition IMPRESS_V3_CANDIDATE makes ImpressV3ReviewEnvironment.pilotEnabled default to true on a fresh installation. Only two main tabs exist: 闪卡 and 笔记. Release behavior remains unchanged and must not silently migrate old user data.
+## Only four first-level native destinations
+`SceneDelegate -> ImTabBarViewController` presents `闪卡 / 校准 / 笔记 / 设置`. `ImpressV3ReviewEnvironment.pilotEnabled` is a no-op compatibility surface returning `true`; V3 startup never opens `impressdata.db`. Settings has three native groups (内容工具 / 学习节奏 / 数据安全). Keep Apple native semantic styles, Dynamic Type, Light/Dark, readable margins, and responsive touch targets.
 
-## Review core
-ImpressV3ReviewViewController -> review environment and database facade -> ReviewWCDBRepository -> FSRS6ReviewCalculator, with ImpressReviewCore for portable review state contracts and reminder planning. Use the existing WCDB atomic transaction and idempotency guarantees. Do not invent a parallel score algorithm. Show Answer precedes rating; directions: left Hard, up Good, right Easy, down Again. Card types: text QA, image, single/multiple choice. Long answers must scroll without triggering rating.
+## Independent business authorities
+- **Flashcards**: `ReviewWCDBRepository` + `FSRS6ReviewCalculator` + `ImpressReviewCore` review contracts. One WCDB transaction per FSRS event, idempotent rating, independent content CAS, SQL pagination, and schema upgrade from pre-R04.2 V3. Four swipe ratings (left Hard, up Good, right Easy, down Again). Text, image, single/multiple choice remain editable. Legacy migrations are not reintroduced.
+- **Calibration**: `CalibrationScoreCore` + `CalibrationCheckInCore` in the existing portable package. Four graded behavior indicators and one mood observation. Unknown is not failure; 1–5 mood and explicit skip never change score. Bonus and deduction each at most one per day with specific reason. Complete only when five assessments are explicit. Day goal snapshots are immutable after completion; gaps are not zero. Daily net, trailing 7-day mean and annual monthly means are different statistics.
+- **Obsidian**: external security-scoped original Vault is read-only in production; `ImVaultGuardedWrite.productionWriteEnabled = false` must remain. File Provider errors must be displayed rather than silently replaced by obsolete local Notes WCDB.
+- **Prompts**: locally editable template library; never auto-send private questions or Vault bytes to web chat.
 
-## User understanding / AI
-Record Understanding is an independent Sheet. Cancel means no persistence. Each committed answer forms a version in the history timeline; AI evaluation is separate and respects consent. Never upload private notes or Vault content to any provider absent explicit user confirmation. Provider keys are entered on-device, never embedded in this mirror or CI.
-
-## Obsidian P0 safety
-ImObsidianManager and ImVaultSyncCore coordinate security-scoped folder access, readonly relative-path Markdown indexing, private drafts, original content hashing, diff/conflict refusal, backup and writeback read-after-write checks. ImVaultGuardedWrite.productionWriteEnabled is intentionally false for production Vaults. Do not change this before real-device iCloud/File Provider testing.
-
-## P1 image pipeline
-PHPicker limited photo access, file-based ImageIO thumbnail decoding, cancellation without side effects, background compression, and atomic card creation; policy: ordinary photos <=1280px and target <=240KB; text screenshot <=2000px and target <=480KB; hard limit ~650KB. UI/database behavior requires simulator tests and real-device validation.
+## Storage, backup and restore
+`Documents/ImpressV3/ReviewV3.sqlite` = flashcards/FSRS. `Application Support/ImpressV3/LearningEntry-v1.json` = learning history. `UserDefaults/ImpressV3LocalPromptLibraryV1` = prompts. `Application Support/ImpressCalibration/checkins-v1.json` = calibration. External Obsidian originals are never included.
+`ImpressV3BackupCoordinator` is the **sole** backup authority. V1 ZIP contains SQLite, learning JSON and prompt JSON with manifest. V2 adds `checkins-v1.json`; both validate ZIP CRC, per-file SHA-256 and SQLite integrity, while V2 also semantically validates the calibration ledger before import. V1 recovery must retain any existing newer calibration ledger. Explicit restore preview and confirmation, local rollback snapshot, next-cold-start replacement, and failure rollback are required. No CloudKit, GitHub Token or external server is used.
+Current ZIP is **unencrypted**: CRC and SHA establish integrity, not confidentiality. iCloud Drive folder selection requires user authorization and does not certify server synchronization; filesystem scope and manual restoration must be evaluated on device.
 
 ## Notifications
-Existing ImpressV3NotificationCoordinator implements Off / Smart / Daily Habit. Do not change FSRS due-date calculations to satisfy reminder behavior.
+`ImpressV3NotificationCoordinator` is the sole `UNUserNotificationCenterDelegate`. `ImpressCalibrationReminderCoordinator` owns only the `impress.calibration.v1.` identifiers and bounded 20:00/22:00 scheduling for 14 days after user authorization. Completion revokes that day's pending reminders without canceling tomorrow; turning calibration off must not remove FSRS identifiers. iOS reminders can be dismissed and permissions withheld; no permanent push claim.
 
-## Package and project files
-Packages/ImpressReviewCore -> portable Swift tests. Podfile + Podfile.lock -> WCDB, MarkdownKit, IQKeyboardManagerSwift, MarkdownView dependencies; CI runs pod install rather than copying Pods. Shared Xcode project, workspace, and scheme support Debug/Release and iPhoneOS arm64. Build with CODE_SIGNING_ALLOWED=NO and no personal DEVELOPMENT_TEAM. Real signing is done off-repository.
+## Build, privacy and release
+The `r04-2-privacy-retirement-validation.yml` workflow runs Core tests, historical credential checks, Simulator build and full native XCTest, then unsigned ARM64 candidate packing and SHA verification. A green source CI is not the iPhone 13 physical-device gate, not iCloud-server sync verification, and not a final original branded icon guarantee.
+Preserve the original seven public iPhone AppIcon sizes byte-for-byte. `icon_1024.png` remains missing and blocks final release; the explicit test-only catalog adjustment is **not** a release workaround. Never generate substitutes, commit personal data, add private Docs/images/keys, enable Vault source writes, or remove a failing safety test to force a green CI.
 
-## Public security / asset policy
-Never add Docs, docs, xcuserdata, original upstream git history, secrets, certs, provisioning profiles, true Vaults or notebook databases. No upstream raster originals with unknown redistribution rights. The CI neutral image generator fills required image paths before build. These substitutions affect appearance only and are disclosed; do not assert pixel-perfect R03 art reproduction from public build without comparison.
-
-## Acceptance
-Three distinct axes: source/security audit, executable Swift and Xcode tests, and simulator UI smoke. A passing archive test does not imply a successful runtime. Physical device iCloud entitlement and Vault writeback validation remain NOT TESTED until conducted on an owned iPhone.
+## Maintenance and sign-off
+Follow [CALIBRATION_V3_2_INTEGRATION.md](CALIBRATION_V3_2_INTEGRATION.md) for the five-indicator rules, calendar boundaries, storage schemas, notification namespace and backup member list. Test results must reference the exact GitHub Actions run and SHA; the previous verified R04.2 baseline (`e9eb5e92679907ab95c6aff615d5a6719b69eb46`, 78/78 UIKit tests) predates the calibration merge. V3.2 is not PASS until its exact final HEAD completes all regression jobs. Protect `main` and all unrelated branches.

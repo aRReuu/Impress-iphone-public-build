@@ -372,7 +372,29 @@ actor ImpressV3BackupCoordinator {
     /// Execute before V3 Repository initializes on the NEXT cold start.
     /// Restore is never allowed to replace an open WCDB pool.
     static func applyPendingAtColdLaunch() throws {
-        let root = try supportDirectory()
+        try applyPendingAtColdLaunch(
+            root: supportDirectory(),
+            documents: FileManager.default.urls(
+                for: .documentDirectory, in: .userDomainMask)[0],
+            calibration: ImpressCalibrationLocalStore.canonicalURL(),
+            prompts: .standard, failAfterCalibration: false)
+    }
+
+    #if DEBUG
+    /// Deterministic, disposable-directory restore fault injection.
+    /// Never writes the real application's SQLite or Vault during XCTest.
+    static func testApplyPendingAtColdLaunch(
+        root: URL, documents: URL, calibration: URL,
+        prompts: UserDefaults, failAfterCalibration: Bool = false) throws {
+        try applyPendingAtColdLaunch(root: root, documents: documents,
+            calibration: calibration, prompts: prompts,
+            failAfterCalibration: failAfterCalibration)
+    }
+    #endif
+
+    private static func applyPendingAtColdLaunch(
+        root: URL, documents: URL, calibration: URL,
+        prompts: UserDefaults, failAfterCalibration: Bool) throws {
         let pending = root.appendingPathComponent("ImpressV3PendingRestore")
         guard FileManager.default.fileExists(atPath: pending.path) else { return }
         let manifest = try JSONDecoder().decode(ImpressV3BackupManifest.self,
@@ -398,11 +420,10 @@ actor ImpressV3BackupCoordinator {
             // A V1 backup never had calibration; retain local V3.2 history.
             restoredCalibration = nil
         }
-        let oldPromptData = UserDefaults.standard.data(
+        let oldPromptData = prompts.data(
             forKey: ImpressV3PromptLibrary.storageKey)
-        let liveFolder = FileManager.default.urls(
-            for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ImpressV3", isDirectory: true)
+        let liveFolder = documents.appendingPathComponent(
+            "ImpressV3", isDirectory: true)
         try FileManager.default.createDirectory(
             at: liveFolder, withIntermediateDirectories: true)
         let current = liveFolder.appendingPathComponent("ReviewV3.sqlite")
@@ -413,7 +434,6 @@ actor ImpressV3BackupCoordinator {
         let fileManager = FileManager.default
         let journalFolder = root.appendingPathComponent("ImpressV3", isDirectory: true)
         let journal = journalFolder.appendingPathComponent("LearningEntry-v1.json")
-        let calibration = ImpressCalibrationLocalStore.canonicalURL()
         let previousCalibration = previous.appendingPathComponent("checkins-v1.json")
         var touchedCalibration = false
         var installedDB = false
@@ -437,7 +457,7 @@ actor ImpressV3BackupCoordinator {
             }
             try fileManager.copyItem(at: pending.appendingPathComponent(
                 "LearningEntry-v1.json"), to: journal)
-            try ImpressV3PromptLibrary.save(restoredPrompts)
+            try ImpressV3PromptLibrary.save(restoredPrompts, to: prompts)
             if let restoredCalibration {
                 try fileManager.createDirectory(
                     at: calibration.deletingLastPathComponent(),
@@ -450,6 +470,9 @@ actor ImpressV3BackupCoordinator {
                 _ = try ImpressCalibrationLocalStore.validateArchiveData(
                     Data(contentsOf: calibration))
             }
+            #if DEBUG
+            if failAfterCalibration { throw ImpressV3BackupFailure.invalidArchive }
+            #endif
             // Moving staging away atomically prevents unintended repeat
             // recovery when temporary cleanup fails.
             let applied = root.appendingPathComponent(
@@ -479,10 +502,10 @@ actor ImpressV3BackupCoordinator {
                 try? fileManager.removeItem(at: journal)
             }
             if let oldPromptData {
-                UserDefaults.standard.set(oldPromptData,
+                prompts.set(oldPromptData,
                     forKey: ImpressV3PromptLibrary.storageKey)
             } else {
-                UserDefaults.standard.removeObject(forKey: ImpressV3PromptLibrary.storageKey)
+                prompts.removeObject(forKey: ImpressV3PromptLibrary.storageKey)
             }
             for suffix in ["", "-wal", "-shm"] {
                 let path = URL(fileURLWithPath: current.path + suffix)

@@ -1,40 +1,32 @@
-# SMOKE_TEST_MATRIX — Evidence, not assumptions
+# SMOKE_TEST_MATRIX — Impress V3.2 acceptance evidence
 
-Status on first publication: ALL NEW NATIVE GATES PENDING. The earlier 111/111 R03 checks tested a browser prototype; earlier G5 44/44 tests and IPA were on an older SHA. Those are **not** current native results.
+## Current evidence boundary
+Baseline R04.2 commit `e9eb5e92679907ab95c6aff615d5a6719b69eb46` completed [CI #39054675238](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39054675238): 78/78 UIKit XCTest, Core, Simulator and ARM64 candidate. **That run predates V3.2 calibration integration and does not sign off the newly added code.** Update this matrix only from the final target SHA and its real Actions log.
 
-## CI automated gates
-- Public-source scope and credential pattern checks
-- Portable Swift core: swift test on Ubuntu, independent job
-- Debug Simulator compilation with candidate startup condition
-- iOS Simulator XCTest: shared Xcode scheme; check exact test counts in xcresult/log
-- Release Simulator compilation (Release pilot policy unchanged)
-- Debug iPhoneOS arm64 compile with CODE_SIGNING_ALLOWED=NO
-- IPA Payload contains app executable, no bundled XCTest plug-in
-- ZIP integrity, binary architecture, SHA-256 and public commit provenance
+## Native Simulator / automation
+| Area | Required actual gate |
+| --- | --- |
+| Branch / privacy | Public feature HEAD, no private/main changes, credential and source privacy checks |
+| Core | All `ImpressReviewCore` tests including five-indicator scoring, calendar, mood skip, extras, trends and reminder plan |
+| Navigation | Exactly four tabs ordered 闪卡 / 校准 / 笔记 / 设置; no return to legacy entry |
+| Flashcards | Show Answer, four swipes, exactly-one FSRS event, card CRUD/pagination/content CAS and V3 schema upgrade |
+| Cards/media | Text QA, image BLOB, single/multiple choice, search, import, stale-save rejection |
+| Obsidian | External Vault read-only index, path containment, search and local attachments; no automatic original writes |
+| Calibration check-ins | All five evaluated, unknown remains unknown, mood not scored, mutable current goals, immutable historic snapshots, manual +/- boundaries |
+| Calibration UI/chart | Week 7 days, month 30 days, year monthly daily mean, axes, missing-day gaps, readable Dynamic Type |
+| Notifications | Calibration IDs separate from FSRS, permissions, duplicate reconciliation, pending-day cancellation and click route |
+| Backup V1 | Legacy 3-data-member ZIP remains readable; does not delete calibration ledger |
+| Backup V2 | SQLite, JSON learning history, prompts, image BLOB, FSRS events and checkins all survive CRC/SHA/semantic validation |
+| Restore | User confirmation, recovery preview, local rollback snapshot, cold-start substitution and fault-injected failure recovery |
+| Device build | iPhoneOS ARM64 unsigned app, no embedded XCTest, IPA ZIP integrity and SHA-256 Artifact |
 
-## Native functional smoke checklist
-Record results per test case as PASS / FAIL / NOT TESTED with simulator type and iOS runtime. Tests are not automatically PASS merely because Xcode built.
+## Device-only gates (not passed by Simulator)
+- iPhone 13 unsigned-IPA signing and actual launch; installation and retention after free seven-day re-signing.
+- iCloud Drive folder picker, stale bookmark after app restart, Files-provider local write versus server upload, offline retry.
+- Recovery from ZIP on a fresh device and app termination between staged restore and next cold start; no partial SQLite/JSON/prompt/calibration restore.
+- Local alert delivery at 20:00/22:00 across sleep/reboot, permission denial, Focus mode, timezone change, badges and FSRS coexistence.
+- UIKit appearance, Dynamic Type, Safe Area and Y-axis readability on iPhone 13, original iPhone App Icon visible; missing marketing 1024 icon still blocks final release.
+- External Obsidian Vault remains read-only by design, including iCloud placeholders, images and safe path resolution.
 
-1. Cold launch enters V3.1 flashcard view; exactly two tabs.
-2. Show Answer; four swipes map to Hard / Good / Easy / Again.
-3. Rating persistence, idempotency, FSRS6 rescheduling.
-4. Create text, image and multiple-choice/single-choice cards.
-5. PHPicker photo access (HEIC, PNG, JPEG), cancel; large file and storage failures.
-6. Compression targets and card write atomicity.
-7. Record Understanding cancel/commit; versioned history; AI feedback permission.
-8. Provider configuration, bad credentials and offline errors; editable prompts.
-9. Off / Smart / Daily Habit notification options and local reminder delivery.
-10. Notes list, Markdown links, local attachments and duplicate basenames.
-11. Authorized Obsidian Vault readonly indexing and folder identity.
-12. Private draft; SHA/diff guard, conflict refusal, recovery backup, no write-on-cancel.
-13. Long-answer scroll versus swipe gesture; dynamic type and small screens.
-
-## Physical-device-only or still-open gates
-- Security-Scoped Bookmark lifetime and iOS Files provider behavior: NOT TESTED
-- iCloud File Provider read/restore and real-device permission flows: NOT TESTED
-- Actual Photos picker HEIC performance on iPhone: NOT TESTED
-- iPhone notifications across sleep/reboot: NOT TESTED
-- Personal/free account entitlement provisioning and on-device install: NOT TESTED
-- Production Vault writeback: DISABLED BY DESIGN, not a missing test
-
-For a final release report, cross-link Actions run ID, exact SHA, XCTest .xcresult, build log and simulator video/screenshot evidence. A test source file is not itself a passing test report.
+## Mandatory evidence format
+Record final Git SHA, Actions run URL, each job conclusion, **total native XCTest passed/failed**, portable Swift tests and unsigned IPA SHA-256. A compiled source file is not a test result, and a CI artifact is not proof of phone-level Files/iCloud entitlement.

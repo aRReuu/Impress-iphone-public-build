@@ -362,6 +362,128 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         } catch is DecodingError { }
     }
 
+    func testColdRestoreFaultRollsBackCalibrationPromptsJournalAndSQLite() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("restore-fault-" + UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let support = root.appendingPathComponent("support", isDirectory: true)
+        let docs = root.appendingPathComponent("docs", isDirectory: true)
+        let live = docs.appendingPathComponent("ImpressV3", isDirectory: true)
+        let calibration = root.appendingPathComponent("calibration/checkins-v1.json")
+        let pending = support.appendingPathComponent(
+            "ImpressV3PendingRestore", isDirectory: true)
+        let journal = support.appendingPathComponent("ImpressV3/LearningEntry-v1.json")
+        for location in [live, pending, journal.deletingLastPathComponent()] {
+            try FileManager.default.createDirectory(
+                at: location, withIntermediateDirectories: true)
+        }
+        let suiteName = "test.calibration.restore." + UUID().uuidString
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Isolated defaults unavailable"); return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let calc = FSRS6ReviewCalculator()
+        let date = Date(timeIntervalSince1970: 1_720_000_000)
+        let originalID = UUID()
+        let priorDB = try ReviewWCDBRepository(
+            databasePath: live.appendingPathComponent("ReviewV3.sqlite").path,
+            calculator: calc)
+        try await priorDB.insertNewCard(
+            WCDBV3CardInput(cardID: originalID, question: "Keep original", answerText: "old"),
+            initial: try calc.newCardSnapshot(id: originalID, now: date), now: date)
+        let priorLearning = [ImpressV3LearningEntry(
+            id: UUID(), cardID: originalID, question: "old entry",
+            userAnswer: "old answer", createdAt: date, aiEvaluation: nil)]
+        try JSONEncoder().encode(priorLearning).write(to: journal, options: .atomic)
+        let priorPrompts = [ImpressV3PromptTemplate(title: "Before", content: "before")]
+        let priorPromptBytes = try JSONEncoder().encode(priorPrompts)
+        defaults.set(priorPromptBytes, forKey: ImpressV3PromptLibrary.storageKey)
+        let priorCalibration = ImpressCalibrationLocalStore(storageURL: calibration)
+        var oldDay = try await priorCalibration.checkIn(on: date)
+        try oldDay.setOutcome(.completed, for: .sleep)
+        try await priorCalibration.save(oldDay)
+        let priorCalibrationBytes = try Data(contentsOf: calibration)
+
+        let nextID = UUID()
+        let newRepo = try ReviewWCDBRepository(
+            databasePath: root.appendingPathComponent("next/ReviewV3.sqlite").path,
+            calculator: calc)
+        try await newRepo.insertNewCard(
+            WCDBV3CardInput(cardID: nextID, question: "Restored", answerText: "new"),
+            initial: try calc.newCardSnapshot(id: nextID, now: date), now: date)
+        _ = try await newRepo.commit(ReviewSubmission(
+            eventID: UUID(), cardID: nextID, expectedRevision: 0,
+            rating: .good, reviewedAt: date.addingTimeInterval(1)))
+        try await newRepo.createConsistentBackup(
+            to: pending.appendingPathComponent("ReviewV3.sqlite"))
+        let nextLearning = [ImpressV3LearningEntry(
+            id: UUID(), cardID: nextID, question: "new entry",
+            userAnswer: "new answer", createdAt: date, aiEvaluation: "new feedback")]
+        try JSONEncoder().encode(nextLearning).write(
+            to: pending.appendingPathComponent("LearningEntry-v1.json"))
+        let nextPrompts = [ImpressV3PromptTemplate(
+            title: "After", content: "after restore")]
+        try JSONEncoder().encode(nextPrompts).write(
+            to: pending.appendingPathComponent("prompts.json"))
+        let nextCalibration = ImpressCalibrationLocalStore(
+            storageURL: root.appendingPathComponent("next/checkins-v1.json"))
+        var nextDay = try await nextCalibration.checkIn(on: date)
+        for kind in CalibrationIndicator.behaviorIndicators {
+            try nextDay.setOutcome(.completed, for: kind)
+        }
+        try nextDay.setMood(2)
+        try await nextCalibration.save(nextDay)
+        let nextLedger = try await nextCalibration.archiveData()
+        try nextLedger.write(to: pending.appendingPathComponent("checkins-v1.json"))
+        let names = ["ReviewV3.sqlite", "LearningEntry-v1.json",
+                     "prompts.json", "checkins-v1.json"]
+        let entries = try names.map {
+            try ImpressV3BackupArchive.inspectFile(
+                pending.appendingPathComponent($0), name: $0).0
+        }
+        try JSONEncoder().encode(ImpressV3BackupManifest.make(entries)).write(
+            to: pending.appendingPathComponent("manifest.json"))
+
+        do {
+            try ImpressV3BackupCoordinator.testApplyPendingAtColdLaunch(
+                root: support, documents: docs, calibration: calibration,
+                prompts: defaults, failAfterCalibration: true)
+            XCTFail("Injected failure after calibration replacement must rollback")
+        } catch ImpressV3BackupFailure.invalidArchive { }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: pending.path))
+        let rolledBack = try ReviewWCDBRepository(
+            databasePath: live.appendingPathComponent("ReviewV3.sqlite").path,
+            calculator: calc)
+        let oldCard = try await rolledBack.content(for: originalID)
+        XCTAssertEqual(oldCard?.question, "Keep original")
+        let absentNewCard = try await rolledBack.content(for: nextID)
+        XCTAssertNil(absentNewCard)
+        XCTAssertEqual(try Data(contentsOf: calibration), priorCalibrationBytes)
+        XCTAssertEqual(try JSONDecoder().decode([ImpressV3LearningEntry].self,
+            from: Data(contentsOf: journal)), priorLearning)
+        XCTAssertEqual(defaults.data(forKey: ImpressV3PromptLibrary.storageKey),
+                       priorPromptBytes)
+
+        try ImpressV3BackupCoordinator.testApplyPendingAtColdLaunch(
+            root: support, documents: docs, calibration: calibration,
+            prompts: defaults)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: pending.path))
+        let installed = try ReviewWCDBRepository(
+            databasePath: live.appendingPathComponent("ReviewV3.sqlite").path,
+            calculator: calc)
+        let installedCard = try await installed.content(for: nextID)
+        XCTAssertEqual(installedCard?.question, "Restored")
+        let installedEvents = try await installed.reviewHistory(for: nextID)
+        XCTAssertEqual(installedEvents.count, 1)
+        XCTAssertEqual(try JSONDecoder().decode([ImpressV3LearningEntry].self,
+            from: Data(contentsOf: journal)), nextLearning)
+        XCTAssertEqual(defaults.data(forKey: ImpressV3PromptLibrary.storageKey),
+                       try JSONEncoder().encode(nextPrompts))
+        XCTAssertEqual(try ImpressCalibrationLocalStore.validateArchiveData(
+            Data(contentsOf: calibration)), 1)
+    }
+
     func testNewCardCommitsOneEventAndRetriesIdempotently() async throws {
         let path = temporaryPath()
         let calculator = FSRS6ReviewCalculator()

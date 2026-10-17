@@ -35,7 +35,7 @@
   "ui_artwork_note": "7 original AppIcon PNGs (iPhone sizes) copied byte-for-byte from private project. App Store 1024 marketing icon remains private. All non-icon sample art remains private; CI creates only 6 synthetic stubs required for older references.",
   "policies": {
     "production_vault_write_enabled": false,
-    "release_default_legacy_unchanged": true,
+    "release_default_legacy_unchanged": false,
     "personal_apple_certificates_in_repository": false,
     "only_authorized_original_raster_paths": [
       "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_40.png",
@@ -105,5 +105,36 @@
     "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_180.png": "65d28cc1984cf706cce3f4059647a9a8ded31f58"
   },
   "original_icon_source_head": "8bc49e0ad85a98aa7003f16733c64693aecf82b6",
-  "original_1024_marketing_icon_status": "Private only: 1,514,144-byte PNG cannot be read through the connected GitHub Contents API (>1 MB); not substituted or fabricated; optional iOS-marketing catalog slot omitted from AltStore build mirror."
+  "original_1024_marketing_icon_status": "Private only: 1,514,144-byte PNG cannot be read through the connected GitHub Contents API (>1 MB); not substituted or fabricated; optional iOS-marketing catalog slot omitted from AltStore build mirror.",
+  "current_development_authority": {
+    "repository": "aRReuu/Impress-iphone-public-build",
+    "branch": "feature/impress-v3-r04-2-build",
+    "product_version": "Impress V3.2",
+    "calibration_source_branch": "feature/impress-calibration-v01",
+    "calibration_source_head_sha": "c16c4a605c5b6018861ff1691d6e6abbba0d8901",
+    "calibration_source_role": "historical feature provenance, no source-branch edits",
+    "final_ci_status": "PENDING_VERIFICATION"
+  },
+  "v3_2_calibration": {
+    "authoritative_scoring": "Packages/ImpressReviewCore/Sources/ImpressReviewCore/CalibrationScoreCore.swift",
+    "authoritative_check_in": "Packages/ImpressReviewCore/Sources/ImpressReviewCore/CalibrationCheckInCore.swift",
+    "store": "aReuImpress-iPhone/VC/MainVCs/ImCalibrationVC/ImpressCalibrationLocalStore.swift",
+    "notifications": "aReuImpress-iPhone/VC/MainVCs/ImCalibrationVC/ImpressCalibrationReminderCoordinator.swift",
+    "first_level_tabs": [
+      "闪卡",
+      "校准",
+      "笔记",
+      "设置"
+    ],
+    "archive_format_versions": [
+      1,
+      2
+    ],
+    "archive_v2_member": "checkins-v1.json",
+    "archive_encrypted": false,
+    "vault_source_writes_enabled": false,
+    "marketing_icon_1024_present": false,
+    "iphone13_device_validation": "NOT_TESTED"
+  },
+  "historical_provenance_note": "authority, source_files_sha, source_head_sha, original_r03_source_sha and earlier CI failures preserve historical public-mirror provenance only; these are not live V3.2 content checksums or approval to modify the private repository."
 }
