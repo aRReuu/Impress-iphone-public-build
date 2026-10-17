@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate neutral build-only raster assets. No private or third-party images."""
+"""Generate only non-icon build placeholders. Original AppIcon never modified."""
 from __future__ import annotations
 
 import hashlib
@@ -30,15 +30,7 @@ def paint(path: Path, width: int, height: int, kind: str) -> None:
         row = bytearray([0])
         for x in range(width):
             t = y / max(height - 1, 1)
-            if kind == "icon":
-                color = (25 + int(t * 15), 31 + int(t * 12), 53 + int(t * 20))
-                stem = (width * 0.44 <= x <= width * 0.56 and height * 0.30 <= y <= height * 0.72)
-                cross = (width * 0.32 <= x <= width * 0.68 and
-                         (height * 0.30 <= y <= height * 0.39 or
-                          height * 0.63 <= y <= height * 0.72))
-                if stem or cross:
-                    color = (215, 243, 239)
-            elif kind == "wallpaper":
+            if kind == "wallpaper":
                 color = (24 + int(t * 25), 31 + int(t * 20), 50 + int(t * 31))
             elif kind == "portrait":
                 color = (47 + int(t * 20), 62 + int(t * 20), 82 + int(t * 22))
@@ -69,9 +61,9 @@ def paint(path: Path, width: int, height: int, kind: str) -> None:
 
 
 def main() -> None:
-    icons = RES / "Assets.xcassets" / "AppIcon.appiconset"
-    for edge in (40, 58, 60, 80, 87, 120, 180, 1024):
-        paint(icons / f"icon_{edge}.png", edge, edge, "icon")
+    # AppIcon images are checked-in, byte-for-byte originals from the private
+    # authority. NEVER draw, regenerate, resize or overwrite any AppIcon file.
+    # Only non-icon build stubs are generated below. No private art is copied.
     card_dir = RES / "ImCard"
     for rating in ("again", "hard", "easy", "normal"):
         paint(card_dir / f"imcard_{rating}@2x.png", 120, 120, rating)
@@ -85,8 +77,7 @@ def main() -> None:
     )
     temporary.unlink()
     outputs = sorted(
-        list(icons.glob("icon_*.png"))
-        + list(card_dir.glob("*.png")) + [RES / "grandmother.jpg"]
+        list(card_dir.glob("*.png")) + [RES / "grandmother.jpg"]
     )
     print(json.dumps({
         "count": len(outputs),

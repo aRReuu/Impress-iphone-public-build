@@ -9,7 +9,7 @@
   },
   "public_repository": "aRReuu/Impress-iphone-public-build",
   "public_commit_sha": "CI resolves git rev-parse HEAD; release attestation includes final public SHA and IPA digest",
-  "baseline": "Impress V3.1 R04.2-D4 system-following Light/Dark mode QA candidate 2026-10-17",
+  "baseline": "Impress V3.1 R04.2-D4.1, original iPhone AppIcon from private (binary-exact), 2026-10-17",
   "copied_text_candidates": 154,
   "copied_text_source_count": 154,
   "normalized_public_files": [
@@ -28,15 +28,27 @@
     "impressBuild.sh",
     "codemagic.yaml",
     "upstream .github workflows",
-    "original raster images and photographs"
+    "all original wallpapers/photos/internal raster artwork and original 1024x1024 marketing icon; only 7 original iPhone AppIcon PNGs are explicitly public"
   ],
-  "excluded_original_binary_files": 14,
-  "generated_neutral_assets_at_ci": 14,
-  "ui_artwork_note": "Neutral placeholders are used for raster art whose redistribution rights were not verified. They are not a pixel-perfect R03 artwork replacement.",
+  "excluded_original_binary_files": 7,
+  "generated_neutral_assets_at_ci": 6,
+  "ui_artwork_note": "7 original AppIcon PNGs (iPhone sizes) copied byte-for-byte from private project. App Store 1024 marketing icon remains private. All non-icon sample art remains private; CI creates only 6 synthetic stubs required for older references.",
   "policies": {
     "production_vault_write_enabled": false,
     "release_default_legacy_unchanged": true,
-    "personal_apple_certificates_in_repository": false
+    "personal_apple_certificates_in_repository": false,
+    "only_authorized_original_raster_paths": [
+      "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_40.png",
+      "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_58.png",
+      "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_60.png",
+      "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_80.png",
+      "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_87.png",
+      "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_120.png",
+      "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_180.png"
+    ],
+    "private_ios_marketing_icon_not_published": true,
+    "original_in_app_iPhone_icons": true,
+    "original_non_icon_artwork_private": true
   },
   "audit": {
     "text_files_individually_fetched": 150,
@@ -50,9 +62,9 @@
     "R04 Xcode27: test target inherited CocoaPods search paths; SDK27 deployment floor 15 overridden in CI"
   ],
   "public_branch": "feature/impress-v3-r04-2-build",
-  "last_mirror_update": "D4.1 correction: Xcode 27 no longer exposes CGColorEqualToColor as callable API; use CGColor Equatable in UIKit appearance regression. All other D4 source unchanged.",
-  "screenshot_policy": "Screenshots only assessed in private conversation, not uploaded or mirrored; some show private content",
-  "copy_summary": "6 V3 source/test files SHA-identical with private canonical tree. Private Docs, notes, originals and keys excluded.",
+  "last_mirror_update": "Original artwork policy: only seven original iPhone AppIcon PNGs copied byte-identical, generator permanently disabled for AppIcon; no original startup/wallpaper/card/sample artwork leaves private repository.",
+  "screenshot_policy": "No user screenshots or private notes/artifacts copied; only explicit original iPhone AppIcon sizes authorized.",
+  "copy_summary": "Private source code unchanged; 7 original iPhone AppIcon binary blobs public by explicit owner permission, 1024px App Store artwork and all non-icon visuals retained privately. 6 non-icon CI placeholders generated but not tracked.",
   "r04_2_batch": "Existing R04.2-C/C1 importer verified prior run; R04.2-D2 full XCTest/ARM64 pending CI",
   "r04_2_test_fix": "legacy native XCTest menu assertion replaced with two toolbar action semantics (no removal of existing tests)",
   "source_files_sha": {
@@ -82,5 +94,16 @@
   "appearance_authority": "aReuImpress-iPhone/Utils/Constansts/ImColorConstants.swift",
   "appearance_policy": "System UIUserInterfaceStyle Automatic; dynamic grouped/secondary surfaces; light/dark on-accent text, semantic feedback alpha; bundled Markdown fixed white CSS overridden via trusted CSS media query; swipe overlay CGColors re-resolved on trait change.",
   "physical_gate": "iPhone13 manual Light/Dark transition while visible, dark Markdown tables/code, segmented selected contrast, twelve options, status bar, image and accessibility to approve.",
-  "latest_public_ci_last_known_failure": "D4 run 39026316747 failed test compilation on CGColorEqualToColor unavailable; corrected in D4.1."
+  "latest_public_ci_last_known_failure": "D4 run 39026316747 failed test compilation on CGColorEqualToColor unavailable; corrected in D4.1.",
+  "original_icon_blobs_sha": {
+    "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_40.png": "6b84184cc92c7087f67e0d4a04d58a35f3fd1857",
+    "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_58.png": "894f3d52817c02158534936fd78e2a6601542f2e",
+    "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_60.png": "fcb469c6d79da5286f798283057526eabdabb0a5",
+    "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_80.png": "a78b88d4a2b010dfe5bdfa595828e5781493741e",
+    "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_87.png": "4ace8e7e0954af127c9942e50924581ca7bdca0d",
+    "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_120.png": "bd5bdf9a26ba2cae6d795c30d9f699bebeede322",
+    "aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_180.png": "65d28cc1984cf706cce3f4059647a9a8ded31f58"
+  },
+  "original_icon_source_head": "8bc49e0ad85a98aa7003f16733c64693aecf82b6",
+  "original_1024_marketing_icon_status": "Private only: 1,514,144-byte PNG cannot be read through the connected GitHub Contents API (>1 MB); not substituted or fabricated; optional iOS-marketing catalog slot omitted from AltStore build mirror."
 }
