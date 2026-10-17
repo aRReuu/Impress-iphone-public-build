@@ -107,9 +107,9 @@ class ImMarkdownViewController: ImBaseViewController
         // 记录初始 attributed 文本（使用Down渲染后的富文本）
         originalAttributedText = textView.attributedText
 
-        // 设置摘录回调，实现笔记摘录逻辑
+        // Explicit user action only: no implicit native Chat persistence.
         textView.onTextExtracted = { [weak self] selectedText in
-            self?.createExcerpt(with: selectedText)
+            self?.showExcerptMenu(for: selectedText)
         }
 
         view.addSubview(textView)
@@ -399,10 +399,13 @@ extension ImMarkdownViewController
 
     /// 显示摘录菜单
     private func showExcerptMenu(for selectedText: String) {
-        let alertController = UIAlertController(title: "摘录内容", message: selectedText, preferredStyle: .actionSheet)
+        let alertController = UIAlertController(
+            title: "复制摘录",
+            message: "确认后仅复制到系统剪贴板；不会保存到旧聊天记录或自动上传。",
+            preferredStyle: .actionSheet)
 
-        let excerptAction = UIAlertAction(title: "创建摘录", style: .default) { [weak self] _ in
-            self?.createExcerpt(with: selectedText)
+        let excerptAction = UIAlertAction(title: "复制所选文字", style: .default) { _ in
+            UIPasteboard.general.string = selectedText
         }
 
         let cancelAction = UIAlertAction(title: "取消", style: .cancel, handler: nil)
@@ -419,36 +422,7 @@ extension ImMarkdownViewController
         present(alertController, animated: true, completion: nil)
     }
 
-    /// 创建摘录
-    private func createExcerpt(with content: String) {
-        guard let note = self.note, let fileName = note.mainTitle else {
-            ImAlertController.warningAlert("无法获取文件信息")
-            return
-        }
 
-        // 创建摘录模型
-        var excerptModel = ImPreChatModel()
-        excerptModel.question = content
-//        excerptModel.content = nil
-        excerptModel.noteID = note.identifier
-        excerptModel.questionSource = fileName
-        excerptModel.updateTime = Date()
-        excerptModel.isChated = false
-
-        // 保存到数据库
-        let preChatTable = ImDBTableType.preChat.description
-        dbShare.insertToDB(intoTable: preChatTable, with: [excerptModel]) { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success():
-//                    ImAlertController.alert(message: "摘录创建成功！")
-                    break
-                case .failure(let error):
-                    ImAlertController.warningAlert("摘录创建失败：\(error.localizedDescription)")
-                }
-            }
-        }
-    }
 }
 
 
