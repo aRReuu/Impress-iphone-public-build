@@ -79,11 +79,17 @@ actor ImpressV3BackupCoordinator {
                 // assuming an old successful cloud timestamp is up to date.
                 let pendingName = UserDefaults.standard.string(
                     forKey: Self.pendingCloudFileKey)
-                let pending = pendingName.flatMap { name in
-                    try? Self.localDirectory().appendingPathComponent(name)
+                let pending = pendingName.flatMap { name -> URL? in
+                    guard name.hasPrefix("ImpressV3-"), name.hasSuffix(".zip"),
+                          !name.contains("/") else { return nil }
+                    let item = try? Self.localDirectory().appendingPathComponent(name)
+                    guard let item, FileManager.default.fileExists(atPath: item.path) else {
+                        return nil
+                    }
+                    return item
                 }
                 if let candidate = pending ?? previous,
-                   pendingName != nil ||
+                   pending != nil ||
                    UserDefaults.standard.object(forKey: Self.cloudDateKey) == nil {
                     try Self.copyToAuthorizedCloud(candidate)
                 }
@@ -188,7 +194,10 @@ actor ImpressV3BackupCoordinator {
         let backups = all.filter {
             $0.lastPathComponent.hasPrefix("ImpressV3-") && $0.pathExtension == "zip"
         }.sorted { $0.lastPathComponent > $1.lastPathComponent }
+        let pending = UserDefaults.standard.string(forKey: pendingCloudFileKey)
         for obsolete in backups.dropFirst(limit) {
+            // Do not prune the sole pending cloud upload during an offline period.
+            guard obsolete.lastPathComponent != pending else { continue }
             try? FileManager.default.removeItem(at: obsolete)
         }
     }
@@ -211,10 +220,20 @@ actor ImpressV3BackupCoordinator {
         coordinator.coordinate(writingItemAt: target, options: [],
                                error: &coordinatorError) { location in
             do {
-                guard !FileManager.default.fileExists(atPath: location.path) else {
-                    throw ImpressV3BackupFailure.duplicateEntry
+                // A previous copy may have completed before the app could
+                // record the acknowledgement. An identical file is success;
+                // a different existing file must never be overwritten.
+                if !FileManager.default.fileExists(atPath: location.path) {
+                    try FileManager.default.copyItem(at: archive, to: location)
                 }
-                try FileManager.default.copyItem(at: archive, to: location)
+                let original = try ImpressV3BackupArchive.inspectFile(
+                    archive, name: archive.lastPathComponent).0
+                let copied = try ImpressV3BackupArchive.inspectFile(
+                    location, name: archive.lastPathComponent).0
+                guard original.sha256 == copied.sha256,
+                      original.size == copied.size else {
+                    throw ImpressV3BackupFailure.invalidChecksum
+                }
             } catch { copyError = error }
         }
         if let coordinatorError { throw coordinatorError }
