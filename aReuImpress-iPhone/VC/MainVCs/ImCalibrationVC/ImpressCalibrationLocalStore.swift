@@ -17,12 +17,18 @@ actor ImpressCalibrationLocalStore {
         var days: [String: CalibrationDayCheckIn] = [:]
     }
 
-    private let storageURL: URL = {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory,
-                                            in: .userDomainMask).first!
-        return base.appendingPathComponent("ImpressCalibration", isDirectory: true)
-                   .appendingPathComponent("checkins-v1.json")
-    }()
+    private let storageURL: URL
+
+    init(storageURL: URL? = nil) {
+        if let storageURL {
+            self.storageURL = storageURL
+        } else {
+            let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                                in: .userDomainMask).first!
+            self.storageURL = base.appendingPathComponent("ImpressCalibration", isDirectory: true)
+                                  .appendingPathComponent("checkins-v1.json")
+        }
+    }
 
     func goals() throws -> CalibrationGoals { try load().goals }
 
