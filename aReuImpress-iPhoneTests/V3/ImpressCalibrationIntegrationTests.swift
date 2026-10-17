@@ -43,19 +43,12 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
         var first = try await store.checkIn(on: timestamp, calendar: calendar)
         try first.setOutcome(.completed, for: .sleep)
         try await store.save(first)
-        await XCTAssertNoThrowAsync {
-            let original = try await store.checkIn(on: timestamp, calendar: calendar)
-            XCTAssertEqual(original.outcome(for: .sleep), .completed)
-        }
+        let original = try await store.checkIn(on: timestamp, calendar: calendar)
+        XCTAssertEqual(original.outcome(for: .sleep), .completed)
         try await store.setGoals(CalibrationGoals(custom: "新的自定义目标"))
         let reload = try await store.checkIn(on: timestamp, calendar: calendar)
         XCTAssertEqual(reload.goalsSnapshot.custom, first.goalsSnapshot.custom)
-        XCTAssertEqual(try await store.history().count, 1)
+        let all = try await store.history()
+        XCTAssertEqual(all.count, 1)
     }
-}
-
-// Lightweight async helper: exceptions become XCTest failures without global test fixtures.
-private func XCTAssertNoThrowAsync(_ body: () async throws -> Void,
-                                  file: StaticString = #filePath, line: UInt = #line) async {
-    do { try await body() } catch { XCTFail("Unexpected error: \(error)", file: file, line: line) }
 }
