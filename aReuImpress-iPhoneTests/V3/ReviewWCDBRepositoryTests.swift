@@ -5,6 +5,7 @@
 
 import XCTest
 import UIKit
+import SQLite3
 import ImpressReviewCore
 @testable import aReuImpress_iPhone
 
@@ -106,6 +107,73 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         } catch ReviewWCDBError.revisionConflict { }
         let unchanged = try await repo.content(for: ids[0])
         XCTAssertEqual(unchanged?.question, "Search 0")
+    }
+
+    func testExistingV3DatabaseUpgradesContentRevisionWithoutLosingCards() async throws {
+        let path = temporaryPath()
+        // Construct a real on-disk pre-R04.2 table. Never touch the user's
+        // installed application database or its original backup files.
+        var connection: OpaquePointer?
+        XCTAssertEqual(path.withCString {
+            sqlite3_open_v2($0, &connection,
+                SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil)
+        }, SQLITE_OK)
+        guard let db = connection else { XCTFail("SQLite fixture unavailable"); return }
+        func execute(_ sql: String) throws {
+            guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else {
+                throw NSError(domain: "ImpressV3LegacyFixture", code: Int(sqlite3_errcode(db)))
+            }
+        }
+        let oldID = UUID()
+        try execute("""
+            CREATE TABLE impress_v3_memory_card (
+                card_id TEXT PRIMARY KEY, question TEXT, answer_text TEXT,
+                choices TEXT, correct_indices TEXT, card_type INTEGER,
+                image_data BLOB, source_note_path TEXT, created_at REAL,
+                updated_at REAL, revision INTEGER, is_suspended INTEGER,
+                state INTEGER, due_at REAL, last_reviewed_at REAL,
+                scheduler_payload BLOB, schema_version INTEGER
+            );
+            """)
+        try execute("""
+            CREATE TABLE impress_v3_review_event (
+                event_id TEXT PRIMARY KEY, card_id TEXT, reviewed_at REAL,
+                event_payload BLOB, schema_version INTEGER
+            );
+            """)
+        try execute("""
+            INSERT INTO impress_v3_memory_card
+                (card_id, question, answer_text, card_type, revision,
+                 is_suspended, state, due_at, created_at, updated_at,
+                 scheduler_payload, schema_version)
+            VALUES ('\(oldID.uuidString)', 'Original saved V3',
+                    'Do not discard', 0, 0, 0, 0, 1720000000,
+                    1720000000, 1720000000, X'0102', 1);
+            """)
+        XCTAssertEqual(sqlite3_close(db), SQLITE_OK)
+        connection = nil
+
+        let calc = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(databasePath: path, calculator: calc)
+        let original = try await repo.content(for: oldID)
+        XCTAssertEqual(original?.question, "Original saved V3")
+        XCTAssertEqual(original?.answerText, "Do not discard")
+        XCTAssertEqual(original?.contentRevision, 0)
+        let newID = UUID()
+        let now = Date(timeIntervalSince1970: 1_720_000_123)
+        try await repo.insertNewCard(
+            WCDBV3CardInput(cardID: newID, question: "New V3", answerText: "A"),
+            initial: try calc.newCardSnapshot(id: newID, now: now), now: now)
+        try await repo.updateManagedCard(
+            WCDBV3CardInput(cardID: oldID, question: "Original preserved", answerText: "A"),
+            expectedRevision: 0, expectedContentRevision: 0)
+        let updatedOriginal = try await repo.content(for: oldID)
+        XCTAssertEqual(updatedOriginal?.contentRevision, 1)
+        let reopened = try ReviewWCDBRepository(databasePath: path, calculator: calc)
+        let all = try await reopened.listManagedCards()
+        XCTAssertEqual(Set(all.map(\.cardID)), Set([oldID, newID]))
+        let history = try await reopened.reviewHistory(for: newID)
+        XCTAssertTrue(history.isEmpty)
     }
 
     func testConcurrentContentEditorsRejectStaleSaveWithoutChangingFSRS() async throws {

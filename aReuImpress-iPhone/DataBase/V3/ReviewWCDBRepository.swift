@@ -197,6 +197,10 @@ public actor ReviewWCDBRepository: ReviewRepository {
             withIntermediateDirectories: true,
             attributes: nil
         )
+        // A device already running V3 may have the pre-R04.2 card table
+        // without content_revision. Upgrade that table in-place before WCDB
+        // prepares ORM bindings; never discard the live database or events.
+        try Self.migrateContentRevisionIfNeeded(at: databasePath)
         let db = Database(withPath: databasePath)
         try db.run(transaction: {
             try db.create(table: Self.cardsTable, of: WCDBV3CardRow.self)
@@ -205,6 +209,61 @@ public actor ReviewWCDBRepository: ReviewRepository {
         database = db
         self.calculator = calculator
         self.algorithmIdentifier = algorithmIdentifier
+    }
+
+
+    /// Idempotent, transactionally adds the R04.2 content CAS column to the
+    /// existing V3 table. A fresh install remains owned by WCDB's ORM create.
+    /// SQLite ALTER TABLE retains all original rows, blobs, and FSRS events.
+    private static func migrateContentRevisionIfNeeded(at path: String) throws {
+        guard FileManager.default.fileExists(atPath: path) else { return }
+        var connection: OpaquePointer?
+        let openResult = path.withCString {
+            sqlite3_open_v2($0, &connection, SQLITE_OPEN_READWRITE, nil)
+        }
+        guard openResult == SQLITE_OK, let db = connection else {
+            if let connection { sqlite3_close(connection) }
+            throw ReviewWCDBError.corruptRecord
+        }
+        defer { sqlite3_close(db) }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db,
+            "PRAGMA table_info(impress_v3_memory_card);", -1,
+            &statement, nil) == SQLITE_OK, let query = statement else {
+            if let statement { sqlite3_finalize(statement) }
+            throw ReviewWCDBError.corruptRecord
+        }
+        var hasTable = false
+        var hasColumn = false
+        var result = sqlite3_step(query)
+        while result == SQLITE_ROW {
+            hasTable = true
+            if let name = sqlite3_column_text(query, 1),
+               String(cString: UnsafeRawPointer(name)
+                    .assumingMemoryBound(to: CChar.self)) == "content_revision" {
+                hasColumn = true
+            }
+            result = sqlite3_step(query)
+        }
+        sqlite3_finalize(query)
+        guard result == SQLITE_DONE else { throw ReviewWCDBError.corruptRecord }
+        guard hasTable && !hasColumn else { return }
+        guard sqlite3_exec(db, "BEGIN IMMEDIATE;", nil, nil, nil) == SQLITE_OK else {
+            throw ReviewWCDBError.corruptRecord
+        }
+        do {
+            // The default backfills pre-R04.2 cards with content revision zero.
+            guard sqlite3_exec(db,
+                "ALTER TABLE impress_v3_memory_card " +
+                "ADD COLUMN content_revision INTEGER NOT NULL DEFAULT 0;",
+                nil, nil, nil) == SQLITE_OK else { throw ReviewWCDBError.corruptRecord }
+            guard sqlite3_exec(db, "COMMIT;", nil, nil, nil) == SQLITE_OK else {
+                throw ReviewWCDBError.corruptRecord
+            }
+        } catch {
+            _ = sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
+            throw error
+        }
     }
 
     /// Creates a new card with a full, explicitly encoded FSRS-6 initial state.
