@@ -54,9 +54,9 @@ def main() -> None:
     tracked = set(filter(None, names))
     expected_raster = {ICON_DIR + name for name in ORIGINAL}
     real_raster = {name for name in tracked if name.lower().endswith(RASTER)}
-    assert real_raster == expected_raster, (
-        "P0 fail: unauthorized/missing original AppIcon raster files",
-        sorted(real_raster ^ expected_raster))
+    unexpected_raster = real_raster - expected_raster
+    assert not unexpected_raster, (
+        "P2 fail: unauthorized raster images", sorted(unexpected_raster))
     for name in sorted(tracked):
         lower = name.lower()
         assert not lower.startswith(("docs/", "pods/", "private/", ".obsidian/")), (
@@ -74,6 +74,10 @@ def main() -> None:
             data = path.read_bytes()
             for label, pattern in SENSITIVE.items():
                 assert not pattern.search(data), ("P2 fail: credential signature", label, name)
+    print("PUBLIC_SOURCE_PRIVACY_AND_SECRET_SCAN_PASS")
+    missing_icons = expected_raster - real_raster
+    assert not missing_icons, (
+        "P0 fail: missing byte-identical original AppIcon files", sorted(missing_icons))
     for name, expected_sha in ORIGINAL.items():
         data = (ROOT / ICON_DIR / name).read_bytes()
         assert git_blob_sha(data) == expected_sha, ("P0 fail: original SHA", name)
