@@ -22,7 +22,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
     
     private let reuseID = "impress-note-native-cell"
     // External Vault never merges into the legacy Note WCDB table.
-    private var externalMode = false
+    private var externalMode = true
     private var externalNotes: [ImVaultIndexNote] = []
     private var externalSearchText = ""
     private var externalLoading = false
@@ -78,7 +78,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
     /// 初始化UI
     private func initUISetting()
     {
-        title = ImpressV3ReviewEnvironment.pilotEnabled ? "笔记" : imNotesTitle 
+        title = "笔记"
         view.backgroundColor = ImpressV3ReviewEnvironment.pilotEnabled
             ? ImpressV3Appearance.page : bgColor
 //        navigationItem.largeTitleDisplayMode = .always
@@ -137,7 +137,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
         alert.addAction(UIAlertAction(title: "取消", style: .cancel))
         alert.addAction(UIAlertAction(title: "断开", style: .destructive) { _ in
             ImVaultReadOnlyProbe.shared.disconnectSavedPermission()
-            self.externalMode = false
+            self.externalMode = true
             self.externalNotes = []
             self.externalSearchText = ""
             self.externalError = nil
@@ -244,12 +244,13 @@ class ImpressNoteListTableViewController: ImBaseViewController
             // Invalidate callbacks from a previous authorization/source.
             externalReadGate.changeSource(to: nil)
             externalLoading = false
-            externalMode = false
+            // No legacy WCDB fallback; list always shows the authorized Vault.
+            externalMode = true
             externalNotes = []
             externalError = nil
             updateVaultEmptyState()
             tableView.refreshControl?.endRefreshing()
-            viewModel.fetchNotes(by: self)
+            tableView.reloadData()
         }
     }
 
@@ -258,7 +259,10 @@ class ImpressNoteListTableViewController: ImBaseViewController
         if !visibleExternalNotes.isEmpty { tableView.backgroundView = nil; return }
         let message = UILabel()
         message.text = externalError ??
-            (externalLoading ? "正在安全读取 Vault…" : "此 Vault 没有可读取的 Markdown 笔记")
+            (externalLoading ? "正在读取 Obsidian 全部文档…" :
+             ImVaultReadOnlyProbe.shared.hasAuthorizedBookmark
+                ? "当前 Vault 没有可读取的 Markdown 文档"
+                : "连接 Obsidian Vault 后，这里将显示全部文档")
         message.numberOfLines = 0
         message.textColor = ImpressV3Appearance.secondaryText
         message.textAlignment = .center

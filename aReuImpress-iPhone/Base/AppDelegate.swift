@@ -23,15 +23,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate
                     "kSystemPrompt", "kSystemPromptMigrated"] {
             UserDefaults.standard.removeObject(forKey: key)
         }
-        // A notification delegate must be installed before launch finishes.
-        // V3 never requests notification permission during bootstrap.
-        if ImpressV3ReviewEnvironment.pilotEnabled {
-            ImpressV3NotificationCoordinator.shared.installDelegate()
-        } else {
-            // Remove orphaned V3 requests when a Release install follows
-            // a previous Debug pilot; leave legacy notification policy intact.
-            ImpressV3NotificationCoordinator.shared.requestReconciliation()
-        }
+        // V3 alone handles notification routing; no retired reminder policy.
+        ImpressV3NotificationCoordinator.shared.installDelegate()
         return true
     }
 

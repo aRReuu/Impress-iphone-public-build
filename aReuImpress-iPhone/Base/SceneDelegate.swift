@@ -28,21 +28,13 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
                 requestIdentifier: response.notification.request.identifier) {
             ImpressV3NotificationRouteInbox.shared.enqueueReview()
         }
-        // Open and verify tables before the first card VC starts querying.
-        guard initDB() else {
-            showDatabaseUnavailable()
-            return
-        }
+        // Open only V3; the abandoned impressdata.db is not migrated,
+        // opened, cleared or recreated as part of the live startup path.
+        do { _ = try ImpressV3ReviewEnvironment.repository() }
+        catch { showDatabaseUnavailable(); return }
         initRootVC()
         ImpressV3NotificationRouteInbox.shared.deliverIfPossible(
             in: window?.rootViewController)
-        // Backups may present UIKit; the root controller must exist first.
-        dbShare.checkBackupReminder(from: window?.rootViewController ?? UIViewController()) { error in
-            if let error = error {
-                zcLog("Backup check failed: \(error.localizedDescription)")
-            }
-        }
-        initNotificationSetting()
         initKeyboard()
     }
     
@@ -65,16 +57,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
     @available(iOS 13.0, *)
     func sceneDidBecomeActive(_ scene: UIScene)
     {
-        // 3秒后重新计算并重置iCon角标数据
-        if ImpressV3ReviewEnvironment.pilotEnabled {
-            ImpressV3NotificationRouteInbox.shared.deliverIfPossible(
-                in: window?.rootViewController)
-            ImpressV3NotificationCoordinator.shared.requestReconciliation()
-        } else {
-            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + ImAnimationConfig.generateDelay) {
-                notificationShare.rescheduleDailyReminder()
-            }
-        }
+        ImpressV3NotificationRouteInbox.shared.deliverIfPossible(
+            in: window?.rootViewController)
+        ImpressV3NotificationCoordinator.shared.requestReconciliation()
     }
 }
 
@@ -90,23 +75,6 @@ extension SceneDelegate
         window?.makeKeyAndVisible()
     }
     
-    /// Initialize all required legacy tables; do not proceed on failure.
-    @discardableResult
-    private func initDB() -> Bool {
-        let manager = FileManager.default
-        do {
-            if !manager.fileExists(atPath: documentPath) {
-                try manager.createDirectory(atPath: documentPath,
-                                            withIntermediateDirectories: true,
-                                            attributes: nil)
-            }
-        } catch {
-            zcLog("Create database directory failed: \(error.localizedDescription)")
-            return false
-        }
-        return dbShare.createAllDB()
-    }
-
     private func showDatabaseUnavailable() {
         let unavailableVC = UIViewController()
         unavailableVC.view.backgroundColor = .systemBackground
@@ -126,12 +94,6 @@ extension SceneDelegate
         window?.makeKeyAndVisible()
     }
 
-    /// 关闭数据库
-    private func closeDB()
-    {
-        dbShare.closeDB()
-    }
-    
     /// 初始化键盘配置
     private func initKeyboard()
     {
@@ -145,21 +107,5 @@ extension SceneDelegate
         keyboard.keyboardDistanceFromTextField = defaultSpacing
     }
 
-    /// 初始化推送权限
-    private func initNotificationSetting()
-    {
-        // Never show a system permission prompt on V3 cold launch.
-        // Users may explicitly enable reminders from the V3 screen.
-        if !ImpressV3ReviewEnvironment.pilotEnabled {
-            notificationShare.requestAuthorization()
-        }
-    }
-    
-    private func launchDelay()
-    {
-        #if !DEBUG
-        Thread.sleep(forTimeInterval: ImAnimationConfig.generateDelay)
-        #endif
-    }
-    
+
 }

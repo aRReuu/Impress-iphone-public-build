@@ -23,9 +23,7 @@ class ImTabBarViewController: UITabBarController
 
     private func tabBarSetting()
     {
-        let cardVC: UIViewController = ImpressV3ReviewEnvironment.pilotEnabled
-            ? ImpressV3ReviewViewController()
-            : ImCardViewController()
+        let cardVC = ImpressV3ReviewViewController()
         let cardNav = ImNavigationViewController(rootViewController: cardVC)
         cardNav.tabBarItem.title = "闪卡"
         cardNav.tabBarItem.image = UIImage(systemName: "square.stack.3d.up")

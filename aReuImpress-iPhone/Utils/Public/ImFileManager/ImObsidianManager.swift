@@ -248,7 +248,6 @@ final class ImVaultReadOnlyProbe: NSObject, UIDocumentPickerDelegate {
         var count = 0
         var samples = [String]()
         var firstNote: URL?
-        var capped = false
         coordinator.coordinate(readingItemAt: scopedURL, options: [],
                                error: &coordinationError) { folder in
             do {
@@ -280,10 +279,6 @@ final class ImVaultReadOnlyProbe: NSObject, UIDocumentPickerDelegate {
                     if samples.count < 3 {
                         samples.append(String(file.standardizedFileURL.path.dropFirst(prefix.count)))
                     }
-                    if count >= 5000 {
-                        capped = true
-                        break
-                    }
                 }
             } catch { inspectionError = error }
         }
@@ -313,7 +308,7 @@ final class ImVaultReadOnlyProbe: NSObject, UIDocumentPickerDelegate {
             sampleRelativePaths: samples,
             sampleBytesRead: bytesRead,
             restoredFromBookmark: restored,
-            wasTruncated: capped)
+            wasTruncated: false)
     }
 }
 
@@ -468,7 +463,6 @@ final class ImVaultReadSync {
                     let id = try ImVaultFileIdentity(vaultID: vaultID, relativePath: relative)
                     notes.append(ImVaultIndexNote(identity: id, bytes: v.fileSize ?? 0,
                                                   modified: v.contentModificationDate))
-                    if notes.count > 5000 { throw ImVaultSyncFailure.incompleteIndex }
                 }
             } catch { operationError = error }
         }
