@@ -50,7 +50,7 @@ public enum CalibrationCheckInError: Error, Equatable, Sendable {
 
 public struct CalibrationDayCheckIn: Codable, Equatable, Sendable {
     public let dayID: String
-    public let goalsSnapshot: CalibrationGoals
+    public private(set) var goalsSnapshot: CalibrationGoals
     /// Four predetermined behavior assessments with stable IDs, even if the user renames goals.
     public private(set) var assessments: [CalibrationTaskAssessment]
     /// Explicit mood assessment is required to close the day, but never affects score.
@@ -72,6 +72,19 @@ public struct CalibrationDayCheckIn: Codable, Equatable, Sendable {
         self.bonusNote = nil
         self.deductionNote = nil
         _ = try CalibrationScoreCore.summarize(rawRecord)
+    }
+
+    /// Changing a still-open local day refreshes only changed goal rows;
+    /// previously marked outcomes for those changed goals require re-assessment.
+    /// Once all five are finalized, the day's original goals remain frozen.
+    public mutating func replaceGoalsForOpenDay(_ next: CalibrationGoals) throws {
+        try next.validate()
+        guard !isComplete else { return }
+        for kind in CalibrationIndicator.behaviorIndicators
+        where goalsSnapshot.title(for: kind) != next.title(for: kind) {
+            try setOutcome(.unrecorded, for: kind)
+        }
+        goalsSnapshot = next
     }
 
     public var pendingIndicators: [CalibrationIndicator] {
