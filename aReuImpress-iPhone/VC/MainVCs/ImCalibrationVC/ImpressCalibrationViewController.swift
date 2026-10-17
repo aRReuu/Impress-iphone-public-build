@@ -134,7 +134,8 @@ final class ImpressCalibrationViewController: UITableViewController {
                     averages.append(values[index] == nil ? nil :
                         recent.reduce(0, +) / Double(recent.count))
                 }
-                chart.update(values: values, smooth: averages, title: "月均每日得分")
+                chart.update(values: values, smooth: averages, title: "月均每日得分",
+                             labels: months.map { String($0.month) + "月" })
             } else {
                 let length = period.selectedSegmentIndex == 0 ? 6 : 29
                 let start = cal.date(byAdding: .day, value: -length, to: now)!
@@ -144,7 +145,8 @@ final class ImpressCalibrationViewController: UITableViewController {
                 chart.update(values: days.map { $0.netScore.map(Double.init) },
                              smooth: days.map(\.trailingSevenDayMean),
                              title: period.selectedSegmentIndex == 0 ?
-                                "每日净分与7日均线" : "近30日净分与7日均线")
+                                "每日净分与7日均线" : "近30日净分与7日均线",
+                             labels: days.map { String($0.dayID.suffix(5)) })
             }
         } catch {
             showError(error)
@@ -321,7 +323,7 @@ final class ImpressCalibrationViewController: UITableViewController {
             do {
                 let values = try await store.goals()
                 let alert = UIAlertController(title: "编辑四项行为标准",
-                    message: "更改仅影响新创建的每日记录；已有日期保留原目标快照。",
+                    message: "尚未完成的当日计划可调整；目标变化的项目会重新标为待评估。已完成的日期保留原目标。",
                     preferredStyle: .alert)
                 for value in [values.sleep, values.exercise, values.nutrition, values.custom] {
                     alert.addTextField { $0.text = value }
@@ -383,6 +385,7 @@ private final class ImpressCalibrationTrendChart: UIView {
     private var values: [Double?] = []
     private var smooth: [Double?] = []
     private var descriptionText = "还没有校准记录"
+    private var tickLabels: [String] = []
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -391,9 +394,11 @@ private final class ImpressCalibrationTrendChart: UIView {
     }
     required init?(coder: NSCoder) { super.init(coder: coder) }
 
-    func update(values: [Double?], smooth: [Double?], title: String) {
+    func update(values: [Double?], smooth: [Double?], title: String,
+                labels: [String]) {
         self.values = values
         self.smooth = smooth
+        self.tickLabels = labels
         descriptionText = title
         accessibilityLabel = title + "，" + values.compactMap { $0 }.count.description + "条有效记录"
         setNeedsDisplay()
@@ -406,31 +411,61 @@ private final class ImpressCalibrationTrendChart: UIView {
 
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
-        let box = rect.insetBy(dx: 12, dy: 18)
-        guard box.width > 0 && box.height > 0 else { return }
+        let box = CGRect(x: 32, y: 12, width: max(1, rect.width - 44),
+                         height: max(1, rect.height - 40))
         let all = (values + smooth).compactMap { $0 }
         let ceiling = max(1.0, ceil(all.map(abs).max() ?? 1.0))
         let y: (Double) -> CGFloat = { value in
-            box.midY - CGFloat(value / ceiling) * box.height * 0.44
+            box.midY - CGFloat(value / ceiling) * box.height * 0.46
         }
+        let axis = ImpressV3Appearance.divider.resolvedColor(with: traitCollection)
+        let muted = ImpressV3Appearance.secondaryText.resolvedColor(with: traitCollection)
+        let textAttributes: [NSAttributedString.Key: Any] = [
+            .font: ImpressV3Appearance.Typography.micro,
+            .foregroundColor: muted
+        ]
+        // Explicit Cartesian axes and simple positive/zero/negative y ticks.
         context.setLineWidth(1)
-        context.setStrokeColor(ImpressV3Appearance.divider.resolvedColor(with: traitCollection).cgColor)
-        context.move(to: CGPoint(x: box.minX, y: y(0)))
-        context.addLine(to: CGPoint(x: box.maxX, y: y(0)))
+        context.setStrokeColor(axis.cgColor)
+        context.move(to: CGPoint(x: box.minX, y: box.minY))
+        context.addLine(to: CGPoint(x: box.minX, y: box.maxY))
+        context.addLine(to: CGPoint(x: box.maxX, y: box.maxY))
         context.strokePath()
+        for number in [-ceiling, 0, ceiling] {
+            let lineY = y(number)
+            context.setStrokeColor(axis.withAlphaComponent(number == 0 ? 0.8 : 0.4).cgColor)
+            context.move(to: CGPoint(x: box.minX, y: lineY))
+            context.addLine(to: CGPoint(x: box.maxX, y: lineY))
+            context.strokePath()
+            let string = String(format: "%+.0f", number) as NSString
+            string.draw(at: CGPoint(x: 0, y: lineY - 7), withAttributes: textAttributes)
+        }
+        if !tickLabels.isEmpty {
+            let candidates = Array(Set([0, tickLabels.count/2, tickLabels.count-1])).sorted()
+            for index in candidates {
+                let value = tickLabels[index] as NSString
+                let size = value.size(withAttributes: textAttributes)
+                let x = box.minX + box.width * CGFloat(index) /
+                    CGFloat(max(1, tickLabels.count-1))
+                let origin = CGPoint(x: min(rect.width - size.width, max(0, x - size.width/2)),
+                                     y: box.maxY + 5)
+                value.draw(at: origin, withAttributes: textAttributes)
+            }
+        }
         func plot(_ data: [Double?], color: UIColor, width: CGFloat) {
             context.setStrokeColor(color.resolvedColor(with: traitCollection).cgColor)
             context.setLineWidth(width)
             context.setLineCap(.round)
             context.setLineJoin(.round)
-            var previousWasValue = false
+            var continuing = false
             for index in data.indices {
-                guard let value = data[index] else { previousWasValue = false; continue }
-                let x = box.minX + box.width * CGFloat(index) / CGFloat(max(1, data.count - 1))
+                guard let value = data[index] else { continuing = false; continue }
+                let x = box.minX + box.width * CGFloat(index) /
+                    CGFloat(max(1, data.count - 1))
                 let point = CGPoint(x: x, y: y(value))
-                if previousWasValue { context.addLine(to: point) }
+                if continuing { context.addLine(to: point) }
                 else { context.move(to: point) }
-                previousWasValue = true
+                continuing = true
             }
             context.strokePath()
         }
@@ -439,7 +474,8 @@ private final class ImpressCalibrationTrendChart: UIView {
         if values.compactMap({ $0 }).count == 1,
            let index = values.firstIndex(where: { $0 != nil }),
            let value = values[index] {
-            let x = box.minX + box.width * CGFloat(index) / CGFloat(max(1, values.count - 1))
+            let x = box.minX + box.width * CGFloat(index) /
+                CGFloat(max(1, values.count - 1))
             context.setFillColor(ImpressV3Appearance.accent.resolvedColor(with: traitCollection).cgColor)
             context.fillEllipse(in: CGRect(x: x-3, y: y(value)-3, width: 6, height: 6))
         }
