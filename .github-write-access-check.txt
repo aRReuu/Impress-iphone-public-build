@@ -1,0 +1,2 @@
+Impress V3.1 public build GitHub App permission verification.
+No private source, secret, user content or build credentials.
