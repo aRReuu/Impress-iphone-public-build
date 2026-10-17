@@ -266,6 +266,53 @@ public actor ReviewWCDBRepository: ReviewRepository {
         }
     }
 
+    #if DEBUG
+    /// Creates a disposable legacy V3 fixture with the application's existing
+    /// SQLCipher-compatible SQLite import. Never called during normal startup.
+    static func seedPreR042FixtureForTesting(at path: String, cardID: UUID) throws {
+        var pointer: OpaquePointer?
+        let result = path.withCString {
+            sqlite3_open_v2($0, &pointer,
+                SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil)
+        }
+        guard result == SQLITE_OK, let db = pointer else {
+            if let pointer { sqlite3_close(pointer) }
+            throw ReviewWCDBError.corruptRecord
+        }
+        defer { sqlite3_close(db) }
+        func execute(_ sql: String) throws {
+            guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else {
+                throw ReviewWCDBError.corruptRecord
+            }
+        }
+        try execute("""
+            CREATE TABLE impress_v3_memory_card (
+                card_id TEXT PRIMARY KEY, question TEXT, answer_text TEXT,
+                choices TEXT, correct_indices TEXT, card_type INTEGER,
+                image_data BLOB, source_note_path TEXT, created_at REAL,
+                updated_at REAL, revision INTEGER, is_suspended INTEGER,
+                state INTEGER, due_at REAL, last_reviewed_at REAL,
+                scheduler_payload BLOB, schema_version INTEGER
+            );
+            """)
+        try execute("""
+            CREATE TABLE impress_v3_review_event (
+                event_id TEXT PRIMARY KEY, card_id TEXT, reviewed_at REAL,
+                event_payload BLOB, schema_version INTEGER
+            );
+            """)
+        try execute("""
+            INSERT INTO impress_v3_memory_card
+                (card_id, question, answer_text, card_type, revision,
+                 is_suspended, state, due_at, created_at, updated_at,
+                 scheduler_payload, schema_version)
+            VALUES ('\(cardID.uuidString)', 'Original saved V3',
+                    'Do not discard', 0, 0, 0, 0, 1720000000,
+                    1720000000, 1720000000, X'0102', 1);
+            """)
+    }
+    #endif
+
     /// Creates a new card with a full, explicitly encoded FSRS-6 initial state.
     public func insertNewCard(_ input: WCDBV3CardInput,
                               initial: ReviewScheduleSnapshot,
