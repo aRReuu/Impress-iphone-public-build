@@ -28,6 +28,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
                 requestIdentifier: response.notification.request.identifier) {
             ImpressV3NotificationRouteInbox.shared.enqueueReview()
         }
+        if let response = connectionOptions.notificationResponse,
+           ImpressCalibrationReminderCoordinator.isCalibrationTap(response) {
+            ImpressCalibrationNotificationRouteInbox.shared.enqueue()
+        }
         // Open only V3; the abandoned impressdata.db is not migrated,
         // opened, cleared or recreated as part of the live startup path.
         do { _ = try ImpressV3ReviewEnvironment.repository() }
@@ -39,6 +43,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
         }
         ImpressV3NotificationRouteInbox.shared.deliverIfPossible(
             in: window?.rootViewController)
+        ImpressCalibrationNotificationRouteInbox.shared.deliverIfPossible(
+            in: window?.rootViewController)
+        ImpressCalibrationReminderCoordinator.shared.requestReconciliation()
         initKeyboard()
     }
     
@@ -71,7 +78,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
         }
         ImpressV3NotificationRouteInbox.shared.deliverIfPossible(
             in: window?.rootViewController)
+        ImpressCalibrationNotificationRouteInbox.shared.deliverIfPossible(
+            in: window?.rootViewController)
         ImpressV3NotificationCoordinator.shared.requestReconciliation()
+        ImpressCalibrationReminderCoordinator.shared.requestReconciliation()
     }
 }
 
