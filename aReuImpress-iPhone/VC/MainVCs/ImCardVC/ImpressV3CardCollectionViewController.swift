@@ -68,7 +68,7 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
         Task { [weak self] in
             guard let self else { return }
             do {
-                let next = try await repository.listManagedCards(
+                let next = try await self.repository.listManagedCards(
                     matching: query, offset: offset, limit: pageSize)
                 guard ticket == generation else { return }
                 loading = false
@@ -157,9 +157,9 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
             let now = Date()
             let initial = try FSRS6ReviewCalculator().newCardSnapshot(
                 id: input.cardID, now: now)
-            try await repository.insertNewCard(input, initial: initial, now: now)
-            onMutation?()
-            reloadCards()
+            try await self.repository.insertNewCard(input, initial: initial, now: now)
+            self.onMutation?()
+            self.reloadCards()
         }
         showComposer(composer)
     }
@@ -168,7 +168,7 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
         Task { [weak self] in
             guard let self else { return }
             do {
-                guard let stored = try await repository.content(for: item.cardID) else {
+                guard let stored = try await self.repository.content(for: item.cardID) else {
                     throw ReviewWCDBError.missingCard
                 }
                 let selections = Set((stored.correctIndices ?? "")
@@ -193,13 +193,13 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
                     draft: draft, editingCardID: item.cardID)
                 editor.onSave = { [weak self] input in
                     guard let self else { throw CocoaError(.userCancelled) }
-                    try await repository.updateManagedCard(
+                    try await self.repository.updateManagedCard(
                         input, expectedRevision: item.revision)
-                    onMutation?()
-                    reloadCards()
+                    self.onMutation?()
+                    self.reloadCards()
                 }
                 showComposer(editor)
-            } catch { showError(error) }
+            } catch { self.showError(error) }
         }
     }
 
@@ -216,12 +216,12 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await repository.setManagedCardSuspended(
+                try await self.repository.setManagedCardSuspended(
                     !item.isSuspended, id: item.cardID,
                     expectedRevision: item.revision)
-                onMutation?()
-                reloadCards()
-            } catch { showError(error) }
+                self.onMutation?()
+                self.reloadCards()
+            } catch { self.showError(error) }
         }
     }
 
@@ -236,11 +236,11 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
             guard let self else { return }
             Task {
                 do {
-                    try await repository.deleteManagedCard(
+                    try await self.repository.deleteManagedCard(
                         id: item.cardID, expectedRevision: item.revision)
-                    onMutation?()
-                    reloadCards()
-                } catch { showError(error) }
+                    self.onMutation?()
+                    self.reloadCards()
+                } catch { self.showError(error) }
             }
         })
         present(alert, animated: true)
