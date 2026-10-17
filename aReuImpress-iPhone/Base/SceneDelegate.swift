@@ -64,6 +64,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
     @available(iOS 13.0, *)
     func sceneDidBecomeActive(_ scene: UIScene)
     {
+        // Foreground resumes are new uses even without a cold launch.
+        // The coordinator avoids redundant copies when nothing changed.
+        Task(priority: .utility) {
+            await ImpressV3BackupCoordinator.shared.backupIfNeeded()
+        }
         ImpressV3NotificationRouteInbox.shared.deliverIfPossible(
             in: window?.rootViewController)
         ImpressV3NotificationCoordinator.shared.requestReconciliation()

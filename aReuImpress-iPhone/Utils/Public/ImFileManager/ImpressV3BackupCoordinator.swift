@@ -16,10 +16,38 @@ actor ImpressV3BackupCoordinator {
     private static let pendingCloudFileKey = "ImpressV3PendingCloudFile"
 
     private var active: Task<URL, any Swift.Error>?
+    private var pendingDebouncedBackup: Task<Void, Never>?
 
     static func markDataChanged() {
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastMutationKey)
         UserDefaults.standard.set(true, forKey: dirtyKey)
+        // A foreground session can last for hours; do not wait for suspension
+        // to protect recently committed FSRS or card changes.
+        Task(priority: .utility) {
+            await shared.scheduleDebouncedBackup()
+        }
+    }
+
+    private func scheduleDebouncedBackup() {
+        pendingDebouncedBackup?.cancel()
+        let last = UserDefaults.standard.object(forKey: Self.localDateKey) as? Date
+        let elapsed = Date().timeIntervalSince(last ?? .distantPast)
+        let waitSeconds = max(45, 20 * 60 - elapsed)
+        pendingDebouncedBackup = Task(priority: .utility) { [self] in
+            do { try await Task.sleep(nanoseconds: UInt64(waitSeconds * 1_000_000_000)) }
+            catch { return }
+            guard !Task.isCancelled else { return }
+            await self.backupIfNeeded()
+            // If a mutation landed mid-snapshot, keep it pending until the
+            // next eligible interval even without leaving the foreground.
+            let stillDirty = UserDefaults.standard.bool(forKey: Self.dirtyKey)
+            let sinceLast = Date().timeIntervalSince(
+                (UserDefaults.standard.object(forKey: Self.localDateKey) as? Date)
+                    ?? .distantPast)
+            if stillDirty && sinceLast < 20 * 60 {
+                self.scheduleDebouncedBackup()
+            }
+        }
     }
 
     static func supportDirectory() throws -> URL {
@@ -144,7 +172,12 @@ actor ImpressV3BackupCoordinator {
                 .replacingOccurrences(of: ":", with: "-") +
             "-" + String(UUID().uuidString.prefix(8)) + ".zip"
         let output = root.appendingPathComponent(archiveName)
+        // Only a fully verified snapshot gets a discoverable .zip filename.
+        // If iOS suspends the process mid-write, the partial file is never
+        // mistaken for the latest valid backup.
+        let partial = root.appendingPathComponent(".partial-" + UUID().uuidString)
         let result = try await Task.detached(priority: .utility) { () throws -> URL in
+            defer { try? FileManager.default.removeItem(at: partial) }
             let records = try names.map {
                 try ImpressV3BackupArchive.inspectFile(
                     staging.appendingPathComponent($0), name: $0).0
@@ -155,15 +188,16 @@ actor ImpressV3BackupCoordinator {
             try ImpressV3BackupArchive.write(
                 files: (names + ["manifest.json"]).map {
                     (name: $0, url: staging.appendingPathComponent($0))
-                }, destination: output)
+                }, destination: partial)
             let verification = staging.appendingPathComponent(".verified-" + UUID().uuidString)
-            _ = try ImpressV3BackupArchive.extract(source: output, destination: verification)
+            _ = try ImpressV3BackupArchive.extract(source: partial, destination: verification)
             try ImpressV3BackupArchive.verifySQLite(
                 verification.appendingPathComponent("ReviewV3.sqlite"))
             try FileManager.default.removeItem(at: verification)
             try FileManager.default.setAttributes([
                 .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication
-            ], ofItemAtPath: output.path)
+            ], ofItemAtPath: partial.path)
+            try FileManager.default.moveItem(at: partial, to: output)
             return output
         }.value
         // A new card/review commit may have arrived while this snapshot was
