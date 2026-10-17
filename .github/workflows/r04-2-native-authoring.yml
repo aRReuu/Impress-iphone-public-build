@@ -4,8 +4,15 @@ on:
   push:
     branches:
       - feature/impress-v3-r04-2-build
+      - feature/impress-calibration-v01
     paths:
       - 'aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/**'
+      - 'aReuImpress-iPhone/VC/MainVCs/ImCalibrationVC/**'
+      - 'aReuImpress-iPhone/Base/**'
+      - 'aReuImpress-iPhone/Utils/Public/ImNotification/**'
+      - 'aReuImpress-iPhone.xcodeproj/project.pbxproj'
+      - 'aReuImpress-iPhoneTests/V3/ImpressCalibrationIntegrationTests.swift'
+      - 'Packages/ImpressReviewCore/**'
       - '.github/workflows/r04-2-native-authoring.yml'
   workflow_dispatch:
 
