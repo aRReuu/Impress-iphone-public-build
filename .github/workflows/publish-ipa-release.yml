@@ -1,0 +1,66 @@
+name: Publish verified Impress V3.1 IPA direct download
+
+on:
+  push:
+    branches:
+      - release/ipa-direct-download
+    paths:
+      - .github/workflows/publish-ipa-release.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  github-release:
+    name: Publish existing passing IPA without rebuilding
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: a1e03e8926b0abb6606486f34569b0fcc87017e4
+      TAG: v3.1-p0p2-a1e03e8926b0
+      IPA: Impress-V3.1-P0P2-a1e03e8926b0-unsigned.ipa
+      EXPECTED_SHA256: f6d5fa31cba29076797901afc31bb1915870544186ae04a35977b898324525ab
+    steps:
+      - name: Retrieve passing CI artifact from run 38994006823
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/verified"
+          gh run download 38994006823 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name impress-v3-p0p2-unsigned-iphoneos-and-evidence \
+            --dir "$RUNNER_TEMP/verified"
+      - name: Enforce exact source and binary SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/verified"
+          test -s "$IPA"
+          test -f package-manifest.json
+          printf '%s  %s\n' "$EXPECTED_SHA256" "$IPA" | sha256sum --check
+          python3 - <<'PY'
+          import json, os, pathlib
+          m = json.loads(pathlib.Path("package-manifest.json").read_text())
+          assert m["public_commit_sha"] == os.environ["SOURCE_SHA"]
+          assert m["ipa_sha256"] == os.environ["EXPECTED_SHA256"]
+          assert m["ipa_file"] == os.environ["IPA"]
+          assert m["code_signing"].startswith("UNSIGNED")
+          print("SOURCE_AND_BINARY_SHA256 VERIFIED")
+          PY
+      - name: Publish single IPA as public GitHub Release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          ASSET="$RUNNER_TEMP/verified/$IPA"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" "$ASSET" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$SOURCE_SHA" \
+              --title "Impress V3.1 R03 P0-P2 — unsigned iPhoneOS IPA" \
+              --notes "Built and tested by GitHub Actions run 38994006823 from public source a1e03e8926b0abb6606486f34569b0fcc87017e4 (private authority 9078600d9be7be048a550d32d43322e55e7d866d). Swift Core, 46 iOS Simulator XCTest and iPhoneOS arm64 build passed. SHA-256: f6d5fa31cba29076797901afc31bb1915870544186ae04a35977b898324525ab. The IPA is UNSIGNED and requires private user re-signing. Physical device and live iCloud File Provider behavior NOT TESTED. Redistributable placeholder images are used for assets of unknown publication rights. Production Obsidian Vault writes remain DISABLED."
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json name,isDraft,url,assets
