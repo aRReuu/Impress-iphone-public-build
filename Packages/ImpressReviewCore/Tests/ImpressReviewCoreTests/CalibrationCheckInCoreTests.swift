@@ -95,6 +95,31 @@ final class CalibrationCheckInCoreTests: XCTestCase {
         XCTAssertFalse(CalibrationReminderPlan.isManaged("impress.v3.smart.123"))
     }
 
+    func testChangingOpenDayGoalInvalidatesOnlyChangedItem() throws {
+        var review = try newDay()
+        try review.setOutcome(.completed, for: .sleep)
+        try review.setOutcome(.missed, for: .custom)
+        try review.replaceGoalsForOpenDay(
+            CalibrationGoals(custom: "完成一次明确的个人计划"))
+        XCTAssertEqual(review.outcome(for: .sleep), .completed)
+        XCTAssertEqual(review.outcome(for: .custom), .unrecorded)
+        XCTAssertFalse(review.isComplete)
+        XCTAssertEqual(review.goalsSnapshot.custom, "完成一次明确的个人计划")
+    }
+
+    func testCompletedDayGoalSnapshotCannotBeRewritten() throws {
+        var review = try newDay()
+        for kind in CalibrationIndicator.behaviorIndicators {
+            try review.setOutcome(.completed, for: kind)
+        }
+        try review.setMood(3)
+        let previous = review.goalsSnapshot
+        try review.replaceGoalsForOpenDay(
+            CalibrationGoals(custom: "尝试覆盖历史目标"))
+        XCTAssertEqual(review.goalsSnapshot, previous)
+        XCTAssertEqual(try review.finalizedScore().netScore, 4)
+    }
+
     func testInvalidMoodOrEmptyGoalsAreRejected() throws {
         var review = try newDay()
         XCTAssertThrowsError(try review.setMood(7))
