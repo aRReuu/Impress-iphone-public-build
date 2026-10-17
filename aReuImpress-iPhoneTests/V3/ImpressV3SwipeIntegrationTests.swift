@@ -7,6 +7,31 @@ import ImpressReviewCore
 /// Uses the V3 database in an isolated temporary location on iOS Simulator.
 @MainActor
 final class ImpressV3SwipeIntegrationTests: XCTestCase {
+    func testNativeSegmentsRemainCenteredAfterWidthIsCapped() {
+        for compact in [false, true] {
+            let control = UISegmentedControl(items: ["问答", "选择", "图片"])
+            ImpressV3Appearance.styleSegmentedControl(control, prominent: true)
+            let row = ImpressV3Appearance.segmentedRow(control, compact: compact)
+            let host = UIView(frame: CGRect(x: 0, y: 0, width: 720, height: 80))
+            row.translatesAutoresizingMaskIntoConstraints = false
+            host.addSubview(row)
+            NSLayoutConstraint.activate([
+                row.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+                row.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+                row.topAnchor.constraint(equalTo: host.topAnchor),
+                row.bottomAnchor.constraint(equalTo: host.bottomAnchor)
+            ])
+            host.layoutIfNeeded()
+            let cap = compact
+                ? ImpressV3Appearance.Metrics.compactSegmentWidth
+                : ImpressV3Appearance.Metrics.maximumSegmentWidth
+            XCTAssertLessThanOrEqual(control.bounds.width, cap + 0.5)
+            XCTAssertEqual(control.center.x, row.bounds.midX, accuracy: 0.5)
+            XCTAssertGreaterThanOrEqual(control.frame.minX, -0.5)
+            XCTAssertLessThanOrEqual(control.frame.maxX, row.bounds.maxX + 0.5)
+        }
+    }
+
     private func makeRepository() throws -> ReviewWCDBRepository {
         let path = FileManager.default.temporaryDirectory
             .appendingPathComponent("V3Swipe-" + UUID().uuidString, isDirectory: true)

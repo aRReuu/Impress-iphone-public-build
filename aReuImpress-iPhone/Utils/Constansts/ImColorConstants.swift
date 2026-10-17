@@ -360,7 +360,8 @@ enum ImpressV3Appearance {
         let fill = control.widthAnchor.constraint(equalTo: container.widthAnchor)
         fill.priority = .defaultHigh
         NSLayoutConstraint.activate([
-            control.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            control.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            control.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor),
             control.topAnchor.constraint(equalTo: container.topAnchor),
             control.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             control.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor),
