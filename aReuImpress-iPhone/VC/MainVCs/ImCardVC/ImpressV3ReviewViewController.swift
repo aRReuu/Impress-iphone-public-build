@@ -722,6 +722,7 @@ enum ImpressV3LearningJournal {
               }) else {
             throw CocoaError(.fileWriteUnknown)
         }
+        ImpressV3BackupCoordinator.markDataChanged()
     }
 }
 

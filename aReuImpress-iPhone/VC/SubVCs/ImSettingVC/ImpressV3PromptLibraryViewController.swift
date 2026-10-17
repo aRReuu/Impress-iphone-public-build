@@ -53,6 +53,7 @@ enum ImpressV3PromptLibrary {
                 !body.isEmpty && body.count <= 6000
         }) else { throw Failure.invalid }
         store.set(try JSONEncoder().encode(items), forKey: storageKey)
+        ImpressV3BackupCoordinator.markDataChanged()
     }
 }
 

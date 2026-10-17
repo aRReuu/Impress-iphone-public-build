@@ -208,6 +208,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
                               now: Date) throws {
         let row = try Self.makeNewCardRow(input, initial: initial, now: now)
         try database.insert(objects: [row], intoTable: Self.cardsTable)
+        ImpressV3BackupCoordinator.markDataChanged()
     }
 
     /// One WCDB transaction for the entire reviewed batch. A collision or any
@@ -255,6 +256,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
                 try transaction.insert(objects: [row], intoTable: Self.cardsTable)
             }
         })
+        ImpressV3BackupCoordinator.markDataChanged()
         return rows.count
     }
 
@@ -396,6 +398,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
                       WCDBV3CardRow.Properties.revision == expectedRevision)
             guard tx.changes == 1 else { throw ReviewWCDBError.revisionConflict }
         })
+        ImpressV3BackupCoordinator.markDataChanged()
     }
 
     public func setManagedCardSuspended(_ suspended: Bool,
@@ -421,6 +424,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
                        WCDBV3CardRow.Properties.revision == expectedRevision)
             guard tx.changes == 1 else { throw ReviewWCDBError.revisionConflict }
         })
+        ImpressV3BackupCoordinator.markDataChanged()
     }
 
     /// Explicit destructive action only. Removes the card and its review-event
@@ -443,6 +447,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
                        WCDBV3CardRow.Properties.revision == expectedRevision)
             guard tx.changes == 1 else { throw ReviewWCDBError.revisionConflict }
         })
+        ImpressV3BackupCoordinator.markDataChanged()
     }
 
     /// One transaction: event replay check, optimistic revision check, state
@@ -549,6 +554,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
             throw error
         }
         guard let result = outcome else { throw ReviewWCDBError.corruptRecord }
+        ImpressV3BackupCoordinator.markDataChanged()
         return result
     }
 

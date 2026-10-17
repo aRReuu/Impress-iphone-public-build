@@ -250,7 +250,7 @@ enum ImpressV3BackupArchive {
                     try output.write(contentsOf: chunk)
                     remaining -= chunk.count
                 }
-                guard actualCRC ^ 0xFFFFFFFF == expectedCRC else {
+                guard (actualCRC ^ 0xFFFFFFFF) == expectedCRC else {
                     throw ImpressV3BackupFailure.invalidChecksum
                 }
                 found.append(.init(name: name, size: UInt64(uncompressed),

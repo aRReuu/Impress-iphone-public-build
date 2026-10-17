@@ -122,7 +122,7 @@ actor ImpressV3BackupCoordinator {
         let archiveName = "ImpressV3-" +
             ISO8601DateFormatter().string(from: Date())
                 .replacingOccurrences(of: ":", with: "-") +
-            "-" + UUID().uuidString.prefix(8) + ".zip"
+            "-" + String(UUID().uuidString.prefix(8)) + ".zip"
         let output = root.appendingPathComponent(archiveName)
         let result = try await Task.detached(priority: .utility) { () throws -> URL in
             let records = try names.map {
