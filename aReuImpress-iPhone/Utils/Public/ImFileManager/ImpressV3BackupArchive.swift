@@ -110,6 +110,46 @@ enum ImpressV3BackupArchive {
         return data
     }
 
+    /// Open read-only; never create or repair the restored file implicitly.
+    /// This is required in addition to ZIP CRC and manifest SHA checks.
+    static func verifySQLite(_ file: URL) throws {
+        var connection: OpaquePointer?
+        let rc = file.path.withCString {
+            sqlite3_open_v2($0, &connection, SQLITE_OPEN_READONLY, nil)
+        }
+        guard rc == SQLITE_OK, let db = connection else {
+            if let connection { sqlite3_close(connection) }
+            throw ImpressV3BackupFailure.invalidArchive
+        }
+        defer { sqlite3_close(db) }
+
+        func integerQuery(_ sql: String) throws -> Int32 {
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK,
+                  let statement else { throw ImpressV3BackupFailure.invalidArchive }
+            defer { sqlite3_finalize(statement) }
+            guard sqlite3_step(statement) == SQLITE_ROW else {
+                throw ImpressV3BackupFailure.invalidArchive
+            }
+            return sqlite3_column_int(statement, 0)
+        }
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "PRAGMA integrity_check;", -1, &statement, nil) == SQLITE_OK,
+              let statement else { throw ImpressV3BackupFailure.invalidArchive }
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW,
+              let raw = sqlite3_column_text(statement, 0),
+              String(cString: UnsafeRawPointer(raw).assumingMemoryBound(to: CChar.self)) == "ok",
+              sqlite3_step(statement) == SQLITE_DONE else {
+            throw ImpressV3BackupFailure.invalidArchive
+        }
+        let tables = try integerQuery(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND " +
+            "name IN ('impress_v3_memory_card','impress_v3_review_event');")
+        guard tables == 2 else { throw ImpressV3BackupFailure.invalidArchive }
+    }
+
     static func inspectFile(_ url: URL, name: String) throws -> (ImpressV3BackupFileRecord, UInt32) {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
