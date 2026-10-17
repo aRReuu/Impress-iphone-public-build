@@ -65,8 +65,6 @@ class ImExtractTextView: UITextView, UITextViewDelegate
                   shouldInteractWith URL: URL,
                   in characterRange: NSRange,
                   interaction: UITextItemInteraction) -> Bool {
-        let tappedText = (textView.text as NSString).substring(with: characterRange)
-        zcLog("clieked: \(tappedText)")
         return false
     }
     
@@ -108,13 +106,9 @@ class ImExtractTextView: UITextView, UITextViewDelegate
     @objc private func extractSpecifiedContent() {
         if let textRange = selectedTextRange,
            let text = text(in: textRange) {
-            if let callback = onTextExtracted {
-                // 新方式：通过block回调传递选中文本
-                callback(text)
-            } else {
-                // 向后兼容：如果没有设置回调，使用原有逻辑
-                insertExtractChat(by: text)
-            }
+            // A selection is private. Never persist it without an explicit
+            // consumer. The former fallback wrote to retired Chat storage.
+            onTextExtracted?(text)
             hideMenu()
         }
     }
@@ -130,21 +124,6 @@ extension ImExtractTextView
         guard let text = self.text, !text.isEmpty else { return }
         if let attributedText = markdownRenderer.parseMarkdown(text) {
             self.attributedText = attributedText
-        }
-    }
-}
-
-// MARK: - 保存数据
-extension ImExtractTextView {
-    func insertExtractChat(by title: String) {
-        var e = ImPreChatModel()
-        e.question = title
-        e.updateTime = Date()
-        dbShare.insertToDB(intoTable: ImDBTableType.preChat.description,
-                           with: [e]) { (result) in
-            if case .failure(let error) = result {
-                ImAlertController.warningAlert(error.localizedDescription)
-            }
         }
     }
 }
