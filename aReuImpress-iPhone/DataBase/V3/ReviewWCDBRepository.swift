@@ -148,6 +148,18 @@ public struct WCDBV3CardInput: Sendable {
     }
 }
 
+/// Lightweight, BLOB-free projection for the native V3 card collection.
+public struct WCDBV3ManagedCard: Sendable {
+    public let cardID: UUID
+    public let question: String
+    public let answerText: String?
+    public let cardType: Int
+    public let sourceNotePath: String?
+    public let isSuspended: Bool
+    public let revision: Int
+    public let updatedAt: Date
+}
+
 public struct WCDBV3CardContent: Sendable {
     public let cardID: UUID
     public let question: String
@@ -285,6 +297,152 @@ public actor ReviewWCDBRepository: ReviewRepository {
         row.schedulerPayload = initial.schedulerPayload
         row.schemaVersion = Self.schema
         return row
+    }
+
+    /// BLOB-free browse/search. Offset and limit are applied after filtering,
+    /// preserving results across card types without loading image_data.
+    /// An indexed database-side search can replace this projection later.
+    public func listManagedCards(matching search: String = "",
+                                 offset: Int = 0,
+                                 limit: Int = 100) throws -> [WCDBV3ManagedCard] {
+        guard offset >= 0, (1...200).contains(limit) else {
+            throw ReviewWCDBError.invalidSchedulerOutput
+        }
+        let rows: [WCDBV3CardRow] = try database.getObjects(
+            on: [
+                WCDBV3CardRow.Properties.cardID,
+                WCDBV3CardRow.Properties.question,
+                WCDBV3CardRow.Properties.answerText,
+                WCDBV3CardRow.Properties.cardType,
+                WCDBV3CardRow.Properties.sourceNotePath,
+                WCDBV3CardRow.Properties.isSuspended,
+                WCDBV3CardRow.Properties.revision,
+                WCDBV3CardRow.Properties.updatedAt
+            ], fromTable: Self.cardsTable)
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try rows.filter { row in
+            query.isEmpty || [row.question, row.answerText, row.sourceNotePath]
+                .compactMap { $0 }
+                .contains { $0.localizedStandardContains(query) }
+        }.sorted {
+            ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast)
+        }.dropFirst(min(offset, rows.count)).prefix(limit).map { row in
+            guard let rawID = row.cardID, let id = UUID(uuidString: rawID),
+                  let question = row.question, let type = row.cardType,
+                  let suspended = row.isSuspended, let revision = row.revision else {
+                throw ReviewWCDBError.corruptRecord
+            }
+            return WCDBV3ManagedCard(cardID: id, question: question,
+                answerText: row.answerText, cardType: type,
+                sourceNotePath: row.sourceNotePath,
+                isSuspended: suspended != 0, revision: revision,
+                updatedAt: row.updatedAt ?? .distantPast)
+        }
+    }
+
+    /// Update only content fields. Card identity, FSRS revision/schedule and
+    /// immutable review events remain intact. Optimistic version check prevents
+    /// editing a row concurrently changed by an in-flight grading operation.
+    public func updateManagedCard(_ input: WCDBV3CardInput,
+                                  expectedRevision: Int,
+                                  now: Date = Date()) throws {
+        guard !input.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              [0, 2, 3].contains(input.cardType),
+              (input.cardType != 0 || !(input.answerText ?? "").isEmpty),
+              (input.cardType != 2 ||
+                 (!(input.choices ?? "").isEmpty &&
+                  !(input.correctIndices ?? "").isEmpty)),
+              (input.cardType != 3 || input.imageData != nil) else {
+            throw ReviewWCDBError.invalidSchedulerOutput
+        }
+        let key = input.cardID.uuidString
+        let tx = try database.getTransaction()
+        try tx.run(transaction: {
+            guard let old: WCDBV3CardRow = try tx.getObject(
+                fromTable: Self.cardsTable,
+                where: WCDBV3CardRow.Properties.cardID == key)
+            else { throw ReviewWCDBError.missingCard }
+            guard old.revision == expectedRevision else {
+                throw ReviewWCDBError.revisionConflict
+            }
+            let all: [WCDBV3CardRow] = try tx.getObjects(
+                on: [WCDBV3CardRow.Properties.cardID,
+                     WCDBV3CardRow.Properties.question,
+                     WCDBV3CardRow.Properties.sourceNotePath],
+                fromTable: Self.cardsTable)
+            var edited = old
+            edited.question = input.question
+            edited.answerText = input.answerText
+            edited.choices = input.choices
+            edited.correctIndices = input.correctIndices
+            edited.cardType = input.cardType
+            edited.imageData = input.imageData
+            edited.sourceNotePath = input.sourceNotePath
+            edited.updatedAt = now
+            guard !all.contains(where: {
+                $0.cardID != key && Self.duplicateKey($0) == Self.duplicateKey(edited)
+            }) else { throw ReviewWCDBError.duplicateContent }
+            try tx.update(table: Self.cardsTable, on: [
+                WCDBV3CardRow.Properties.question,
+                WCDBV3CardRow.Properties.answerText,
+                WCDBV3CardRow.Properties.choices,
+                WCDBV3CardRow.Properties.correctIndices,
+                WCDBV3CardRow.Properties.cardType,
+                WCDBV3CardRow.Properties.imageData,
+                WCDBV3CardRow.Properties.sourceNotePath,
+                WCDBV3CardRow.Properties.updatedAt
+            ], with: edited,
+               where: WCDBV3CardRow.Properties.cardID == key &&
+                      WCDBV3CardRow.Properties.revision == expectedRevision)
+            guard tx.changes == 1 else { throw ReviewWCDBError.revisionConflict }
+        })
+    }
+
+    public func setManagedCardSuspended(_ suspended: Bool,
+                                        id: UUID,
+                                        expectedRevision: Int) throws {
+        let tx = try database.getTransaction()
+        try tx.run(transaction: {
+            guard let old: WCDBV3CardRow = try tx.getObject(
+                fromTable: Self.cardsTable,
+                where: WCDBV3CardRow.Properties.cardID == id.uuidString)
+            else { throw ReviewWCDBError.missingCard }
+            guard old.revision == expectedRevision else {
+                throw ReviewWCDBError.revisionConflict
+            }
+            var updated = old
+            updated.isSuspended = suspended ? 1 : 0
+            updated.updatedAt = Date()
+            try tx.update(table: Self.cardsTable,
+                on: [WCDBV3CardRow.Properties.isSuspended,
+                     WCDBV3CardRow.Properties.updatedAt],
+                with: updated,
+                where: WCDBV3CardRow.Properties.cardID == id.uuidString &&
+                       WCDBV3CardRow.Properties.revision == expectedRevision)
+            guard tx.changes == 1 else { throw ReviewWCDBError.revisionConflict }
+        })
+    }
+
+    /// Explicit destructive action only. Removes the card and its review-event
+    /// rows atomically; never affects source notes or independent learning logs.
+    public func deleteManagedCard(id: UUID,
+                                  expectedRevision: Int) throws {
+        let tx = try database.getTransaction()
+        try tx.run(transaction: {
+            guard let old: WCDBV3CardRow = try tx.getObject(
+                fromTable: Self.cardsTable,
+                where: WCDBV3CardRow.Properties.cardID == id.uuidString)
+            else { throw ReviewWCDBError.missingCard }
+            guard old.revision == expectedRevision else {
+                throw ReviewWCDBError.revisionConflict
+            }
+            try tx.delete(fromTable: Self.eventsTable,
+                where: WCDBV3EventRow.Properties.cardID == id.uuidString)
+            try tx.delete(fromTable: Self.cardsTable,
+                where: WCDBV3CardRow.Properties.cardID == id.uuidString &&
+                       WCDBV3CardRow.Properties.revision == expectedRevision)
+            guard tx.changes == 1 else { throw ReviewWCDBError.revisionConflict }
+        })
     }
 
     /// One transaction: event replay check, optimistic revision check, state
