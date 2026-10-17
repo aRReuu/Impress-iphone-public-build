@@ -177,7 +177,7 @@ actor ImpressCalibrationReminderReconciler {
             })
         }
         if authorized {
-            let badge = todayDone ? 0 : 1
+            let badge = (enabled && !todayDone) ? 1 : 0
             if #available(iOS 16.0, *) {
                 try? await center.setBadgeCount(badge)
             } else {
