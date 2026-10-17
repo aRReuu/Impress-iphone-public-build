@@ -64,6 +64,13 @@ class ImWebViewController: UIViewController, WKNavigationDelegate {
         return controller
     }
 
+    /// Fresh Web route from Settings: no carried question and no old card button.
+    static func forDirectBrowse() -> ImWebViewController {
+        let controller = ImWebViewController()
+        controller.reviewHandoffText = ""
+        return controller
+    }
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
@@ -127,7 +134,7 @@ class ImWebViewController: UIViewController, WKNavigationDelegate {
 
         // WebView配置
         let configuration = WKWebViewConfiguration()
-        configuration.preferences.javaScriptEnabled = true
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.websiteDataStore = .default()
 
         let newWebView = WKWebView(frame: .zero, configuration: configuration)
@@ -163,13 +170,17 @@ class ImWebViewController: UIViewController, WKNavigationDelegate {
                                        target: self,
                                        action: #selector(closeWebView))
 
-        if reviewHandoffText != nil {
-            // UIKit supplies the native back button. Keep learning context
-            // entirely local until the user explicitly copies it.
-            navigationItem.rightBarButtonItem = UIBarButtonItem(
-                title: "复制问题", style: .plain,
-                target: self, action: #selector(copyReviewHandoff))
-            navigationItem.rightBarButtonItem?.accessibilityLabel = "复制问题和参考答案"
+        if let handoff = reviewHandoffText {
+            // The system back button returns to the exact prior review state.
+            // Empty context denotes ordinary Web browsing from Settings.
+            if !handoff.isEmpty {
+                navigationItem.rightBarButtonItem = UIBarButtonItem(
+                    title: "复制问题", style: .plain,
+                    target: self, action: #selector(copyReviewHandoff))
+                navigationItem.rightBarButtonItem?.accessibilityLabel = "复制问题和参考答案"
+            } else {
+                navigationItem.rightBarButtonItem = refreshItem
+            }
         } else {
             navigationItem.leftBarButtonItems = [closeItem, refreshItem]
         }
@@ -268,7 +279,11 @@ class ImWebViewController: UIViewController, WKNavigationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard self != nil else {
                 // 如果控制器已释放，使用window显示alert
-                if let window = UIApplication.shared.windows.first(where: { $0.isKeyWindow }) {
+                if let window = UIApplication.shared.connectedScenes
+                    .compactMap({ $0 as? UIWindowScene })
+                    .filter({ $0.activationState == .foregroundActive })
+                    .flatMap({ $0.windows })
+                    .first(where: { $0.isKeyWindow }) {
                     ImAlertController.alert(message: "卡片已成功创建!", in: window.rootViewController)
                 }
                 return

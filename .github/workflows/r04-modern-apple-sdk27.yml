@@ -142,14 +142,14 @@ jobs:
           mkdir -p "$RUNNER_TEMP/R04Package/Payload"
           ditto "$APP" "$RUNNER_TEMP/R04Package/Payload/aReuImpress-iPhone.app"
           FULL_SHA="$(git rev-parse HEAD)"
-          NAME="Impress-V3.1-R04-AltStore-$(echo "$FULL_SHA" | cut -c1-12)-unsigned.ipa"
+          NAME="Impress-V3.1-R04.1-AltStore-$(echo "$FULL_SHA" | cut -c1-12)-unsigned.ipa"
           (cd "$RUNNER_TEMP/R04Package" && zip -qry "$GITHUB_WORKSPACE/out/$NAME" Payload)
           unzip -tq "out/$NAME" | tee out/zip-integrity.txt
           shasum -a 256 "out/$NAME" | tee out/IPA_SHA256.txt
           python3 - "$NAME" <<'PY'
           import hashlib, json, pathlib, sys
           ipa=pathlib.Path("out")/sys.argv[1]
-          m=dict(private_source_sha="7795b2b5bdd8e1f44737f976ad221e10245251f3",
+          m=dict(private_source_sha="9804343b4998870ec8f6298ed9d1dde2c67e2911",
                  public_snapshot_sha=__import__("subprocess").check_output(
                    ["git","rev-parse","HEAD"], text=True).strip(),
                  ipa_name=ipa.name,ipa_sha256=hashlib.sha256(ipa.read_bytes()).hexdigest(),
@@ -168,3 +168,59 @@ jobs:
           name: impress-r04-sdk27-ios-evidence-and-unsigned-altstore
           path: out/
           retention-days: 14
+
+  publish-altstore-candidate:
+    name: Verified R04.1 pre-release direct IPA
+    needs: [swift-core, apple-native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_PRIVATE: 9804343b4998870ec8f6298ed9d1dde2c67e2911
+    steps:
+      - name: Download artifact from this exact successful SDK27 run
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/r04release"
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name impress-r04-sdk27-ios-evidence-and-unsigned-altstore \
+            --dir "$RUNNER_TEMP/r04release"
+      - name: Verify provenance, source authority and unsigned IPA SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/r04release"
+          python3 - <<'PY'
+          import glob,hashlib,json,os,pathlib
+          manifest=json.loads(pathlib.Path("r04-manifest.json").read_text())
+          assert manifest["private_source_sha"]==os.environ["EXPECTED_PRIVATE"]
+          assert manifest["public_snapshot_sha"]==os.environ["GITHUB_SHA"]
+          assert manifest["vault_production_write"] is False
+          assert manifest["wcdb_upgrade_performed"] is False
+          assert manifest["signing"].startswith("UNSIGNED")
+          ipa=pathlib.Path(manifest["ipa_name"])
+          assert ipa.is_file() and ipa.stat().st_size>100000
+          digest=hashlib.sha256(ipa.read_bytes()).hexdigest()
+          assert digest==manifest["ipa_sha256"]
+          assert pathlib.Path("IPA_SHA256.txt").read_text().split()[0]==digest
+          print("PROVENANCE_AND_SHA256_PASS",ipa.name,digest)
+          PY
+      - name: Publish independent unsigned AltStore R04.1 candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/r04release"
+          SHORT="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+          TAG="v3.1-r04.1-altstore-$SHORT"
+          IPA="Impress-V3.1-R04.1-AltStore-$SHORT-unsigned.ipa"
+          test -s "$IPA"
+          gh release create "$TAG" "$IPA" r04-manifest.json \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Impress V3.1 R04.1 — Native UIKit iPhone QA Candidate" \
+            --prerelease \
+            --notes "R04.1 iPhone screenshot-driven UI candidate. Apple native grouped Settings, shortened learning menu, DeepSeek Web separated from API Chat, native chat empty state, 44pt send target and improved photo-card question contrast. Built with Xcode 27 SDK after Core and Simulator XCTest passed. Uses app-only ARM64 scheme and minimal unsigned AltStore entitlements. Code baseline private R04.1 9804343b4998870ec8f6298ed9d1dde2c67e2911. Real-device R04.1 visual acceptance PENDING; cannot access production Vault writes (still disabled). Includes neutral CI image placeholders; requires user-managed AltStore signature."
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,assets

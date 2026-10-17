@@ -97,9 +97,9 @@ class ImPollingChatViewController: ImBaseViewController {
                     contentInset.bottom = clampedOffset + self.chatInputView.frame.height + 16
                     self.tableView.contentInset = contentInset
 
-                    var scrollIndicatorInsets = self.tableView.scrollIndicatorInsets
-                    scrollIndicatorInsets.bottom = contentInset.bottom
-                    self.tableView.scrollIndicatorInsets = scrollIndicatorInsets
+                    var verticalScrollIndicatorInsets = self.tableView.verticalScrollIndicatorInsets
+                    verticalScrollIndicatorInsets.bottom = contentInset.bottom
+                    self.tableView.verticalScrollIndicatorInsets = verticalScrollIndicatorInsets
                 }
             }
         }
@@ -227,9 +227,9 @@ extension ImPollingChatViewController {
             contentInset.bottom = clampedOffset + self.chatInputView.frame.height + 16
             self.tableView.contentInset = contentInset
 
-            var scrollIndicatorInsets = self.tableView.scrollIndicatorInsets
-            scrollIndicatorInsets.bottom = contentInset.bottom
-            self.tableView.scrollIndicatorInsets = scrollIndicatorInsets
+            var verticalScrollIndicatorInsets = self.tableView.verticalScrollIndicatorInsets
+            verticalScrollIndicatorInsets.bottom = contentInset.bottom
+            self.tableView.verticalScrollIndicatorInsets = verticalScrollIndicatorInsets
 
             self.view.layoutIfNeeded()
 
@@ -262,9 +262,9 @@ extension ImPollingChatViewController {
             contentInset.bottom = 0
             self.tableView.contentInset = contentInset
 
-            var scrollIndicatorInsets = self.tableView.scrollIndicatorInsets
-            scrollIndicatorInsets.bottom = 0
-            self.tableView.scrollIndicatorInsets = scrollIndicatorInsets
+            var verticalScrollIndicatorInsets = self.tableView.verticalScrollIndicatorInsets
+            verticalScrollIndicatorInsets.bottom = 0
+            self.tableView.verticalScrollIndicatorInsets = verticalScrollIndicatorInsets
 
             self.view.layoutIfNeeded()
 
@@ -636,7 +636,8 @@ extension ImPollingChatViewController {
             self?.sendMessage()
         }
 
-        chatInputView.onMicPressed = {}
+        // No speech-recognition handler exists yet. Do not display a dead mic.
+        chatInputView.onMicPressed = nil
 
         chatInputView.onTextChanged = {text in}
 
@@ -727,56 +728,43 @@ extension ImPollingChatViewController: UITableViewDataSource, UITableViewDelegat
     }
 
     private func createEmptyStateBackgroundView() -> UIView {
-        let containerView = UIView(frame: tableView.bounds)
-
-        // 主标题 - 知识原子化
-        let titleLabel = UILabel()
-        titleLabel.text = "知识原子化"
-        titleLabel.textColor = funBtnColor
-        titleLabel.textAlignment = .center
-        titleLabel.font = UIFont.preferredFont(forTextStyle: .largeTitle)
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        // 副标题 - 提示信息
-        let subtitleLabel = UILabel()
-        subtitleLabel.text = "开始与AI对话，原子化你的知识"
-        subtitleLabel.textColor = contentColor
-        subtitleLabel.textAlignment = .center
-        subtitleLabel.font = UIFont.preferredFont(forTextStyle: .body)
-        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        // 图标
-        let iconView = UIImageView(image: UIImage(systemName: "brain.head.profile"))
-        iconView.tintColor = funBtnColor
-        iconView.contentMode = .scaleAspectFit
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-
-        containerView.addSubview(iconView)
-        containerView.addSubview(titleLabel)
-        containerView.addSubview(subtitleLabel)
-
-        
+        if #available(iOS 17.0, *) {
+            // Modern UIKit handles Dynamic Type, spacing and contrast.
+            var config = UIContentUnavailableConfiguration.empty()
+            config.image = UIImage(systemName: "bubble.left.and.bubble.right")
+            config.text = "尚无 AI 对话"
+            config.secondaryText = "在下方输入问题，使用已配置的 API 模型讨论"
+            let view = UIContentUnavailableView(configuration: config)
+            view.backgroundColor = .clear
+            return view
+        }
+        // iOS 14–16: compact and accessible fallback, not a full-screen hero.
+        let container = UIView(frame: tableView.bounds)
+        let headline = UILabel()
+        headline.text = "尚无 AI 对话"
+        headline.textAlignment = .center
+        headline.font = UIFont.preferredFont(forTextStyle: .headline)
+        headline.textColor = .label
+        headline.adjustsFontForContentSizeCategory = true
+        let help = UILabel()
+        help.text = "在下方输入问题，使用已配置的 API 模型讨论"
+        help.textAlignment = .center
+        help.font = UIFont.preferredFont(forTextStyle: .subheadline)
+        help.textColor = .secondaryLabel
+        help.adjustsFontForContentSizeCategory = true
+        help.numberOfLines = 0
+        let stack = UIStackView(arrangedSubviews: [headline, help])
+        stack.axis = .vertical
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stack)
         NSLayoutConstraint.activate([
-            // 图标居中，位于上方
-            iconView.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
-            iconView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor, constant: -60),
-            iconView.widthAnchor.constraint(equalToConstant: 80),
-            iconView.heightAnchor.constraint(equalToConstant: 80),
-
-            // 主标题在图标下方
-            titleLabel.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
-            titleLabel.topAnchor.constraint(equalTo: iconView.bottomAnchor, constant: defaultSpacing),
-            titleLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 40),
-            titleLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -40),
-
-            // 副标题在主标题下方
-            subtitleLabel.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
-            subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: defaultSpacing),
-            subtitleLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 40),
-            subtitleLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -40)
+            stack.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 24),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -24)
         ])
-
-        return containerView
+        return container
     }
 }
 

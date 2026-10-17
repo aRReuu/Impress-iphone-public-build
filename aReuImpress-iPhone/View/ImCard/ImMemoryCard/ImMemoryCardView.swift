@@ -112,6 +112,12 @@ class ImMemoryCardView: UIView
     {
         self.init()
         self.usesCompactV3Style = v3Style
+        if v3Style {
+            // High-priority question text is primary label color, not muted gray.
+            questionTextView.textColor = .label
+            questionTextView.adjustsFontForContentSizeCategory = true
+            answerTextView.adjustsFontForContentSizeCategory = true
+        }
         self.cardModel = model
         questionTextView.text = model.question
         setupUI()

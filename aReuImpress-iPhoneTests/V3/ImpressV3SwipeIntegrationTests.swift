@@ -344,3 +344,31 @@ final class ImpressV3DeepSeekHandoffTests: XCTestCase {
         XCTAssertTrue(payload.contains("没有可用的文字答案"))
     }
 }
+
+
+// R04.1 regression: Settings separates API chat / DeepSeek Web and uses system
+// inset-grouped navigation instead of a single overloaded actions menu.
+final class ImpressR041NativeNavigationTests: XCTestCase {
+    func testSettingsUsesThreeNativeGroupedSections() {
+        let settings = ImpressV3SettingsHubViewController()
+        settings.loadViewIfNeeded()
+        XCTAssertEqual(settings.numberOfSections(in: settings.tableView), 3)
+        XCTAssertEqual(settings.tableView(settings.tableView,
+                          numberOfRowsInSection: 0), 4)
+        XCTAssertEqual(settings.tableView(settings.tableView,
+                          numberOfRowsInSection: 1), 1)
+        XCTAssertEqual(settings.navigationItem.largeTitleDisplayMode, .never)
+        let cell = settings.tableView(settings.tableView,
+                          cellForRowAt: IndexPath(row: 1, section: 0))
+        let content = cell.contentConfiguration as? UIListContentConfiguration
+        XCTAssertEqual(content?.text, "DeepSeek 网页")
+    }
+
+    func testDirectDeepSeekBrowserHasNoPrivateQuestionHandoff() {
+        let browser = ImWebViewController.forDirectBrowse()
+        browser.loadViewIfNeeded()
+        XCTAssertEqual(browser.title, "DeepSeek")
+        XCTAssertTrue(browser.navigationItem.leftBarButtonItems?.isEmpty ?? true)
+        XCTAssertNotEqual(browser.navigationItem.rightBarButtonItem?.title, "复制问题")
+    }
+}

@@ -174,60 +174,67 @@ final class ImpressV3ReviewViewController: UIViewController {
     }
 
     private func updateNavigationActions() {
-        let refresh = UIAction(title: "刷新复习队列",
-                               image: UIImage(systemName: "arrow.clockwise")) { [weak self] _ in
-            self?.reloadSession()
-        }
-        let enableReminders = UIAction(title: "开启到期提醒",
-                                       image: UIImage(systemName: "bell")) { [weak self] _ in
-            self?.enableReminders()
-        }
-        let habitReminders = UIAction(title: "每天定时提醒",
-                                      image: UIImage(systemName: "calendar")) { [weak self] _ in
-            self?.requestHabitReminders()
-        }
-        let disableReminders = UIAction(title: "关闭提醒",
-                                        image: UIImage(systemName: "bell.slash")) { _ in
-            ImpressV3NotificationCoordinator.shared.disableReminders()
-        }
-        let capture = UIAction(title: "记录此刻的理解",
+        // Keep the primary menu short. Low-frequency notifications and
+        // model administration belong in native submenus / settings.
+        let capture = UIAction(title: "记录理解",
                                image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
             self?.captureUnderstanding()
         }
-        let history = UIAction(title: "理解时间线",
-                               image: UIImage(systemName: "clock.arrow.circlepath")) { [weak self] _ in
+        let timeline = UIAction(title: "理解时间线",
+                                image: UIImage(systemName: "clock.arrow.circlepath")) { [weak self] _ in
             self?.showUnderstandingTimeline()
         }
-        let chat = UIAction(title: "AI 问答",
-                            image: UIImage(systemName: "bubble.left.and.bubble.right")) { [weak self] _ in
-            let vc = ImPollingChatViewController()
-            vc.title = "AI 问答"
-            self?.navigationController?.pushViewController(vc, animated: true)
+
+        let nativeChat = UIAction(title: "AI 问答（API）",
+                                  image: UIImage(systemName: "bubble.left.and.bubble.right")) { [weak self] _ in
+            let chat = ImPollingChatViewController()
+            chat.title = "AI 问答"
+            self?.navigationController?.pushViewController(chat, animated: true)
+        }
+        let deepSeek = UIAction(title: "DeepSeek 网页",
+                                image: UIImage(systemName: "globe")) { [weak self] _ in
+            self?.exploreFromAnswer()
         }
         let models = UIAction(title: "模型配置",
                               image: UIImage(systemName: "cpu")) { [weak self] _ in
             self?.present(ImNavigationViewController(
                 rootViewController: ImLLMConfigViewController()), animated: true)
         }
+        let aiMenu = UIMenu(title: "AI 工具",
+                            image: UIImage(systemName: "sparkles"),
+                            children: [nativeChat, deepSeek, models])
+
+        let refresh = UIAction(title: "刷新复习队列",
+                               image: UIImage(systemName: "arrow.clockwise")) { [weak self] _ in
+            self?.reloadSession()
+        }
+        let notifications = UIAction(title: "提醒设置",
+                                     image: UIImage(systemName: "bell")) { [weak self] _ in
+            self?.navigationController?.pushViewController(
+                ImpressV3ReminderSettingsController(), animated: true)
+        }
+        var reviewActions: [UIMenuElement] = [refresh, notifications]
+        #if DEBUG
+        reviewActions.append(UIAction(
+            title: "下次启动恢复旧版闪卡（测试）",
+            image: UIImage(systemName: "arrow.uturn.backward")) { _ in
+            ImpressV3ReviewEnvironment.pilotEnabled = false
+            ImpressV3NotificationCoordinator.shared.disableReminders()
+        })
+        #endif
+        let reviewMenu = UIMenu(title: "复习与提醒",
+                                image: UIImage(systemName: "rectangle.stack"),
+                                children: reviewActions)
+
         let settings = UIAction(title: "设置",
                                 image: UIImage(systemName: "gearshape")) { [weak self] _ in
             self?.navigationController?.pushViewController(
                 ImpressV3SettingsHubViewController(), animated: true)
         }
-        var actions = [capture, history, chat, models, settings,
-                       refresh, enableReminders, habitReminders, disableReminders]
-        #if DEBUG
-        actions.append(UIAction(title: "下次启动恢复旧版闪卡",
-                                image: UIImage(systemName: "arrow.uturn.backward")) { _ in
-            ImpressV3ReviewEnvironment.pilotEnabled = false
-            ImpressV3NotificationCoordinator.shared.disableReminders()
-        })
-        #endif
-
         let more = UIBarButtonItem(image: UIImage(systemName: "ellipsis.circle"),
                                    style: .plain, target: nil, action: nil)
-        more.menu = UIMenu(children: actions)
-        navigationItem.rightBarButtonItems = [more]
+        more.menu = UIMenu(children: [capture, timeline, aiMenu, reviewMenu, settings])
+        navigationItem.rightBarButtonItem = more
     }
 
     private func displayFailure(_ error: Swift.Error) {
@@ -979,51 +986,80 @@ final class ImpressV3TimelineViewController: UITableViewController {
 
 @MainActor
 final class ImpressV3SettingsHubViewController: UITableViewController {
+    private enum Destination {
+        case nativeChat, deepSeek, models, prompts, reminders, advanced
+    }
     private struct Option {
         let title: String
-        let description: String
-        let icon: String
+        let subtitle: String
+        let symbol: String
+        let destination: Destination
     }
-    private let rows = [
-        Option(title: "AI 与 DeepSeek / 模型",
-               description: "配置当前模型、密钥和兼容服务端",
-               icon: "cpu"),
-        Option(title: "提示词",
-               description: "修改个人系统提示词",
-               icon: "text.quote"),
-        Option(title: "提醒通知",
-               description: "关闭 / 到期提醒 / 每日习惯提醒",
-               icon: "bell"),
-        Option(title: "高级设置",
-               description: "旧版工具与数据相关设置",
-               icon: "slider.horizontal.3")
+
+    private let groupTitles = ["人工智能", "复习提醒", "应用"]
+    private let groups: [[Option]] = [
+        [
+            Option(title: "AI 问答", subtitle: "使用已配置的 API 模型进行原生对话",
+                   symbol: "bubble.left.and.bubble.right", destination: .nativeChat),
+            Option(title: "DeepSeek 网页", subtitle: "打开官方网页，登录及发送由用户控制",
+                   symbol: "globe", destination: .deepSeek),
+            Option(title: "模型配置", subtitle: "管理模型、服务地址和 API 密钥",
+                   symbol: "cpu", destination: .models),
+            Option(title: "提示词", subtitle: "编辑自己的学习与评价指导",
+                   symbol: "text.quote", destination: .prompts)
+        ],
+        [
+            Option(title: "提醒通知", subtitle: "关闭、智能到期或每日习惯提醒",
+                   symbol: "bell", destination: .reminders)
+        ],
+        [
+            Option(title: "高级设置", subtitle: "其他工具和兼容性选项",
+                   symbol: "slider.horizontal.3", destination: .advanced)
+        ]
     ]
 
-    init() {
-        super.init(style: .insetGrouped)
-    }
+    init() { super.init(style: .insetGrouped) }
     required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "设置"
+        // Settings is a pushed secondary screen, not a second app root.
+        navigationItem.largeTitleDisplayMode = .never
         tableView.backgroundColor = .systemGroupedBackground
-        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "settings")
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 68
+        tableView.cellLayoutMarginsFollowReadableWidth = true
+    }
+
+    override func numberOfSections(in tableView: UITableView) -> Int {
+        groups.count
     }
 
     override func tableView(_ tableView: UITableView,
-                            numberOfRowsInSection section: Int) -> Int { rows.count }
+                            numberOfRowsInSection section: Int) -> Int {
+        groups[section].count
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            titleForHeaderInSection section: Int) -> String? {
+        groupTitles[section]
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            titleForFooterInSection section: Int) -> String? {
+        section == 0 ? "原生 AI 问答与 DeepSeek 网页是两个独立的功能；不会自动上传私人笔记。" : nil
+    }
 
     override func tableView(_ tableView: UITableView,
                             cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let row = rows[indexPath.row]
-        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
-        // Use Apple's native list-content configuration instead of
-        // manually styling and sizing different label subviews.
+        let option = groups[indexPath.section][indexPath.row]
+        let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
         var content = UIListContentConfiguration.subtitleCell()
-        content.text = row.title
-        content.secondaryText = row.description
-        content.image = UIImage(systemName: row.icon)
+        content.text = option.title
+        content.secondaryText = option.subtitle
+        content.image = UIImage(systemName: option.symbol)
+        content.imageProperties.tintColor = .systemBlue
         cell.contentConfiguration = content
         cell.accessoryType = .disclosureIndicator
         return cell
@@ -1032,19 +1068,26 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
     override func tableView(_ tableView: UITableView,
                             didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        switch indexPath.row {
-        case 0:
-            // Existing provider view manages real WCDB-backed provider rows.
+        let option = groups[indexPath.section][indexPath.row]
+        switch option.destination {
+        case .nativeChat:
+            let chat = ImPollingChatViewController()
+            chat.title = "AI 问答"
+            navigationController?.pushViewController(chat, animated: true)
+        case .deepSeek:
+            navigationController?.pushViewController(
+                ImWebViewController.forDirectBrowse(), animated: true)
+        case .models:
             present(ImNavigationViewController(
                 rootViewController: ImLLMConfigViewController()), animated: true)
-        case 1:
+        case .prompts:
             navigationController?.pushViewController(
                 ImSystemPromptViewController(viewModel: ImSettingsViewModel()),
                 animated: true)
-        case 2:
+        case .reminders:
             navigationController?.pushViewController(
                 ImpressV3ReminderSettingsController(), animated: true)
-        default:
+        case .advanced:
             navigationController?.pushViewController(
                 ImSettingsViewController(), animated: true)
         }
@@ -1056,9 +1099,13 @@ final class ImpressV3ReminderSettingsController: UITableViewController {
     private let labels = ["关闭提醒", "智能到期提醒 · 每天 09:00 起", "每日习惯提醒 · 09:00"]
     private let modeKey = "ImpressV3ReminderMode"
 
+    init() { super.init(style: .insetGrouped) }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "提醒通知"
+        navigationItem.largeTitleDisplayMode = .never
         tableView.backgroundColor = .systemGroupedBackground
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "reminder")
     }

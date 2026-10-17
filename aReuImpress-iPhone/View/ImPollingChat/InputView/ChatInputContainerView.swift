@@ -33,7 +33,9 @@ class ChatInputContainerView: UIView {
     var onSendMessage: (() -> Void)?
 
     /// 麦克风按钮点击回调
-    var onMicPressed: (() -> Void)?
+    var onMicPressed: (() -> Void)? {
+        didSet { updateButtonVisibility() }
+    }
 
     /// 获取当前输入文本
     var text: String {
@@ -62,18 +64,13 @@ class ChatInputContainerView: UIView {
         backgroundColor = .clear
 
         // 输入框背景视图 - 使用系统三级填充色，更符合HIG规范
-        inputBackgroundView.backgroundColor = tertiarySystemFillColor
-        inputBackgroundView.layer.cornerRadius = 18 // 更大的圆角，更符合现代iOS设计
+        inputBackgroundView.backgroundColor = .secondarySystemGroupedBackground
+        inputBackgroundView.layer.cornerRadius = 16
         inputBackgroundView.layer.masksToBounds = true
-
-        // 添加轻微的阴影效果，提升视觉层次
-        inputBackgroundView.layer.shadowColor = shadowColor.cgColor
-        inputBackgroundView.layer.shadowOffset = CGSize(width: 0, height: 1)
-        inputBackgroundView.layer.shadowRadius = 2
-        inputBackgroundView.layer.shadowOpacity = 0.1
 
         // Setup text view - 优化字体和样式
         messageInputTextView.font = UIFont.preferredFont(forTextStyle: .body)
+        messageInputTextView.adjustsFontForContentSizeCategory = true
         messageInputTextView.backgroundColor = .clear // 透明背景，让背景视图的颜色显示
         messageInputTextView.isScrollEnabled = false
         messageInputTextView.textContainerInset = UIEdgeInsets(top: 14, left: 16, bottom: 14, right: 16) // 更大的内边距
@@ -83,6 +80,7 @@ class ChatInputContainerView: UIView {
 
         // 占位符标签 - 完全独立的UI组件
         placeholderLabel.font = UIFont.preferredFont(forTextStyle: .body)
+        placeholderLabel.adjustsFontForContentSizeCategory = true
         placeholderLabel.textColor = subTitleColor
         placeholderLabel.numberOfLines = 0  // 支持多行
         placeholderLabel.isHidden = false  // 初始显示占位符
@@ -93,18 +91,27 @@ class ChatInputContainerView: UIView {
         sendButton.tintColor = funBtnColor
         sendButton.isHidden = true
 
-        // 优化发送按钮的视觉效果
-        sendButton.layer.cornerRadius = 16
-        sendButton.layer.masksToBounds = true
+        if #available(iOS 15.0, *) {
+            var style = UIButton.Configuration.plain()
+            style.image = UIImage(systemName: "arrow.up.circle.fill")
+            style.baseForegroundColor = .systemBlue
+            sendButton.configuration = style
+        }
+        sendButton.accessibilityLabel = "发送消息"
 
         // 麦克风按钮优化
         micButton.setImage(UIImage(systemName: "mic.fill"), for: .normal)
         micButton.tintColor = subTitleColor
         micButton.addTarget(self, action: #selector(micButtonPressed), for: .touchUpInside)
 
-        // 麦克风按钮也添加圆角
-        micButton.layer.cornerRadius = 14
-        micButton.layer.masksToBounds = true
+        if #available(iOS 15.0, *) {
+            var style = UIButton.Configuration.plain()
+            style.image = UIImage(systemName: "mic.fill")
+            style.baseForegroundColor = .secondaryLabel
+            micButton.configuration = style
+        }
+        micButton.accessibilityLabel = "语音输入"
+        micButton.isHidden = true
 
         // Add subviews
         addSubview(inputBackgroundView)
@@ -139,15 +146,15 @@ class ChatInputContainerView: UIView {
             // Send button - 优化按钮位置和大小
             sendButton.trailingAnchor.constraint(equalTo: inputBackgroundView.trailingAnchor, constant: -8),
             sendButton.centerYAnchor.constraint(equalTo: inputBackgroundView.centerYAnchor),
-            sendButton.widthAnchor.constraint(equalToConstant: 36), // 稍微增大按钮尺寸
-            sendButton.heightAnchor.constraint(equalToConstant: 36),
+            sendButton.widthAnchor.constraint(equalToConstant: 44),
+            sendButton.heightAnchor.constraint(equalToConstant: 44),
 
             // Mic button - 优化麦克风按钮布局
             micButton.leadingAnchor.constraint(equalTo: messageInputTextView.trailingAnchor, constant: 8),
             micButton.centerXAnchor.constraint(equalTo: sendButton.centerXAnchor),
             micButton.centerYAnchor.constraint(equalTo: inputBackgroundView.centerYAnchor),
-            micButton.widthAnchor.constraint(equalToConstant: 32), // 稍微增大按钮尺寸
-            micButton.heightAnchor.constraint(equalToConstant: 32)
+            micButton.widthAnchor.constraint(equalToConstant: 44),
+            micButton.heightAnchor.constraint(equalToConstant: 44)
         ])
 
         // Dynamic height constraints - 优化高度约束
@@ -207,7 +214,7 @@ class ChatInputContainerView: UIView {
         let isPlaceholder = messageInputTextView.textColor == subTitleColor
 
         sendButton.isHidden = hasText && !isPlaceholder ? false : true
-        micButton.isHidden = hasText && !isPlaceholder ? true : false
+        micButton.isHidden = !(onMicPressed != nil && !hasText)
 
         UIView.animate(withDuration: 0.25) {
             self.layoutIfNeeded()
@@ -215,16 +222,7 @@ class ChatInputContainerView: UIView {
     }
 
     @objc private func sendButtonPressed() {
-        // 添加触摸反馈动画
-        UIView.animate(withDuration: 0.15, animations: {
-            self.sendButton.transform = CGAffineTransform(scaleX: 0.95, y: 0.95)
-        }) { _ in
-            UIView.animate(withDuration: 0.15) {
-                self.sendButton.transform = CGAffineTransform.identity
-            }
-        }
-
-        // 调用回调
+        // Native UIButton.Configuration provides standard pressed feedback.
         onSendMessage?()
     }
 
@@ -263,20 +261,14 @@ extension ChatInputContainerView: UITextViewDelegate {
         // 确保占位符正确隐藏
         updatePlaceholderVisibility()
 
-        // 添加轻微的放大动画，提升编辑体验
-        UIView.animate(withDuration: 0.2, animations: {
-            self.inputBackgroundView.transform = CGAffineTransform(scaleX: 1.02, y: 1.02)
-        })
+        // Use the system's focus response; do not scale the entire input.
     }
 
     func textViewDidEndEditing(_ textView: UITextView) {
         // 确保占位符正确显示
         updatePlaceholderVisibility()
 
-        // 恢复原始大小
-        UIView.animate(withDuration: 0.2) {
-            self.inputBackgroundView.transform = CGAffineTransform.identity
-        }
+        // The system restores native appearance when editing ends.
     }
 
     // MARK: - Helper Methods
