@@ -17,6 +17,7 @@ BANNED_RELATIVE_PATHS = (
     "NetWork/ImNetWorkRequest", "NetWork/ImResponse/ImGeminiResponse.swift",
     "NetWork/ImResponse/ImpressResponse.swift",
     "Utils/Public/ImAutoGenerator/", "Utils/Public/ImFileManager/ImBackupManager.swift",
+    "Utils/Public/ImSliderVC/",
     "VC/MainVCs/ImPollingChatVC/", "VC/SubVCs/ImPollingChatListVC/",
     "VC/SubVCs/ImPreChatVC/", "VC/SubVCs/ImLLMConfigVC/",
     "VC/SubVCs/ImSettingVC/ImSystemPromptViewController.swift",
@@ -44,6 +45,18 @@ def assert_clean() -> None:
             assert not any(short.startswith(b) for b in BANNED_RELATIVE_PATHS), (
                 "RETIRED_NATIVE_CHAT_SOURCE_STILL_TRACKED", name)
     swift = sorted(APP.rglob("*.swift"))
+    # Prefix check catches suffixed model/controller references left in unrelated
+    # features after removal (e.g. ImPollingChatListViewController in old UI).
+    retired_prefixes = (
+        "ImPollingChat", "ImPreChat", "ImLLM", "ImNetWorkRequest",
+        "ImAutoGenerator", "ImBackupManager", "ImSliderViewController",
+        "ImSettingsViewModel",
+    )
+    for path in swift:
+        data = path.read_text()
+        for prefix in retired_prefixes:
+            assert not re.search(r"\\b" + re.escape(prefix) + r"[A-Za-z0-9_]*\\b", data), (
+                "RETIRED_TYPE_REFERENCE", str(path.relative_to(ROOT)), prefix)
     project = (ROOT / "aReuImpress-iPhone.xcodeproj/project.pbxproj").read_text()
     for identifier in RETIRED_IDENTIFIERS:
         for p in swift:
