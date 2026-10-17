@@ -79,7 +79,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
         super.viewDidLoad()
         title = "批量导入"
         navigationItem.largeTitleDisplayMode = .never
-        view.backgroundColor = .systemGroupedBackground
+        view.backgroundColor = ImpressV3Appearance.page
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
         navigationItem.rightBarButtonItem = UIBarButtonItem(
@@ -112,9 +112,9 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
         let intro = UILabel()
         intro.text = "选择输入格式，在本机解析。预览和逐题校验通过后才会写入闪卡数据库。"
         intro.numberOfLines = 0
-        intro.font = .preferredFont(forTextStyle: .subheadline)
+        intro.font = ImpressV3Appearance.Typography.supporting
         intro.adjustsFontForContentSizeCategory = true
-        intro.textColor = .secondaryLabel
+        intro.textColor = ImpressV3Appearance.secondaryText
         stack.addArrangedSubview(intro)
         formatPicker.selectedSegmentIndex = 0
         stack.addArrangedSubview(formatPicker)
@@ -126,16 +126,16 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
         buttons.addArrangedSubview(actionButton("Obsidian 笔记", icon: "folder", selector: #selector(chooseVault)))
         stack.addArrangedSubview(buttons)
         sourceLabel.numberOfLines = 0
-        sourceLabel.font = .preferredFont(forTextStyle: .caption1)
+        sourceLabel.font = ImpressV3Appearance.Typography.caption
         sourceLabel.adjustsFontForContentSizeCategory = true
-        sourceLabel.textColor = .secondaryLabel
+        sourceLabel.textColor = ImpressV3Appearance.secondaryText
         sourceLabel.text = "粘贴文本，或选择 CSV / TSV / Markdown 文件。"
         stack.addArrangedSubview(sourceLabel)
-        editor.font = .preferredFont(forTextStyle: .body)
+        editor.font = ImpressV3Appearance.Typography.body
         editor.adjustsFontForContentSizeCategory = true
-        editor.backgroundColor = .secondarySystemGroupedBackground
-        editor.textColor = .label
-        editor.layer.cornerRadius = 12
+        editor.backgroundColor = ImpressV3Appearance.surface
+        editor.textColor = ImpressV3Appearance.primaryText
+        editor.layer.cornerRadius = ImpressV3Appearance.Radius.field
         editor.textContainerInset = UIEdgeInsets(top: 14, left: 12, bottom: 14, right: 12)
         editor.accessibilityLabel = "本地批量导入原始文本"
         editor.delegate = self
@@ -143,9 +143,9 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
         editor.heightAnchor.constraint(greaterThanOrEqualToConstant: 270).isActive = true
         let hint = UILabel()
         hint.numberOfLines = 0
-        hint.font = .preferredFont(forTextStyle: .footnote)
+        hint.font = ImpressV3Appearance.Typography.footnote
         hint.adjustsFontForContentSizeCategory = true
-        hint.textColor = .secondaryLabel
+        hint.textColor = ImpressV3Appearance.secondaryText
         hint.text = "文本/Markdown：Q: 问题、A: 答案。CSV/TSV：question、answer；选择题另提供 type=choice、options=A|B|C、correct=1,3（从 1 起）。无法识别的内容保留原文供修正。"
         stack.addArrangedSubview(hint)
     }
@@ -153,11 +153,8 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
     private func actionButton(_ title: String, icon: String, selector: Selector) -> UIButton {
         let button = UIButton(type: .system)
         if #available(iOS 15.0, *) {
-            var config = UIButton.Configuration.bordered()
-            config.title = title
-            config.image = UIImage(systemName: icon)
-            config.imagePadding = 5
-            button.configuration = config
+            button.configuration = ImpressV3NativeButtonAppearance
+                .secondaryConfiguration(title: title, symbol: icon)
         } else {
             button.setTitle(title, for: .normal)
             button.setImage(UIImage(systemName: icon), for: .normal)
@@ -423,11 +420,11 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
             : value.draft.question
         cfg.secondaryText = issue.map { "第 \(value.line) 行 · " + $0 }
             ?? "第 \(value.line) 行 · 校验通过"
-        cfg.secondaryTextProperties.color = issue == nil ? .secondaryLabel : .systemOrange
+        cfg.secondaryTextProperties.color = issue == nil ? ImpressV3Appearance.secondaryText : ImpressV3Appearance.caution
         cfg.textProperties.numberOfLines = 2
         cfg.secondaryTextProperties.numberOfLines = 2
         cfg.image = UIImage(systemName: issue == nil ? "checkmark.circle" : "exclamationmark.circle")
-        cfg.imageProperties.tintColor = issue == nil ? .systemGreen : .systemOrange
+        cfg.imageProperties.tintColor = issue == nil ? ImpressV3Appearance.positive : ImpressV3Appearance.caution
         cell.contentConfiguration = cfg
         cell.accessoryType = .detailDisclosureButton
         cell.accessibilityHint = "点按编辑本题，详情按钮查看原文与原始错误，左滑移除。"
@@ -445,16 +442,16 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
         let detail = UIViewController()
         detail.title = "原始记录 · 第 \(record.line) 行"
         detail.navigationItem.largeTitleDisplayMode = .never
-        detail.view.backgroundColor = .systemGroupedBackground
+        detail.view.backgroundColor = ImpressV3Appearance.page
         let body = UITextView()
         body.isEditable = false
         body.isSelectable = true
         body.isScrollEnabled = true
-        body.font = .preferredFont(forTextStyle: .body)
+        body.font = ImpressV3Appearance.Typography.body
         body.adjustsFontForContentSizeCategory = true
-        body.textColor = .label
-        body.backgroundColor = .secondarySystemGroupedBackground
-        body.layer.cornerRadius = 10
+        body.textColor = ImpressV3Appearance.primaryText
+        body.backgroundColor = ImpressV3Appearance.surface
+        body.layer.cornerRadius = ImpressV3Appearance.Radius.compactField
         body.textContainerInset = UIEdgeInsets(top: 16, left: 12, bottom: 16, right: 12)
         body.accessibilityLabel = "原始导入文本及解析问题"
         let diagnostics = record.issues.isEmpty

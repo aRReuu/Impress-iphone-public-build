@@ -21,6 +21,7 @@
 		3823CC892970531C00CCAAD3 /* ImBaseTableViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3823CC882970531B00CCAAD3 /* ImBaseTableViewCell.swift */; };
 		382B981C2E8D6B3500F33388 /* ImImagePreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382B981B2E8D6B3500F33388 /* ImImagePreviewViewController.swift */; };
 		382E7ED52E9286BC005D8EAE /* ImSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382E7ED42E9286BC005D8EAE /* ImSettingsViewController.swift */; };
+		F3B600000000000000000010 /* ImpressV3PromptLibraryViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B600000000000000000011 /* ImpressV3PromptLibraryViewController.swift */; };
 		382E7ED92E9286F2005D8EAE /* ImSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382E7ED82E9286F2005D8EAE /* ImSettingsViewModel.swift */; };
 		382E7EDE2E928729005D8EAE /* ImSettingSliderCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382E7EDC2E928729005D8EAE /* ImSettingSliderCell.swift */; };
 		382E7EDF2E928729005D8EAE /* ImSettingSwitchCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382E7EDD2E928729005D8EAE /* ImSettingSwitchCell.swift */; };
@@ -194,6 +195,7 @@
 		3823CC882970531B00CCAAD3 /* ImBaseTableViewCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImBaseTableViewCell.swift; sourceTree = "<group>"; };
 		382B981B2E8D6B3500F33388 /* ImImagePreviewViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImImagePreviewViewController.swift; sourceTree = "<group>"; };
 		382E7ED42E9286BC005D8EAE /* ImSettingsViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImSettingsViewController.swift; sourceTree = "<group>"; };
+		F3B600000000000000000011 /* ImpressV3PromptLibraryViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV3PromptLibraryViewController.swift; sourceTree = "<group>"; };
 		382E7ED82E9286F2005D8EAE /* ImSettingsViewModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImSettingsViewModel.swift; sourceTree = "<group>"; };
 		382E7EDC2E928729005D8EAE /* ImSettingSliderCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImSettingSliderCell.swift; sourceTree = "<group>"; };
 		382E7EDD2E928729005D8EAE /* ImSettingSwitchCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImSettingSwitchCell.swift; sourceTree = "<group>"; };
@@ -446,6 +448,7 @@
 			children = (
 				38913DD42E97A690008003A8 /* ImSystemPromptViewController.swift */,
 				382E7ED42E9286BC005D8EAE /* ImSettingsViewController.swift */,
+				F3B600000000000000000011 /* ImpressV3PromptLibraryViewController.swift */,
 			);
 			path = ImSettingVC;
 			sourceTree = "<group>";
@@ -1351,6 +1354,7 @@
 				383869B229B22CDC004220FA /* ImpressRoute.swift in Sources */,
 				38C055512DD0888A005F3E6E /* ImCardViewModel.swift in Sources */,
 				382E7ED52E9286BC005D8EAE /* ImSettingsViewController.swift in Sources */,
+				F3B600000000000000000010 /* ImpressV3PromptLibraryViewController.swift in Sources */,
 				380E3A5D2E8E597D001C5A2F /* ImPollingChatListViewController.swift in Sources */,
 				380730922E895DDB00CA566B /* ImLLMModel.swift in Sources */,
 				3897F89F2DDB0D6B005B8534 /* ImpressNotesViewModelProtocol.swift in Sources */,

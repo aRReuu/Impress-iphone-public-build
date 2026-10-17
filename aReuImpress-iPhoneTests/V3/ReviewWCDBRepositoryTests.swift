@@ -606,17 +606,25 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         XCTAssertEqual(try ImpressV3LearningJournal.load().filter { $0.id == id }.count, 1)
     }
 
-    func testDebugPilotHasExplicitSettingsEntryWithoutSwitchingReleaseRoute() {
-        #if DEBUG
-        let configuration = SettingsConfiguration.default
-        XCTAssertTrue(configuration.debugRows.contains(.v3ReviewPilot))
-        XCTAssertEqual(configuration.displaySections.filter {
-            if case .debug = $0 { return true }
-            return false
-        }.count, 1)
-        #else
-        XCTAssertFalse(ImpressV3ReviewEnvironment.pilotEnabled)
-        #endif
+    func testModernSettingsKeepsPromptAndReminderOnly() {
+        let settings = ImpressV3SettingsHubViewController()
+        settings.loadViewIfNeeded()
+        XCTAssertEqual(settings.tableView.numberOfSections, 2)
+        XCTAssertEqual(settings.tableView.numberOfRows(inSection: 0), 1)
+        XCTAssertEqual(settings.tableView.numberOfRows(inSection: 1), 1)
+        let prompts = settings.tableView(settings.tableView,
+            cellForRowAt: IndexPath(row: 0, section: 0))
+        XCTAssertEqual(prompts.contentConfiguration is UIListContentConfiguration, true)
+        let legacy = SettingsConfiguration.default
+        XCTAssertEqual(legacy.displaySections.count, 1)
+    }
+
+    func testV3AppearanceIsBasedOnCentralColorAuthority() {
+        XCTAssertEqual(ImpressV3Appearance.accent, funBtnColor)
+        XCTAssertEqual(ImpressV3Appearance.primaryText, titleColor)
+        XCTAssertEqual(ImpressV3Appearance.secondaryText, contentColor)
+        XCTAssertEqual(ImpressV3Appearance.surface, UIColor.secondarySystemBackground)
+        XCTAssertNotNil(ImpressV3Appearance.Typography.heading)
     }
 
     func testV3ReviewUsesExplicitRevealAndKeepsFourDirectionSwipeStack() throws {
@@ -637,13 +645,10 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         let stacks = controller.view.subviews.compactMap { $0 as? SwipeCardStack }
         XCTAssertEqual(stacks.count, 1)
         XCTAssertTrue(stacks[0].protectsVerticalContentScroll)
-        // R04.2 removed the overloaded ellipsis; both actionable
-        // native toolbar destinations must now be explicit and menu-free.
-        let actions = try XCTUnwrap(controller.navigationItem.rightBarButtonItems)
-        XCTAssertEqual(actions.count, 2)
-        XCTAssertNil(actions.first?.menu)
-        XCTAssertEqual(actions.first?.accessibilityLabel, "设置")
-        XCTAssertEqual(actions.last?.accessibilityLabel, "原生 AI 问答")
+        // R04.2-D moves Settings to its own tab and removes the chat action.
+        XCTAssertTrue(controller.navigationItem.rightBarButtonItems?.isEmpty ?? true)
+        XCTAssertEqual(controller.navigationItem.leftBarButtonItem?.accessibilityLabel,
+                       "添加内容")
         XCTAssertFalse(buttons.contains { $0.title(for: .normal) == "困难" })
         XCTAssertFalse(buttons.contains { $0.title(for: .normal) == "简单" })
     }

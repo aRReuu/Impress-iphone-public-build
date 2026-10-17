@@ -3,15 +3,15 @@
   "authority": {
     "repository": "aRReuu/Impress-iphone",
     "branch": "feature/impress-v3-r04-2-information-architecture",
-    "source_head_sha": "62457964b31331b9d91db78fa031e9961788b90f",
+    "source_head_sha": "d3a35a4489b7a508fdff758aefa4b97524c5cb39",
     "baseline_20261017_sha": "9078600d9be7be048a550d32d43322e55e7d866d",
     "original_r03_source_sha": "9804343b4998870ec8f6298ed9d1dde2c67e2911"
   },
   "public_repository": "aRReuu/Impress-iphone-public-build",
-  "public_commit_sha": "Resolved by CI with git rev-parse HEAD; Release r04-2-manifest.json is exact build attestation",
-  "baseline": "Impress V3.1 / R03 frozen / R04.2-A,B,C+C1 UI audit CI candidate",
-  "copied_text_candidates": 153,
-  "copied_text_source_count": 153,
+  "public_commit_sha": "Resolved by CI using git rev-parse HEAD; release manifest records exact public commit and SHA",
+  "baseline": "Impress V3.1 / R04.2-D centralized native design tokens candidate 2026-10-17",
+  "copied_text_candidates": 154,
+  "copied_text_source_count": 154,
   "normalized_public_files": [
     "aReuImpress-iPhone.xcodeproj/project.pbxproj (remove DEVELOPMENT_TEAM; Debug candidate flag)",
     "Podfile (post_install: set generated Pods minimum iOS 14; fix Xcode 16 libarclite)",
@@ -50,19 +50,31 @@
     "R04 Xcode27: test target inherited CocoaPods search paths; SDK27 deployment floor 15 overridden in CI"
   ],
   "public_branch": "feature/impress-v3-r04-2-build",
-  "last_mirror_update": "R04.2-C1: raw-source diagnostics viewer, explicit native import confirmation, accurate transaction acknowledgement, extra iOS test",
+  "last_mirror_update": "R04.2-D central palette/typography, Settings 3rd tab, timeline and prompt library. Public project pbx stays sanitized; native XCTest pending.",
   "screenshot_policy": "Screenshots only assessed in private conversation, not uploaded or mirrored; some show private content",
-  "copy_summary": "A/B/C native workflow and C1 fidelity patch, updated six-file private source SHA inventory, sanitizations maintained, no private Docs",
-  "r04_2_batch": "R04.2-C1 pending full CI; R04.2-C prior e675c723 baseline validated and available",
+  "copy_summary": "Native R04.2-D uses centralized V3 appearance (colors/typography/button tokens only in ImColorConstants.swift), retains WCDB 1.1.0 / FSRS-6 and Vault write lock; all private Docs, images and credentials stay excluded.",
+  "r04_2_batch": "R04.2-C fully CI validated; R04.2-D UI style candidate pending validation and user visual QA",
   "r04_2_test_fix": "legacy native XCTest menu assertion replaced with two toolbar action semantics (no removal of existing tests)",
   "source_files_sha": {
     "Packages/ImpressReviewCore/Sources/ImpressReviewCore/ImpressBatchParser.swift": "3616994dee6c931a3c5dd4ac3d429f382190dc38",
     "Packages/ImpressReviewCore/Tests/ImpressReviewCoreTests/ImpressBatchParserTests.swift": "8d61d83c9e1cc035e19d3f9a2144da6a5cda2d82",
     "aReuImpress-iPhone/DataBase/V3/ReviewWCDBRepository.swift": "c877a86a05da8b88dc6fea6ed0e802c28e6dd78c",
-    "aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3BatchImportViewController.swift": "d38751018e77026a6ef9b238b9c51ac0818525fb",
-    "aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3ReviewViewController.swift": "9feb9e929cbc4cb2f163e3431fe1b1d2cee04fbf",
-    "aReuImpress-iPhoneTests/V3/ReviewWCDBRepositoryTests.swift": "87294501396872b7d30cfa124abc3dabaf97d431"
+    "aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3BatchImportViewController.swift": "edf2570dfec05c82ecda234f42032877610d33a3",
+    "aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3ReviewViewController.swift": "9b34d9d8bd406b021684fb31e72f87272e45455a",
+    "aReuImpress-iPhoneTests/V3/ReviewWCDBRepositoryTests.swift": "acc362a0cbfa51e9891a7ee17d37ee18f7e192a7",
+    "aReuImpress-iPhone/Utils/Constansts/ImColorConstants.swift": "1fd2bc98ba51c3ab8e71cde61cd062d3c3760a32",
+    "aReuImpress-iPhone/Base/ImTabBarViewController.swift": "922f0fcefceb077a2f0a8d36afddd086ef2862d3",
+    "aReuImpress-iPhone/Base/ImNavigationViewController.swift": "3857657004f1531dbc00fc37cf9ce3a5b97a3225",
+    "aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3CardComposerViewController.swift": "4633826d9e9c12b9f7268a11b369e80e331c6b1d",
+    "aReuImpress-iPhone/VC/SubVCs/ImSettingVC/ImpressV3PromptLibraryViewController.swift": "9b1a4f9da783f984a315e6a742e1c7b8c16dfb35",
+    "aReuImpress-iPhone/VC/SubVCs/ImSettingVC/ImSettingsViewController.swift": "e09621e2db13b96236463326fd5a8cfbe0887ff6",
+    "aReuImpress-iPhone/VC/SubVCs/ImWebVC/ImWebViewController.swift": "f800606faad8cccc980dfd2655a526a262431f57",
+    "aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImpressNoteListTableViewController.swift": "aa7a888f0e49e4e4bbb8f39dda8c57b76fb053cf",
+    "aReuImpress-iPhone/View/ImCard/ImMultipleChoiceCardView.swift": "3fd5cffbbae069619abfcde9f818f5fcf27704e7",
+    "aReuImpress-iPhone/View/ImCard/ImMemoryCard/ImMemoryCardView.swift": "cf3d78f672bc48c4f3afcbf2c2756c88bc65816c"
   },
   "sanitized_project": "Public project.pbxproj preserved; only added R04.2-C source reference to public sanitized file, no private DEVELOPMENT_TEAM copied.",
-  "provenance_gate": "Full Core + iOS XCTest + ARM64 + ZIP + SHA required for release"
+  "provenance_gate": "Full Core + iOS XCTest + ARM64 + ZIP + SHA required for release",
+  "appearance_authority": "aReuImpress-iPhone/Utils/Constansts/ImColorConstants.swift",
+  "appearance_policy": "V3 view controllers reference semantic palette, font and radius tokens; future additions only in central source file"
 }

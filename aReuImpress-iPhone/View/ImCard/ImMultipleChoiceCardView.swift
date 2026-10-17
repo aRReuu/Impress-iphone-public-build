@@ -56,7 +56,9 @@ class ImMultipleChoiceCardView: UIView {
         if usesNativeOptionButtons {
             questionLabel.numberOfLines = 0
             optionsStackView.spacing = 9
-            backgroundColor = .systemBackground
+            backgroundColor = ImpressV3Appearance.surface
+            questionLabel.font = ImpressV3Appearance.Typography.cardTitle
+            questionLabel.textColor = ImpressV3Appearance.primaryText
         }
         setupViews()
         configure(with: model)
@@ -115,10 +117,11 @@ class ImMultipleChoiceCardView: UIView {
         button.heightAnchor.constraint(greaterThanOrEqualToConstant:
             usesNativeOptionButtons ? 44 : 48).isActive = true
         if usesNativeOptionButtons {
-            button.backgroundColor = .secondarySystemGroupedBackground
-            button.layer.cornerRadius = 11
-            button.layer.borderColor = UIColor.separator.withAlphaComponent(0.45).cgColor
-            button.layer.borderWidth = 0.8
+            button.titleLabel?.font = ImpressV3Appearance.Typography.body
+            button.setTitleColor(ImpressV3Appearance.primaryText, for: .normal)
+            button.backgroundColor = ImpressV3Appearance.surface
+            button.layer.cornerRadius = ImpressV3Appearance.Radius.field
+            button.layer.borderWidth = 0
             button.contentHorizontalAlignment = .leading
             button.contentEdgeInsets = UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
             button.titleLabel?.numberOfLines = 0

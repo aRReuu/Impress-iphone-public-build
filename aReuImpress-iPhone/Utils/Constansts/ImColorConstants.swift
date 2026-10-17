@@ -129,19 +129,72 @@ enum ImpressV3NativeButtonAppearance {
         var configuration = UIButton.Configuration.filled()
         configuration.title = title
         configuration.buttonSize = .large
-        configuration.cornerStyle = .large
-        configuration.baseBackgroundColor = .systemBlue
-        configuration.baseForegroundColor = .white
+        configuration.cornerStyle = .medium
+        configuration.baseBackgroundColor = ImpressV3Appearance.accent
+        configuration.baseForegroundColor = ImpressV3Appearance.primaryButtonText
         button.configuration = configuration
         button.titleLabel?.adjustsFontForContentSizeCategory = true
     }
 
     static func secondary(_ button: UIButton, title: String) {
-        var configuration = UIButton.Configuration.borderedTinted()
+        button.configuration = secondaryConfiguration(title: title)
+        button.titleLabel?.adjustsFontForContentSizeCategory = true
+    }
+
+    /// Native text-first action without a decorative outline. Centralized to
+    /// ensure Composer, batch import and context actions share one treatment.
+    static func secondaryConfiguration(title: String, symbol: String? = nil)
+    -> UIButton.Configuration {
+        var configuration = UIButton.Configuration.plain()
         configuration.title = title
         configuration.buttonSize = .large
-        configuration.cornerStyle = .large
-        button.configuration = configuration
-        button.titleLabel?.adjustsFontForContentSizeCategory = true
+        configuration.cornerStyle = .medium
+        configuration.baseForegroundColor = ImpressV3Appearance.accent
+        if let symbol {
+            configuration.image = UIImage(systemName: symbol)
+            configuration.imagePadding = 8
+        }
+        return configuration
+    }
+}
+
+
+// MARK: - Impress V3 design authority
+// This file is the SINGLE source for color, font roles, surface hierarchy,
+// radius and button treatment in native Impress V3 screens. UIKit owns the
+// system navigation/tab materials. Semantic UIColors follow Light/Dark Mode.
+// Never create shadow copies of these values inside individual controllers.
+enum ImpressV3Appearance {
+    static let page = UIColor.systemBackground
+    static let surface = UIColor.secondarySystemBackground
+    static let accent = funBtnColor
+    static let primaryText = titleColor
+    static let secondaryText = contentColor
+    static let mutedText = subTitleColor
+    static let divider = separatorColor
+    static let positive = safeTipColor
+    static let caution = UIColor.systemOrange
+    static let negative = reviewCellColor
+    static let timelineInactive = UIColor.systemGray2
+    static let primaryButtonText = UIColor.white
+
+    enum Radius {
+        static let card: CGFloat = 16
+        static let field: CGFloat = 12
+        static let compactField: CGFloat = 10
+        static let timelineNode: CGFloat = 5
+    }
+
+    /// Prefer semantic text roles and Dynamic Type. Views that own text must
+    /// continue to opt in to adjustsFontForContentSizeCategory.
+    enum Typography {
+        static var largeTitle: UIFont { UIFont.preferredFont(forTextStyle: .title1) }
+        static var cardTitle: UIFont { UIFont.preferredFont(forTextStyle: .title3) }
+        static var heading: UIFont { UIFont.preferredFont(forTextStyle: .headline) }
+        static var body: UIFont { UIFont.preferredFont(forTextStyle: .body) }
+        static var supporting: UIFont { UIFont.preferredFont(forTextStyle: .subheadline) }
+        static var footnote: UIFont { UIFont.preferredFont(forTextStyle: .footnote) }
+        static var caption: UIFont { UIFont.preferredFont(forTextStyle: .caption1) }
+        static var micro: UIFont { UIFont.preferredFont(forTextStyle: .caption2) }
     }
 }

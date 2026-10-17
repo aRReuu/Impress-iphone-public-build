@@ -123,7 +123,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         super.viewDidLoad()
         title = "新增卡片"
         navigationItem.largeTitleDisplayMode = .never
-        view.backgroundColor = .systemGroupedBackground
+        view.backgroundColor = ImpressV3Appearance.page
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
         let save = UIBarButtonItem(title: "保存", style: .done,
@@ -160,11 +160,11 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         typePicker.addTarget(self, action: #selector(typeDidChange), for: .valueChanged)
         stack.addArrangedSubview(typePicker)
 
-        questionView.backgroundColor = .secondarySystemGroupedBackground
-        questionView.layer.cornerRadius = 12
-        questionView.font = UIFont.preferredFont(forTextStyle: .body)
+        questionView.backgroundColor = ImpressV3Appearance.surface
+        questionView.layer.cornerRadius = ImpressV3Appearance.Radius.field
+        questionView.font = ImpressV3Appearance.Typography.body
         questionView.adjustsFontForContentSizeCategory = true
-        questionView.textColor = .label
+        questionView.textColor = ImpressV3Appearance.primaryText
         questionView.text = originalDraft.question
         questionView.textContainerInset = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
         questionView.heightAnchor.constraint(greaterThanOrEqualToConstant: 100).isActive = true
@@ -190,9 +190,9 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
     private func caption(_ text: String) -> UILabel {
         let label = UILabel()
         label.text = text
-        label.font = UIFont.preferredFont(forTextStyle: .subheadline)
+        label.font = ImpressV3Appearance.Typography.supporting
         label.adjustsFontForContentSizeCategory = true
-        label.textColor = .secondaryLabel
+        label.textColor = ImpressV3Appearance.secondaryText
         label.numberOfLines = 0
         return label
     }
@@ -201,7 +201,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         let group = verticalStack()
         let heading = UILabel()
         heading.text = title
-        heading.font = UIFont.preferredFont(forTextStyle: .headline)
+        heading.font = ImpressV3Appearance.Typography.heading
         heading.adjustsFontForContentSizeCategory = true
         group.addArrangedSubview(heading)
         group.addArrangedSubview(child)
@@ -211,11 +211,11 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
     private func configureQA() {
         qaSection.axis = .vertical
         qaSection.spacing = 10
-        answerView.backgroundColor = .secondarySystemGroupedBackground
-        answerView.layer.cornerRadius = 12
-        answerView.font = UIFont.preferredFont(forTextStyle: .body)
+        answerView.backgroundColor = ImpressV3Appearance.surface
+        answerView.layer.cornerRadius = ImpressV3Appearance.Radius.field
+        answerView.font = ImpressV3Appearance.Typography.body
         answerView.adjustsFontForContentSizeCategory = true
-        answerView.textColor = .label
+        answerView.textColor = ImpressV3Appearance.primaryText
         answerView.text = originalDraft.answer
         answerView.textContainerInset = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
         answerView.heightAnchor.constraint(greaterThanOrEqualToConstant: 128).isActive = true
@@ -234,11 +234,8 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         choiceSection.addArrangedSubview(makeLabeledGroup("选项（点选正确答案）", child: optionList))
         addOptionButton.setTitle("添加选项", for: .normal)
         if #available(iOS 15.0, *) {
-            var c = UIButton.Configuration.borderedTinted()
-            c.image = UIImage(systemName: "plus")
-            c.title = "添加选项"
-            c.imagePadding = 8
-            addOptionButton.configuration = c
+            addOptionButton.configuration = ImpressV3NativeButtonAppearance
+                .secondaryConfiguration(title: "添加选项", symbol: "plus")
         }
         addOptionButton.addTarget(self, action: #selector(addOption), for: .touchUpInside)
         choiceSection.addArrangedSubview(addOptionButton)
@@ -251,17 +248,14 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         photoSection.spacing = 12
         imageButton.setTitle("从照片选择图片", for: .normal)
         if #available(iOS 15.0, *) {
-            var c = UIButton.Configuration.borderedTinted()
-            c.title = "从照片选择图片"
-            c.image = UIImage(systemName: "photo.on.rectangle")
-            c.imagePadding = 8
-            imageButton.configuration = c
+            imageButton.configuration = ImpressV3NativeButtonAppearance
+                .secondaryConfiguration(title: "从照片选择图片", symbol: "photo.on.rectangle")
         }
         imageButton.addTarget(self, action: #selector(selectPhoto), for: .touchUpInside)
         photoSection.addArrangedSubview(imageButton)
         imagePreview.contentMode = .scaleAspectFit
-        imagePreview.backgroundColor = .secondarySystemGroupedBackground
-        imagePreview.layer.cornerRadius = 12
+        imagePreview.backgroundColor = ImpressV3Appearance.surface
+        imagePreview.layer.cornerRadius = ImpressV3Appearance.Radius.field
         imagePreview.clipsToBounds = true
         imagePreview.heightAnchor.constraint(equalToConstant: 225).isActive = true
         imagePreview.image = imageData.flatMap { UIImage(data: $0) }
@@ -498,7 +492,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
             mark.setImage(UIImage(systemName: correct
                                   ? (isMulti ? "checkmark.square.fill" : "largecircle.fill.circle")
                                   : (isMulti ? "square" : "circle")), for: .normal)
-            mark.tintColor = .systemBlue
+            mark.tintColor = ImpressV3Appearance.accent
             mark.widthAnchor.constraint(equalToConstant: 44).isActive = true
             mark.heightAnchor.constraint(equalToConstant: 44).isActive = true
             mark.accessibilityLabel = "选项 \(index + 1) \(correct ? "正确" : "未标记")"
@@ -508,10 +502,11 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
             }, for: .touchUpInside)
             field.text = text
             field.placeholder = "选项 \(index + 1)"
-            field.font = UIFont.preferredFont(forTextStyle: .body)
+            field.font = ImpressV3Appearance.Typography.body
             field.adjustsFontForContentSizeCategory = true
-            field.backgroundColor = .secondarySystemGroupedBackground
-            field.borderStyle = .roundedRect
+            field.backgroundColor = ImpressV3Appearance.surface
+            field.borderStyle = .none
+            field.layer.cornerRadius = ImpressV3Appearance.Radius.field
             field.accessibilityLabel = "选项 \(index + 1) 内容"
             field.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
             let actions = UIButton(type: .system)

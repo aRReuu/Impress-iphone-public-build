@@ -27,7 +27,7 @@ extension ImPreChatListCell {
         let hasContent = !(note.markdownText?.isEmpty ?? true)
         if hasContent {
             statusIndicator.image = UIImage(systemName: "doc.text.fill")
-            statusIndicator.tintColor = .systemBlue
+            statusIndicator.tintColor = ImpressV3Appearance.accent
         } else {
             statusIndicator.image = UIImage(systemName: "doc.text")
             statusIndicator.tintColor = .systemGray
@@ -110,7 +110,8 @@ class ImpressNoteListTableViewController: ImBaseViewController
     private func initUISetting()
     {
         title = ImpressV3ReviewEnvironment.pilotEnabled ? "笔记" : imNotesTitle 
-        view.backgroundColor = bgColor
+        view.backgroundColor = ImpressV3ReviewEnvironment.pilotEnabled
+            ? ImpressV3Appearance.page : bgColor
 //        navigationItem.largeTitleDisplayMode = .always
         searchControllerSetting()
         tableViewSetting()
@@ -290,9 +291,9 @@ class ImpressNoteListTableViewController: ImBaseViewController
         message.text = externalError ??
             (externalLoading ? "正在安全读取 Vault…" : "此 Vault 没有可读取的 Markdown 笔记")
         message.numberOfLines = 0
-        message.textColor = .secondaryLabel
+        message.textColor = ImpressV3Appearance.secondaryText
         message.textAlignment = .center
-        message.font = UIFont.preferredFont(forTextStyle: .subheadline)
+        message.font = ImpressV3Appearance.Typography.supporting
         tableView.backgroundView = message
     }
 }
@@ -364,7 +365,8 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
     private func tableViewSetting()
     {
         view.addSubview(tableView)
-        tableView.backgroundColor = bgColor
+        tableView.backgroundColor = ImpressV3ReviewEnvironment.pilotEnabled
+            ? ImpressV3Appearance.page : bgColor
         tableView.contentInsetAdjustmentBehavior = .automatic
         tableView.translatesAutoresizingMaskIntoConstraints = false
         tableView.showsVerticalScrollIndicator = true
@@ -417,10 +419,11 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
             content.text = note.title
             content.secondaryText = note.identity.relativePath
             content.image = UIImage(systemName: "doc.text")
-            content.imageProperties.tintColor = .systemBlue
+            content.imageProperties.tintColor = ImpressV3Appearance.accent
             content.textProperties.numberOfLines = 2
             content.secondaryTextProperties.numberOfLines = 2
             cell.contentConfiguration = content
+            cell.backgroundColor = ImpressV3Appearance.surface
             cell.accessoryType = .disclosureIndicator
             return cell
         }

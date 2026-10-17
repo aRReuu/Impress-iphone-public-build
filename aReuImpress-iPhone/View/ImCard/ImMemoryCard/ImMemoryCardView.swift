@@ -114,7 +114,9 @@ class ImMemoryCardView: UIView
         self.usesCompactV3Style = v3Style
         if v3Style {
             // High-priority question text is primary label color, not muted gray.
-            questionTextView.textColor = .label
+            questionTextView.textColor = ImpressV3Appearance.primaryText
+            questionTextView.font = ImpressV3Appearance.Typography.largeTitle
+            answerTextView.font = ImpressV3Appearance.Typography.body
             questionTextView.adjustsFontForContentSizeCategory = true
             answerTextView.adjustsFontForContentSizeCategory = true
         }

@@ -37,13 +37,19 @@ class ImTabBarViewController: UITabBarController
         noteNav.tabBarItem.image = UIImage(systemName: "doc.text")
         noteNav.tabBarItem.selectedImage = UIImage(systemName: "doc.text.fill")
 
-        self.viewControllers = [cardNav, noteNav]
+        let settingsVC = ImpressV3SettingsHubViewController()
+        let settingsNav = ImNavigationViewController(rootViewController: settingsVC)
+        settingsNav.tabBarItem.title = "设置"
+        settingsNav.tabBarItem.image = UIImage(systemName: "gearshape")
+        settingsNav.tabBarItem.selectedImage = UIImage(systemName: "gearshape.fill")
+
+        self.viewControllers = [cardNav, noteNav, settingsNav]
         // Leave the tab bar material to UIKit. Manual barTintColor
         // suppresses the platform's modern floating navigation treatment.
-        tabBar.tintColor = .systemBlue
-        tabBar.unselectedItemTintColor = .secondaryLabel
+        tabBar.tintColor = ImpressV3Appearance.accent
+        tabBar.unselectedItemTintColor = ImpressV3Appearance.secondaryText
         if #available(iOS 26.0, *) {
-            // The two-tab learning workflow must not jump as notes scroll.
+            // Keep primary navigation stationary while reading or reviewing.
             tabBarMinimizeBehavior = .never
         }
     }

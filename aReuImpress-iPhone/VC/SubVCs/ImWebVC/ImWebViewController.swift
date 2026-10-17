@@ -49,6 +49,7 @@ class ImWebViewController: UIViewController, WKNavigationDelegate {
     private var initialCenter: CGPoint = .zero
     private var cancellables = Set<AnyCancellable>()
     private var reviewHandoffText: String?
+    private var copyHandoffButton: UIBarButtonItem?
     private let viewModel = ImCardViewModel() // 将viewModel作为属性保留
 
     // MARK: - Initialization
@@ -90,6 +91,7 @@ class ImWebViewController: UIViewController, WKNavigationDelegate {
         super.viewWillAppear(animated)
         idleSet(true)
         floatingButton.isHidden = reviewHandoffText != nil
+        updatePromptMenu()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -130,7 +132,7 @@ class ImWebViewController: UIViewController, WKNavigationDelegate {
 
     // MARK: - Setup
     private func setupViews() {
-        view.backgroundColor = bgColor
+        view.backgroundColor = ImpressV3Appearance.page
 
         // WebView配置
         let configuration = WKWebViewConfiguration()
@@ -159,41 +161,58 @@ class ImWebViewController: UIViewController, WKNavigationDelegate {
 
     private func setupNavigationBar() {
         navigationItem.largeTitleDisplayMode = .never
-        title = "DeepSeek"
-
-        let refreshItem = UIBarButtonItem(image: UIImage(systemName: "arrow.clockwise"),
-                                         style: .plain,
-                                         target: self,
-                                         action: #selector(refreshPage))
-        let closeItem = UIBarButtonItem(image: UIImage(systemName: "xmark.circle.fill"),
-                                       style: .plain,
-                                       target: self,
-                                       action: #selector(closeWebView))
-
+        title = "网页聊天"
+        let refresh = UIBarButtonItem(image: UIImage(systemName: "arrow.clockwise"),
+                                      style: .plain, target: self,
+                                      action: #selector(refreshPage))
+        let close = UIBarButtonItem(image: UIImage(systemName: "xmark"),
+                                    style: .plain, target: self,
+                                    action: #selector(closeWebView))
         if let handoff = reviewHandoffText {
-            // The system back button returns to the exact prior review state.
-            // Empty context denotes ordinary Web browsing from Settings.
             if !handoff.isEmpty {
-                navigationItem.rightBarButtonItem = UIBarButtonItem(
-                    title: "复制问题", style: .plain,
-                    target: self, action: #selector(copyReviewHandoff))
-                navigationItem.rightBarButtonItem?.accessibilityLabel = "复制问题和参考答案"
+                let copy = UIBarButtonItem(title: "复制问题", style: .plain,
+                                           target: self, action: #selector(copyReviewHandoff))
+                copy.accessibilityLabel = "复制本题到剪贴板"
+                copyHandoffButton = copy
+                navigationItem.rightBarButtonItems = [copy]
             } else {
-                navigationItem.rightBarButtonItem = refreshItem
+                navigationItem.rightBarButtonItems = [refresh]
             }
         } else {
-            navigationItem.leftBarButtonItems = [closeItem, refreshItem]
+            navigationItem.leftBarButtonItems = [close, refresh]
         }
+        updatePromptMenu()
+    }
+
+    private func updatePromptMenu() {
+        let templates = ImpressV3PromptLibrary.load()
+        let actions = templates.map { template in
+            UIAction(title: template.title, image: UIImage(systemName: "doc.on.doc")) { _ in
+                // One direct user action: copy only this explicit local template.
+                // No script injection, hidden clipboard read or network send.
+                UIPasteboard.general.string = template.content
+                UIAccessibility.post(notification: .announcement,
+                                     argument: "提示词已复制。请自行粘贴并确认发送。")
+            }
+        }
+        let menu = UIMenu(title: "复制提示词", children: actions)
+        let item = UIBarButtonItem(image: UIImage(systemName: "text.quote"),
+                                   menu: menu)
+        item.accessibilityLabel = "从提示词库复制"
+        var others = navigationItem.rightBarButtonItems ?? []
+        others.removeAll { $0.accessibilityLabel == "从提示词库复制" }
+        others.append(item)
+        navigationItem.rightBarButtonItems = others
     }
 
     @objc private func copyReviewHandoff() {
-        guard let content = reviewHandoffText else { return }
-        UIPasteboard.general.string = content
+        guard let value = reviewHandoffText, !value.isEmpty else { return }
+        UIPasteboard.general.string = value
         UIAccessibility.post(notification: .announcement,
-                             argument: "已复制。请在 DeepSeek 网页输入框中粘贴并确认发送。")
-        navigationItem.rightBarButtonItem?.title = "已复制"
+                             argument: "已复制。请在网页输入框中粘贴并确认发送。")
+        copyHandoffButton?.title = "已复制"
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            self?.navigationItem.rightBarButtonItem?.title = "复制问题"
+            self?.copyHandoffButton?.title = "复制问题"
         }
     }
 
@@ -209,8 +228,8 @@ class ImWebViewController: UIViewController, WKNavigationDelegate {
 
     private func setupFloatingButton() {
         floatingButton.setImage(UIImage(systemName: "plus.circle.fill"), for: .normal)
-        floatingButton.tintColor = .white
-        floatingButton.backgroundColor = funBtnColor
+        floatingButton.tintColor = ImpressV3Appearance.primaryButtonText
+        floatingButton.backgroundColor = ImpressV3Appearance.accent
         floatingButton.addTarget(self, action: #selector(createCard), for: .touchUpInside)
 
         // 添加拖拽手势
