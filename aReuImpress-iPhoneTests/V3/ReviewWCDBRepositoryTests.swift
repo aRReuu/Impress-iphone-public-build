@@ -147,9 +147,11 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(output.count, 4)
         XCTAssertTrue(FileManager.default.fileExists(atPath:
             extracted.appendingPathComponent("ReviewV3.sqlite").path))
-        XCTAssertEqual(try Data(contentsOf: extracted.appendingPathComponent(
-            "ReviewV3.sqlite")), Data(contentsOf: stage.appendingPathComponent(
-            "ReviewV3.sqlite")))
+        let restoredDatabaseBytes = try Data(contentsOf:
+            extracted.appendingPathComponent("ReviewV3.sqlite"))
+        let originalDatabaseBytes = try Data(contentsOf:
+            stage.appendingPathComponent("ReviewV3.sqlite"))
+        XCTAssertEqual(restoredDatabaseBytes, originalDatabaseBytes)
         let scanned = try JSONDecoder().decode(ImpressV3BackupManifest.self,
             from: Data(contentsOf: extracted.appendingPathComponent("manifest.json")))
         try scanned.validate(output.filter { $0.name != "manifest.json" })
