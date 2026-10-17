@@ -1,0 +1,25 @@
+name: Impress Calibration Core v0.1 Tests
+
+on:
+  push:
+    branches:
+      - feature/impress-calibration-v01
+    paths:
+      - 'Packages/ImpressReviewCore/**'
+      - '.github/workflows/calibration-core-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  swift-core:
+    name: Portable Swift core regression tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report Swift toolchain
+        run: swift --version
+      - name: Execute entire ImpressReviewCore test suite
+        run: swift test --package-path Packages/ImpressReviewCore --parallel
