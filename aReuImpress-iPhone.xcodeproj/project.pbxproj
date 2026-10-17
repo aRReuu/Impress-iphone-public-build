@@ -323,7 +323,7 @@
 				3801E8442F30DD5900987335 /* ImiCloudImportManager.swift */,
 				387C25762F18BA35000FF54C /* ImFloatingButtonManager */,
 				380E587A2E9F6FD000F3483C /* ImTTSManager */,
-				382E7EE12E928789005D8EAE /* ImAutoGenerator */,
+
 				380034BA2E8BA37E00161000 /* ImSliderVC */,
 				385B90692E7C1831006336D5 /* ImFileManager */,
 				38C9375B2E1FCBC100BB0BEC /* ImExtractTextView */,
@@ -335,26 +335,12 @@
 			path = Public;
 			sourceTree = "<group>";
 		};
-		380E3A5B2E8E597D001C5A2F /* ImPollingChatListVC */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ImPollingChatListVC;
-			sourceTree = "<group>";
-		};
 		380E587A2E9F6FD000F3483C /* ImTTSManager */ = {
 			isa = PBXGroup;
 			children = (
 				380E587B2E9F6FD000F3483C /* ImTTSManager.swift */,
 			);
 			path = ImTTSManager;
-			sourceTree = "<group>";
-		};
-		3828F98F2E942D6200B66EC4 /* PollCell */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = PollCell;
 			sourceTree = "<group>";
 		};
 		382987952CD3E452000D091B /* ImCardVC */ = {
@@ -387,13 +373,6 @@
 			path = ImSettingVC;
 			sourceTree = "<group>";
 		};
-		382E7ED72E9286F2005D8EAE /* ImSettings */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ImSettings;
-			sourceTree = "<group>";
-		};
 		382E7EDB2E928729005D8EAE /* ImSetting */ = {
 			isa = PBXGroup;
 			children = (
@@ -403,59 +382,12 @@
 			path = ImSetting;
 			sourceTree = "<group>";
 		};
-		382E7EE12E928789005D8EAE /* ImAutoGenerator */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ImAutoGenerator;
-			sourceTree = "<group>";
-		};
-		3831161E2E978E7500826A85 /* ImPollingChatList */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ImPollingChatList;
-			sourceTree = "<group>";
-		};
 		383869AF29B22CAF004220FA /* Route */ = {
 			isa = PBXGroup;
 			children = (
 				383869B129B22CDC004220FA /* ImpressRoute.swift */,
 			);
 			path = Route;
-			sourceTree = "<group>";
-		};
-		384885E52E88DBCD00CAE576 /* ImPollingChatVC */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ImPollingChatVC;
-			sourceTree = "<group>";
-		};
-		384885E92E88DBF800CAE576 /* ImPollingChat */ = {
-			isa = PBXGroup;
-			children = (
-				3831161E2E978E7500826A85 /* ImPollingChatList */,
-			);
-			path = ImPollingChat;
-			sourceTree = "<group>";
-		};
-		384885F12E88DC0900CAE576 /* ImPollingChat */ = {
-			isa = PBXGroup;
-			children = (
-				389993672E9D5D3900FF043D /* InputView */,
-				389993662E9D5D3000FF043D /* SearchBar */,
-				389993602E9D5D1700FF043D /* PreQuestion */,
-				3828F98F2E942D6200B66EC4 /* PollCell */,
-			);
-			path = ImPollingChat;
-			sourceTree = "<group>";
-		};
-		384885F52E88DC2E00CAE576 /* ImPollingChat */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ImPollingChat;
 			sourceTree = "<group>";
 		};
 		385B90692E7C1831006336D5 /* ImFileManager */ = {
@@ -495,13 +427,6 @@
 			path = ImLoading;
 			sourceTree = "<group>";
 		};
-		387322442E8E67AC0016EFB1 /* ImPreChat */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ImPreChat;
-			sourceTree = "<group>";
-		};
 		387C25712F189363000FF54C /* ImWebVC */ = {
 			isa = PBXGroup;
 			children = (
@@ -527,13 +452,6 @@
 				3819E37C2DCA573D002088F4 /* ImCardDebugViewModel.swift */,
 			);
 			path = ImCard;
-			sourceTree = "<group>";
-		};
-		387EF4A82D3A3AB800D99F55 /* ImLLM */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ImLLM;
 			sourceTree = "<group>";
 		};
 		3889853C29979431009ABE26 /* ImNote */ = {
@@ -612,7 +530,7 @@
 				3895E17E293B8EC9006939DA /* ViewModel */,
 				3895E184293B8F21006939DA /* View */,
 				389C733F295C4E1A0012A7E0 /* DataBase */,
-				3895E181293B8EFF006939DA /* NetWork */,
+
 				3895E180293B8EF5006939DA /* Model */,
 				3895E183293B8F14006939DA /* Utils */,
 				3895E17C293B8E99006939DA /* Resources */,
@@ -634,9 +552,7 @@
 		3895E17E293B8EC9006939DA /* ViewModel */ = {
 			isa = PBXGroup;
 			children = (
-				38C673A92E9787DA00E629EF /* ImPreChatList */,
-				382E7ED72E9286F2005D8EAE /* ImSettings */,
-				384885E92E88DBF800CAE576 /* ImPollingChat */,
+
 				387D8ABD2DB9349200E7FDC8 /* ImCard */,
 				3889854829979453009ABE26 /* ImNotes */,
 			);
@@ -661,21 +577,12 @@
 		3895E180293B8EF5006939DA /* Model */ = {
 			isa = PBXGroup;
 			children = (
-				387322442E8E67AC0016EFB1 /* ImPreChat */,
-				384885F52E88DC2E00CAE576 /* ImPollingChat */,
+
 				38AF28F02D68699200C2009B /* ImCard */,
-				38F858972CEF38B100E6FD77 /* ImLLM */,
+
 				3889853C29979431009ABE26 /* ImNote */,
 			);
 			path = Model;
-			sourceTree = "<group>";
-		};
-		3895E181293B8EFF006939DA /* NetWork */ = {
-			isa = PBXGroup;
-			children = (
-				38E4856B2CEEDBAA00AC9FA5 /* ImResponse */,
-			);
-			path = NetWork;
 			sourceTree = "<group>";
 		};
 		3895E182293B8F09006939DA /* VC */ = {
@@ -702,33 +609,12 @@
 			children = (
 				3823CC882970531B00CCAAD3 /* ImBaseTableViewCell.swift */,
 				382E7EDB2E928729005D8EAE /* ImSetting */,
-				384885F12E88DC0900CAE576 /* ImPollingChat */,
+
 				3892F3922E3757300005AF2E /* ImSubmit */,
-				387EF4A82D3A3AB800D99F55 /* ImLLM */,
+
 				3865D2652CDE481400935BC2 /* ImCard */,
 			);
 			path = View;
-			sourceTree = "<group>";
-		};
-		389993602E9D5D1700FF043D /* PreQuestion */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = PreQuestion;
-			sourceTree = "<group>";
-		};
-		389993662E9D5D3000FF043D /* SearchBar */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = SearchBar;
-			sourceTree = "<group>";
-		};
-		389993672E9D5D3900FF043D /* InputView */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = InputView;
 			sourceTree = "<group>";
 		};
 		389C733F295C4E1A0012A7E0 /* DataBase */ = {
@@ -800,13 +686,6 @@
 			path = ProtocolTool;
 			sourceTree = "<group>";
 		};
-		38B911A82D84950C001DDE0E /* ImLLMConfigVC */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ImLLMConfigVC;
-			sourceTree = "<group>";
-		};
 		38BE34202E6562F200CB184F /* ImSwipQuickCard */ = {
 			isa = PBXGroup;
 			children = (
@@ -864,20 +743,6 @@
 				38C625A72E5C254D00160852 /* ImMusicPlayer.swift */,
 			);
 			path = ImMusicPlay;
-			sourceTree = "<group>";
-		};
-		38C673A52E97873C00E629EF /* ImPreChatVC */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ImPreChatVC;
-			sourceTree = "<group>";
-		};
-		38C673A92E9787DA00E629EF /* ImPreChatList */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ImPreChatList;
 			sourceTree = "<group>";
 		};
 		38C9375B2E1FCBC100BB0BEC /* ImExtractTextView */ = {
@@ -940,13 +805,6 @@
 			path = UIView;
 			sourceTree = "<group>";
 		};
-		38E4856B2CEEDBAA00AC9FA5 /* ImResponse */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ImResponse;
-			sourceTree = "<group>";
-		};
 		38E4B47E2F19E476002AA600 /* ImGridVC */ = {
 			isa = PBXGroup;
 			children = (
@@ -958,7 +816,7 @@
 		38F61A732DD8748E00D6C9F6 /* MainVCs */ = {
 			isa = PBXGroup;
 			children = (
-				384885E52E88DBCD00CAE576 /* ImPollingChatVC */,
+
 				382987952CD3E452000D091B /* ImCardVC */,
 			);
 			path = MainVCs;
@@ -969,22 +827,15 @@
 			children = (
 				38E4B47E2F19E476002AA600 /* ImGridVC */,
 				387C25712F189363000FF54C /* ImWebVC */,
-				38C673A52E97873C00E629EF /* ImPreChatVC */,
+
 				382E7ED32E9286BC005D8EAE /* ImSettingVC */,
-				380E3A5B2E8E597D001C5A2F /* ImPollingChatListVC */,
+
 				382B981A2E8D6B3500F33388 /* ImImagePreview */,
 				388FA8352DD382CE00849CFB /* ImSubmit */,
 				386F38402D02A4F50048A694 /* ImNoteListVC */,
-				38B911A82D84950C001DDE0E /* ImLLMConfigVC */,
+
 			);
 			path = SubVCs;
-			sourceTree = "<group>";
-		};
-		38F858972CEF38B100E6FD77 /* ImLLM */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ImLLM;
 			sourceTree = "<group>";
 		};
 		38FCE9B32E7D240600702FE8 /* ImMarkdownVC */ = {
