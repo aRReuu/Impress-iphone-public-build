@@ -43,7 +43,7 @@ final class ImpressCalibrationReminderCoordinator {
         Task { await reconciler.request() }
     }
 
-    static func isCalibrationTap(_ response: UNNotificationResponse) -> Bool {
+    nonisolated static func isCalibrationTap(_ response: UNNotificationResponse) -> Bool {
         response.actionIdentifier == UNNotificationDefaultActionIdentifier &&
             CalibrationReminderPlan.isManaged(response.notification.request.identifier)
     }
