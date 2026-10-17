@@ -348,6 +348,7 @@ final class ImpressV3DeepSeekHandoffTests: XCTestCase {
 
 // R04.1 regression: Settings separates API chat / DeepSeek Web and uses system
 // inset-grouped navigation instead of a single overloaded actions menu.
+@MainActor
 final class ImpressR041NativeNavigationTests: XCTestCase {
     func testSettingsUsesThreeNativeGroupedSections() {
         let settings = ImpressV3SettingsHubViewController()
