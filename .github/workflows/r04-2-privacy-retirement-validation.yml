@@ -27,6 +27,20 @@ jobs:
           set -euo pipefail
           swift test --package-path Packages/ImpressReviewCore --parallel
 
+  public-history-audit:
+    name: Scan reachable public Git history for literal credentials
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan every reachable text blob without exposing secret values
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check_git_history_secrets.py
+
   native-qa:
     name: Xcode 27 UIKit XCTest and unsigned iPhoneOS compile (not release)
     runs-on: xcode-27
