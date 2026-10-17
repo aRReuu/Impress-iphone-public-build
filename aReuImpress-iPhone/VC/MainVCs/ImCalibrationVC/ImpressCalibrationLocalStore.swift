@@ -36,6 +36,11 @@ actor ImpressCalibrationLocalStore {
         try value.validate()
         var state = try load()
         state.goals = value
+        let todayID = CalibrationDayCheckIn.dayID(for: Date(), calendar: Calendar.current)
+        if var today = state.days[todayID], !today.isComplete {
+            try today.replaceGoalsForOpenDay(value)
+            state.days[todayID] = today
+        }
         try persist(state)
     }
 
