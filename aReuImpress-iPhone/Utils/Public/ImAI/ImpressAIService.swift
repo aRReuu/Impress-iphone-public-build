@@ -156,7 +156,7 @@ actor ImpressAIHTTPClient {
         // Auth is configured per connection, independently of each model's
         // payload protocol. This supports Bearer-auth Messages gateways.
         let auth = connection.effectiveAuthentication
-        if auth != .none {
+        if auth != .noAuthentication {
             let secret = try ImpressAIKeychain.read(id: connection.credentialID)
             switch auth {
             case .bearer:
@@ -172,7 +172,7 @@ actor ImpressAIHTTPClient {
                     throw ImpressAIServiceError.invalidURL
                 }
                 result.setValue(secret, forHTTPHeaderField: connection.customHeaderName!)
-            case .none:
+            case .noAuthentication:
                 break
             }
         }
