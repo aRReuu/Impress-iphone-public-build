@@ -676,6 +676,18 @@ final class ImpressAIModelChooser: UITableViewController {
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         let m = models[indexPath.row]
+        let registry = ImpressAIConfigStore.shared.registry
+        guard let connection = registry.connections.first(where: { $0.id == m.connectionID }),
+              (try? ImpressAIOpenCodeFreeQA.validate(
+                 ImpressAIResolvedRoute(connection: connection, model: m))) != nil
+        else {
+            let alert = UIAlertController(title: V3L("仅限免费模型测试"),
+                message: V3L("当前 QA 构建仅允许匿名 OpenCode 官方免费模型。"),
+                preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+            present(alert, animated: true)
+            return
+        }
         if task == .knowledgeSynthesis && !m.toolsVerified {
             let alert = UIAlertController(title: V3L("该功能尚未开放"),
                    message: V3L("知识重构需要单独的工具调用及 Vault 写回安全验收。"),
