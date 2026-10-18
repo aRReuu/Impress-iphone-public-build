@@ -6,17 +6,52 @@ import ImpressReviewCore
 
 final class ImpressCalibrationIntegrationTests: XCTestCase {
     @MainActor
-    func testCalibrationIsDedicatedTabWithoutReplacingExistingTabs() {
+    func testCalibrationIsDedicatedTabAlongsideFlashcardNotesShortcut() {
         let root = ImTabBarViewController()
         root.loadViewIfNeeded()
         let tabs = root.viewControllers ?? []
-        XCTAssertEqual(tabs.count, 4)
+        XCTAssertEqual(tabs.count, 3)
+        XCTAssertEqual(tabs.compactMap { $0.tabBarItem.title },
+                       ["闪卡", "校准", "设置"])
         XCTAssertEqual(tabs.compactMap { ($0 as? UINavigationController)?.viewControllers.first }
                               .compactMap { $0 as? ImpressCalibrationViewController }.count, 1)
         XCTAssertTrue((tabs[0] as? UINavigationController)?.viewControllers.first
                       is ImpressV3ReviewViewController)
         XCTAssertTrue((tabs[2] as? UINavigationController)?.viewControllers.first
-                      is ImpressNoteListTableViewController)
+                      is ImpressV3SettingsHubViewController)
+        let review = (tabs[0] as? UINavigationController)?.viewControllers.first
+            as? ImpressV3ReviewViewController
+        review?.loadViewIfNeeded()
+        XCTAssertEqual(Set(review?.navigationItem.rightBarButtonItems?
+            .compactMap(\.accessibilityLabel) ?? []), Set(["笔记", "卡片集"]))
+    }
+
+    @MainActor
+    func testFlashcardNotesBarActionPushesReadOnlyVaultScreenWithoutNewTab() throws {
+        let tabs = ImTabBarViewController()
+        tabs.loadViewIfNeeded()
+        let navigation = try XCTUnwrap(tabs.viewControllers?[0] as? UINavigationController)
+        let review = try XCTUnwrap(navigation.viewControllers.first
+            as? ImpressV3ReviewViewController)
+        review.loadViewIfNeeded()
+        let actions = review.navigationItem.rightBarButtonItems ?? []
+        XCTAssertEqual(actions.count, 2)
+        let notes = try XCTUnwrap(actions.first(where: {
+            $0.accessibilityIdentifier == "impress.review.notes"
+        }))
+        let collection = try XCTUnwrap(actions.first(where: {
+            $0.accessibilityIdentifier == "impress.review.card-collection"
+        }))
+        XCTAssertEqual(notes.title, "笔记")
+        XCTAssertEqual(collection.accessibilityLabel, "卡片集")
+        XCTAssertNotEqual(notes.action, collection.action)
+        let selector = try XCTUnwrap(notes.action)
+        XCTAssertTrue(UIApplication.shared.sendAction(
+            selector, to: notes.target, from: notes, for: nil))
+        XCTAssertEqual(navigation.viewControllers.count, 2)
+        XCTAssertTrue(navigation.topViewController is ImpressNoteListTableViewController)
+        XCTAssertEqual(tabs.viewControllers?.count, 3)
+        XCTAssertTrue(navigation.viewControllers.first === review)
     }
 
     @MainActor

@@ -270,6 +270,11 @@ public actor ReviewWCDBRepository: ReviewRepository {
     /// Creates a disposable legacy V3 fixture with the application's existing
     /// SQLCipher-compatible SQLite import. Never called during normal startup.
     static func seedPreR042FixtureForTesting(at path: String, cardID: UUID) throws {
+        // SQLite OPEN_CREATE creates a file, not its enclosing directory.
+        // This fixture is an isolated pre-R04.2 V3 database, never user data.
+        try FileManager.default.createDirectory(
+            at: URL(fileURLWithPath: path).deletingLastPathComponent(),
+            withIntermediateDirectories: true)
         var pointer: OpaquePointer?
         let result = path.withCString {
             sqlite3_open_v2($0, &pointer,

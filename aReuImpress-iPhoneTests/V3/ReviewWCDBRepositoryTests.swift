@@ -386,11 +386,15 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         let date = Date(timeIntervalSince1970: 1_720_000_000)
         let originalID = UUID()
         let priorDB = try ReviewWCDBRepository(
-            databasePath: live.appendingPathComponent("ReviewV3.sqlite").path,
+            databasePath: root.appendingPathComponent("old-source/ReviewV3.sqlite").path,
             calculator: calc)
         try await priorDB.insertNewCard(
             WCDBV3CardInput(cardID: originalID, question: "Keep original", answerText: "old"),
             initial: try calc.newCardSnapshot(id: originalID, now: date), now: date)
+        // Only the source fixture is ever opened in a WCDB pool. The live
+        // destination mimics a fully closed app at the next cold launch.
+        try await priorDB.createConsistentBackup(
+            to: live.appendingPathComponent("ReviewV3.sqlite"))
         let priorLearning = [ImpressV3LearningEntry(
             id: UUID(), cardID: originalID, question: "old entry",
             userAnswer: "old answer", createdAt: date, aiEvaluation: nil)]
@@ -452,9 +456,12 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         } catch ImpressV3BackupFailure.invalidArchive { }
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: pending.path))
+        let rollbackInspection = root.appendingPathComponent("rollback-inspection.sqlite")
+        try FileManager.default.copyItem(
+            at: live.appendingPathComponent("ReviewV3.sqlite"),
+            to: rollbackInspection)
         let rolledBack = try ReviewWCDBRepository(
-            databasePath: live.appendingPathComponent("ReviewV3.sqlite").path,
-            calculator: calc)
+            databasePath: rollbackInspection.path, calculator: calc)
         let oldCard = try await rolledBack.content(for: originalID)
         XCTAssertEqual(oldCard?.question, "Keep original")
         let absentNewCard = try await rolledBack.content(for: nextID)
@@ -469,9 +476,12 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             root: support, documents: docs, calibration: calibration,
             prompts: defaults)
         XCTAssertFalse(FileManager.default.fileExists(atPath: pending.path))
+        let completedInspection = root.appendingPathComponent("completed-inspection.sqlite")
+        try FileManager.default.copyItem(
+            at: live.appendingPathComponent("ReviewV3.sqlite"),
+            to: completedInspection)
         let installed = try ReviewWCDBRepository(
-            databasePath: live.appendingPathComponent("ReviewV3.sqlite").path,
-            calculator: calc)
+            databasePath: completedInspection.path, calculator: calc)
         let installedCard = try await installed.content(for: nextID)
         XCTAssertEqual(installedCard?.question, "Restored")
         let installedEvents = try await installed.reviewHistory(for: nextID)
@@ -1105,10 +1115,11 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         let stacks = controller.view.subviews.compactMap { $0 as? SwipeCardStack }
         XCTAssertEqual(stacks.count, 1)
         XCTAssertTrue(stacks[0].protectsVerticalContentScroll)
-        // Settings stays in its own tab; the right action is now the V3
-        // searchable card collection, never a legacy Chat/LLM menu.
-        XCTAssertEqual(controller.navigationItem.rightBarButtonItem?.accessibilityLabel,
-                       "卡片集")
+        // The collection and Notes have two visible, independent right
+        // navigation buttons; neither is a legacy Chat/LLM overflow menu.
+        XCTAssertEqual(Set(controller.navigationItem.rightBarButtonItems?
+            .compactMap(\.accessibilityLabel) ?? []), Set(["卡片集", "笔记"]))
+        XCTAssertEqual(controller.navigationItem.rightBarButtonItems?.count, 2)
         XCTAssertEqual(controller.navigationItem.leftBarButtonItem?.accessibilityLabel,
                        "添加内容")
         XCTAssertFalse(buttons.contains { $0.title(for: .normal) == "困难" })

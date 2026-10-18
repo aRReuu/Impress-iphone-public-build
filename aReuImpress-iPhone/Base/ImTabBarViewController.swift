@@ -36,19 +36,13 @@ class ImTabBarViewController: UITabBarController
         calibrationNav.tabBarItem.image = UIImage(systemName: "chart.xyaxis.line")
         calibrationNav.tabBarItem.selectedImage = UIImage(systemName: "chart.xyaxis.line")
 
-        let noteVC = ImpressNoteListTableViewController()
-        let noteNav = ImNavigationViewController(rootViewController: noteVC)
-        noteNav.tabBarItem.title = "笔记"
-        noteNav.tabBarItem.image = UIImage(systemName: "doc.text")
-        noteNav.tabBarItem.selectedImage = UIImage(systemName: "doc.text.fill")
-
         let settingsVC = ImpressV3SettingsHubViewController()
         let settingsNav = ImNavigationViewController(rootViewController: settingsVC)
         settingsNav.tabBarItem.title = "设置"
         settingsNav.tabBarItem.image = UIImage(systemName: "gearshape")
         settingsNav.tabBarItem.selectedImage = UIImage(systemName: "gearshape.fill")
 
-        self.viewControllers = [cardNav, calibrationNav, noteNav, settingsNav]
+        self.viewControllers = [cardNav, calibrationNav, settingsNav]
         // Page extends underneath the native floating bar; no fake glass.
         view.backgroundColor = ImpressV3Appearance.page
         ImpressV3Appearance.styleTabBar(tabBar)

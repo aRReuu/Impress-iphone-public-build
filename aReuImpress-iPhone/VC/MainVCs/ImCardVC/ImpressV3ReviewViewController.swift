@@ -197,12 +197,32 @@ final class ImpressV3ReviewViewController: UIViewController {
     }
 
     private func updateNavigationActions() {
-        // One quiet collection entry; grading/navigation remain independent.
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
+        // Distinct first-class destinations. Keep the searchable card
+        // collection, and expose external Obsidian notes without another Tab.
+        let cardCollection = UIBarButtonItem(
             image: UIImage(systemName: "square.stack"),
             style: .plain, target: self,
             action: #selector(openCardCollection))
-        navigationItem.rightBarButtonItem?.accessibilityLabel = "卡片集"
+        cardCollection.accessibilityLabel = "卡片集"
+        cardCollection.accessibilityIdentifier = "impress.review.card-collection"
+
+        // A visible native text action remains recognizable on iPhone 13;
+        // not hidden inside a menu or the card-creation (+) control.
+        let notes = UIBarButtonItem(
+            title: "笔记", style: .plain, target: self,
+            action: #selector(openNotes))
+        notes.accessibilityLabel = "笔记"
+        notes.accessibilityIdentifier = "impress.review.notes"
+        navigationItem.rightBarButtonItems = [notes, cardCollection]
+    }
+
+    @objc private func openNotes() {
+        // Notes retains its existing read-only Vault permission, search,
+        // attachments and folder actions. The flashcard rating transaction
+        // is never changed by this navigation.
+        guard navigationController?.topViewController === self else { return }
+        navigationController?.pushViewController(
+            ImpressNoteListTableViewController(), animated: true)
     }
 
     @objc private func openCardCollection() {
