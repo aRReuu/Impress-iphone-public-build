@@ -74,7 +74,7 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
         let store = ImpressCalibrationLocalStore(storageURL: url)
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let timestamp = calendar.date(from: DateComponents(year: 2026, month: 10, day: 18))!
+        let timestamp = calendar.date(from: DateComponents(year: 2025, month: 10, day: 18))!
         var first = try await store.checkIn(on: timestamp, calendar: calendar)
         try first.setOutcome(.completed, for: .sleep)
         try await store.save(first)
@@ -83,9 +83,36 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
         try await store.setGoals(CalibrationGoals(custom: "新的自定义目标"))
         let reload = try await store.checkIn(on: timestamp, calendar: calendar)
         XCTAssertEqual(reload.goalsSnapshot.custom, first.goalsSnapshot.custom)
+        XCTAssertEqual(reload.outcome(for: .sleep), .completed)
         let all = try await store.history()
         XCTAssertEqual(all.count, 1)
     }
+
+    func testEditingOpenTodayResetsOnlyChangedGoalAssessments() async throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("calibration-edit-today-" + UUID().uuidString,
+                                    isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = ImpressCalibrationLocalStore(
+            storageURL: folder.appendingPathComponent("checkins.json"))
+        let today = Date()
+        var day = try await store.checkIn(on: today)
+        try day.setOutcome(.completed, for: .sleep)
+        try day.setOutcome(.missed, for: .custom)
+        try await store.save(day)
+        try await store.setGoals(CalibrationGoals(custom: "更新后需要重新确认的目标"))
+        let updated = try await store.checkIn(on: today)
+        XCTAssertEqual(updated.goalsSnapshot.custom, "更新后需要重新确认的目标")
+        XCTAssertEqual(updated.outcome(for: .sleep), .completed,
+                       "An unchanged confirmed goal must be retained")
+        XCTAssertEqual(updated.outcome(for: .custom), .unrecorded,
+                       "The changed goal must be reassessed")
+        XCTAssertFalse(updated.isComplete)
+        XCTAssertNil(try updated.finalizedScore().netScore)
+        let history = try await store.history()
+        XCTAssertEqual(history.count, 1)
+    }
+
     func testCalibrationArchiveRoundTripAndCorruptionRejection() async throws {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("cal-archive-" + UUID().uuidString, isDirectory: true)

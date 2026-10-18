@@ -1,4 +1,4 @@
-name: Impress R04.2 Retired Chat Privacy and Native Regression
+name: Impress V3.2 Full Native Regression and Unsigned QA
 
 on:
   push:
@@ -143,7 +143,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/PrivacyPayload/Payload"
           ditto "$APP" "$RUNNER_TEMP/PrivacyPayload/Payload/aReuImpress-iPhone.app"
           SHORT="$(git rev-parse --short=12 HEAD)"
-          IPA="Impress-V3.1-R04.2-PrivacyClean-$SHORT-7icon-INCOMPLETE-unsigned.ipa"
+          IPA="Impress-V3.2-$SHORT-7icon-INCOMPLETE-unsigned.ipa"
           (cd "$RUNNER_TEMP/PrivacyPayload" && zip -qry "$GITHUB_WORKSPACE/out/$IPA" Payload)
           unzip -tq "out/$IPA" | tee out/zip-integrity.txt
           shasum -a 256 "out/$IPA" | tee out/IPA_SHA256.txt
@@ -152,7 +152,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: impress-r04-2-privacy-clean-qa-not-final
+          name: impress-v3-2-native-qa-not-final
           path: |
             out/*.txt
             out/*.json

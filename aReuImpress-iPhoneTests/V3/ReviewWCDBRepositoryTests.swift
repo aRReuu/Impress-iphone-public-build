@@ -488,8 +488,14 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(installedEvents.count, 1)
         XCTAssertEqual(try JSONDecoder().decode([ImpressV3LearningEntry].self,
             from: Data(contentsOf: journal)), nextLearning)
-        XCTAssertEqual(defaults.data(forKey: ImpressV3PromptLibrary.storageKey),
-                       try JSONEncoder().encode(nextPrompts))
+        // JSONEncoder does not guarantee byte ordering of Codable keyed
+        // properties. Verify restored semantic content; the earlier rollback
+        // assertion still requires byte-for-byte preservation of prior data.
+        let restoredPromptData = try XCTUnwrap(
+            defaults.data(forKey: ImpressV3PromptLibrary.storageKey))
+        let restoredPrompts = try JSONDecoder().decode(
+            [ImpressV3PromptTemplate].self, from: restoredPromptData)
+        XCTAssertEqual(restoredPrompts, nextPrompts)
         XCTAssertEqual(try ImpressCalibrationLocalStore.validateArchiveData(
             Data(contentsOf: calibration)), 1)
     }
