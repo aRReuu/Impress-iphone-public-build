@@ -77,6 +77,10 @@ public struct ImpressAIEndpointPaths: Codable, Equatable, Sendable {
     }
 }
 
+public enum ImpressAIJSONMode: String, Codable, CaseIterable, Sendable {
+    case native, promptOnly
+}
+
 public enum ImpressAITask: String, Codable, CaseIterable, Sendable {
     case questionGeneration, knowledgeSynthesis, conversation
 }
@@ -129,10 +133,14 @@ public struct ImpressAIModel: Codable, Equatable, Sendable {
     public var enabled: Bool
     /// Mixed-format gateways may need a protocol per model.
     public var protocolOverride: ImpressAIProtocol?
+    /// Some compatible gateways accept prompt-enforced JSON but reject
+    /// response_format. Still require strict local output validation.
+    public var jsonMode: ImpressAIJSONMode?
 
     public init(id: UUID = UUID(), connectionID: UUID, identifier: String,
                 jsonVerified: Bool = false, toolsVerified: Bool = false, enabled: Bool = true,
-                protocolOverride: ImpressAIProtocol? = nil) {
+                protocolOverride: ImpressAIProtocol? = nil,
+                jsonMode: ImpressAIJSONMode? = nil) {
         self.id = id
         self.connectionID = connectionID
         self.identifier = identifier
@@ -140,6 +148,7 @@ public struct ImpressAIModel: Codable, Equatable, Sendable {
         self.toolsVerified = toolsVerified
         self.enabled = enabled
         self.protocolOverride = protocolOverride
+        self.jsonMode = jsonMode
     }
 }
 
