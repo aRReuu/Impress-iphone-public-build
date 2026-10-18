@@ -1380,7 +1380,7 @@ final class ImpressV3TimelineNodeCell: UITableViewCell {
 @MainActor
 final class ImpressV3SettingsHubViewController: UITableViewController {
     private enum Destination {
-        case promptLibrary, reminders, appearance, language, speech, backup
+        case aiService, promptLibrary, reminders, appearance, language, speech, backup
     }
     private struct Item {
         let title: String
@@ -1390,6 +1390,8 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
     }
     private let groups: [(name: String, items: [Item])] = [
         ("内容工具", [
+            Item(title: "AI 服务", detail: "多 API 连接、多模型与智能出题路由",
+                 symbol: "sparkles", destination: .aiService),
             Item(title: "提示词", detail: "费曼总结、选择题、问题与答案 · 可建立多份自定义模板",
                  symbol: "text.book.closed", destination: .promptLibrary)
         ]),
@@ -1444,7 +1446,7 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
     override func tableView(_ tableView: UITableView,
                             titleForFooterInSection section: Int) -> String? {
         switch section {
-        case 0: return V3L("本地模板仅在用户明确操作后复制，不自动上传私人内容。")
+        case 0: return V3L("API Key 由 Keychain 管理；私人笔记只在明确授权的生成任务中发送。")
         case 1: return V3L("FSRS-6 决定到期时间；通知仅负责提醒。")
         case 2: return V3L("默认跟随系统；手动选择仅影响 Impress，不修改 iPhone 系统外观。")
         case 3: return V3L("仅使用 Apple 端侧语音模型，录音不会写入历史或发送到服务器。")
@@ -1482,6 +1484,9 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
                             didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         switch groups[indexPath.section].items[indexPath.row].destination {
+        case .aiService:
+            navigationController?.pushViewController(
+                ImpressAISettingsViewController(), animated: true)
         case .promptLibrary:
             navigationController?.pushViewController(
                 ImpressV3PromptLibraryViewController(), animated: true)
