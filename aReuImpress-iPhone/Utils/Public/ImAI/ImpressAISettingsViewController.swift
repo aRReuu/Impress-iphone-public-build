@@ -125,6 +125,31 @@ final class ImpressAISettingsViewController: UITableViewController {
         // Presets are convenience only. "Custom API" always accepts arbitrary
         // HTTPS providers and manual model IDs. Gateways may offer mixed wire
         // protocols and retain independent user API keys.
+        // Explicit one-tap free setup, no API key and no billable models.
+        // Users may separately configure paid profiles for a future release,
+        // but this QA build refuses inference through them.
+        sheet.addAction(UIAlertAction(
+            title: V3L("OpenCode 免费模型（测试）"), style: .default
+        ) { [weak self] _ in
+            guard let self else { return }
+            let connection = ImpressAIOpenCodeFreeQA.connection()
+            let models = ImpressAIOpenCodeFreeQA.models(for: connection.id)
+            do {
+                try ImpressAIConfigStore.shared.update { registry in
+                    registry.connections.append(connection)
+                    registry.models.append(contentsOf: models)
+                    for task in [ImpressAITask.questionGeneration, .conversation] {
+                        registry.routes.removeAll { $0.task == task }
+                        registry.routes.append(ImpressAIRoute(
+                            task: task, primaryModelID: models[0].id))
+                    }
+                }
+                self.navigationController?.pushViewController(
+                    ImpressAIModelsViewController(connectionID: connection.id),
+                    animated: true)
+            } catch { self.showFailure(error) }
+        })
+
         let presets: [(String, ImpressAIProvider, ImpressAIProtocol, String)] = [
             ("OpenAI (GPT)", .openAI, .responses, "https://api.openai.com/v1"),
             ("DeepSeek", .deepSeek, .chatCompletions, "https://api.deepseek.com"),
@@ -133,7 +158,7 @@ final class ImpressAISettingsViewController: UITableViewController {
             ("智谱 GLM (国内)", .zhipu, .chatCompletions, "https://open.bigmodel.cn/api/paas/v4"),
             ("GLM / Z.AI (国际)", .zhipu, .chatCompletions, "https://api.z.ai/api/paas/v4"),
             ("Command Code", .commandCode, .chatCompletions, "https://api.commandcode.ai/provider/v1"),
-            ("OpenCode Zen", .openCode, .responses, "https://opencode.ai/zen/v1"),
+            ("OpenCode Console", .openCode, .chatCompletions, "https://opencode.ai/inference"),
             ("OpenCode Go", .openCode, .chatCompletions, "https://opencode.ai/zen/go/v1"),
             (V3L("自定义 API"), .custom, .chatCompletions, "https://api.example.com/v1")
         ]
@@ -141,7 +166,9 @@ final class ImpressAISettingsViewController: UITableViewController {
             sheet.addAction(UIAlertAction(title: label, style: .default) { [weak self] _ in
                 guard let self, let endpoint = URL(string: url) else { return }
                 let profile = ImpressAIConnection(title: label, provider: provider,
-                                                  apiProtocol: wire, baseURL: endpoint)
+                    apiProtocol: wire, baseURL: endpoint,
+                    endpoints: provider == .openCode && label == "OpenCode Console"
+                        ? ImpressAIOpenCodeFreeQA.endpoints : nil)
                 do {
                     try ImpressAIConfigStore.shared.update { $0.connections.append(profile) }
                     self.navigationController?.pushViewController(
@@ -544,6 +571,11 @@ final class ImpressAIModelsViewController: UITableViewController {
         present(a, animated: true)
     }
     private func addModelID(_ id: String) {
+        if connection?.effectiveAuthentication == .noAuthentication &&
+           !ImpressAIOpenCodeFreeQA.allowedForCatalog(id) {
+            showError(ImpressAIServiceError.freeModelOnly)
+            return
+        }
         do {
             let model = ImpressAIModel(connectionID: connectionID,
                     identifier: id.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -585,6 +617,15 @@ final class ImpressAIModelsViewController: UITableViewController {
         }
     }
     private func setRoute(_ task: ImpressAITask, modelID: UUID) {
+        // Free QA must never silently promote a paid model as a runnable route.
+        let registry = ImpressAIConfigStore.shared.registry
+        if let model = registry.models.first(where: { $0.id == modelID }),
+           let connection = registry.connections.first(where: { $0.id == model.connectionID }),
+           (try? ImpressAIOpenCodeFreeQA.validate(
+                 ImpressAIResolvedRoute(connection: connection, model: model))) == nil {
+            showError(ImpressAIServiceError.freeModelOnly)
+            return
+        }
         do {
             try ImpressAIConfigStore.shared.update { reg in
                 reg.routes.removeAll { $0.task == task }
