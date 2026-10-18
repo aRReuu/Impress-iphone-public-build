@@ -24,11 +24,6 @@ final class ImpressV3BackupSettingsViewController: UITableViewController,
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        tableView.reloadData()
-    }
-
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
         title = V3L("数据与备份")
         tableView.reloadData()
     }
@@ -41,7 +36,7 @@ final class ImpressV3BackupSettingsViewController: UITableViewController,
 
     override func tableView(_ tableView: UITableView,
                             titleForHeaderInSection section: Int) -> String? {
-        V3L([V3L("本地自动备份"), V3L("iCloud Drive 副本"), V3L("恢复")][section])
+        V3L(["本地自动备份", "iCloud Drive 副本", "恢复"][section])
     }
 
     override func tableView(_ tableView: UITableView,
