@@ -41,11 +41,16 @@ public enum ImpressAIOpenCodeFreeQA {
     /// Deliberate fail-closed allowlist; arbitrary `free` suffixes never pass.
     public static func validate(_ route: ImpressAIResolvedRoute) throws {
         let c = route.connection
+        let anonymous = c.effectiveAuthentication == .noAuthentication &&
+            c.credentialID == nil
+        // Users may explicitly test their own Keychain-stored key with only
+        // the same documented free model IDs. CI always takes anonymous lane.
+        let ownedKey = c.effectiveAuthentication == .bearer &&
+            c.credentialID != nil
         guard modelIDs.contains(route.model.identifier),
               c.provider == .openCode,
               c.baseURL == baseURL,
-              c.effectiveAuthentication == .noAuthentication,
-              c.credentialID == nil,
+              anonymous || ownedKey,
               c.effectiveEndpoints.chatPath == endpoints.chatPath,
               route.effectiveProtocol == .chatCompletions
         else { throw ImpressAIContractError.freeModelQAOnly }
