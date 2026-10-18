@@ -1,6 +1,7 @@
 import UIKit
 import Speech
 import AVFoundation
+import AudioToolbox
 import CoreMedia
 
 // V3.3: This unit is the only authority for microphone capture and Apple
@@ -78,6 +79,71 @@ struct ImpressTranscriptBuffer {
     }
 }
 
+/// iOS 26-compatible microphone -> AnalyzerInput bridge.
+/// The newer CaptureInputSequenceProvider requires iOS 27 and must not be
+/// referenced by the iOS 26 deployment target.
+private final class ImpressSpeechAudioPipe: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "impress.speech.audio-conversion",
+                                      qos: .userInitiated)
+    private let converter: AnalyzerInputConverter
+    private let continuation: AsyncStream<AnalyzerInput>.Continuation
+    let stream: AsyncStream<AnalyzerInput>
+    // Confined to serial dispatch queue; no mutable data escapes the microphone callback.
+    private var closed = false
+
+    init(format: AVAudioFormat) {
+        converter = AnalyzerInputConverter(analyzerFormat: format)
+        let pair = AsyncStream.makeStream(of: AnalyzerInput.self)
+        stream = pair.stream
+        continuation = pair.continuation
+    }
+
+    func append(_ buffer: AVAudioPCMBuffer) {
+        guard buffer.frameLength > 0,
+              let copy = AVAudioPCMBuffer(pcmFormat: buffer.format,
+                                          frameCapacity: buffer.frameLength) else { return }
+        copy.frameLength = buffer.frameLength
+        // The input tap reuses its buffer. Make our own PCM copy before the
+        // callback returns so the serial converter never reads changing audio.
+        let source = UnsafeMutableAudioBufferListPointer(
+            UnsafeMutablePointer(mutating: buffer.audioBufferList))
+        let destination = UnsafeMutableAudioBufferListPointer(copy.mutableAudioBufferList)
+        guard source.count == destination.count else { return }
+        for index in 0..<source.count {
+            guard let data = source[index].mData,
+                  let target = destination[index].mData else { return }
+            memcpy(target, data, min(Int(source[index].mDataByteSize),
+                                     Int(destination[index].mDataByteSize)))
+        }
+        queue.async { [self] in
+            guard !closed else { return }
+            do {
+                for input in try converter.convert(copy, at: nil) {
+                    continuation.yield(input)
+                }
+            } catch {
+                closed = true
+                continuation.finish()
+            }
+        }
+    }
+
+    func finish() async {
+        await withCheckedContinuation { (waiter: CheckedContinuation<Void, Never>) in
+            queue.async { [self] in
+                if !closed {
+                    closed = true
+                    if let remaining = try? converter.flush() {
+                        for input in remaining { continuation.yield(input) }
+                    }
+                    continuation.finish()
+                }
+                waiter.resume()
+            }
+        }
+    }
+}
+
 @MainActor
 final class ImpressSpeechService: NSObject {
     static let shared = ImpressSpeechService()
@@ -108,7 +174,8 @@ final class ImpressSpeechService: NSObject {
 
     private(set) var state = State.idle
     private var analyzer: SpeechAnalyzer?
-    private var capture: CaptureInputSequenceProvider?
+    private var microphone: AVAudioEngine?
+    private var audioPipe: ImpressSpeechAudioPipe?
     private var resultTask: Task<Void, Never>?
     private var segments = ImpressTranscriptBuffer()
     private var updateHandler: ((String, String) -> Void)?
@@ -162,13 +229,21 @@ final class ImpressSpeechService: NSObject {
             let engine = try await recognizer(for: choice)
             let installed = await availability(for: choice)
             guard installed.installed else { throw ImpressSpeechFailure.modelRequired }
-            guard let device = AVCaptureDevice.default(for: .audio) else {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.record, mode: .measurement)
+            try session.setActive(true)
+            let recorder = AVAudioEngine()
+            let node = recorder.inputNode
+            let inputFormat = node.outputFormat(forBus: 0)
+            guard inputFormat.sampleRate > 0,
+                  let targetFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
+                    compatibleWith: engine.modules, considering: inputFormat) else {
                 throw ImpressSpeechFailure.unavailableMicrophone
             }
-            let provider = try await CaptureInputSequenceProvider.providerWithSession(
-                from: device, compatibleWith: engine.modules)
+            let feed = ImpressSpeechAudioPipe(format: targetFormat)
             let analysis = SpeechAnalyzer(modules: engine.modules)
-            self.capture = provider
+            self.microphone = recorder
+            self.audioPipe = feed
             self.analyzer = analysis
             switch engine {
             case .speech(let transcriber):
@@ -190,15 +265,13 @@ final class ImpressSpeechService: NSObject {
                     } catch { self?.receiveFailure(error) }
                 }
             }
-            try await analysis.start(inputSequence: provider.analyzerInputs)
-            // Capture startup is not allowed to block the UIKit thread.
-            await withCheckedContinuation { continuation in
-                DispatchQueue.global(qos: .userInitiated).async {
-                    provider.captureSession.startRunning()
-                    continuation.resume()
-                }
+            try await analysis.start(inputSequence: feed.stream)
+            node.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) {
+                buffer, _ in feed.append(buffer)
             }
-            guard provider.captureSession.isRunning else {
+            recorder.prepare()
+            try recorder.start()
+            guard recorder.isRunning else {
                 throw ImpressSpeechFailure.unavailableMicrophone
             }
             state = .recording
@@ -235,17 +308,15 @@ final class ImpressSpeechService: NSObject {
             throw ImpressSpeechFailure.canceled
         }
         state = .finishing
-        if let capture {
-            await withCheckedContinuation { continuation in
-                DispatchQueue.global(qos: .userInitiated).async {
-                    capture.captureSession.stopRunning()
-                    continuation.resume()
-                }
-            }
+        if let microphone {
+            microphone.inputNode.removeTap(onBus: 0)
+            microphone.stop()
         }
-        capture = nil
-        // The capture provider terminates its input stream on release. A
-        // bounded watchdog prevents indefinitely waiting on an audio driver.
+        microphone = nil
+        await audioPipe?.finish()
+        audioPipe = nil
+        // After the async input stream terminates, the analyzer flushes its
+        // remaining final results. Bound hardware/driver stalls.
         let watchdog = Task {
             try? await Task.sleep(for: .seconds(6))
             if !Task.isCancelled { await analyzer.cancelAndFinishNow() }
@@ -259,22 +330,25 @@ final class ImpressSpeechService: NSObject {
         }
         await resultTask?.value
         let result = segments.finalText
+        try? AVAudioSession.sharedInstance().setActive(
+            false, options: .notifyOthersOnDeactivation)
         reset()
         guard !result.isEmpty else { throw ImpressSpeechFailure.noFinalText }
         return result
     }
 
     func cancel() async {
-        if let provider = capture, provider.captureSession.isRunning {
-            await withCheckedContinuation { continuation in
-                DispatchQueue.global(qos: .userInitiated).async {
-                    provider.captureSession.stopRunning()
-                    continuation.resume()
-                }
-            }
+        if let microphone {
+            microphone.inputNode.removeTap(onBus: 0)
+            microphone.stop()
         }
+        microphone = nil
+        await audioPipe?.finish()
+        audioPipe = nil
         await analyzer?.cancelAndFinishNow()
         resultTask?.cancel()
+        try? AVAudioSession.sharedInstance().setActive(
+            false, options: .notifyOthersOnDeactivation)
         reset()
     }
 
@@ -284,7 +358,8 @@ final class ImpressSpeechService: NSObject {
         NotificationCenter.default.removeObserver(self,
             name: AVAudioSession.interruptionNotification, object: nil)
         observedApplication = false
-        capture = nil
+        microphone = nil
+        audioPipe = nil
         analyzer = nil
         resultTask = nil
         updateHandler = nil
