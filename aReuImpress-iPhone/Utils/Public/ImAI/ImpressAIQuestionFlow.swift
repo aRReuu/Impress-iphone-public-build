@@ -150,7 +150,7 @@ final class ImpressAIQuestionGenerationViewController: UITableViewController {
                 relativePath: document.identity.relativePath,
                 documentSHA256: document.digest, heading: chosen.count == 1 ? chosen[0].heading : "多章节")
         let excerpts = chosen.map { item in
-            ImpressAIExcerpt(id: item.id, source: source, text: item.text)
+            ImpressAIExcerpt(id: item.id, source: source, text: item.text, sectionHeading: item.heading)
         }
         do { _ = try ImpressAIQuestionPrompt.input(excerpts) }
         catch { showFailure(ImpressAIServiceError.tooLarge); return }
