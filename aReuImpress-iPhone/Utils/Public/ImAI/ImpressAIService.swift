@@ -231,9 +231,9 @@ actor ImpressAIHTTPClient {
             return name.isEmpty ? nil : name
         }
         let cleaned = Array(Set(values)).sorted()
-        // The anonymous QA profile must never present paid models as choices.
-        let filtered = connection.provider == .openCode &&
-            connection.effectiveAuthentication == .noAuthentication
+        // OpenCode's model catalog includes paid models. Neither a
+        // Keychain-backed nor anonymous QA connection may present them.
+        let filtered = connection.provider == .openCode
             ? cleaned.filter(ImpressAIOpenCodeFreeQA.allowedForCatalog)
             : cleaned
         guard !filtered.isEmpty else { throw ImpressAIServiceError.emptyModelList }
@@ -242,7 +242,8 @@ actor ImpressAIHTTPClient {
 
     func complete(route: ImpressAIResolvedRoute, system: String,
                   user: String) async throws -> String {
-        // No app-held API keys or charged models are reachable through QA.
+        // Reject paid model IDs before sending any request, whether anonymous
+        // or explicitly authenticated from device Keychain.
         guard (try? ImpressAIOpenCodeFreeQA.validate(route)) != nil else {
             throw ImpressAIServiceError.freeModelOnly
         }
