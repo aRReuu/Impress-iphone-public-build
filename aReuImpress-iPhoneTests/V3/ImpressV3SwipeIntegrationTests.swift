@@ -387,14 +387,19 @@ final class ImpressR041NativeNavigationTests: XCTestCase {
         XCTAssertEqual(settings.numberOfSections(in: settings.tableView), 5)
         XCTAssertEqual(settings.navigationItem.largeTitleDisplayMode, .always)
         // R04.2 added data safety as a distinct native settings group.
-        for (section, title) in ["提示词", "复习通知", "显示模式", "语音与听写", "数据与备份"].enumerated() {
+        for (section, title) in ["AI 服务", "复习通知", "显示模式", "语音与听写", "数据与备份"].enumerated() {
+            let expectedRows = section == 0 || section == 2 ? 2 : 1
             XCTAssertEqual(settings.tableView(settings.tableView,
-                              numberOfRowsInSection: section), section == 2 ? 2 : 1)
+                              numberOfRowsInSection: section), expectedRows)
             let cell = settings.tableView(settings.tableView,
                               cellForRowAt: IndexPath(row: 0, section: section))
             let content = cell.contentConfiguration as? UIListContentConfiguration
             XCTAssertEqual(content?.text, V3L(title))
         }
+        let prompts = settings.tableView(settings.tableView,
+            cellForRowAt: IndexPath(row: 1, section: 0))
+        XCTAssertEqual((prompts.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("提示词"))
         let language = settings.tableView(settings.tableView,
             cellForRowAt: IndexPath(row: 1, section: 2))
         XCTAssertEqual((language.contentConfiguration as? UIListContentConfiguration)?.text,
