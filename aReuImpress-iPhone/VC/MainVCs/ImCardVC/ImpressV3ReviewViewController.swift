@@ -878,6 +878,7 @@ final class ImpressV3CaptureViewController: UIViewController {
         input.layer.cornerRadius = ImpressV3Appearance.Radius.field
         input.translatesAutoresizingMaskIntoConstraints = false
         input.accessibilityLabel = V3L("本次理解的文字记录")
+        ImpressSpeechAccessory.install(on: input)
         view.addSubview(subtitle)
         view.addSubview(input)
         NSLayoutConstraint.activate([
@@ -1241,6 +1242,7 @@ final class ImpressV3UnderstandingEditorViewController: UIViewController, UIText
         input.isEditable = true
         input.delegate = self
         input.accessibilityIdentifier = "impress.learning.edit.body"
+        ImpressSpeechAccessory.install(on: input)
         input.text = entry.userAnswer
         input.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(input)
@@ -1378,7 +1380,7 @@ final class ImpressV3TimelineNodeCell: UITableViewCell {
 @MainActor
 final class ImpressV3SettingsHubViewController: UITableViewController {
     private enum Destination {
-        case promptLibrary, reminders, appearance, language, backup
+        case promptLibrary, reminders, appearance, language, speech, backup
     }
     private struct Item {
         let title: String
@@ -1400,6 +1402,10 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
                  symbol: "circle.lefthalf.filled", destination: .appearance),
             Item(title: "应用语言", detail: "简体中文、繁体中文或英文",
                  symbol: "globe", destination: .language)
+        ]),
+        ("语音输入", [
+            Item(title: "语音与听写", detail: "识别语言、Apple 端侧模型与录音权限",
+                 symbol: "mic", destination: .speech)
         ]),
         ("数据安全", [
             Item(title: "数据与备份", detail: "静默自动备份、iCloud 副本与受控恢复",
@@ -1441,6 +1447,7 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
         case 0: return V3L("本地模板仅在用户明确操作后复制，不自动上传私人内容。")
         case 1: return V3L("FSRS-6 决定到期时间；通知仅负责提醒。")
         case 2: return V3L("默认跟随系统；手动选择仅影响 Impress，不修改 iPhone 系统外观。")
+        case 3: return V3L("仅使用 Apple 端侧语音模型，录音不会写入历史或发送到服务器。")
         default: return V3L("备份保存在本机；连接 iCloud Drive 文件夹后可自动创建副本。")
         }
     }
@@ -1487,6 +1494,9 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
         case .language:
             navigationController?.pushViewController(
                 ImpressV3LanguageSettingsViewController(), animated: true)
+        case .speech:
+            navigationController?.pushViewController(
+                ImpressSpeechSettingsViewController(), animated: true)
         case .backup:
             navigationController?.pushViewController(
                 ImpressV3BackupSettingsViewController(), animated: true)

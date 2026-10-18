@@ -246,6 +246,7 @@ final class ImpressV3PromptEditorViewController: UIViewController {
         titleField.placeholder = V3L("例如：费曼总结")
         titleField.text = original?.title
         titleField.accessibilityLabel = V3L("提示词名称")
+        ImpressSpeechAccessory.install(on: titleField)
         titleField.heightAnchor.constraint(
             greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.controlHeight).isActive = true
         stack.addArrangedSubview(titleField)
@@ -262,6 +263,7 @@ final class ImpressV3PromptEditorViewController: UIViewController {
                                                    bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
         contentView.text = original?.content ?? ""
         contentView.accessibilityLabel = V3L("可复制的提示词正文")
+        ImpressSpeechAccessory.install(on: contentView)
         contentView.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.promptEditorMinHeight).isActive = true
         stack.addArrangedSubview(contentView)
         let note = UILabel()

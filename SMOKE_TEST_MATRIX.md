@@ -41,3 +41,13 @@ Record final Git SHA, Actions run URL, each job conclusion, **total native XCTes
 | Binary | Signed state unchanged; unsigned ARM64 QA .app reports `MinimumOSVersion=26.0`, IPA ZIP/SHA valid | New native packaging assertion; pending CI |
 | iPhone 13 | iOS 26 installation and SpeechTranscriber hardware/locale/download checks; old-system support intentionally dropped | **Device PENDING** |
 | Global STT/Markdown | Apple SpeechAnalyzer and unified renderer/voice UI not yet implemented | **Development PENDING** |
+
+## V3.3 speech gate
+| Gate | Required evidence |
+| --- | --- |
+| Speech code | Real iOS 26 compilation against Apple Speech; no SFSpeechRecognizer, no third-party STT and no private audio log/disk path |
+| Voice settings | Three independent recognition locales, engine availability, manual Apple model installation and microphone permissions displayed |
+| Text insertion | UTF-16 selection replacement, cancel leaves source unchanged, stale edit rejected, final-only commit, single editor-change callback |
+| Editor routing | Question, answer, options, batch import, understanding capture/edit, prompt inputs and Markdown **private drafts** provide one mic accessory; source Obsidian reader remains read-only |
+| Real device | iPhone 13 microphone and interrupted session; per-locale model availability, first-download permission, latency, accuracy, background cancellation and VoiceOver **PENDING** |
+| Markdown overhaul | One AST-backed parser and unified rendering pipeline **PENDING**; no old or external Vault document discarded |

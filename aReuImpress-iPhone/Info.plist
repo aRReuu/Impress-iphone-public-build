@@ -97,6 +97,8 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Impress 仅在你点击麦克风后录音，使用 Apple 端侧识别将语音插入当前文本框。音频不上传或保存。</string>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>需要访问Obsidian笔记库进行内容分析</string>
 	<key>NSRemindersUsageDescription</key>

@@ -31,3 +31,6 @@ Use GitHub Actions Artifact URL from the exact target SHA, SHA256SUMS / IPA_SHA2
 
 ## iOS 26 deployment migration
 App and XCTest targets now require iOS 26.0. CocoaPods and all CI compiler overrides match the same minimum. The native packaging job verifies the built app's `MinimumOSVersion` is exactly `26.0` in addition to ARM64, unsigned status and SHA-256. This is strictly a platform-floor change: STT, new Markdown rendering and full iPhone 13 voice acceptance remain separate pending work. Keep original App Icon release blockade and all data safety gates intact.
+
+## iOS 26 native STT candidate
+The iOS 26 branch adds Apple-only `SpeechAnalyzer` voice input, a new Settings page, isolated editor accessory and microphone-use reason. CI uses `.github/scripts/verify_apple_stt_contract.py` for static privacy/route checks and UIKit regression tests for transcription buffer and insertion rules. The unsigned candidate name uses `Impress-V3.3-<HEAD>-7icon-INCOMPLETE-unsigned.ipa` and is not directly installable. A green simulator test cannot prove microphone, available Apple models or cloud-independent recognition on iPhone 13; do not describe them as device-PASS.

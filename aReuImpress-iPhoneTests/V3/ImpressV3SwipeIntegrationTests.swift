@@ -384,10 +384,10 @@ final class ImpressR041NativeNavigationTests: XCTestCase {
     func testSettingsIncludesAppearanceLanguageAndDataSafety() {
         let settings = ImpressV3SettingsHubViewController()
         settings.loadViewIfNeeded()
-        XCTAssertEqual(settings.numberOfSections(in: settings.tableView), 4)
+        XCTAssertEqual(settings.numberOfSections(in: settings.tableView), 5)
         XCTAssertEqual(settings.navigationItem.largeTitleDisplayMode, .always)
         // R04.2 added data safety as a distinct native settings group.
-        for (section, title) in ["提示词", "复习通知", "显示模式", "数据与备份"].enumerated() {
+        for (section, title) in ["提示词", "复习通知", "显示模式", "语音与听写", "数据与备份"].enumerated() {
             XCTAssertEqual(settings.tableView(settings.tableView,
                               numberOfRowsInSection: section), section == 2 ? 2 : 1)
             let cell = settings.tableView(settings.tableView,
@@ -400,7 +400,7 @@ final class ImpressR041NativeNavigationTests: XCTestCase {
         XCTAssertEqual((language.contentConfiguration as? UIListContentConfiguration)?.text,
                        V3L("应用语言"))
         XCTAssertEqual(settings.tableView(settings.tableView,
-                          titleForHeaderInSection: 3), V3L("数据安全"))
+                          titleForHeaderInSection: 4), V3L("数据安全"))
     }
 
     func testAppearanceModesPersistAndApplyOnlyToRequestedWindow() throws {
@@ -454,6 +454,72 @@ final class ImpressR041NativeNavigationTests: XCTestCase {
         XCTAssertEqual(notes.tableView.backgroundColor, ImpressV3Appearance.page)
         XCTAssertEqual(notes.tableView.estimatedRowHeight,
                        ImpressV3Appearance.Metrics.noteRowEstimatedHeight)
+    }
+
+    func testSpeechInputTextMutationRespectsUTF16SelectionAndNoDataLoss() throws {
+        let original = "你好👩‍💻 markdown"
+        let at = (original as NSString).range(of: "markdown")
+        XCTAssertEqual(ImpressSpeechTextInsertion.inserting(
+            "STT", into: original, selected: at), "你好👩‍💻 STT")
+        XCTAssertNil(ImpressSpeechTextInsertion.inserting(
+            "dictation", into: original,
+            selected: NSRange(location: 100000, length: 0)))
+        let uneditable = UITextView()
+        uneditable.isEditable = false
+        ImpressSpeechAccessory.install(on: uneditable)
+        XCTAssertNil(uneditable.inputAccessoryView)
+
+        let editor = UITextView()
+        editor.text = "Original"
+        editor.selectedRange = NSRange(location: 8, length: 0)
+        ImpressSpeechAccessory.install(on: editor)
+        XCTAssertNotNil(editor.inputAccessoryView)
+        let binder = try XCTUnwrap(ImpressSpeechTextBinding(view: editor))
+        editor.text = "Changed elsewhere"
+        XCTAssertThrowsError(try binder.commit(" spoken"))
+        XCTAssertEqual(editor.text, "Changed elsewhere")
+    }
+
+    func testSpeechInputCommitUsesExistingEditorChangeDelegate() throws {
+        final class Spy: NSObject, UITextViewDelegate {
+            var edits = 0
+            func textViewDidChange(_ textView: UITextView) { edits += 1 }
+        }
+        let editor = UITextView()
+        let observer = Spy()
+        editor.delegate = observer
+        editor.text = "ABC"
+        editor.selectedRange = NSRange(location: 1, length: 1)
+        let binding = try XCTUnwrap(ImpressSpeechTextBinding(view: editor))
+        try binding.commit("word")
+        XCTAssertEqual(editor.text, "AwordC")
+        XCTAssertEqual(editor.selectedRange.location, 5)
+        XCTAssertEqual(observer.edits, 1)
+    }
+
+    func testSpeechSettingsShowsThreeLocalesWithoutMicrophoneUse() {
+        let screen = ImpressSpeechSettingsViewController()
+        screen.loadViewIfNeeded()
+        XCTAssertEqual(screen.tableView.numberOfSections, 3)
+        XCTAssertEqual(screen.tableView.numberOfRows(inSection: 0), 3)
+        XCTAssertEqual(screen.tableView.numberOfRows(inSection: 1), 2)
+        XCTAssertEqual(screen.tableView.numberOfRows(inSection: 2), 2)
+        XCTAssertEqual(ImpressSpeechLocale.allCases.map(\.rawValue),
+                       ["zh-CN", "zh-TW", "en-US"])
+        // No action was invoked and the test does not request microphone access.
+        XCTAssertEqual(ImpressSpeechService.shared.state, .idle)
+    }
+
+    func testSpeechVolatileResultUpdatesWithoutDuplication() {
+        var buffer = ImpressTranscriptBuffer()
+        buffer.accept(key: "0/1000", text: "hel", isFinal: false)
+        buffer.accept(key: "0/1000", text: "hello", isFinal: false)
+        XCTAssertEqual(buffer.previewText, "hello")
+        XCTAssertEqual(buffer.finalText, "")
+        buffer.accept(key: "0/1000", text: "Hello", isFinal: true)
+        buffer.accept(key: "0/1000", text: "Hello duplicate", isFinal: true)
+        buffer.accept(key: "100/1000", text: "world", isFinal: true)
+        XCTAssertEqual(buffer.finalText, "Hello world")
     }
 
     func testDirectWebBrowserDoesNotAutoSendPrivateQuestions() {

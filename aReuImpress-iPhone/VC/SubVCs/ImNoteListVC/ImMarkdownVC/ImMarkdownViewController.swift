@@ -893,6 +893,7 @@ final class ImVaultDraftEditorController: UIViewController, UITextViewDelegate {
                                                     bottom: 24, right: 15)
         sourceView.delegate = self
         sourceView.isEditable = true
+        ImpressSpeechAccessory.install(on: sourceView)
         NotificationCenter.default.addObserver(
             self, selector: #selector(flushDraftBeforeBackground),
             name: UIApplication.willResignActiveNotification, object: nil)

@@ -1252,11 +1252,12 @@ final class ImpressV3NativeFlowTests: XCTestCase {
     func testModernSettingsIncludesDataAndBackup() {
         let settings = ImpressV3SettingsHubViewController()
         settings.loadViewIfNeeded()
-        XCTAssertEqual(settings.tableView.numberOfSections, 4)
+        XCTAssertEqual(settings.tableView.numberOfSections, 5)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 0), 1)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 1), 1)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 2), 2)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 3), 1)
+        XCTAssertEqual(settings.tableView.numberOfRows(inSection: 4), 1)
         let prompts = settings.tableView(settings.tableView,
             cellForRowAt: IndexPath(row: 0, section: 0))
         XCTAssertEqual(prompts.contentConfiguration is UIListContentConfiguration, true)

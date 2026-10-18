@@ -143,6 +143,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
                                                   bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
         editor.accessibilityLabel = V3L("本地批量导入原始文本")
         editor.delegate = self
+        ImpressSpeechAccessory.install(on: editor)
         stack.addArrangedSubview(editor)
         editor.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.batchEditorMinHeight).isActive = true
         let hint = UILabel()

@@ -176,6 +176,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         questionView.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding, bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
         questionView.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.questionEditorMinHeight).isActive = true
         questionView.accessibilityLabel = V3L("问题")
+        ImpressSpeechAccessory.install(on: questionView)
         stack.addArrangedSubview(makeLabeledGroup(V3L("问题"), child: questionView))
 
         configureQA()
@@ -226,6 +227,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         answerView.text = originalDraft.answer
         answerView.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding, bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
         answerView.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.answerEditorMinHeight).isActive = true
+        ImpressSpeechAccessory.install(on: answerView)
         answerView.accessibilityLabel = V3L("答案")
         qaSection.addArrangedSubview(makeLabeledGroup(V3L("答案"), child: answerView))
     }
@@ -509,6 +511,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
             field.text = text
             field.placeholder = "选项 \(index + 1)"
             ImpressV3Appearance.styleTextField(field)
+            ImpressSpeechAccessory.install(on: field)
             field.accessibilityLabel = "选项 \(index + 1) 内容"
             field.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.controlHeight).isActive = true
             let actions = UIButton(type: .system)
