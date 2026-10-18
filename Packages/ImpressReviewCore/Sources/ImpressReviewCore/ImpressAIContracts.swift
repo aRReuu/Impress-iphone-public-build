@@ -470,9 +470,21 @@ public enum ImpressAIQuestionPrompt {
         """
     }
 
+    // Only the selected teaching content is sent to the chosen provider.
+    // Vault ID, on-disk path and SHA-256 remain local and are used solely for
+    // provenance/commit checks; they are not required by question generation.
+    private struct ProviderExcerpt: Encodable {
+        let id: String
+        let heading: String
+        let text: String
+    }
+
     public static func input(_ excerpts: [ImpressAIExcerpt], maxBytes: Int = 40000) throws -> String {
-        let data = try JSONEncoder().encode(excerpts)
-        guard !excerpts.isEmpty && data.count <= maxBytes else {
+        let safe = excerpts.map {
+            ProviderExcerpt(id: $0.id, heading: $0.source.heading, text: $0.text)
+        }
+        let data = try JSONEncoder().encode(safe)
+        guard !safe.isEmpty && data.count <= maxBytes else {
             throw ImpressAIContractError.invalidRequest
         }
         return String(decoding: data, as: UTF8.self)
