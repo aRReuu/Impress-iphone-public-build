@@ -323,11 +323,15 @@ public struct ImpressAIExcerpt: Codable, Hashable, Sendable {
     public var id: String
     public var source: ImpressAISource
     public var text: String
+    /// Section-local title; separate from the shared document/version identity.
+    public var sectionHeading: String?
 
-    public init(id: String, source: ImpressAISource, text: String) {
+    public init(id: String, source: ImpressAISource, text: String,
+                sectionHeading: String? = nil) {
         self.id = id
         self.source = source
         self.text = text
+        self.sectionHeading = sectionHeading
     }
 }
 
@@ -481,7 +485,7 @@ public enum ImpressAIQuestionPrompt {
 
     public static func input(_ excerpts: [ImpressAIExcerpt], maxBytes: Int = 40000) throws -> String {
         let safe = excerpts.map {
-            ProviderExcerpt(id: $0.id, heading: $0.source.heading, text: $0.text)
+            ProviderExcerpt(id: $0.id, heading: $0.sectionHeading ?? $0.source.heading, text: $0.text)
         }
         let data = try JSONEncoder().encode(safe)
         guard !safe.isEmpty && data.count <= maxBytes else {
