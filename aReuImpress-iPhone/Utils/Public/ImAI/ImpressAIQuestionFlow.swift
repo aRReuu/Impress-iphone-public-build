@@ -240,6 +240,10 @@ final class ImpressAIQuestionPoolViewController: UITableViewController {
         "\(pool.candidates.count)/\(pool.requestedCount) \(V3L("道候选 · 点选勾选，点信息按钮编辑"))"
     }
     override func tableView(_ tableView: UITableView,
+                            titleForFooterInSection section: Int) -> String? {
+        V3L("来源引用仅供核对，不能单独证明答案正确。加入前请确认内容。")
+    }
+    override func tableView(_ tableView: UITableView,
                             cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let item = pool.candidates[indexPath.row]
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
@@ -275,7 +279,13 @@ final class ImpressAIQuestionPoolViewController: UITableViewController {
     override func tableView(_ tableView: UITableView,
                             accessoryButtonTappedForRowWith indexPath: IndexPath) {
         let row = pool.candidates[indexPath.row]
-        let editor = ImpressAIQuestionEditor(question: row.question, answer: row.answer) { [weak self] question, answer in
+        let sourceEvidence = pool.excerpts
+            .filter { row.evidenceIDs.contains($0.id) }
+            .map { "[" + $0.id + "] " + $0.text }
+            .joined(separator: "\n\n")
+        let editor = ImpressAIQuestionEditor(
+            question: row.question, answer: row.answer, sourceEvidence: sourceEvidence
+        ) { [weak self] question, answer in
             guard let self else { return }
             self.pool.candidates[indexPath.row].question = question
             self.pool.candidates[indexPath.row].answer = answer
@@ -379,12 +389,15 @@ final class ImpressAIQuestionPoolViewController: UITableViewController {
 private final class ImpressAIQuestionEditor: UIViewController {
     private let question = UITextView()
     private let answer = UITextView()
+    private let evidence = UITextView()
     private let onSave: (String, String) -> Void
-    init(question: String, answer: String, onSave: @escaping (String, String) -> Void) {
+    init(question: String, answer: String, sourceEvidence: String,
+         onSave: @escaping (String, String) -> Void) {
         self.onSave = onSave
         super.init(nibName: nil, bundle: nil)
         self.question.text = question
         self.answer.text = answer
+        self.evidence.text = sourceEvidence
     }
     required init?(coder: NSCoder) { fatalError("init(coder:)") }
     override func viewDidLoad() {
@@ -395,6 +408,8 @@ private final class ImpressAIQuestionEditor: UIViewController {
         title1.text = V3L("问题")
         let title2 = UILabel()
         title2.text = V3L("参考答案")
+        let title3 = UILabel()
+        title3.text = V3L("来源依据（只读）")
         for field in [question, answer] {
             field.font = ImpressV3Appearance.Typography.body
             field.backgroundColor = ImpressV3Appearance.surface
@@ -403,7 +418,13 @@ private final class ImpressAIQuestionEditor: UIViewController {
             field.isScrollEnabled = true
             ImpressSpeechAccessory.install(on: field)
         }
-        let stack = UIStackView(arrangedSubviews: [title1, question, title2, answer])
+        evidence.isEditable = false
+        evidence.isSelectable = true
+        evidence.font = ImpressV3Appearance.Typography.supporting
+        evidence.textColor = ImpressV3Appearance.secondaryText
+        evidence.backgroundColor = ImpressV3Appearance.surface
+        evidence.layer.cornerRadius = ImpressV3Appearance.Radius.field
+        let stack = UIStackView(arrangedSubviews: [title1, question, title2, answer, title3, evidence])
         stack.axis = .vertical
         stack.spacing = ImpressV3Appearance.Metrics.rowSpacing
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -413,7 +434,8 @@ private final class ImpressAIQuestionEditor: UIViewController {
             stack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
             stack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
             stack.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -12),
-            question.heightAnchor.constraint(equalTo: answer.heightAnchor, multiplier: 0.55)
+            question.heightAnchor.constraint(equalTo: answer.heightAnchor, multiplier: 0.55),
+            evidence.heightAnchor.constraint(equalToConstant: 110)
         ])
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             title: V3L("保存"), style: .done, target: self, action: #selector(save))
