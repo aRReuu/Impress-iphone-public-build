@@ -514,8 +514,10 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             at: live.appendingPathComponent("ReviewV3.sqlite"), to: repairedDB)
         let repaired = try ReviewWCDBRepository(
             databasePath: repairedDB.path, calculator: calc)
-        XCTAssertEqual(try await repaired.content(for: originalID)?.question, "Keep original")
-        XCTAssertNil(try await repaired.content(for: nextID))
+        let repairedOldCard = try await repaired.content(for: originalID)
+        let repairedUnexpectedCard = try await repaired.content(for: nextID)
+        XCTAssertEqual(repairedOldCard?.question, "Keep original")
+        XCTAssertNil(repairedUnexpectedCard)
         XCTAssertEqual(try Data(contentsOf: calibration), priorCalibrationBytes)
         XCTAssertEqual(defaults.data(forKey: ImpressV3PromptLibrary.storageKey),
                        priorPromptBytes)

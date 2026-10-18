@@ -600,6 +600,7 @@ actor ImpressV3BackupCoordinator {
         let fileManager = FileManager.default
         let journalFolder = root.appendingPathComponent("ImpressV3", isDirectory: true)
         let journal = journalFolder.appendingPathComponent("LearningEntry-v1.json")
+        let previousCalibration = previous.appendingPathComponent("checkins-v1.json")
         try prepareRestoreTransaction(
             root: root, documents: documents, calibration: calibration, prompts: prompts)
         do {
