@@ -31,7 +31,7 @@ final class ImpressAISettingsViewController: UITableViewController {
         switch section {
         case 0: return ImpressAIConfigStore.shared.registry.connections.count
         case 1: return tasks.count
-        default: return 1
+        default: return 2
         }
     }
     override func tableView(_ tableView: UITableView,
@@ -77,9 +77,15 @@ final class ImpressAISettingsViewController: UITableViewController {
             } else { content.secondaryText = V3L("未配置") }
             content.image = UIImage(systemName: "arrow.triangle.branch")
         default:
-            content.text = V3L("数据上传规则")
-            content.secondaryText = V3L("按需授权、仅上传选定文档、不会修改原始 Vault")
-            content.image = UIImage(systemName: "lock.shield")
+            if indexPath.row == 0 {
+                content.text = V3L("数据上传规则")
+                content.secondaryText = V3L("按需授权、仅上传选定文档、不会修改原始 Vault")
+                content.image = UIImage(systemName: "lock.shield")
+            } else {
+                content.text = V3L("AI 讨论")
+                content.secondaryText = V3L("使用对话模型进行原生多轮讨论")
+                content.image = UIImage(systemName: "bubble.left.and.bubble.right")
+            }
         }
         content.textProperties.font = ImpressV3Appearance.Typography.body
         content.secondaryTextProperties.font = ImpressV3Appearance.Typography.supporting
@@ -101,6 +107,11 @@ final class ImpressAISettingsViewController: UITableViewController {
             navigationController?.pushViewController(
                 ImpressAIModelChooser(task: tasks[indexPath.row]), animated: true)
         default:
+            if indexPath.row == 1 {
+                navigationController?.pushViewController(
+                    ImpressAINativeChatViewController(), animated: true)
+                return
+            }
             let alert = UIAlertController(title: V3L("数据上传规则"),
                 message: V3L("云端模型会接收你明确选择的笔记片段。服务商可能根据各自政策处理请求；不会默认上传整个 Obsidian Vault。所有自动写回仍被生产安全门禁关闭。"),
                 preferredStyle: .alert)
