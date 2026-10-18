@@ -6,9 +6,11 @@ import ImpressReviewCore
 // The UI manages provider-owned credentials; no API key value is Codable or logged.
 enum ImpressAIServiceError: LocalizedError {
     case configuration, credential, invalidURL, unauthorized, status(Int), response, tooLarge, emptyModelList
+    case freeModelOnly
     var errorDescription: String? {
         switch self {
         case .configuration: return V3L("请先在设置中配置并测试 AI 出题模型。")
+        case .freeModelOnly: return V3L("本测试版只允许 OpenCode 官方免费模型的匿名请求；请在 AI 服务中添加 OpenCode Free · QA。")
         case .credential: return V3L("API Key 不可用，请重新保存密钥。")
         case .invalidURL: return V3L("API 地址不安全或不正确。")
         case .unauthorized: return V3L("API 授权失败，请检查密钥。")
@@ -229,12 +231,21 @@ actor ImpressAIHTTPClient {
             return name.isEmpty ? nil : name
         }
         let cleaned = Array(Set(values)).sorted()
-        guard !cleaned.isEmpty else { throw ImpressAIServiceError.emptyModelList }
-        return Array(cleaned.prefix(300))
+        // The anonymous QA profile must never present paid models as choices.
+        let filtered = connection.provider == .openCode &&
+            connection.effectiveAuthentication == .noAuthentication
+            ? cleaned.filter(ImpressAIOpenCodeFreeQA.allowedForCatalog)
+            : cleaned
+        guard !filtered.isEmpty else { throw ImpressAIServiceError.emptyModelList }
+        return Array(filtered.prefix(300))
     }
 
     func complete(route: ImpressAIResolvedRoute, system: String,
                   user: String) async throws -> String {
+        // No app-held API keys or charged models are reachable through QA.
+        guard (try? ImpressAIOpenCodeFreeQA.validate(route)) != nil else {
+            throw ImpressAIServiceError.freeModelOnly
+        }
         let c = route.connection
         let model = route.model.identifier
         guard system.utf8.count + user.utf8.count <= 65_000 else { throw ImpressAIServiceError.tooLarge }
@@ -312,6 +323,9 @@ actor ImpressAIHTTPClient {
                  && $0.text.utf8.count <= 12_000 }),
               turns.reduce(0, { $0 + $1.text.utf8.count }) <= 55_000 else {
             throw ImpressAIServiceError.tooLarge
+        }
+        guard (try? ImpressAIOpenCodeFreeQA.validate(route)) != nil else {
+            throw ImpressAIServiceError.freeModelOnly
         }
         let connection = route.connection
         let model = route.model.identifier
