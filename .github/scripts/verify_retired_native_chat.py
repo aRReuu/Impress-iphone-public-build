@@ -97,9 +97,18 @@ def assert_clean() -> None:
     review = (APP / "VC/MainVCs/ImCardVC/ImpressV3ReviewViewController.swift").read_text()
     assert "ImpressNoteListTableViewController()" in review
     assert "navigationItem.rightBarButtonItems = [notes, cardCollection]" in review
-    assert 'title: "笔记", style: .plain, target: self' in review
-    assert 'accessibilityLabel = "笔记"' in review
-    assert 'accessibilityLabel = "卡片集"' in review
+    # Active V3 native UI is localized; require explicit Chinese-key lookup
+    # rather than a single hard-coded language or an invisible overflow menu.
+    assert 'title: V3L("笔记"), style: .plain, target: self' in review
+    assert 'notes.accessibilityLabel = V3L("笔记")' in review
+    assert 'cardCollection.accessibilityLabel = V3L("卡片集")' in review
+    assert 'notes.accessibilityIdentifier = "impress.review.notes"' in review
+    assert 'cardCollection.accessibilityIdentifier = "impress.review.card-collection"' in review
+    config = (APP / "Utils/Constansts/ImColorConstants.swift").read_text()
+    assert 'enum ImpressV3Language: String, CaseIterable' in config
+    for language in ('"zh-Hans"', '"zh-Hant"', '"en"'):
+        assert language in config, ("MISSING_INTERFACE_LANGUAGE", language)
+    assert 'case system, light, dark' in config
     vault = (APP / "Utils/Public/ImFileManager/ImObsidianManager.swift").read_text()
     assert re.search(r"productionWriteEnabled\s*=\s*false\b", vault)
     app = (APP / "Base/AppDelegate.swift").read_text()
