@@ -119,6 +119,9 @@
 		F3C000000000000000000002 /* ImpressCalibrationLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C000000000000000000012 /* ImpressCalibrationLocalStore.swift */; };
 		F3C000000000000000000003 /* ImpressCalibrationReminderCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C000000000000000000013 /* ImpressCalibrationReminderCoordinator.swift */; };
 		F3C000000000000000000004 /* ImpressCalibrationIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C000000000000000000014 /* ImpressCalibrationIntegrationTests.swift */; };
+		F4A100000000000000000001 /* ImpressAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4A100000000000000000011 /* ImpressAIService.swift */; };
+		F4A100000000000000000002 /* ImpressAISettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4A100000000000000000012 /* ImpressAISettingsViewController.swift */; };
+		F4A100000000000000000003 /* ImpressAIQuestionFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4A100000000000000000013 /* ImpressAIQuestionFlow.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -287,6 +290,9 @@
 		F3C000000000000000000012 /* ImpressCalibrationLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressCalibrationLocalStore.swift; sourceTree = "<group>"; };
 		F3C000000000000000000013 /* ImpressCalibrationReminderCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressCalibrationReminderCoordinator.swift; sourceTree = "<group>"; };
 		F3C000000000000000000014 /* ImpressCalibrationIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressCalibrationIntegrationTests.swift; sourceTree = "<group>"; };
+		F4A100000000000000000011 /* ImpressAIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressAIService.swift; sourceTree = "<group>"; };
+		F4A100000000000000000012 /* ImpressAISettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressAISettingsViewController.swift; sourceTree = "<group>"; };
+		F4A100000000000000000013 /* ImpressAIQuestionFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressAIQuestionFlow.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -312,6 +318,17 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		F4A100000000000000000020 /* ImAI */ = {
+			isa = PBXGroup;
+			children = (
+				F4A100000000000000000011 /* ImpressAIService.swift */,
+				F4A100000000000000000012 /* ImpressAISettingsViewController.swift */,
+				F4A100000000000000000013 /* ImpressAIQuestionFlow.swift */,
+			);
+			path = ImAI;
+			sourceTree = "<group>";
+		};
+
 		F3D300000000000000000030 /* ImSpeech */ = {
 			isa = PBXGroup;
 			children = (
@@ -347,6 +364,7 @@
 				387C25762F18BA35000FF54C /* ImFloatingButtonManager */,
 				380E587A2E9F6FD000F3483C /* ImTTSManager */,
 				F3D300000000000000000030 /* ImSpeech */,
+				F4A100000000000000000020 /* ImAI */,
 
 				385B90692E7C1831006336D5 /* ImFileManager */,
 				38C9375B2E1FCBC100BB0BEC /* ImExtractTextView */,
@@ -1088,6 +1106,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F4A100000000000000000001 /* ImpressAIService.swift in Sources */,
+				F4A100000000000000000002 /* ImpressAISettingsViewController.swift in Sources */,
+				F4A100000000000000000003 /* ImpressAIQuestionFlow.swift in Sources */,
 				F3A200000000000000000011 /* ImpressV3ReviewEnvironment.swift in Sources */,
 				F3A200000000000000000012 /* ImpressV3ReviewViewController.swift in Sources */,
 				F3A400000000000000000010 /* ImpressV3CardComposerViewController.swift in Sources */,
