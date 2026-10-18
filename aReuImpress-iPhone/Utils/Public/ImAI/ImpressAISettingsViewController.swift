@@ -133,7 +133,7 @@ final class ImpressAISettingsViewController: UITableViewController {
             ("智谱 GLM (国内)", .zhipu, .chatCompletions, "https://open.bigmodel.cn/api/paas/v4"),
             ("GLM / Z.AI (国际)", .zhipu, .chatCompletions, "https://api.z.ai/api/paas/v4"),
             ("Command Code", .commandCode, .chatCompletions, "https://api.commandcode.ai/provider/v1"),
-            ("OpenCode Zen", .openCode, .chatCompletions, "https://opencode.ai/zen/v1"),
+            ("OpenCode Zen", .openCode, .responses, "https://opencode.ai/zen/v1"),
             ("OpenCode Go", .openCode, .chatCompletions, "https://opencode.ai/zen/go/v1"),
             (V3L("自定义 API"), .custom, .chatCompletions, "https://api.example.com/v1")
         ]
