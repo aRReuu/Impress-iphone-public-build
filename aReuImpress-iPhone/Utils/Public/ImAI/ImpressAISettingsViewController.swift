@@ -681,7 +681,15 @@ final class ImpressAIModelChooser: UITableViewController {
     private let task: ImpressAITask
     init(task: ImpressAITask) { self.task = task; super.init(style: .insetGrouped) }
     required init?(coder: NSCoder) { fatalError("init(coder:)") }
-    private var models: [ImpressAIModel] { ImpressAIConfigStore.shared.registry.models }
+    private var models: [ImpressAIModel] {
+        let registry = ImpressAIConfigStore.shared.registry
+        return registry.models.filter { model in
+            guard let connection = registry.connections.first(where: { $0.id == model.connectionID })
+            else { return false }
+            return (try? ImpressAIOpenCodeFreeQA.validate(
+                ImpressAIResolvedRoute(connection: connection, model: model))) != nil
+        }
+    }
     override func viewDidLoad() {
         super.viewDidLoad()
         title = V3L("选择业务模型")
