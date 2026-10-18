@@ -1467,3 +1467,50 @@ final class ImpressV3BatchPreviewIntegrationTests: XCTestCase {
     }
 
 }
+
+
+// New API surfaces may be reached without calling a live provider. UI tests
+// must not create API keys, send network requests or alter the real Vault.
+@MainActor
+final class ImpressAICustomAPIUITests: XCTestCase {
+    func testAISettingsHasProviderAndTaskRoutingWithoutNewPrimaryTab() {
+        let ai = ImpressAISettingsViewController()
+        ai.loadViewIfNeeded()
+        XCTAssertEqual(ai.tableView.numberOfSections, 3)
+        XCTAssertEqual(ai.tableView(ai.tableView, numberOfRowsInSection: 1), 3)
+        XCTAssertEqual(ai.navigationItem.rightBarButtonItem?.accessibilityLabel,
+                       V3L("添加 API 连接"))
+        let generation = ai.tableView(ai.tableView,
+                         cellForRowAt: IndexPath(row: 0, section: 1))
+        XCTAssertEqual((generation.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("指定笔记出题"))
+        let privacy = ai.tableView(ai.tableView,
+                         cellForRowAt: IndexPath(row: 0, section: 2))
+        XCTAssertEqual((privacy.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("数据上传规则"))
+    }
+
+    func testSelectedNoteQuestionRouteNeverWritesSourceOnOpening() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ImpressAI-Vault-" + UUID().uuidString)
+        let folder = root.appendingPathComponent("Study")
+        try FileManager.default.createDirectory(at: folder,
+                                                 withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceURL = folder.appendingPathComponent("Knowledge.md")
+        let original = Data("# 知识整理\n一个段落。\n\n## 应用\n已有原则。\n".utf8)
+        try original.write(to: sourceURL)
+        let identity = try ImVaultFileIdentity(vaultID: "fixture-" + UUID().uuidString,
+                                                relativePath: "Study/Knowledge.md")
+        let source = try ImVaultReadSync.load(root: root, identity: identity)
+        let generator = ImpressAIQuestionGenerationViewController(document: source)
+        generator.loadViewIfNeeded()
+        XCTAssertEqual(generator.tableView.numberOfSections, 2)
+        XCTAssertEqual(generator.tableView(generator.tableView, numberOfRowsInSection: 0), 1)
+        XCTAssertGreaterThan(generator.tableView(generator.tableView,
+                              numberOfRowsInSection: 1), 0)
+        XCTAssertEqual(generator.navigationItem.rightBarButtonItem?.title, V3L("生成"))
+        XCTAssertEqual(try Data(contentsOf: sourceURL), original)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+}
