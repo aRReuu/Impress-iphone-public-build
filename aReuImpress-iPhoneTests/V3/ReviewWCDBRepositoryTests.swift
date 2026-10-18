@@ -362,6 +362,27 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         } catch is DecodingError { }
     }
 
+    func testBackupGenerationRejectsMidSnapshotWritesWithoutClearingDirty() throws {
+        let suite = "test.snapshot-epoch." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = "ImpressV3LastMutationGeneration"
+        let dirty = ImpressV3BackupCoordinator.dirtyKey
+        defaults.set("start", forKey: key)
+        defaults.set(true, forKey: dirty)
+        XCTAssertFalse(ImpressV3BackupCoordinator.testReconcileSnapshotDirty(
+            startingGeneration: "start", defaults: defaults))
+        XCTAssertFalse(defaults.bool(forKey: dirty))
+        defaults.set("next-commit", forKey: key)
+        XCTAssertTrue(ImpressV3BackupCoordinator.testReconcileSnapshotDirty(
+            startingGeneration: "start", defaults: defaults))
+        XCTAssertTrue(defaults.bool(forKey: dirty))
+        defaults.set("next-commit-again", forKey: key)
+        XCTAssertTrue(ImpressV3BackupCoordinator.testReconcileSnapshotDirty(
+            startingGeneration: "next-commit", defaults: defaults))
+        XCTAssertTrue(defaults.bool(forKey: dirty))
+    }
+
     func testColdRestoreFaultRollsBackCalibrationPromptsJournalAndSQLite() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("restore-fault-" + UUID().uuidString, isDirectory: true)
@@ -471,6 +492,38 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             from: Data(contentsOf: journal)), priorLearning)
         XCTAssertEqual(defaults.data(forKey: ImpressV3PromptLibrary.storageKey),
                        priorPromptBytes)
+
+        // Simulate a process kill after SQLite, learning, prompts and
+        // calibration were replaced, bypassing ordinary Swift error rollback.
+        do {
+            try ImpressV3BackupCoordinator.testApplyPendingAtColdLaunch(
+                root: support, documents: docs, calibration: calibration,
+                prompts: defaults, simulateHardTerminationAfterCalibration: true)
+            XCTFail("Expected simulated hard termination")
+        } catch ImpressV3BackupFailure.invalidArchive { }
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: support.appendingPathComponent("ImpressV3RestoreTransaction").path))
+        do {
+            try ImpressV3BackupCoordinator.testApplyPendingAtColdLaunch(
+                root: support, documents: docs, calibration: calibration,
+                prompts: defaults)
+            XCTFail("Cold start must stop after repairing interrupted restore")
+        } catch ImpressV3BackupFailure.restoreInterrupted { }
+        let repairedDB = root.appendingPathComponent("repaired-interruption.sqlite")
+        try FileManager.default.copyItem(
+            at: live.appendingPathComponent("ReviewV3.sqlite"), to: repairedDB)
+        let repaired = try ReviewWCDBRepository(
+            databasePath: repairedDB.path, calculator: calc)
+        XCTAssertEqual(try await repaired.content(for: originalID)?.question, "Keep original")
+        XCTAssertNil(try await repaired.content(for: nextID))
+        XCTAssertEqual(try Data(contentsOf: calibration), priorCalibrationBytes)
+        XCTAssertEqual(defaults.data(forKey: ImpressV3PromptLibrary.storageKey),
+                       priorPromptBytes)
+        XCTAssertEqual(try JSONDecoder().decode([ImpressV3LearningEntry].self,
+            from: Data(contentsOf: journal)), priorLearning)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: pending.path))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: support.appendingPathComponent("ImpressV3RestoreTransaction").path))
 
         try ImpressV3BackupCoordinator.testApplyPendingAtColdLaunch(
             root: support, documents: docs, calibration: calibration,

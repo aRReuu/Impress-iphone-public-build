@@ -5,6 +5,7 @@ enum ImpressV3BackupFailure: LocalizedError {
     case invalidArchive, invalidManifest, unsupportedArchive
     case invalidChecksum, duplicateEntry, missingData
     case unsafeSize, notAuthorized, cloudUnavailable, restoreAlreadyPending
+    case concurrentChanges, restoreInterrupted
 
     var errorDescription: String? {
         switch self {
@@ -18,6 +19,8 @@ enum ImpressV3BackupFailure: LocalizedError {
         case .notAuthorized: return "文件夹授权已失效，请重新选择备份位置。"
         case .cloudUnavailable: return "云端目录暂时不可用，本地备份已保留。"
         case .restoreAlreadyPending: return "已有待恢复的数据，请先重新启动应用完成恢复。"
+        case .concurrentChanges: return "创建备份期间数据仍在变化，已保留上一个有效快照并等待下一次一致性备份。"
+        case .restoreInterrupted: return "检测到上次恢复被系统中断，已回滚至恢复前的数据；请再次冷启动应用以重试已经确认的恢复。"
         }
     }
 }

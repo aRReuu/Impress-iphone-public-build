@@ -32,6 +32,13 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
            ImpressCalibrationReminderCoordinator.isCalibrationTap(response) {
             ImpressCalibrationNotificationRouteInbox.shared.enqueue()
         }
+        // Never open SQLite if an interrupted multi-file restore still needs
+        // its durable rollback. AppDelegate attempts repair before Scene startup.
+        guard !UserDefaults.standard.bool(
+            forKey: ImpressV3BackupCoordinator.recoveryBlockKey) else {
+            showDatabaseUnavailable()
+            return
+        }
         // Open only V3; the abandoned impressdata.db is not migrated,
         // opened, cleared or recreated as part of the live startup path.
         do { _ = try ImpressV3ReviewEnvironment.repository() }

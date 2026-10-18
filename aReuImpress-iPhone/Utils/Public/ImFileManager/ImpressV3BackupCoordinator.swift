@@ -22,21 +22,50 @@ actor ImpressV3BackupCoordinator {
     static let localDateKey = "ImpressV3BackupLocalDate"
     static let cloudDateKey = "ImpressV3BackupCloudCopiedDate"
     static let failureKey = "ImpressV3BackupLastError"
-    private static let lastMutationKey = "ImpressV3LastMutationTimestamp"
+    private static let mutationGenerationKey = "ImpressV3LastMutationGeneration"
+    static let recoveryBlockKey = "ImpressV3RestoreRecoveryBlocked"
+    private static let mutationLock = NSLock()
     private static let pendingCloudFileKey = "ImpressV3PendingCloudFile"
 
     private var active: Task<URL, any Swift.Error>?
     private var pendingDebouncedBackup: Task<Void, Never>?
 
     static func markDataChanged() {
-        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastMutationKey)
+        // An opaque generation avoids timestamp equality during dense commits.
+        // Both the write and the post-snapshot acknowledgement share one lock.
+        mutationLock.lock()
+        UserDefaults.standard.set(UUID().uuidString, forKey: mutationGenerationKey)
         UserDefaults.standard.set(true, forKey: dirtyKey)
-        // A foreground session can last for hours; do not wait for suspension
-        // to protect recently committed FSRS or card changes.
+        mutationLock.unlock()
         Task(priority: .utility) {
             await shared.scheduleDebouncedBackup()
         }
     }
+
+    private static func snapshotGeneration() -> String {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+        return UserDefaults.standard.string(forKey: mutationGenerationKey) ?? ""
+    }
+
+    @discardableResult
+    private static func reconcileSnapshotDirty(
+        startingGeneration: String, defaults: UserDefaults
+    ) -> Bool {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+        let changed = (defaults.string(forKey: mutationGenerationKey) ?? "") != startingGeneration
+        defaults.set(changed, forKey: dirtyKey)
+        return changed
+    }
+
+    #if DEBUG
+    static func testReconcileSnapshotDirty(
+        startingGeneration: String, defaults: UserDefaults
+    ) -> Bool {
+        reconcileSnapshotDirty(startingGeneration: startingGeneration, defaults: defaults)
+    }
+    #endif
 
     private func scheduleDebouncedBackup() {
         pendingDebouncedBackup?.cancel()
@@ -157,7 +186,7 @@ actor ImpressV3BackupCoordinator {
     }
 
     private func buildSnapshot() async throws -> URL {
-        let mutationAtStart = UserDefaults.standard.double(forKey: Self.lastMutationKey)
+        let mutationAtStart = Self.snapshotGeneration()
         let root = try Self.localDirectory()
         let staging = root.appendingPathComponent(".stage-" + UUID().uuidString,
                                                    isDirectory: true)
@@ -218,8 +247,13 @@ actor ImpressV3BackupCoordinator {
         }.value
         // A new card/review commit may have arrived while this snapshot was
         // being assembled. Keep it pending for the next backup cycle.
-        let mutationAfter = UserDefaults.standard.double(forKey: Self.lastMutationKey)
-        UserDefaults.standard.set(mutationAfter > mutationAtStart, forKey: Self.dirtyKey)
+        // A verified SQLite snapshot is not sufficient if independent JSON
+        // stores changed during assembly: never publish a mixed-era ZIP.
+        if Self.reconcileSnapshotDirty(startingGeneration: mutationAtStart,
+                                        defaults: .standard) {
+            try? FileManager.default.removeItem(at: result)
+            throw ImpressV3BackupFailure.concurrentChanges
+        }
         UserDefaults.standard.set(Date(), forKey: Self.localDateKey)
         UserDefaults.standard.removeObject(forKey: Self.failureKey)
         Self.pruneOlderLocalBackups(keeping: 7)
@@ -377,7 +411,8 @@ actor ImpressV3BackupCoordinator {
             documents: FileManager.default.urls(
                 for: .documentDirectory, in: .userDomainMask)[0],
             calibration: ImpressCalibrationLocalStore.canonicalURL(),
-            prompts: .standard, failAfterCalibration: false)
+            prompts: .standard, failAfterCalibration: false,
+            simulateHardTerminationAfterCalibration: false)
     }
 
     #if DEBUG
@@ -385,16 +420,149 @@ actor ImpressV3BackupCoordinator {
     /// Never writes the real application's SQLite or Vault during XCTest.
     static func testApplyPendingAtColdLaunch(
         root: URL, documents: URL, calibration: URL,
-        prompts: UserDefaults, failAfterCalibration: Bool = false) throws {
+        prompts: UserDefaults, failAfterCalibration: Bool = false,
+        simulateHardTerminationAfterCalibration: Bool = false) throws {
         try applyPendingAtColdLaunch(root: root, documents: documents,
             calibration: calibration, prompts: prompts,
-            failAfterCalibration: failAfterCalibration)
+            failAfterCalibration: failAfterCalibration,
+            simulateHardTerminationAfterCalibration: simulateHardTerminationAfterCalibration)
     }
     #endif
 
+
+    private struct RestoreSavedState: Codable {
+        // Names are a fixed, known allowlist. Copies are kept until recovery
+        // completes; a crash during rollback can safely retry from the copies.
+        let originals: [ImpressV3BackupFileRecord]
+        let previousPrompts: Data?
+    }
+
+    private static func restoreTargets(
+        root: URL, documents: URL, calibration: URL
+    ) -> [(name: String, location: URL)] {
+        let db = documents.appendingPathComponent("ImpressV3/ReviewV3.sqlite")
+        return [
+            ("ReviewV3.sqlite", db),
+            ("ReviewV3.sqlite-wal", URL(fileURLWithPath: db.path + "-wal")),
+            ("ReviewV3.sqlite-shm", URL(fileURLWithPath: db.path + "-shm")),
+            ("LearningEntry-v1.json", root.appendingPathComponent("ImpressV3/LearningEntry-v1.json")),
+            ("checkins-v1.json", calibration)
+        ]
+    }
+
+    private static func restoreTransactionURL(root: URL) -> URL {
+        root.appendingPathComponent("ImpressV3RestoreTransaction", isDirectory: true)
+    }
+
+    private static func prepareRestoreTransaction(
+        root: URL, documents: URL, calibration: URL, prompts: UserDefaults
+    ) throws {
+        let fileManager = FileManager.default
+        let destination = restoreTransactionURL(root: root)
+        guard !fileManager.fileExists(atPath: destination.path) else {
+            throw ImpressV3BackupFailure.restoreAlreadyPending
+        }
+        let preparing = root.appendingPathComponent(
+            ".ImpressV3RestorePrepare-" + UUID().uuidString, isDirectory: true)
+        try fileManager.createDirectory(at: preparing, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: preparing) }
+        var originals: [ImpressV3BackupFileRecord] = []
+        for target in restoreTargets(root: root, documents: documents, calibration: calibration) {
+            guard fileManager.fileExists(atPath: target.location.path) else { continue }
+            let archived = preparing.appendingPathComponent(target.name)
+            try fileManager.copyItem(at: target.location, to: archived)
+            originals.append(try ImpressV3BackupArchive.inspectFile(archived, name: target.name).0)
+        }
+        let metadata = RestoreSavedState(originals: originals,
+            previousPrompts: prompts.data(forKey: ImpressV3PromptLibrary.storageKey))
+        try JSONEncoder().encode(metadata).write(
+            to: preparing.appendingPathComponent("restore-transaction.json"), options: .atomic)
+        // The rename is the durable prepare/commit boundary. Nothing in the
+        // live app is replaced until the full rollback image exists.
+        try fileManager.moveItem(at: preparing, to: destination)
+        UserDefaults.standard.set(true, forKey: recoveryBlockKey)
+    }
+
+    private static func restorePreviousFromTransaction(
+        root: URL, documents: URL, calibration: URL, prompts: UserDefaults
+    ) throws {
+        let fileManager = FileManager.default
+        let snapshot = restoreTransactionURL(root: root)
+        let metadata = try JSONDecoder().decode(RestoreSavedState.self,
+            from: Data(contentsOf: snapshot.appendingPathComponent("restore-transaction.json")))
+        let targets = restoreTargets(root: root, documents: documents, calibration: calibration)
+        let expected = Set(targets.map(\.name))
+        guard Set(metadata.originals.map(\.name)).isSubset(of: expected),
+              Set(metadata.originals.map(\.name)).count == metadata.originals.count else {
+            throw ImpressV3BackupFailure.invalidManifest
+        }
+        // Validate every original before destructive rollback starts.
+        for item in metadata.originals {
+            let restored = try ImpressV3BackupArchive.inspectFile(
+                snapshot.appendingPathComponent(item.name), name: item.name).0
+            guard restored.sha256 == item.sha256 && restored.size == item.size else {
+                throw ImpressV3BackupFailure.invalidChecksum
+            }
+        }
+        let found = Set(metadata.originals.map(\.name))
+        for target in targets {
+            try fileManager.createDirectory(at: target.location.deletingLastPathComponent(),
+                                            withIntermediateDirectories: true)
+            if fileManager.fileExists(atPath: target.location.path) {
+                try fileManager.removeItem(at: target.location)
+            }
+            if found.contains(target.name) {
+                try fileManager.copyItem(
+                    at: snapshot.appendingPathComponent(target.name), to: target.location)
+            }
+        }
+        if let data = metadata.previousPrompts {
+            prompts.set(data, forKey: ImpressV3PromptLibrary.storageKey)
+        } else {
+            prompts.removeObject(forKey: ImpressV3PromptLibrary.storageKey)
+        }
+    }
+
+    private static func archiveRestoreTransaction(root: URL) throws {
+        let snapshot = restoreTransactionURL(root: root)
+        guard FileManager.default.fileExists(atPath: snapshot.path) else { return }
+        try FileManager.default.moveItem(at: snapshot, to: root.appendingPathComponent(
+            "ImpressV3PreRestoreVerified-" + UUID().uuidString, isDirectory: true))
+    }
+
+    private static func recoverInterruptedRestore(
+        root: URL, documents: URL, calibration: URL, prompts: UserDefaults
+    ) throws {
+        let snapshot = restoreTransactionURL(root: root)
+        guard FileManager.default.fileExists(atPath: snapshot.path) else {
+            // A fully completed rename can precede an interrupted defaults update.
+            UserDefaults.standard.removeObject(forKey: recoveryBlockKey)
+            return
+        }
+        UserDefaults.standard.set(true, forKey: recoveryBlockKey)
+        let pending = root.appendingPathComponent("ImpressV3PendingRestore")
+        if FileManager.default.fileExists(atPath: pending.path) {
+            // No WCDB pool has opened. Revert all five on-disk files and prompts.
+            try restorePreviousFromTransaction(
+                root: root, documents: documents, calibration: calibration, prompts: prompts)
+            try archiveRestoreTransaction(root: root)
+            UserDefaults.standard.removeObject(forKey: recoveryBlockKey)
+            // Keep the previously confirmed source staged for another cold
+            // launch; never resume halfway through this process.
+            throw ImpressV3BackupFailure.restoreInterrupted
+        }
+        // The pending-to-applied rename is the transaction's commit point.
+        // No pending folder means the multi-file installation succeeded.
+        try archiveRestoreTransaction(root: root)
+        UserDefaults.standard.removeObject(forKey: recoveryBlockKey)
+    }
+
     private static func applyPendingAtColdLaunch(
         root: URL, documents: URL, calibration: URL,
-        prompts: UserDefaults, failAfterCalibration: Bool) throws {
+        prompts: UserDefaults, failAfterCalibration: Bool,
+        simulateHardTerminationAfterCalibration: Bool) throws {
+        try recoverInterruptedRestore(
+            root: root, documents: documents, calibration: calibration, prompts: prompts)
         let pending = root.appendingPathComponent("ImpressV3PendingRestore")
         guard FileManager.default.fileExists(atPath: pending.path) else { return }
         let manifest = try JSONDecoder().decode(ImpressV3BackupManifest.self,
@@ -420,8 +588,6 @@ actor ImpressV3BackupCoordinator {
             // A V1 backup never had calibration; retain local V3.2 history.
             restoredCalibration = nil
         }
-        let oldPromptData = prompts.data(
-            forKey: ImpressV3PromptLibrary.storageKey)
         let liveFolder = documents.appendingPathComponent(
             "ImpressV3", isDirectory: true)
         try FileManager.default.createDirectory(
@@ -434,9 +600,8 @@ actor ImpressV3BackupCoordinator {
         let fileManager = FileManager.default
         let journalFolder = root.appendingPathComponent("ImpressV3", isDirectory: true)
         let journal = journalFolder.appendingPathComponent("LearningEntry-v1.json")
-        let previousCalibration = previous.appendingPathComponent("checkins-v1.json")
-        var touchedCalibration = false
-        var installedDB = false
+        try prepareRestoreTransaction(
+            root: root, documents: documents, calibration: calibration, prompts: prompts)
         do {
             for suffix in ["", "-wal", "-shm"] {
                 let priorFile = URL(fileURLWithPath: current.path + suffix)
@@ -447,7 +612,6 @@ actor ImpressV3BackupCoordinator {
             }
             try fileManager.copyItem(
                 at: pending.appendingPathComponent("ReviewV3.sqlite"), to: current)
-            installedDB = true
             try fileManager.createDirectory(at: journalFolder,
                 withIntermediateDirectories: true)
             if fileManager.fileExists(atPath: journal.path) {
@@ -462,7 +626,6 @@ actor ImpressV3BackupCoordinator {
                 try fileManager.createDirectory(
                     at: calibration.deletingLastPathComponent(),
                     withIntermediateDirectories: true)
-                touchedCalibration = true
                 if fileManager.fileExists(atPath: calibration.path) {
                     try fileManager.moveItem(at: calibration, to: previousCalibration)
                 }
@@ -471,7 +634,9 @@ actor ImpressV3BackupCoordinator {
                     Data(contentsOf: calibration))
             }
             #if DEBUG
-            if failAfterCalibration { throw ImpressV3BackupFailure.invalidArchive }
+            if failAfterCalibration || simulateHardTerminationAfterCalibration {
+                throw ImpressV3BackupFailure.invalidArchive
+            }
             #endif
             // Moving staging away atomically prevents unintended repeat
             // recovery when temporary cleanup fails.
@@ -480,44 +645,27 @@ actor ImpressV3BackupCoordinator {
             try fileManager.moveItem(at: pending, to: applied)
             try? fileManager.removeItem(at: applied)
             markDataChanged()
-            // The previous live database remains available as an emergency
-            // rollback folder, without any automatic deletion of user data.
-        } catch {
-            if touchedCalibration {
-                if fileManager.fileExists(atPath: calibration.path) {
-                    try? fileManager.removeItem(at: calibration)
-                }
-                if fileManager.fileExists(atPath: previousCalibration.path) {
-                    try? fileManager.moveItem(at: previousCalibration, to: calibration)
-                }
+            // After the pending rename, the restore is committed. If archival
+            // fails, the next cold start finishes it without rolling back.
+            try? archiveRestoreTransaction(root: root)
+            UserDefaults.standard.removeObject(forKey: recoveryBlockKey)
+        } catch let applyError {
+            // XCTest models process termination: no Swift catch/rollback runs.
+            // The next cold start must repair from the durable pre-image.
+            if simulateHardTerminationAfterCalibration { throw applyError }
+            do {
+                try restorePreviousFromTransaction(
+                    root: root, documents: documents, calibration: calibration,
+                    prompts: prompts)
+                try archiveRestoreTransaction(root: root)
+                UserDefaults.standard.removeObject(forKey: recoveryBlockKey)
+            } catch {
+                // Keep a persistent block on opening any half-restored SQLite.
+                // The intact transaction directory permits another safe retry.
+                UserDefaults.standard.set(true, forKey: recoveryBlockKey)
+                throw error
             }
-            if installedDB { try? fileManager.removeItem(at: current) }
-            let previousJournal = previous.appendingPathComponent("LearningEntry-v1.json")
-            if fileManager.fileExists(atPath: previousJournal.path) {
-                if fileManager.fileExists(atPath: journal.path) {
-                    try? fileManager.removeItem(at: journal)
-                }
-                try? fileManager.copyItem(at: previousJournal, to: journal)
-            } else if installedDB {
-                try? fileManager.removeItem(at: journal)
-            }
-            if let oldPromptData {
-                prompts.set(oldPromptData,
-                    forKey: ImpressV3PromptLibrary.storageKey)
-            } else {
-                prompts.removeObject(forKey: ImpressV3PromptLibrary.storageKey)
-            }
-            for suffix in ["", "-wal", "-shm"] {
-                let path = URL(fileURLWithPath: current.path + suffix)
-                let old = previous.appendingPathComponent(path.lastPathComponent)
-                if fileManager.fileExists(atPath: old.path) {
-                    if fileManager.fileExists(atPath: path.path) {
-                        try? fileManager.removeItem(at: path)
-                    }
-                    try? fileManager.moveItem(at: old, to: path)
-                }
-            }
-            throw error
+            throw applyError
         }
     }
 }
