@@ -71,7 +71,7 @@ final class ImpressV3ReviewViewController: UIViewController {
     private func refreshLocalizedReview() {
         title = V3L("闪卡")
         setupNavigation()
-        let titles = ["记录想法", "深入探讨", "历史"]
+        let titles = ["补充理解"]
         for (i, view) in answerTools.arrangedSubviews.enumerated() {
             guard let button = view as? UIButton, i < titles.count else { continue }
             let text = V3L(titles[i])
@@ -112,30 +112,16 @@ final class ImpressV3ReviewViewController: UIViewController {
         answerTools.spacing = ImpressV3Appearance.Metrics.rowSpacing
         answerTools.isHidden = true
         let reflect = UIButton(type: .system)
-        reflect.setTitle(V3L("记录想法"), for: .normal)
+        reflect.setTitle(V3L("补充理解"), for: .normal)
         reflect.titleLabel?.font = ImpressV3Appearance.Typography.supporting
         if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.secondary(reflect, title: V3L("记录想法"))
+            ImpressV3NativeButtonAppearance.secondary(reflect, title: V3L("补充理解"))
         }
         reflect.addTarget(self, action: #selector(captureFromAnswer), for: .touchUpInside)
-        let explore = UIButton(type: .system)
-        explore.setTitle(V3L("深入探讨"), for: .normal)
-        explore.titleLabel?.font = ImpressV3Appearance.Typography.supporting
-        if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.secondary(explore, title: V3L("深入探讨"))
-        }
-        explore.accessibilityHint = V3L("在 DeepSeek 网页继续讨论当前问题")
-        explore.addTarget(self, action: #selector(exploreFromAnswer), for: .touchUpInside)
-        let timeline = UIButton(type: .system)
-        timeline.setTitle(V3L("历史"), for: .normal)
-        if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.secondary(timeline, title: V3L("历史"))
-        }
-        timeline.accessibilityLabel = V3L("查看当前卡片的理解时间线")
-        timeline.addTarget(self, action: #selector(openCurrentTimeline), for: .touchUpInside)
+        // Only optional capture remains after revealing the answer.
+        // Review/FSRS history is available in Card Collection; a normal
+        // swipe must never require a new text entry or call the AI API.
         answerTools.addArrangedSubview(reflect)
-        answerTools.addArrangedSubview(explore)
-        answerTools.addArrangedSubview(timeline)
         revealButton.setTitle(V3L("查看答案"), for: .normal)
         revealButton.titleLabel?.font = ImpressV3Appearance.Typography.heading
         revealButton.titleLabel?.adjustsFontForContentSizeCategory = true
@@ -205,19 +191,24 @@ final class ImpressV3ReviewViewController: UIViewController {
     }
 
     private func setupNavigation() {
-        // One creation menu, no misleading secondary chat/settings controls.
-        let single = UIAction(title: V3L("新建卡片"),
-                              image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
-            self?.createCard()
-        }
-        let batch = UIAction(title: V3L("批量导入"),
-                             image: UIImage(systemName: "square.stack.3d.up")) { [weak self] _ in
-            self?.startBatchImport()
-        }
+        // One low-friction entry for an idea; deliberate card CRUD and batch
+        // import now belong exclusively in Card Collection.
         navigationItem.leftBarButtonItem = UIBarButtonItem(
-            image: UIImage(systemName: "plus"), menu: UIMenu(children: [single, batch]))
-        navigationItem.leftBarButtonItem?.accessibilityLabel = V3L("添加内容")
+            image: UIImage(systemName: "plus"), style: .plain,
+            target: self, action: #selector(openQuickCapture))
+        navigationItem.leftBarButtonItem?.accessibilityLabel = V3L("快速记录")
         updateNavigationActions()
+    }
+
+    @objc private func openQuickCapture() {
+        guard presentedViewController == nil, pending == nil else { return }
+        // The same durable LearningEntry journal serves standalone thoughts
+        // and card-linked understanding. No new parallel storage authority.
+        let capture = ImpressV3CaptureViewController(cardID: nil, question: "")
+        let navigation = UINavigationController(rootViewController: capture)
+        navigation.modalPresentationStyle = .pageSheet
+        navigation.sheetPresentationController?.detents = [.medium(), .large()]
+        present(navigation, animated: true)
     }
 
     private func updateNavigationActions() {
