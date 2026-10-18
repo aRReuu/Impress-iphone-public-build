@@ -346,7 +346,7 @@ final class ImpressAIQuestionPoolViewController: UITableViewController {
                 }
                 // Database transaction remains the final duplicate authority.
                 let checked = ImpressAIQuestionValidator.audit(pool, existingQuestions: existing)
-                let selected = try ImpressAIQuestionValidator.validatedSelection(checked)
+                let selected = try ImpressAIQuestionValidator.validatedSelection(checked, existingQuestions: existing)
                 let sourceKey = try ImpressBatchSourceKey.encode(document.identity)
                 let now = Date()
                 let calc = FSRS6ReviewCalculator()
