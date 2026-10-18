@@ -34,9 +34,24 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
         navigationItem.searchController = searchController
         navigationItem.hidesSearchBarWhenScrolling = false
         definesPresentationContext = true
+        let create = UIAction(title: V3L("新建卡片"),
+                              image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
+            self?.createCard()
+        }
+        let batch = UIAction(title: V3L("批量导入"),
+                             image: UIImage(systemName: "square.stack.3d.up")) { [weak self] _ in
+            self?.startBatchImport()
+        }
+        let history = UIAction(title: V3L("理解记录"),
+                               image: UIImage(systemName: "clock.arrow.circlepath")) { [weak self] _ in
+            guard let self else { return }
+            self.navigationController?.pushViewController(
+                ImpressV3TimelineViewController(cardID: nil, repository: self.repository),
+                animated: true)
+        }
         navigationItem.rightBarButtonItem = UIBarButtonItem(
-            image: UIImage(systemName: "plus"), style: .plain,
-            target: self, action: #selector(createCard))
+            image: UIImage(systemName: "plus"), menu: UIMenu(children: [create, batch, history]))
+        navigationItem.rightBarButtonItem?.accessibilityLabel = V3L("卡片管理")
         reloadCards()
     }
 
@@ -148,6 +163,46 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
         tableView.deselectRow(at: indexPath, animated: true)
         guard cards.indices.contains(indexPath.row) else { return }
         editCard(cards[indexPath.row])
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            contextMenuConfigurationForRowAt indexPath: IndexPath,
+                            point: CGPoint) -> UIContextMenuConfiguration? {
+        guard cards.indices.contains(indexPath.row) else { return nil }
+        let card = cards[indexPath.row]
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+            let timeline = UIAction(title: V3L("查看理解与复习历史"),
+                          image: UIImage(systemName: "clock")) { [weak self] _ in
+                guard let self else { return }
+                self.navigationController?.pushViewController(
+                    ImpressV3TimelineViewController(cardID: card.cardID, repository: self.repository),
+                    animated: true)
+            }
+            let edit = UIAction(title: V3L("编辑卡片"),
+                         image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
+                self?.editCard(card)
+            }
+            return UIMenu(children: [timeline, edit])
+        }
+    }
+
+    private func startBatchImport() {
+        let importVC = ImpressV3BatchImportViewController()
+        importVC.onCommit = { [weak self] inputs in
+            guard let self else { throw CocoaError(.userCancelled) }
+            let now = Date()
+            let calculator = FSRS6ReviewCalculator()
+            let entries = try inputs.map { input in
+                (input: input, initial: try calculator.newCardSnapshot(id: input.cardID, now: now))
+            }
+            _ = try await self.repository.insertBatchCards(entries, now: now)
+            self.onMutation?()
+            self.reloadCards()
+        }
+        let navigation = ImNavigationViewController(rootViewController: importVC)
+        navigation.modalPresentationStyle = .pageSheet
+        navigation.sheetPresentationController?.detents = [.large()]
+        present(navigation, animated: true)
     }
 
     @objc private func createCard() {
