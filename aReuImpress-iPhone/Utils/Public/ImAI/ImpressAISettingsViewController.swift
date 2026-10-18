@@ -682,7 +682,7 @@ final class ImpressAIModelChooser: UITableViewController {
                  ImpressAIResolvedRoute(connection: connection, model: m))) != nil
         else {
             let alert = UIAlertController(title: V3L("仅限免费模型测试"),
-                message: V3L("当前 QA 构建仅允许匿名 OpenCode 官方免费模型。"),
+                message: V3L("当前 QA 只允许 OpenCode 官方免费型号，推荐选择免费连接进行测试。"),
                 preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
             present(alert, animated: true)
