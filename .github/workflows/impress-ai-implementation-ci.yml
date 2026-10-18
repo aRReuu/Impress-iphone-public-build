@@ -88,13 +88,48 @@ jobs:
             -resultBundlePath "$GITHUB_WORKSPACE/out/AIv1.xcresult" \
             -parallel-testing-enabled NO IPHONEOS_DEPLOYMENT_TARGET=26.0 \
             CODE_SIGNING_ALLOWED=NO test 2>&1 | tee out/ai-xctest.log
-      - name: Upload diagnostics
+      - name: Compile unsigned ARM64 iPhoneOS QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace \
+            -scheme aReuImpress-iPhone-AltStore -configuration Debug \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/ImpressAIPhone" \
+            IPHONEOS_DEPLOYMENT_TARGET=26.0 CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_ENTITLEMENTS= ENABLE_DEBUG_DYLIB=NO \
+            build 2>&1 | tee out/ai-iphoneos-arm64-build.log
+      - name: Package verified QA-only unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/ImpressAIPhone/Build/Products/Debug-iphoneos/aReuImpress-iPhone.app"
+          test -s "$APP/aReuImpress-iPhone"
+          test -s "$APP/Info.plist"
+          lipo -info "$APP/aReuImpress-iPhone" | tee out/architecture.txt
+          grep -q arm64 out/architecture.txt
+          /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Info.plist" > out/min-ios.txt
+          test "$(cat out/min-ios.txt)" = "26.0"
+          test ! -e "$APP/embedded.mobileprovision"
+          if codesign --verify "$APP" >/dev/null 2>&1; then
+            echo 'QA binary unexpectedly signed'; exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/ImpressAIQA/Payload"
+          ditto "$APP" "$RUNNER_TEMP/ImpressAIQA/Payload/aReuImpress-iPhone.app"
+          SHORT="$(git rev-parse --short=12 HEAD)"
+          IPA="Impress-AI-V1-$SHORT-icon-INCOMPLETE-unsigned-QA.ipa"
+          (cd "$RUNNER_TEMP/ImpressAIQA" && zip -qry "$GITHUB_WORKSPACE/out/$IPA" Payload)
+          unzip -tq "out/$IPA" | tee out/qa-ipa-integrity.txt
+          shasum -a 256 "out/$IPA" | tee out/qa-ipa-sha256.txt
+          echo 'QA ONLY: unsigned, original icon absent; not a final signed release.' > out/QA_ONLY_NOT_FINAL.txt
+      - name: Upload QA IPA and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: impress-ai-v1-build-logs
+          name: impress-ai-v1-qa-not-final
           path: |
             out/*.txt
             out/*.json
             out/*.log
+            out/*.ipa
           retention-days: 14
