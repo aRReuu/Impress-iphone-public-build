@@ -145,11 +145,13 @@ final class ImpressAIContractsTests: XCTestCase {
 
     func testNoBlindUploadLargeContext() throws {
         let s = source()
-        let e = ImpressAIExcerpt(id: "x", source: s, text: String(repeating: "a", count: 512))
+        let e = ImpressAIExcerpt(id: "x", source: s, text: String(repeating: "a", count: 512),
+                                sectionHeading: "验证的章节标题")
         XCTAssertThrowsError(try ImpressAIQuestionPrompt.input([e], maxBytes: 120))
         XCTAssertTrue(try ImpressAIQuestionPrompt.input([e]).contains("fragment") == false)
         let payload = try ImpressAIQuestionPrompt.input([e])
         XCTAssertTrue(payload.contains("text"))
+        XCTAssertTrue(payload.contains("验证的章节标题"))
         XCTAssertFalse(payload.contains(s.relativePath))
         XCTAssertFalse(payload.contains(s.vaultID))
         XCTAssertFalse(payload.contains(s.documentSHA256))
