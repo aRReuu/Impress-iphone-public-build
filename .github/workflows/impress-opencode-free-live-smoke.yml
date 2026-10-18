@@ -1,0 +1,67 @@
+name: OpenCode FREE Model Live Smoke (No Key)
+
+on:
+  push:
+    branches:
+      - feature/impress-vault-device-write-qa
+    paths:
+      - .github/workflows/impress-opencode-free-live-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  free-model-anonymous:
+    name: Anonymous OpenCode free-only live API
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Read catalog and send two minimal FREE-only requests
+        shell: bash
+        run: |
+          set -euo pipefail
+          # No API key or user note is ever sent or written to Action logs.
+          # A free model changing to paid must fail anonymously instead of
+          # debiting anyone's account. Never substitute a charged fallback.
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error
+          url = "https://opencode.ai/inference/openai/v1/chat/completions"
+          catalog = "https://opencode.ai/inference/v1/models"
+          allowed = ("glm-5.3-flash-free", "deepseek-v4.1-flash-free")
+          headers = {"Accept": "application/json", "User-Agent": "Impress-Free-QA/1.0"}
+          def fetch(req):
+              try:
+                  with urllib.request.urlopen(req, timeout=45) as resp:
+                      payload = resp.read(512_000)
+                      return resp.status, json.loads(payload)
+              except urllib.error.HTTPError as e:
+                  return e.code, None
+              except (urllib.error.URLError, TimeoutError, ValueError) as e:
+                  return 0, None
+          status, doc = fetch(urllib.request.Request(catalog, headers=headers))
+          assert status == 200 and isinstance(doc, dict), "public catalog unavailable"
+          model_ids = {v.get("id") for v in doc.get("data", []) if isinstance(v, dict)}
+          for name in allowed:
+              assert name in model_ids, "chosen free ID absent from official catalog"
+          print("FREE_CATALOG: checked two exact public free IDs, no authorization")
+          failures = []
+          for name in allowed:
+              body = json.dumps({
+                  "model": name, "stream": False,
+                  "messages": [{"role": "user", "content": "Reply with only OK."}]
+              }).encode("utf-8")
+              req = urllib.request.Request(url, data=body, method="POST",
+                  headers={**headers, "Content-Type": "application/json"})
+              code, response = fetch(req)
+              choices = response.get("choices", []) if isinstance(response, dict) else []
+              message = choices[0].get("message", {}) if choices else {}
+              answer = message.get("content") if isinstance(message, dict) else None
+              healthy = code == 200 and isinstance(answer, str) and bool(answer.strip())
+              print("FREE_ONLY_RESULT model=" + name +
+                    " status=" + str(code) + " nonempty_response=" + str(healthy))
+              if not healthy:
+                  failures.append(name)
+          assert not failures, "one or more free anonymous endpoints did not respond"
+          print("FREE_ONLY_LIVE_SMOKE_PASS; no API credentials, no private notes")
+          PY
