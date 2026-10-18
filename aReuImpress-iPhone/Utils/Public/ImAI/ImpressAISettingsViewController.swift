@@ -264,6 +264,14 @@ final class ImpressAIConnectionEditor: UITableViewController {
                         throw ImpressAIServiceError.configuration
                     }
                     reg.connections[index].credentialID = id
+                    // An explicit Keychain key on the previously anonymous
+                    // free QA preset switches auth to Bearer, without ever
+                    // enabling paid model IDs or changing the API endpoint.
+                    if reg.connections[index].provider == .openCode &&
+                       reg.connections[index].baseURL == ImpressAIOpenCodeFreeQA.baseURL &&
+                       reg.connections[index].effectiveAuthentication == .noAuthentication {
+                        reg.connections[index].authentication = .bearer
+                    }
                     // Rotating or replacing a key requires another safe
                     // model capability probe before private document upload.
                     for i in reg.models.indices
@@ -471,6 +479,9 @@ final class ImpressAIModelsViewController: UITableViewController {
         tableView.deselectRow(at: indexPath, animated: true)
         let model = models[indexPath.row]
         let a = UIAlertController(title: model.identifier, message: nil, preferredStyle: .actionSheet)
+        a.addAction(UIAlertAction(title: V3L("测试免费对话"), style: .default) { [weak self] _ in
+            self?.testFreeConversation(model)
+        })
         a.addAction(UIAlertAction(title: V3L("测试 JSON 输出"), style: .default) { [weak self] _ in
             self?.testModel(model)
         })
@@ -601,6 +612,27 @@ final class ImpressAIModelsViewController: UITableViewController {
             navigationItem.rightBarButtonItems?.forEach { $0.isEnabled = true }
         }
     }
+    private func testFreeConversation(_ model: ImpressAIModel) {
+        guard let connection else { return }
+        let selected = ImpressAIResolvedRoute(connection: connection, model: model)
+        Task {
+            do {
+                // Zero Vault bytes; the only content is this harmless probe.
+                let reply = try await ImpressAIHTTPClient.shared.converse(
+                    route: selected, system: "Respond with only OK.",
+                    turns: [ImpressAIChatTurn(role: .user, text: "ping")])
+                guard !reply.isEmpty else { throw ImpressAIServiceError.response }
+                let alert = UIAlertController(title: V3L("免费模型连接成功"),
+                    message: V3L("已收到模型响应；没有发送私人笔记。"),
+                    preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+                present(alert, animated: true)
+            } catch {
+                showError(error)
+            }
+        }
+    }
+
     private func testModel(_ model: ImpressAIModel) {
         guard let c = connection else { return }
         Task {
