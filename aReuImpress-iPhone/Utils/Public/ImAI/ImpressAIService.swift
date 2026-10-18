@@ -5,7 +5,7 @@ import ImpressReviewCore
 // New AI architecture. This is not the removed legacy Chat/LLM implementation.
 // The UI manages provider-owned credentials; no API key value is Codable or logged.
 enum ImpressAIServiceError: LocalizedError {
-    case configuration, credential, invalidURL, unauthorized, status(Int), response, tooLarge, emptyModelList
+    case configuration, credential, invalidURL, unauthorized, forbidden, status(Int), response, tooLarge, emptyModelList
     case freeModelOnly
     var errorDescription: String? {
         switch self {
@@ -13,7 +13,8 @@ enum ImpressAIServiceError: LocalizedError {
         case .freeModelOnly: return V3L("本 QA 版只允许 OpenCode 官方免费模型；推荐添加「OpenCode 免费模型（测试）」，不需要密钥。使用 Keychain 密钥时也只允许相同的免费型号。")
         case .credential: return V3L("API Key 不可用，请重新保存密钥。")
         case .invalidURL: return V3L("API 地址不安全或不正确。")
-        case .unauthorized: return V3L("API 授权失败，请检查密钥。")
+        case .unauthorized: return V3L("API 授权失败（401），请检查密钥。")
+        case .forbidden: return V3L("免费 API 请求被拒绝（403）；可能是账号认证、地区或网络限制，请尝试在设置中保存新的 OpenCode API Key 后重测。")
         case .status(let code): return "AI API 请求失败（HTTP \(code)），原始数据未改变。"
         case .response: return V3L("模型响应不符合格式要求，未生成卡片。")
         case .tooLarge: return V3L("请求或响应超出安全长度限制。")
@@ -204,9 +205,8 @@ actor ImpressAIHTTPClient {
     private func execute(_ request: URLRequest) async throws -> [String: Any] {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ImpressAIServiceError.response }
-        if http.statusCode == 401 || http.statusCode == 403 {
-            throw ImpressAIServiceError.unauthorized
-        }
+        if http.statusCode == 401 { throw ImpressAIServiceError.unauthorized }
+        if http.statusCode == 403 { throw ImpressAIServiceError.forbidden }
         guard (200...299).contains(http.statusCode) else {
             throw ImpressAIServiceError.status(http.statusCode)
         }
