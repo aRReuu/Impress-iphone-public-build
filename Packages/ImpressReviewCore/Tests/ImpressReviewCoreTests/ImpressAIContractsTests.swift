@@ -75,7 +75,6 @@ final class ImpressAIContractsTests: XCTestCase {
         let r = try ImpressAIRegistry(connections: [c], models: [failed],
                              routes: [.init(task: .questionGeneration, primaryModelID: failed.id)])
         XCTAssertThrowsError(try r.resolve(.questionGeneration))
-        XCTAssertThrowsError(try r.resolve(.questionGeneration))
     }
 
     private func source() -> ImpressAISource {
@@ -149,5 +148,137 @@ final class ImpressAIContractsTests: XCTestCase {
         let e = ImpressAIExcerpt(id: "x", source: s, text: String(repeating: "a", count: 512))
         XCTAssertThrowsError(try ImpressAIQuestionPrompt.input([e], maxBytes: 120))
         XCTAssertTrue(try ImpressAIQuestionPrompt.input([e]).contains("fragment") == false)
+    }
+}
+
+extension ImpressAIContractsTests {
+    func testExtraProviderPresetsAndArbitraryCustomCompany() throws {
+        let profiles: [(ImpressAIProvider, ImpressAIProtocol, String)] = [
+            (.zhipu, .chatCompletions, "https://open.bigmodel.cn/api/paas/v4"),
+            (.commandCode, .chatCompletions, "https://api.commandcode.ai/provider/v1"),
+            (.openCode, .responses, "https://opencode.ai/zen/go/v1"),
+            (.custom, .anthropicMessages, "https://third-party.example/v2")
+        ]
+        for (provider, wire, endpoint) in profiles {
+            let c = ImpressAIConnection(title: "Any brand: " + provider.rawValue,
+                                        provider: provider, apiProtocol: wire,
+                                        baseURL: try XCTUnwrap(URL(string: endpoint)),
+                                        credentialID: UUID())
+            XCTAssertNoThrow(try ImpressAIRegistry(connections: [c]))
+        }
+    }
+
+    func testGatewayAllowsMixedWireFormatsOnSingleKey() throws {
+        let gateway = ImpressAIConnection(title: "Command Code", provider: .commandCode,
+                apiProtocol: .chatCompletions,
+                baseURL: URL(string: "https://api.commandcode.ai/provider/v1")!,
+                credentialID: UUID())
+        let chat = ImpressAIModel(connectionID: gateway.id, identifier: "open/model",
+                                 jsonVerified: true, protocolOverride: .chatCompletions)
+        let anthropic = ImpressAIModel(connectionID: gateway.id,
+                                 identifier: "claude/example",
+                                 jsonVerified: true, protocolOverride: .anthropicMessages,
+                                 jsonMode: .promptOnly)
+        let registry = try ImpressAIRegistry(connections: [gateway], models: [chat, anthropic],
+                  routes: [.init(task: .questionGeneration, primaryModelID: chat.id),
+                           .init(task: .conversation, primaryModelID: anthropic.id)])
+        XCTAssertEqual(try registry.resolve(.questionGeneration).effectiveProtocol, .chatCompletions)
+        XCTAssertEqual(try registry.resolve(.conversation).effectiveProtocol, .anthropicMessages)
+        XCTAssertEqual(gateway.effectiveAuthentication, .bearer)
+        XCTAssertEqual(anthropic.jsonMode, .promptOnly)
+    }
+
+    func testCustomAuthenticationHeaderAllowedButProtectedHeadersBlocked() throws {
+        let valid = ImpressAIConnection(title: "Any HTTPS API", provider: .custom,
+                  apiProtocol: .chatCompletions, baseURL: safeURL,
+                  credentialID: UUID(), authentication: .customHeader,
+                  customHeaderName: "X-Custom-Private-Token")
+        XCTAssertNoThrow(try ImpressAIRegistry(connections: [valid]))
+        for forbidden in ["Authorization", "Cookie", "Content-Type", "Host",
+                          "x-goog-api-key", "X-Key\\nInjected", "X Key", ""] {
+            var invalid = valid
+            invalid.customHeaderName = forbidden
+            XCTAssertThrowsError(try ImpressAIRegistry(connections: [invalid]))
+        }
+    }
+
+    func testAuthModeNoneRequiresNoCredentialButBearerDoes() throws {
+        let emptyKey = ImpressAIConnection(title: "TLS Gateway", provider: .custom,
+                 apiProtocol: .chatCompletions, baseURL: safeURL,
+                 authentication: .none)
+        let verified = ImpressAIModel(connectionID: emptyKey.id, identifier: "my-model",
+                                      jsonVerified: true)
+        let routing = [ImpressAIRoute(task: .questionGeneration, primaryModelID: verified.id)]
+        let accepted = try ImpressAIRegistry(connections: [emptyKey],
+                                             models: [verified], routes: routing)
+        XCTAssertEqual(try accepted.resolve(.questionGeneration).model.id, verified.id)
+        var needsKey = emptyKey
+        needsKey.authentication = .bearer
+        let rejected = try ImpressAIRegistry(connections: [needsKey],
+                                             models: [verified], routes: routing)
+        XCTAssertThrowsError(try rejected.resolve(.questionGeneration))
+    }
+
+    func testCustomEndpointPathsAreRelativeSafeAndDisableModelListing() throws {
+        let paths = ImpressAIEndpointPaths(modelsPath: "",
+                     chatPath: "api/v5/chat/completions",
+                     responsesPath: "sdk/responses", messagesPath: "provider/messages")
+        XCTAssertNoThrow(try paths.validate())
+        XCTAssertEqual(paths.path(for: .chatCompletions), "api/v5/chat/completions")
+        XCTAssertEqual(paths.path(for: .anthropicMessages), "provider/messages")
+        for value in ["../keys", "/admin", "https://elsewhere.com", "m/../../secret",
+                      "chat?token=x", "chat%2Fsecret", "x//y", "x\\y", "chat#part", "a/./b"] {
+            XCTAssertFalse(ImpressAIEndpointPaths.safePath(value))
+        }
+        XCTAssertTrue(ImpressAIEndpointPaths.safePath("", allowEmpty: true))
+        XCTAssertFalse(ImpressAIEndpointPaths.safePath(""))
+    }
+
+    func testCustomGatewayProtocolOverrideDoesNotBypassProviderRestrictions() throws {
+        let glm = ImpressAIConnection(title: "GLM", provider: .zhipu,
+                 apiProtocol: .chatCompletions, baseURL: safeURL)
+        let invalid = ImpressAIModel(connectionID: glm.id, identifier: "glm-custom",
+                protocolOverride: .anthropicMessages)
+        XCTAssertThrowsError(try ImpressAIRegistry(connections: [glm], models: [invalid]))
+        XCTAssertTrue(ImpressAIRegistry.supported(.anthropicMessages, for: .commandCode))
+        XCTAssertTrue(ImpressAIRegistry.supported(.responses, for: .openCode))
+        XCTAssertFalse(ImpressAIRegistry.supported(.geminiGenerateContent, for: .zhipu))
+    }
+
+    func testLegacyV1RegistryDecodesWithoutNewOptionalCustomFields() throws {
+        let (registry, connection, _) = try fixture()
+        let original = try JSONEncoder().encode(registry)
+        var raw = try XCTUnwrap(JSONSerialization.jsonObject(with: original) as? [String: Any])
+        var oldConnections = try XCTUnwrap(raw["connections"] as? [[String: Any]])
+        oldConnections[0].removeValue(forKey: "authentication")
+        oldConnections[0].removeValue(forKey: "customHeaderName")
+        oldConnections[0].removeValue(forKey: "endpoints")
+        raw["connections"] = oldConnections
+        var oldModels = try XCTUnwrap(raw["models"] as? [[String: Any]])
+        oldModels[0].removeValue(forKey: "protocolOverride")
+        oldModels[0].removeValue(forKey: "jsonMode")
+        raw["models"] = oldModels
+        let oldData = try JSONSerialization.data(withJSONObject: raw)
+        let decoded = try JSONDecoder().decode(ImpressAIRegistry.self, from: oldData)
+        try decoded.validate()
+        XCTAssertEqual(decoded.connections[0].credentialID, connection.credentialID)
+        XCTAssertEqual(decoded.connections[0].effectiveAuthentication, .bearer)
+        XCTAssertEqual(decoded.models[0].protocolOverride, nil)
+        XCTAssertEqual(decoded.models[0].jsonMode, nil)
+        XCTAssertEqual(try decoded.resolve(.questionGeneration).model.identifier, "model-A")
+    }
+
+    func testJSONModesAreIsolatedAcrossModelProfiles() throws {
+        let gateway = ImpressAIConnection(title: "OpenCode Go", provider: .openCode,
+             apiProtocol: .chatCompletions, baseURL: safeURL, credentialID: UUID())
+        let a = ImpressAIModel(connectionID: gateway.id, identifier: "model-A",
+                               jsonVerified: true, jsonMode: .native)
+        let b = ImpressAIModel(connectionID: gateway.id, identifier: "model-B",
+                               jsonVerified: true, jsonMode: .promptOnly)
+        let config = try ImpressAIRegistry(connections: [gateway], models: [a,b],
+                 routes: [.init(task: .questionGeneration, primaryModelID: a.id),
+                          .init(task: .conversation, primaryModelID: b.id)])
+        XCTAssertEqual(try config.resolve(.questionGeneration).model.jsonMode, .native)
+        XCTAssertEqual(try config.resolve(.conversation).model.jsonMode, .promptOnly)
     }
 }
