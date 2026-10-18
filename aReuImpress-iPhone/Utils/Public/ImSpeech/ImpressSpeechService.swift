@@ -221,6 +221,7 @@ final class ImpressSpeechService: NSObject {
     private var analyzer: SpeechAnalyzer?
     private var microphone: AVAudioEngine?
     private var audioPipe: ImpressSpeechAudioPipe?
+    private var tapInstalled = false
     private var resultTask: Task<Void, Never>?
     private var segments = ImpressTranscriptBuffer()
     private var updateHandler: ((String, String) -> Void)?
@@ -315,6 +316,7 @@ final class ImpressSpeechService: NSObject {
             node.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) {
                 buffer, _ in feed.append(buffer)
             }
+            tapInstalled = true
             recorder.prepare()
             try recorder.start()
             guard recorder.isRunning else {
@@ -355,7 +357,10 @@ final class ImpressSpeechService: NSObject {
         }
         state = .finishing
         if let microphone {
-            microphone.inputNode.removeTap(onBus: 0)
+            if tapInstalled {
+                microphone.inputNode.removeTap(onBus: 0)
+                tapInstalled = false
+            }
             microphone.stop()
         }
         microphone = nil
@@ -385,7 +390,10 @@ final class ImpressSpeechService: NSObject {
 
     func cancel() async {
         if let microphone {
-            microphone.inputNode.removeTap(onBus: 0)
+            if tapInstalled {
+                microphone.inputNode.removeTap(onBus: 0)
+                tapInstalled = false
+            }
             microphone.stop()
         }
         microphone = nil
@@ -406,6 +414,7 @@ final class ImpressSpeechService: NSObject {
         observedApplication = false
         microphone = nil
         audioPipe = nil
+        tapInstalled = false
         analyzer = nil
         resultTask = nil
         updateHandler = nil

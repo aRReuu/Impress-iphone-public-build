@@ -26,6 +26,7 @@ assert "CaptureInputSequenceProvider?" not in source
 assert "providerWithSession" not in source
 assert "AnalyzerInputConverter(" not in source
 assert "AVAudioEngine()" in source
+assert "tapInstalled = true" in source and "if tapInstalled" in source
 assert "AVAudioConverter(from:" in source
 assert "AnalyzerInput(buffer:" in source
 assert "UnsafeMutableAudioBufferListPointer" in source
