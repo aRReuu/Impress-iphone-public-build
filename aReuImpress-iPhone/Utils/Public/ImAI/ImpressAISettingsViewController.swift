@@ -111,17 +111,25 @@ final class ImpressAISettingsViewController: UITableViewController {
 
     @objc private func addConnection() {
         let sheet = UIAlertController(title: V3L("选择服务商"), message: nil, preferredStyle: .actionSheet)
-        let presets: [(ImpressAIProvider, ImpressAIProtocol, String)] = [
-            (.openAI, .responses, "https://api.openai.com/v1"),
-            (.deepSeek, .chatCompletions, "https://api.deepseek.com"),
-            (.anthropic, .anthropicMessages, "https://api.anthropic.com/v1"),
-            (.gemini, .geminiGenerateContent, "https://generativelanguage.googleapis.com/v1beta"),
-            (.custom, .chatCompletions, "https://api.example.com/v1")
+        // Presets are convenience only. "Custom API" always accepts arbitrary
+        // HTTPS providers and manual model IDs. Gateways may offer mixed wire
+        // protocols and retain independent user API keys.
+        let presets: [(String, ImpressAIProvider, ImpressAIProtocol, String)] = [
+            ("OpenAI (GPT)", .openAI, .responses, "https://api.openai.com/v1"),
+            ("DeepSeek", .deepSeek, .chatCompletions, "https://api.deepseek.com"),
+            ("Claude", .anthropic, .anthropicMessages, "https://api.anthropic.com/v1"),
+            ("Gemini", .gemini, .geminiGenerateContent, "https://generativelanguage.googleapis.com/v1beta"),
+            ("智谱 GLM (国内)", .zhipu, .chatCompletions, "https://open.bigmodel.cn/api/paas/v4"),
+            ("GLM / Z.AI (国际)", .zhipu, .chatCompletions, "https://api.z.ai/api/paas/v4"),
+            ("Command Code", .commandCode, .chatCompletions, "https://api.commandcode.ai/provider/v1"),
+            ("OpenCode Zen", .openCode, .chatCompletions, "https://opencode.ai/zen/v1"),
+            ("OpenCode Go", .openCode, .chatCompletions, "https://opencode.ai/zen/go/v1"),
+            (V3L("自定义 API"), .custom, .chatCompletions, "https://api.example.com/v1")
         ]
-        for (provider, wire, url) in presets {
-            sheet.addAction(UIAlertAction(title: provider.rawValue, style: .default) { [weak self] _ in
+        for (label, provider, wire, url) in presets {
+            sheet.addAction(UIAlertAction(title: label, style: .default) { [weak self] _ in
                 guard let self, let endpoint = URL(string: url) else { return }
-                let profile = ImpressAIConnection(title: provider.rawValue, provider: provider,
+                let profile = ImpressAIConnection(title: label, provider: provider,
                                                   apiProtocol: wire, baseURL: endpoint)
                 do {
                     try ImpressAIConfigStore.shared.update { $0.connections.append(profile) }
@@ -165,14 +173,16 @@ final class ImpressAIConnectionEditor: UITableViewController {
     }
     override func numberOfSections(in tableView: UITableView) -> Int { 2 }
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        section == 0 ? 5 : 1
+        section == 0 ? 8 : 1
     }
     override func tableView(_ tableView: UITableView,
                             cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
         let c = connection
         let labels = [V3L("连接名称"), V3L("服务商 / 协议"),
-                      "Base URL", "API Key", V3L("模型列表")]
+                      "Base URL", "API Key", V3L("认证方式"),
+                      V3L("自定义 Header 名称"), V3L("模型列表"),
+                      V3L("API 接口路径")]
         cell.textLabel?.text = indexPath.section == 0 ? labels[indexPath.row] : V3L("删除连接")
         cell.textLabel?.font = ImpressV3Appearance.Typography.body
         cell.textLabel?.textColor = indexPath.section == 1
@@ -180,8 +190,12 @@ final class ImpressAIConnectionEditor: UITableViewController {
         if indexPath.section == 0 {
             let models = ImpressAIConfigStore.shared.registry.models
             let values = [c?.title ?? "", (c?.provider.rawValue ?? "") + " / " + (c?.apiProtocol.rawValue ?? ""),
-                          c?.baseURL.host ?? "", c?.credentialID == nil ? V3L("未保存") : V3L("已保存"),
-                          "\(models.filter { $0.connectionID == connectionID }.count)"]
+                          c?.baseURL.host ?? "",
+                          c?.credentialID == nil ? V3L("未保存") : V3L("已保存"),
+                          c?.effectiveAuthentication.rawValue ?? "",
+                          c?.customHeaderName ?? "—",
+                          "\(models.filter { $0.connectionID == connectionID }.count)",
+                          c?.effectiveEndpoints.modelsPath ?? "models"]
             cell.detailTextLabel?.text = values[indexPath.row]
             cell.accessoryType = .disclosureIndicator
         }
@@ -219,9 +233,15 @@ final class ImpressAIConnectionEditor: UITableViewController {
                 self.tableView.reloadData()
             } catch { self.showError(error) }
         }
-        case 4:
+        case 4: chooseAuthentication()
+        case 5: editText(title: V3L("自定义 Header 名称"), secure: false,
+                         value: connection?.customHeaderName ?? "") { [weak self] value in
+            self?.edit { $0.customHeaderName = value.trimmingCharacters(in: .whitespacesAndNewlines) }
+        }
+        case 6:
             navigationController?.pushViewController(
                 ImpressAIModelsViewController(connectionID: connectionID), animated: true)
+        case 7: chooseEndpointPath()
         default: break
         }
     }
@@ -254,19 +274,52 @@ final class ImpressAIConnectionEditor: UITableViewController {
     private func chooseProtocol() {
         guard let c = connection else { return }
         let sheet = UIAlertController(title: V3L("协议类型"), message: nil, preferredStyle: .actionSheet)
-        for wire in ImpressAIProtocol.allCases {
-            // Known providers have one canonical protocol, except OpenAI.
-            let allowed: Bool
-            switch c.provider {
-            case .openAI: allowed = wire == .responses || wire == .chatCompletions
-            case .deepSeek: allowed = wire == .chatCompletions
-            case .anthropic: allowed = wire == .anthropicMessages
-            case .gemini: allowed = wire == .geminiGenerateContent
-            case .custom: allowed = true
-            }
-            guard allowed else { continue }
+        for wire in ImpressAIProtocol.allCases
+            where ImpressAIRegistry.supported(wire, for: c.provider) {
             sheet.addAction(UIAlertAction(title: wire.rawValue, style: .default) { [weak self] _ in
                 self?.edit { $0.apiProtocol = wire }
+            })
+        }
+        sheet.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        sheet.popoverPresentationController?.sourceView = tableView
+        sheet.popoverPresentationController?.sourceRect = tableView.bounds
+        present(sheet, animated: true)
+    }
+
+    private func chooseAuthentication() {
+        let sheet = UIAlertController(title: V3L("认证方式"), message: nil, preferredStyle: .actionSheet)
+        for option in ImpressAIAuthentication.allCases {
+            sheet.addAction(UIAlertAction(title: option.rawValue, style: .default) { [weak self] _ in
+                self?.edit { $0.authentication = option }
+            })
+        }
+        sheet.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        sheet.popoverPresentationController?.sourceView = tableView
+        sheet.popoverPresentationController?.sourceRect = tableView.bounds
+        present(sheet, animated: true)
+    }
+
+    private func chooseEndpointPath() {
+        guard let c = connection else { return }
+        let routes = c.effectiveEndpoints
+        let sheet = UIAlertController(title: V3L("API 接口路径"), message: nil,
+                                      preferredStyle: .actionSheet)
+        let choices: [(String, WritableKeyPath<ImpressAIEndpointPaths, String>)] = [
+            ("Models GET", \.modelsPath),
+            ("Chat Completions", \.chatPath),
+            ("Responses", \.responsesPath),
+            ("Messages", \.messagesPath)
+        ]
+        for (name, key) in choices {
+            sheet.addAction(UIAlertAction(title: name + " · " + routes[keyPath: key],
+                                           style: .default) { [weak self] _ in
+                self?.editText(title: name, secure: false, value: routes[keyPath: key]) { value in
+                    self?.edit { connection in
+                        var paths = connection.effectiveEndpoints
+                        paths[keyPath: key] = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                        connection.endpoints = paths
+                    }
+                }
             })
         }
         sheet.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
