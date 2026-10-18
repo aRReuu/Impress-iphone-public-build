@@ -148,6 +148,11 @@ final class ImpressAIContractsTests: XCTestCase {
         let e = ImpressAIExcerpt(id: "x", source: s, text: String(repeating: "a", count: 512))
         XCTAssertThrowsError(try ImpressAIQuestionPrompt.input([e], maxBytes: 120))
         XCTAssertTrue(try ImpressAIQuestionPrompt.input([e]).contains("fragment") == false)
+        let payload = try ImpressAIQuestionPrompt.input([e])
+        XCTAssertTrue(payload.contains("text"))
+        XCTAssertFalse(payload.contains(s.relativePath))
+        XCTAssertFalse(payload.contains(s.vaultID))
+        XCTAssertFalse(payload.contains(s.documentSHA256))
     }
 }
 
