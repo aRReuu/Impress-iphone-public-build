@@ -145,6 +145,50 @@ enum ImpressV3NativeButtonAppearance {
         prepare(button, minimumHeight: ImpressV3Appearance.Metrics.primaryActionHeight)
     }
 
+    /// Quiet, monochromatic review primary action. Reserve brand accent for
+    /// navigation and selection; no full-width saturated colored pill.
+    static func reviewPrimary(_ button: UIButton, title: String) {
+        var config = UIButton.Configuration.filled()
+        config.title = title
+        config.cornerStyle = .capsule
+        config.buttonSize = .large
+        config.contentInsets = NSDirectionalEdgeInsets(
+            top: 12, leading: 20, bottom: 12, trailing: 20)
+        config.baseBackgroundColor = ImpressV3Appearance.reviewPrimarySurface
+        config.baseForegroundColor = ImpressV3Appearance.reviewPrimaryInk
+        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer {
+            value in
+            var output = value
+            output.font = ImpressV3Appearance.Typography.body
+            return output
+        }
+        button.configuration = config
+        prepare(button, minimumHeight: ImpressV3Appearance.Metrics.primaryActionHeight)
+    }
+
+    /// Two compact native controls shown only after answer reveal.
+    /// No stroke, shadow, gradients, custom bitmap icons or extra footer rows.
+    static func reviewSecondary(_ button: UIButton, title: String, symbol: String) {
+        var config = UIButton.Configuration.gray()
+        config.title = title
+        config.image = UIImage(systemName: symbol)
+        config.imagePadding = ImpressV3Appearance.Metrics.symbolGap
+        config.cornerStyle = .capsule
+        config.buttonSize = .large
+        config.contentInsets = NSDirectionalEdgeInsets(
+            top: 10, leading: 13, bottom: 10, trailing: 13)
+        config.baseBackgroundColor = ImpressV3Appearance.reviewActionSurface
+        config.baseForegroundColor = ImpressV3Appearance.primaryText
+        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer {
+            value in
+            var output = value
+            output.font = ImpressV3Appearance.Typography.supporting
+            return output
+        }
+        button.configuration = config
+        prepare(button, minimumHeight: ImpressV3Appearance.Metrics.tapTarget)
+    }
+
     /// Lightweight tertiary actions in the compact review toolbar.
     static func secondary(_ button: UIButton, title: String) {
         button.configuration = secondaryConfiguration(title: title)
@@ -258,6 +302,14 @@ enum ImpressV3Appearance {
     static let secondarySegmentSelection = UIColor.tertiarySystemGroupedBackground
     static let mutedAction = UIColor.systemGray
     static let quietControlSurface = UIColor.secondarySystemFill
+    static let reviewActionSurface = UIColor.tertiarySystemGroupedBackground
+    static let reviewPrimarySurface = UIColor.label
+    static let reviewPrimaryInk = UIColor.systemBackground
+    static let reviewOverlaySurface = UIColor { traits in
+        UIColor.secondarySystemGroupedBackground.resolvedColor(with: traits)
+            .withAlphaComponent(traits.userInterfaceStyle == .dark ? 0.97 : 0.95)
+    }
+    static let reviewOverlaySymbol = UIColor.secondaryLabel
     static let optionSurface = UIColor.tertiarySystemGroupedBackground
     // Semantic colors already track the system theme. Feedback fills must
     // also resolve their alpha in the active trait (not cache light RGB).
@@ -448,6 +500,8 @@ enum ImpressV3Appearance {
         static let controlHeight: CGFloat = 48
         static let segmentHeight: CGFloat = 50
         static let primaryActionHeight: CGFloat = 52
+        static let reviewOverlayBadgeHeight: CGFloat = 44
+        static let reviewOverlaySymbolSize: CGFloat = 17
         static let answerOptionHeight: CGFloat = 52
         static let maximumSegmentWidth: CGFloat = 440
         static let compactSegmentWidth: CGFloat = 320
