@@ -75,6 +75,10 @@ public struct ImpressAIRoute: Codable, Equatable, Sendable {
 public struct ImpressAIResolvedRoute: Sendable {
     public let connection: ImpressAIConnection
     public let model: ImpressAIModel
+    public init(connection: ImpressAIConnection, model: ImpressAIModel) {
+        self.connection = connection
+        self.model = model
+    }
 }
 
 public enum ImpressAIContractError: Error, Equatable, Sendable {
@@ -280,10 +284,15 @@ public enum ImpressAIQuestionValidator {
     public static func audit(_ pool: ImpressAIQuestionPool,
                              existingQuestions: [String] = []) -> ImpressAIQuestionPool {
         var changed = pool
-        let ids = Dictionary(uniqueKeysWithValues: pool.excerpts.map { ($0.id, $0) })
+        var ids: [String: ImpressAIExcerpt] = [:]
+        var repeatedID = false
+        for excerpt in pool.excerpts {
+            if ids[excerpt.id] != nil { repeatedID = true }
+            ids[excerpt.id] = excerpt
+        }
         var seen = Set(existingQuestions.map(key))
         let tooMany = pool.requestedCount < 1 || pool.requestedCount > 20 ||
-            pool.candidates.count > pool.requestedCount || pool.excerpts.isEmpty
+            pool.candidates.count > pool.requestedCount || pool.excerpts.isEmpty || repeatedID
         for i in changed.candidates.indices {
             var problems: [String] = []
             let c = changed.candidates[i]
@@ -302,11 +311,12 @@ public enum ImpressAIQuestionValidator {
         return changed
     }
 
-    public static func validatedSelection(_ pool: ImpressAIQuestionPool) throws -> [ImpressAIQuestionCandidate] {
+    public static func validatedSelection(_ pool: ImpressAIQuestionPool,
+                                         existingQuestions: [String] = []) throws -> [ImpressAIQuestionCandidate] {
         guard (1...20).contains(pool.requestedCount),
               pool.candidates.count <= pool.requestedCount,
               !pool.candidates.isEmpty else { throw ImpressAIContractError.invalidRequest }
-        let checked = audit(pool)
+        let checked = audit(pool, existingQuestions: existingQuestions)
         let selected = checked.candidates.filter(\.selected)
         guard !selected.isEmpty,
               selected.allSatisfy({ $0.issues.isEmpty }) else {
