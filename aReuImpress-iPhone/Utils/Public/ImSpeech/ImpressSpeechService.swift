@@ -85,14 +85,25 @@ struct ImpressTranscriptBuffer {
 private final class ImpressSpeechAudioPipe: @unchecked Sendable {
     private let queue = DispatchQueue(label: "impress.speech.audio-conversion",
                                       qos: .userInitiated)
-    private let converter: AnalyzerInputConverter
+    private let converter: AVAudioConverter?
+    private let analyzerFormat: AVAudioFormat
+    private let sourceFormat: AVAudioFormat
     private let continuation: AsyncStream<AnalyzerInput>.Continuation
     let stream: AsyncStream<AnalyzerInput>
-    // Confined to serial dispatch queue; no mutable data escapes the microphone callback.
+    // All converter mutation is confined to the serial queue.
     private var closed = false
 
-    init(format: AVAudioFormat) {
-        converter = AnalyzerInputConverter(analyzerFormat: format)
+    init(source: AVAudioFormat, target: AVAudioFormat) throws {
+        sourceFormat = source
+        analyzerFormat = target
+        if source.isEqual(target) {
+            converter = nil
+        } else {
+            guard let candidate = AVAudioConverter(from: source, to: target) else {
+                throw ImpressSpeechFailure.unavailableMicrophone
+            }
+            converter = candidate
+        }
         let pair = AsyncStream.makeStream(of: AnalyzerInput.self)
         stream = pair.stream
         continuation = pair.continuation
@@ -103,8 +114,8 @@ private final class ImpressSpeechAudioPipe: @unchecked Sendable {
               let copy = AVAudioPCMBuffer(pcmFormat: buffer.format,
                                           frameCapacity: buffer.frameLength) else { return }
         copy.frameLength = buffer.frameLength
-        // The input tap reuses its buffer. Make our own PCM copy before the
-        // callback returns so the serial converter never reads changing audio.
+        // The real-time input tap owns the original PCM memory. Copy before
+        // returning; never give an asynchronously executing task that buffer.
         let source = UnsafeMutableAudioBufferListPointer(
             UnsafeMutablePointer(mutating: buffer.audioBufferList))
         let destination = UnsafeMutableAudioBufferListPointer(copy.mutableAudioBufferList)
@@ -117,13 +128,32 @@ private final class ImpressSpeechAudioPipe: @unchecked Sendable {
         }
         queue.async { [self] in
             guard !closed else { return }
-            do {
-                for input in try converter.convert(copy, at: nil) {
-                    continuation.yield(input)
+            if let converter {
+                let factor = analyzerFormat.sampleRate / sourceFormat.sampleRate
+                let capacity = AVAudioFrameCount(max(1024,
+                    Int(ceil(Double(copy.frameLength) * factor)) + 256))
+                guard let output = AVAudioPCMBuffer(
+                    pcmFormat: analyzerFormat, frameCapacity: capacity) else { return }
+                var conversionError: NSError?
+                var supplied = false
+                let status = converter.convert(to: output, error: &conversionError) {
+                    _, inputStatus in
+                    guard !supplied else {
+                        inputStatus.pointee = .noDataNow
+                        return nil
+                    }
+                    supplied = true
+                    inputStatus.pointee = .haveData
+                    return copy
                 }
-            } catch {
-                closed = true
-                continuation.finish()
+                if status != .error && output.frameLength > 0 {
+                    continuation.yield(AnalyzerInput(buffer: output))
+                } else if status == .error {
+                    closed = true
+                    continuation.finish()
+                }
+            } else {
+                continuation.yield(AnalyzerInput(buffer: copy))
             }
         }
     }
@@ -133,8 +163,23 @@ private final class ImpressSpeechAudioPipe: @unchecked Sendable {
             queue.async { [self] in
                 if !closed {
                     closed = true
-                    if let remaining = try? converter.flush() {
-                        for input in remaining { continuation.yield(input) }
+                    if let converter {
+                        for _ in 0..<4 {
+                            guard let output = AVAudioPCMBuffer(
+                                pcmFormat: analyzerFormat, frameCapacity: 4096) else { break }
+                            var conversionError: NSError?
+                            let status = converter.convert(to: output,
+                                                            error: &conversionError) {
+                                _, inputStatus in
+                                inputStatus.pointee = .endOfStream
+                                return nil
+                            }
+                            if output.frameLength > 0 {
+                                continuation.yield(AnalyzerInput(buffer: output))
+                            }
+                            if status == .endOfStream || status == .error ||
+                               output.frameLength == 0 { break }
+                        }
                     }
                     continuation.finish()
                 }
@@ -237,10 +282,11 @@ final class ImpressSpeechService: NSObject {
             let inputFormat = node.outputFormat(forBus: 0)
             guard inputFormat.sampleRate > 0,
                   let targetFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
-                    compatibleWith: engine.modules, considering: inputFormat) else {
+                    compatibleWith: engine.modules) else {
                 throw ImpressSpeechFailure.unavailableMicrophone
             }
-            let feed = ImpressSpeechAudioPipe(format: targetFormat)
+            let feed = try ImpressSpeechAudioPipe(
+                source: inputFormat, target: targetFormat)
             let analysis = SpeechAnalyzer(modules: engine.modules)
             self.microphone = recorder
             self.audioPipe = feed

@@ -20,12 +20,14 @@ assert "SpeechAnalyzer(" in source and "SpeechTranscriber(" in source
 assert "DictationTranscriber(" in source
 assert "AssetInventory.assetInstallationRequest" in source
 assert "AVAudioApplication.requestRecordPermission" in source
-# CaptureInputSequenceProvider was introduced in iOS 27. iOS 26 uses
-# AVAudioEngine + the public AnalyzerInputConverter streaming interface.
-assert "CaptureInputSequenceProvider" not in source.replace(
-    "/// The newer CaptureInputSequenceProvider requires iOS 27 and must not be", "")
+# iOS 27 introduced convenience capture/converter types. The iOS 26
+# implementation uses longstanding AVAudioConverter and direct AnalyzerInput.
+assert "CaptureInputSequenceProvider?" not in source
+assert "providerWithSession" not in source
+assert "AnalyzerInputConverter(" not in source
 assert "AVAudioEngine()" in source
-assert "AnalyzerInputConverter(" in source
+assert "AVAudioConverter(from:" in source
+assert "AnalyzerInput(buffer:" in source
 assert "UnsafeMutableAudioBufferListPointer" in source
 assert "feed.stream" in source
 assert "SFSpeechRecognizer" not in source
