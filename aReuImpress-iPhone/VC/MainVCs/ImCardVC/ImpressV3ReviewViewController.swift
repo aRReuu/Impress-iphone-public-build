@@ -71,18 +71,19 @@ final class ImpressV3ReviewViewController: UIViewController {
     private func refreshLocalizedReview() {
         title = V3L("闪卡")
         setupNavigation()
-        let titles = ["补充理解"]
+        let titles = ["补充理解", "AI 讨论"]
         for (i, view) in answerTools.arrangedSubviews.enumerated() {
             guard let button = view as? UIButton, i < titles.count else { continue }
             let text = V3L(titles[i])
             if #available(iOS 15.0, *) {
-                ImpressV3NativeButtonAppearance.secondary(button, title: text)
+                ImpressV3NativeButtonAppearance.reviewSecondary(button, title: text,
+                    symbol: i == 0 ? "square.and.pencil" : "bubble.left")
             } else {
                 button.setTitle(text, for: .normal)
             }
         }
         if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.primary(revealButton, title: V3L("查看答案"))
+            ImpressV3NativeButtonAppearance.reviewPrimary(revealButton, title: V3L("查看答案"))
         } else {
             revealButton.setTitle(V3L("查看答案"), for: .normal)
         }
@@ -115,22 +116,34 @@ final class ImpressV3ReviewViewController: UIViewController {
         reflect.setTitle(V3L("补充理解"), for: .normal)
         reflect.titleLabel?.font = ImpressV3Appearance.Typography.supporting
         if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.secondary(reflect, title: V3L("补充理解"))
+            ImpressV3NativeButtonAppearance.reviewSecondary(
+                reflect, title: V3L("补充理解"), symbol: "square.and.pencil")
         }
+        reflect.accessibilityIdentifier = "impress.review.capture-understanding"
         reflect.addTarget(self, action: #selector(captureFromAnswer), for: .touchUpInside)
-        // Only optional capture remains after revealing the answer.
-        // Review/FSRS history is available in Card Collection; a normal
-        // swipe must never require a new text entry or call the AI API.
+
+        let discuss = UIButton(type: .system)
+        if #available(iOS 15.0, *) {
+            ImpressV3NativeButtonAppearance.reviewSecondary(
+                discuss, title: V3L("AI 讨论"), symbol: "bubble.left")
+        } else {
+            discuss.setTitle(V3L("AI 讨论"), for: .normal)
+        }
+        discuss.accessibilityIdentifier = "impress.review.ai-discussion"
+        discuss.addTarget(self, action: #selector(openAIDiscussion), for: .touchUpInside)
+        // Keep a short native footer: review itself remains reveal → swipe.
+        // Both tertiary actions are optional; they do not submit FSRS ratings.
         answerTools.addArrangedSubview(reflect)
+        answerTools.addArrangedSubview(discuss)
         revealButton.setTitle(V3L("查看答案"), for: .normal)
         revealButton.titleLabel?.font = ImpressV3Appearance.Typography.heading
         revealButton.titleLabel?.adjustsFontForContentSizeCategory = true
         if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.primary(revealButton, title: V3L("查看答案"))
+            ImpressV3NativeButtonAppearance.reviewPrimary(revealButton, title: V3L("查看答案"))
         } else {
-            revealButton.setTitleColor(ImpressV3Appearance.primaryButtonText, for: .normal)
-            revealButton.backgroundColor = ImpressV3Appearance.accent
-            revealButton.layer.cornerRadius = ImpressV3Appearance.Radius.field
+            revealButton.setTitleColor(ImpressV3Appearance.reviewPrimaryInk, for: .normal)
+            revealButton.backgroundColor = ImpressV3Appearance.reviewPrimarySurface
+            revealButton.layer.cornerRadius = ImpressV3Appearance.Metrics.primaryActionHeight / 2
         }
         revealButton.addTarget(self, action: #selector(revealCurrentAnswer),
                                for: .touchUpInside)
@@ -368,7 +381,7 @@ final class ImpressV3ReviewViewController: UIViewController {
                 self.revealButton.isHidden = revealed
                 self.answerTools.isHidden = !revealed
                 self.statusLabel.text = revealed
-                    ? V3L("左·困难   上·良好   右·简单   下·再次")
+                    ? V3L("← 困难   ↑ 良好   → 容易   ↓ 重来")
                     : V3L("先回忆，再查看答案")
                 self.updateNavigationActions()
             } catch {
@@ -391,6 +404,15 @@ final class ImpressV3ReviewViewController: UIViewController {
     }
 
     @objc private func captureFromAnswer() { captureUnderstanding() }
+
+    @objc private func openAIDiscussion() {
+        guard pending == nil, !isLoading,
+              let item = items[safe: currentIndex],
+              let model = models[item.cardID] else { return }
+        let discussion = ImpressAINativeChatViewController(
+            question: model.question, answer: model.answer)
+        navigationController?.pushViewController(discussion, animated: true)
+    }
 
     @objc private func exploreFromAnswer() {
         guard let current = items[safe: currentIndex],
@@ -590,7 +612,7 @@ extension ImpressV3ReviewViewController: SwipeCardStackDataSource, SwipeCardStac
         card.tapGestureRecognizer.isEnabled = false
         card.swipeDirections = [.left, .up, .right, .down]
         for direction in card.swipeDirections {
-            card.setOverlay(ImMemoryCardOverlay(direction: direction), forDirection: direction)
+            card.setOverlay(ImpressV3RatingOverlay(direction: direction), forDirection: direction)
         }
         guard let item = items[safe: index], let model = models[item.cardID] else {
             return card
