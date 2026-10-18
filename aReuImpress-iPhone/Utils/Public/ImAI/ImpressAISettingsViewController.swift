@@ -363,7 +363,7 @@ final class ImpressAIModelsViewController: UITableViewController {
                     reg.models.removeAll { $0.id == model.id }
                 }
                 self.tableView.reloadData()
-            } catch { self.error(error) }
+            } catch { self.showError(error) }
         })
         a.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
         a.popoverPresentationController?.sourceView = tableView
@@ -385,7 +385,7 @@ final class ImpressAIModelsViewController: UITableViewController {
                     identifier: id.trimmingCharacters(in: .whitespacesAndNewlines))
             try ImpressAIConfigStore.shared.update { $0.models.append(model) }
             tableView.reloadData()
-        } catch { error(error) }
+        } catch { showError(error) }
     }
     @objc private func refreshModels() {
         guard let c = connection else { return }
@@ -401,7 +401,7 @@ final class ImpressAIModelsViewController: UITableViewController {
                     }
                 }
                 tableView.reloadData()
-            } catch { error(error) }
+            } catch { showError(error) }
             navigationItem.rightBarButtonItems?.forEach { $0.isEnabled = true }
         }
     }
@@ -417,7 +417,7 @@ final class ImpressAIModelsViewController: UITableViewController {
                     reg.models[i].jsonVerified = true
                 }
                 tableView.reloadData()
-            } catch { error(error) }
+            } catch { showError(error) }
         }
     }
     private func setRoute(_ task: ImpressAITask, modelID: UUID) {
@@ -429,9 +429,9 @@ final class ImpressAIModelsViewController: UITableViewController {
             let a = UIAlertController(title: V3L("已选择默认模型"), message: nil, preferredStyle: .alert)
             a.addAction(UIAlertAction(title: V3L("确定"), style: .default))
             present(a, animated: true)
-        } catch { error(error) }
+        } catch { showError(error) }
     }
-    private func error(_ error: Error) {
+    private func showError(_ error: Error) {
         let a = UIAlertController(title: V3L("操作失败"), message: error.localizedDescription,
                                   preferredStyle: .alert)
         a.addAction(UIAlertAction(title: V3L("确定"), style: .default))
