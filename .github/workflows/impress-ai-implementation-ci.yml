@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/impress-ai-api-questionpool-impl
+      - feature/impress-vault-device-write-qa
   workflow_dispatch:
 
 permissions:
