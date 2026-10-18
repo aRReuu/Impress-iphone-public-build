@@ -966,6 +966,40 @@ final class ImVaultSyncIntegrationTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: file), original)
     }
 
+    func testDeviceQAWriteRequiresExactExplicitFolderNameAndProductionRemainsLocked() throws {
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+        #if DEBUG
+        let parent = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "ImpressQAPredicate-" + UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        let testFolder = parent.appendingPathComponent(
+            ImVaultGuardedWrite.deviceQAFolderName, isDirectory: true)
+        try FileManager.default.createDirectory(at: testFolder,
+                                                withIntermediateDirectories: true)
+        XCTAssertTrue(ImVaultGuardedWrite.isExplicitQAVault(testFolder))
+        XCTAssertFalse(ImVaultGuardedWrite.isExplicitQAVault(parent))
+        XCTAssertFalse(ImVaultGuardedWrite.isExplicitQAVault(
+            parent.appendingPathComponent(ImVaultGuardedWrite.deviceQAFolderName + "-Old")))
+        let nonTestVault = parent.appendingPathComponent("OriginalVault", isDirectory: true)
+        try FileManager.default.createDirectory(at: nonTestVault,
+                                                withIntermediateDirectories: true)
+        XCTAssertFalse(ImVaultGuardedWrite.isExplicitQAVault(nonTestVault))
+        #endif
+    }
+
+    func testIncompleteSourceDiffNeverActivatesDeviceWriteAction() throws {
+        let id = try ImVaultFileIdentity(vaultID: UUID().uuidString,
+                                         relativePath: "Only/Test.md")
+        var draft = try ImVaultDraft(identity: id, baseText: "# Source")
+        try draft.update("# Source\nmore")
+        let diff = ImVaultDiffController(
+            draft: draft, summary: "Incomplete preview", canApprove: false)
+        diff.loadViewIfNeeded()
+        XCTAssertFalse(diff.navigationItem.rightBarButtonItem?.isEnabled ?? true)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
     func testDebugFixtureWriteCannotTargetUserDocumentsDirectory() throws {
         let documents = try XCTUnwrap(FileManager.default.urls(
             for: .documentDirectory, in: .userDomainMask).first)
