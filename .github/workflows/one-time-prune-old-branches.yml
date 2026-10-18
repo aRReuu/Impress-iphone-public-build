@@ -61,7 +61,7 @@ jobs:
           while read -r ref tag expected; do
             existing="$(gh api "repos/$GITHUB_REPOSITORY/git/refs/tags" \
               --jq ".[] | select(.ref == \"refs/tags/$tag\") | .object.sha" || true)"
-            [ "$existing" = "null" ] && existing=""
+            if [ "$existing" = "null" ]; then existing=""; fi
             if [ -n "$existing" ] && [ "$existing" != "$expected" ]; then
               echo "::error::Archive tag exists at another commit: $tag"; exit 1
             fi
