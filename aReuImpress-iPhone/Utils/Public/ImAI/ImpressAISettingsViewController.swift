@@ -386,7 +386,10 @@ final class ImpressAIModelsViewController: UITableViewController {
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
         var ui = UIListContentConfiguration.subtitleCell()
         ui.text = m.identifier
-        ui.secondaryText = m.jsonVerified ? V3L("JSON 测试已通过") : V3L("尚未验证 JSON 输出")
+        let wire = (m.protocolOverride ?? connection?.apiProtocol)?.rawValue ?? ""
+        let mode = (m.jsonMode ?? .native).rawValue
+        ui.secondaryText = wire + " · " + mode + " · " +
+            (m.jsonVerified ? V3L("JSON 测试已通过") : V3L("尚未验证 JSON 输出"))
         ui.image = UIImage(systemName: m.jsonVerified ? "checkmark.shield" : "questionmark.circle")
         cell.contentConfiguration = ui
         ImpressV3Appearance.styleGroupedCell(cell)
@@ -399,6 +402,12 @@ final class ImpressAIModelsViewController: UITableViewController {
         let a = UIAlertController(title: model.identifier, message: nil, preferredStyle: .actionSheet)
         a.addAction(UIAlertAction(title: V3L("测试 JSON 输出"), style: .default) { [weak self] _ in
             self?.testModel(model)
+        })
+        a.addAction(UIAlertAction(title: V3L("模型协议"), style: .default) { [weak self] _ in
+            self?.chooseModelProtocol(model)
+        })
+        a.addAction(UIAlertAction(title: V3L("JSON 输出模式"), style: .default) { [weak self] _ in
+            self?.chooseJSONMode(model)
         })
         a.addAction(UIAlertAction(title: V3L("作为出题模型"), style: .default) { [weak self] _ in
             self?.setRoute(.questionGeneration, modelID: model.id)
@@ -423,6 +432,64 @@ final class ImpressAIModelsViewController: UITableViewController {
         a.popoverPresentationController?.sourceRect = tableView.rectForRow(at: indexPath)
         present(a, animated: true)
     }
+    private func chooseModelProtocol(_ model: ImpressAIModel) {
+        guard let c = connection else { return }
+        let sheet = UIAlertController(title: V3L("模型协议"), message: nil,
+                                      preferredStyle: .actionSheet)
+        let defaultAction = UIAlertAction(title: V3L("沿用连接协议"), style: .default) { [weak self] _ in
+            self?.applyModelChange(model.id) {
+                $0.protocolOverride = nil
+                $0.jsonVerified = false
+                $0.toolsVerified = false
+            }
+        }
+        sheet.addAction(defaultAction)
+        for wire in ImpressAIProtocol.allCases
+            where ImpressAIRegistry.supported(wire, for: c.provider) {
+            sheet.addAction(UIAlertAction(title: wire.rawValue, style: .default) { [weak self] _ in
+                self?.applyModelChange(model.id) {
+                    $0.protocolOverride = wire
+                    $0.jsonVerified = false
+                    $0.toolsVerified = false
+                }
+            })
+        }
+        sheet.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        sheet.popoverPresentationController?.sourceView = tableView
+        sheet.popoverPresentationController?.sourceRect = tableView.bounds
+        present(sheet, animated: true)
+    }
+
+    private func chooseJSONMode(_ model: ImpressAIModel) {
+        let sheet = UIAlertController(title: V3L("JSON 输出模式"), message: nil,
+                                      preferredStyle: .actionSheet)
+        for value in ImpressAIJSONMode.allCases {
+            sheet.addAction(UIAlertAction(title: value.rawValue, style: .default) { [weak self] _ in
+                self?.applyModelChange(model.id) {
+                    $0.jsonMode = value
+                    $0.jsonVerified = false
+                }
+            })
+        }
+        sheet.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        sheet.popoverPresentationController?.sourceView = tableView
+        sheet.popoverPresentationController?.sourceRect = tableView.bounds
+        present(sheet, animated: true)
+    }
+
+    private func applyModelChange(_ id: UUID,
+                                  edit: (inout ImpressAIModel) -> Void) {
+        do {
+            try ImpressAIConfigStore.shared.update { registry in
+                guard let index = registry.models.firstIndex(where: { $0.id == id }) else {
+                    throw ImpressAIServiceError.configuration
+                }
+                edit(&registry.models[index])
+            }
+            tableView.reloadData()
+        } catch { showError(error) }
+    }
+
     @objc private func addManual() {
         let a = UIAlertController(title: V3L("添加模型 ID"), message: nil, preferredStyle: .alert)
         a.addTextField { $0.autocapitalizationType = .none; $0.autocorrectionType = .no }
