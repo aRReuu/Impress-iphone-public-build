@@ -1166,6 +1166,13 @@ enum ImpressV3Language: String, CaseIterable {
         "无法保存卡片": ("無法儲存卡片", "Could Not Save Cards"),
         "来源依据（只读）": ("來源依據（唯讀）", "Source Evidence (Read Only)"),
         "来源引用仅供核对，不能单独证明答案正确。加入前请确认内容。": ("來源引用僅供查核，不能單獨證明答案正確。加入前請確認內容。", "Citations aid verification but do not guarantee correctness. Review answers before adding."),
+        "自定义 API": ("自訂 API", "Custom API"),
+        "认证方式": ("驗證方式", "Authentication"),
+        "自定义 Header 名称": ("自訂 Header 名稱", "Custom Header Name"),
+        "API 接口路径": ("API 介面路徑", "API Endpoint Paths"),
+        "模型协议": ("模型協定", "Model Protocol"),
+        "JSON 输出模式": ("JSON 輸出模式", "JSON Output Mode"),
+        "沿用连接协议": ("沿用連線協定", "Use Connection Protocol"),
         "模型下载失败": ("模型下載失敗", "Model Download Failed")
     ]
 
