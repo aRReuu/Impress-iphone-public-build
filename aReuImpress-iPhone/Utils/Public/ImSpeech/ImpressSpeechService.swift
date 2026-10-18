@@ -18,7 +18,7 @@ enum ImpressSpeechLocale: String, CaseIterable {
     var name: String {
         switch self {
         case .chineseSimplified: return V3L("普通话（简体）")
-        case .chineseTraditional: return V3L("中文（繁体）"
+        case .chineseTraditional: return V3L("中文（繁体）")
         case .english: return "English (US)"
         }
     }
