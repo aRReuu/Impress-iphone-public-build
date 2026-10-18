@@ -161,6 +161,8 @@ actor ImpressAIHTTPClient {
             switch auth {
             case .bearer:
                 result.setValue("Bearer " + secret, forHTTPHeaderField: "Authorization")
+            case .rawAuthorization:
+                result.setValue(secret, forHTTPHeaderField: "Authorization")
             case .apiKeyHeader:
                 result.setValue(secret, forHTTPHeaderField: "x-api-key")
             case .googleAPIKeyHeader:
