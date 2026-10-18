@@ -145,7 +145,7 @@ final class ImpressAIContractsTests: XCTestCase {
 
     func testNoBlindUploadLargeContext() throws {
         let s = source()
-        let e = ImpressAIExcerpt(id: "x", source: s, text: String(repeating: "a", count: 512),
+        let e = ImpressAIExcerpt(id: "x", source: s, text: String(repeating: "q", count: 512),
                                 sectionHeading: "验证的章节标题")
         XCTAssertThrowsError(try ImpressAIQuestionPrompt.input([e], maxBytes: 120))
         XCTAssertTrue(try ImpressAIQuestionPrompt.input([e]).contains("fragment") == false)
