@@ -10,7 +10,7 @@ enum ImpressAIServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .configuration: return V3L("请先在设置中配置并测试 AI 出题模型。")
-        case .freeModelOnly: return V3L("本测试版只允许 OpenCode 官方免费模型的匿名请求；请在 AI 服务中添加 OpenCode Free · QA。")
+        case .freeModelOnly: return V3L("本 QA 版只允许 OpenCode 官方免费模型；推荐添加「OpenCode 免费模型（测试）」，不需要密钥。使用 Keychain 密钥时也只允许相同的免费型号。")
         case .credential: return V3L("API Key 不可用，请重新保存密钥。")
         case .invalidURL: return V3L("API 地址不安全或不正确。")
         case .unauthorized: return V3L("API 授权失败，请检查密钥。")
