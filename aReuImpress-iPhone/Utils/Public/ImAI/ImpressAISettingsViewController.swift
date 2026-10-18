@@ -65,7 +65,9 @@ final class ImpressAISettingsViewController: UITableViewController {
             let c = config.connections[indexPath.row]
             let count = config.models.filter { $0.connectionID == c.id }.count
             content.text = c.title
-            content.secondaryText = "\(c.provider.rawValue) · \(count) \(V3L("个模型"))"
+            content.secondaryText = c.effectiveAuthentication == .noAuthentication
+                ? "\(count) \(V3L("个免费模型")) · \(V3L("无需密钥"))"
+                : "\(c.provider.rawValue) · \(count) \(V3L("个模型"))"
             content.image = UIImage(systemName: "server.rack")
         case 1:
             let task = tasks[indexPath.row]
@@ -229,7 +231,9 @@ final class ImpressAIConnectionEditor: UITableViewController {
             let models = ImpressAIConfigStore.shared.registry.models
             let values = [c?.title ?? "", (c?.provider.rawValue ?? "") + " / " + (c?.apiProtocol.rawValue ?? ""),
                           c?.baseURL.host ?? "",
-                          c?.credentialID == nil ? V3L("未保存") : V3L("已保存"),
+                          c?.effectiveAuthentication == .noAuthentication
+                              ? V3L("无需密钥") :
+                              (c?.credentialID == nil ? V3L("未保存") : V3L("已保存")),
                           c?.effectiveAuthentication.rawValue ?? "",
                           c?.customHeaderName ?? "—",
                           "\(models.filter { $0.connectionID == connectionID }.count)",
