@@ -2,7 +2,7 @@
 
 > 状态：已实现配置与路由代码；实机及真实付费账号调用尚未验证。此文档不宣称已完成生产发布或 Obsidian 写回。
 >
-> 分支：`feature/impress-ai-api-questionpool-impl`。**校准器、FSRS-6 核心调度、外部 Obsidian 写回门禁均不得改变。**
+> 分支：`feature/impress-vault-device-write-qa`（唯一开发分支）。**校准器、FSRS-6 核心调度、外部 Obsidian 写回门禁均不得改变。**
 >
 > **数据安全**：不得在公共仓库、CI、报告或截图中保存 API Key；私人笔记仅在用户主动选定章节且确认后发送。第三方 API 按其服务条款处理提交内容。针对长期公开分发，官方建议由受控后端代理管理生产 API 密钥；个人 BYOK iOS Keychain 模式无法保证密钥抵御已控制设备的攻击。
 
