@@ -1164,6 +1164,8 @@ enum ImpressV3Language: String, CaseIterable {
         "张卡片已保存到 V3 卡片集。": (" 張卡片已儲存至 V3 卡片集。", " cards have been saved to the V3 card collection."),
         "张问答卡片将进入 FSRS 复习。Obsidian 原文不会修改。": (" 張問答卡片將加入 FSRS 複習；Obsidian 原文不會修改。", " Q&A cards will enter FSRS review. Source Obsidian notes remain unchanged."),
         "无法保存卡片": ("無法儲存卡片", "Could Not Save Cards"),
+        "来源依据（只读）": ("來源依據（唯讀）", "Source Evidence (Read Only)"),
+        "来源引用仅供核对，不能单独证明答案正确。加入前请确认内容。": ("來源引用僅供查核，不能單獨證明答案正確。加入前請確認內容。", "Citations aid verification but do not guarantee correctness. Review answers before adding."),
         "模型下载失败": ("模型下載失敗", "Model Download Failed")
     ]
 
