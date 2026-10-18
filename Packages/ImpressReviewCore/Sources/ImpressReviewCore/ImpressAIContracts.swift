@@ -15,7 +15,7 @@ public enum ImpressAIProtocol: String, Codable, CaseIterable, Sendable {
 // Gateways such as Command Code can expose Anthropic-format Messages with
 // Bearer authorization instead of Anthropic's own x-api-key header.
 public enum ImpressAIAuthentication: String, Codable, CaseIterable, Sendable {
-    case bearer, rawAuthorization, apiKeyHeader, googleAPIKeyHeader, customHeader, none
+    case bearer, rawAuthorization, apiKeyHeader, googleAPIKeyHeader, customHeader, noAuthentication = "none"
 
     public static func defaultFor(_ provider: ImpressAIProvider) -> Self {
         switch provider {
@@ -290,7 +290,7 @@ public struct ImpressAIRegistry: Codable, Sendable {
             throw ImpressAIContractError.invalidRoute
         }
         guard connection.enabled && model.enabled else { throw ImpressAIContractError.disabled }
-        guard connection.effectiveAuthentication == .none || connection.credentialID != nil else {
+        guard connection.effectiveAuthentication == .noAuthentication || connection.credentialID != nil else {
             throw ImpressAIContractError.missingCredential
         }
         // A model test is required before sending private Markdown for AI generation.
