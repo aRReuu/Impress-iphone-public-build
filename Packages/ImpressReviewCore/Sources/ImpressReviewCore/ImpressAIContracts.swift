@@ -4,11 +4,77 @@ import Foundation
 // Existing FSRS and ReviewEvent schemas remain independent.
 
 public enum ImpressAIProvider: String, Codable, CaseIterable, Sendable {
-    case openAI, deepSeek, anthropic, gemini, custom
+    case openAI, deepSeek, anthropic, gemini, zhipu, commandCode, openCode, custom
 }
 
 public enum ImpressAIProtocol: String, Codable, CaseIterable, Sendable {
     case responses, chatCompletions, anthropicMessages, geminiGenerateContent
+}
+
+// Authentication is a property of a *connection*, not of its wire protocol.
+// Gateways such as Command Code can expose Anthropic-format Messages with
+// Bearer authorization instead of Anthropic's own x-api-key header.
+public enum ImpressAIAuthentication: String, Codable, CaseIterable, Sendable {
+    case bearer, apiKeyHeader, googleAPIKeyHeader, customHeader, none
+
+    public static func defaultFor(_ provider: ImpressAIProvider) -> Self {
+        switch provider {
+        case .anthropic: return .apiKeyHeader
+        case .gemini: return .googleAPIKeyHeader
+        default: return .bearer
+        }
+    }
+}
+
+/// Paths are relative to the chosen HTTPS base URL; no absolute URL,
+/// traversal, query strings or request-parameter interpolation is allowed.
+/// modelsPath == "" explicitly disables remote catalog loading.
+public struct ImpressAIEndpointPaths: Codable, Equatable, Sendable {
+    public var modelsPath: String
+    public var chatPath: String
+    public var responsesPath: String
+    public var messagesPath: String
+
+    public init(modelsPath: String = "models",
+                chatPath: String = "chat/completions",
+                responsesPath: String = "responses",
+                messagesPath: String = "messages") {
+        self.modelsPath = modelsPath
+        self.chatPath = chatPath
+        self.responsesPath = responsesPath
+        self.messagesPath = messagesPath
+    }
+
+    public static func safePath(_ path: String, allowEmpty: Bool = false) -> Bool {
+        if path.isEmpty { return allowEmpty }
+        guard path.utf8.count <= 180, !path.hasPrefix("/"), !path.hasSuffix("/"),
+              !path.contains("//"), !path.contains("\\"),
+              !path.contains("%"), !path.contains("?"), !path.contains("#"),
+              !path.contains(":") else { return false }
+        let parts = path.split(separator: "/", omittingEmptySubsequences: false)
+        let allowed = CharacterSet(charactersIn:
+             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
+        return parts.allSatisfy { part in
+            part != "." && part != ".." && !part.isEmpty &&
+            part.unicodeScalars.allSatisfy { allowed.contains($0) }
+        }
+    }
+
+    public func validate() throws {
+        guard Self.safePath(modelsPath, allowEmpty: true),
+              Self.safePath(chatPath), Self.safePath(responsesPath),
+              Self.safePath(messagesPath) else { throw ImpressAIContractError.invalidEndpointPath }
+    }
+
+    public func path(for proto: ImpressAIProtocol) -> String {
+        switch proto {
+        case .chatCompletions: return chatPath
+        case .responses: return responsesPath
+        case .anthropicMessages: return messagesPath
+        // Google uses its official dynamic models/{id}:generateContent endpoint.
+        case .geminiGenerateContent: return ""
+        }
+    }
 }
 
 public enum ImpressAITask: String, Codable, CaseIterable, Sendable {
@@ -23,10 +89,23 @@ public struct ImpressAIConnection: Codable, Equatable, Sendable {
     public var baseURL: URL
     public var credentialID: UUID?
     public var enabled: Bool
+    /// Optional to decode already-saved V1 profiles without migration loss.
+    public var authentication: ImpressAIAuthentication?
+    public var customHeaderName: String?
+    public var endpoints: ImpressAIEndpointPaths?
+
+    public var effectiveAuthentication: ImpressAIAuthentication {
+        authentication ?? .defaultFor(provider)
+    }
+    public var effectiveEndpoints: ImpressAIEndpointPaths {
+        endpoints ?? ImpressAIEndpointPaths()
+    }
 
     public init(id: UUID = UUID(), title: String, provider: ImpressAIProvider,
                 apiProtocol: ImpressAIProtocol, baseURL: URL,
-                credentialID: UUID? = nil, enabled: Bool = true) {
+                credentialID: UUID? = nil, enabled: Bool = true,
+                authentication: ImpressAIAuthentication? = nil,
+                customHeaderName: String? = nil, endpoints: ImpressAIEndpointPaths? = nil) {
         self.id = id
         self.title = title
         self.provider = provider
@@ -34,6 +113,9 @@ public struct ImpressAIConnection: Codable, Equatable, Sendable {
         self.baseURL = baseURL
         self.credentialID = credentialID
         self.enabled = enabled
+        self.authentication = authentication
+        self.customHeaderName = customHeaderName
+        self.endpoints = endpoints
     }
 }
 
@@ -45,15 +127,19 @@ public struct ImpressAIModel: Codable, Equatable, Sendable {
     public var jsonVerified: Bool
     public var toolsVerified: Bool
     public var enabled: Bool
+    /// Mixed-format gateways may need a protocol per model.
+    public var protocolOverride: ImpressAIProtocol?
 
     public init(id: UUID = UUID(), connectionID: UUID, identifier: String,
-                jsonVerified: Bool = false, toolsVerified: Bool = false, enabled: Bool = true) {
+                jsonVerified: Bool = false, toolsVerified: Bool = false, enabled: Bool = true,
+                protocolOverride: ImpressAIProtocol? = nil) {
         self.id = id
         self.connectionID = connectionID
         self.identifier = identifier
         self.jsonVerified = jsonVerified
         self.toolsVerified = toolsVerified
         self.enabled = enabled
+        self.protocolOverride = protocolOverride
     }
 }
 
@@ -75,6 +161,9 @@ public struct ImpressAIRoute: Codable, Equatable, Sendable {
 public struct ImpressAIResolvedRoute: Sendable {
     public let connection: ImpressAIConnection
     public let model: ImpressAIModel
+    public var effectiveProtocol: ImpressAIProtocol {
+        model.protocolOverride ?? connection.apiProtocol
+    }
     public init(connection: ImpressAIConnection, model: ImpressAIModel) {
         self.connection = connection
         self.model = model
@@ -85,6 +174,7 @@ public enum ImpressAIContractError: Error, Equatable, Sendable {
     case duplicateID, duplicateModelIdentifier, invalidName, invalidEndpoint
     case invalidProtocol, invalidModel, invalidRoute, missingCredential
     case disabled, crossProviderNotAuthorized, unverifiedModel
+    case invalidAuthentication, invalidEndpointPath
     case invalidRequest, invalidResponse, invalidEvidence, duplicateQuestion
 }
 
@@ -99,6 +189,27 @@ public struct ImpressAIRegistry: Codable, Sendable {
         self.models = models
         self.routes = routes
         try validate()
+    }
+
+    public static func supported(_ proto: ImpressAIProtocol, for provider: ImpressAIProvider) -> Bool {
+        switch provider {
+        case .openAI: return proto == .responses || proto == .chatCompletions
+        case .deepSeek, .zhipu: return proto == .chatCompletions
+        case .anthropic: return proto == .anthropicMessages
+        case .gemini: return proto == .geminiGenerateContent
+        case .commandCode, .openCode, .custom: return true
+        }
+    }
+
+    public static func safeCustomHeader(_ name: String) -> Bool {
+        let normalized = name.lowercased()
+        let blocked: Set<String> = ["authorization", "host", "cookie",
+             "content-type", "content-length", "connection", "proxy-authorization",
+             "x-goog-api-key", "x-api-key", "accept", "user-agent"]
+        let chars = CharacterSet(charactersIn:
+             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-")
+        return (1...64).contains(name.utf8.count) && !blocked.contains(normalized)
+            && name.unicodeScalars.allSatisfy { chars.contains($0) }
     }
 
     public func validate() throws {
@@ -116,21 +227,26 @@ public struct ImpressAIRegistry: Codable, Sendable {
                   (c.baseURL.port == nil || c.baseURL.port == 443) else {
                 throw ImpressAIContractError.invalidEndpoint
             }
-            let allowed: Bool
-            switch c.provider {
-            case .openAI: allowed = c.apiProtocol == .responses || c.apiProtocol == .chatCompletions
-            case .deepSeek: allowed = c.apiProtocol == .chatCompletions
-            case .anthropic: allowed = c.apiProtocol == .anthropicMessages
-            case .gemini: allowed = c.apiProtocol == .geminiGenerateContent
-            case .custom: allowed = true
+            guard Self.supported(c.apiProtocol, for: c.provider) else {
+                throw ImpressAIContractError.invalidProtocol
             }
-            guard allowed else { throw ImpressAIContractError.invalidProtocol }
+            try c.effectiveEndpoints.validate()
+            if c.effectiveAuthentication == .customHeader {
+                guard Self.safeCustomHeader(c.customHeaderName ?? "") else {
+                    throw ImpressAIContractError.invalidAuthentication
+                }
+            }
         }
         for model in models {
             guard connections.contains(where: { $0.id == model.connectionID }),
                   !model.identifier.isEmpty, model.identifier.utf8.count <= 180,
                   model.identifier == model.identifier.trimmingCharacters(in: .whitespacesAndNewlines),
                   !model.identifier.contains("\n") else { throw ImpressAIContractError.invalidModel }
+            if let alternative = model.protocolOverride,
+               let owner = connections.first(where: { $0.id == model.connectionID }),
+               !Self.supported(alternative, for: owner.provider) {
+                throw ImpressAIContractError.invalidProtocol
+            }
             let key = model.connectionID.uuidString + "|" + model.identifier.lowercased()
             guard modelNames.insert(key).inserted else { throw ImpressAIContractError.duplicateModelIdentifier }
         }
@@ -165,7 +281,9 @@ public struct ImpressAIRegistry: Codable, Sendable {
             throw ImpressAIContractError.invalidRoute
         }
         guard connection.enabled && model.enabled else { throw ImpressAIContractError.disabled }
-        guard connection.credentialID != nil else { throw ImpressAIContractError.missingCredential }
+        guard connection.effectiveAuthentication == .none || connection.credentialID != nil else {
+            throw ImpressAIContractError.missingCredential
+        }
         // A model test is required before sending private Markdown for AI generation.
         if task != .conversation && !model.jsonVerified {
             throw ImpressAIContractError.unverifiedModel
