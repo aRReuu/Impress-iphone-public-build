@@ -118,6 +118,17 @@ private final class ImpressAINoRedirect: NSObject, URLSessionTaskDelegate {
     }
 }
 
+/// Ephemeral conversation turns. No conversation is persisted to app backups
+/// or turned into knowledge automatically.
+enum ImpressAIChatRole: String, Sendable {
+    case user, assistant
+}
+
+struct ImpressAIChatTurn: Sendable {
+    let role: ImpressAIChatRole
+    let text: String
+}
+
 actor ImpressAIHTTPClient {
     static let shared = ImpressAIHTTPClient()
     private let session: URLSession
@@ -289,6 +300,79 @@ actor ImpressAIHTTPClient {
             throw ImpressAIServiceError.response
         }
         return text
+    }
+
+    /// Actual native text conversation, NOT the structured JSON question API.
+    /// Only an explicit Send tap reaches this method. No Vault read/write tools.
+    func converse(route: ImpressAIResolvedRoute, system: String,
+                  turns: [ImpressAIChatTurn]) async throws -> String {
+        guard !turns.isEmpty, turns.last?.role == .user, turns.count <= 20,
+              system.utf8.count <= 4_000,
+              turns.allSatisfy({ !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                 && $0.text.utf8.count <= 12_000 }),
+              turns.reduce(0, { $0 + $1.text.utf8.count }) <= 55_000 else {
+            throw ImpressAIServiceError.tooLarge
+        }
+        let connection = route.connection
+        let model = route.model.identifier
+        let wire = route.effectiveProtocol
+        let endpointPath: String
+        let payload: [String: Any]
+        switch wire {
+        case .responses:
+            endpointPath = connection.effectiveEndpoints.responsesPath
+            payload = ["model": model, "instructions": system,
+                       "input": turns.map { ["role": $0.role.rawValue, "content": $0.text] },
+                       "store": false, "max_output_tokens": 1400]
+        case .chatCompletions:
+            endpointPath = connection.effectiveEndpoints.chatPath
+            let messages: [[String: String]] = [["role": "system", "content": system]] +
+                turns.map { ["role": $0.role.rawValue, "content": $0.text] }
+            payload = ["model": model, "messages": messages, "stream": false]
+        case .anthropicMessages:
+            endpointPath = connection.effectiveEndpoints.messagesPath
+            payload = ["model": model, "system": system, "max_tokens": 1400,
+                       "messages": turns.map {
+                           ["role": $0.role.rawValue, "content": $0.text]
+                       }]
+        case .geminiGenerateContent:
+            let allowed = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))
+            let safeModel = model.addingPercentEncoding(withAllowedCharacters: allowed) ?? model
+            endpointPath = "models/" + safeModel + ":generateContent"
+            payload = ["systemInstruction": ["parts": [["text": system]]],
+                       "contents": turns.map { item in
+                           ["role": item.role == .assistant ? "model" : "user",
+                            "parts": [["text": item.text]]]
+                       }]
+        }
+        let response = try await execute(request(connection, path: endpointPath,
+                            method: "POST", wireProtocol: wire, body: payload))
+        let text: String?
+        switch wire {
+        case .responses:
+            let items = response["output"] as? [[String: Any]] ?? []
+            let parts = items.flatMap { $0["content"] as? [[String: Any]] ?? [] }
+            let combined = parts.filter { $0["type"] as? String == "output_text" }
+                .compactMap { $0["text"] as? String }.joined()
+            text = combined.isEmpty ? response["output_text"] as? String : combined
+        case .chatCompletions:
+            let choices = response["choices"] as? [[String: Any]] ?? []
+            text = (choices.first?["message"] as? [String: Any])?["content"] as? String
+        case .anthropicMessages:
+            let parts = response["content"] as? [[String: Any]] ?? []
+            text = parts.filter { $0["type"] as? String == "text" }
+                .compactMap { $0["text"] as? String }.joined()
+        case .geminiGenerateContent:
+            let responses = response["candidates"] as? [[String: Any]] ?? []
+            let content = responses.first?["content"] as? [String: Any]
+            text = (content?["parts"] as? [[String: Any]] ?? [])
+                .compactMap { $0["text"] as? String }.joined()
+        }
+        guard let value = text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty, value.utf8.count <= 65_000 else {
+            throw ImpressAIServiceError.response
+        }
+        return value
     }
 
     /// Harmless connectivity + JSON probe. It is not a guarantee of factual correctness.
