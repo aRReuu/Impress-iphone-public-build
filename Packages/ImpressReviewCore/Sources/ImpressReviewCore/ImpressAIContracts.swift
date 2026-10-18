@@ -7,6 +7,55 @@ public enum ImpressAIProvider: String, Codable, CaseIterable, Sendable {
     case openAI, deepSeek, anthropic, gemini, zhipu, commandCode, openCode, custom
 }
 
+/// A QA-only, no-credential free-model lane. Every inference request is
+/// validated immediately before transmission, including model capability tests.
+/// When a free promotion ends, anonymous traffic fails rather than charging
+/// a user-held key. This is not a claim that free availability is permanent.
+/// Official console: https://opencode.ai/v2/docs/console/models/
+public enum ImpressAIOpenCodeFreeQA {
+    public static let preferredModelID = "glm-5.3-flash-free"
+    public static let backupModelID = "deepseek-v4.1-flash-free"
+    public static let modelIDs: Set<String> = [preferredModelID, backupModelID]
+    public static let baseURL = URL(string: "https://opencode.ai/inference")!
+    public static let endpoints = ImpressAIEndpointPaths(
+        modelsPath: "v1/models",
+        chatPath: "openai/v1/chat/completions",
+        responsesPath: "openai/v1/responses",
+        messagesPath: "anthropic/v1/messages"
+    )
+
+    public static func connection() -> ImpressAIConnection {
+        ImpressAIConnection(title: "OpenCode Free · QA", provider: .openCode,
+            apiProtocol: .chatCompletions, baseURL: baseURL,
+            credentialID: nil, authentication: .noAuthentication,
+            endpoints: endpoints)
+    }
+
+    public static func models(for connectionID: UUID) -> [ImpressAIModel] {
+        [preferredModelID, backupModelID].map { id in
+            ImpressAIModel(connectionID: connectionID, identifier: id,
+                           jsonMode: .promptOnly)
+        }
+    }
+
+    /// Deliberate fail-closed allowlist; arbitrary `free` suffixes never pass.
+    public static func validate(_ route: ImpressAIResolvedRoute) throws {
+        let c = route.connection
+        guard modelIDs.contains(route.model.identifier),
+              c.provider == .openCode,
+              c.baseURL == baseURL,
+              c.effectiveAuthentication == .noAuthentication,
+              c.credentialID == nil,
+              c.effectiveEndpoints.chatPath == endpoints.chatPath,
+              route.effectiveProtocol == .chatCompletions
+        else { throw ImpressAIContractError.freeModelQAOnly }
+    }
+
+    public static func allowedForCatalog(_ modelID: String) -> Bool {
+        modelIDs.contains(modelID)
+    }
+}
+
 public enum ImpressAIProtocol: String, Codable, CaseIterable, Sendable {
     case responses, chatCompletions, anthropicMessages, geminiGenerateContent
 }
@@ -184,6 +233,7 @@ public enum ImpressAIContractError: Error, Equatable, Sendable {
     case invalidProtocol, invalidModel, invalidRoute, missingCredential
     case disabled, crossProviderNotAuthorized, unverifiedModel
     case invalidAuthentication, invalidEndpointPath
+    case freeModelQAOnly
     case invalidRequest, invalidResponse, invalidEvidence, duplicateQuestion
 }
 
