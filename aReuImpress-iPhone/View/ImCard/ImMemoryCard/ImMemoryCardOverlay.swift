@@ -329,3 +329,75 @@ private class ImMemoryCardOverlayView: UIView
         return (count, totalMemory)
     }
 }
+
+
+/// V3-only four-way swipe feedback. A quiet compact label replaces the
+/// legacy 64-point bitmap, 2-point colored stroke and large drop shadow.
+/// The underlying SwipeCardStack still controls fade/drag and FSRS semantics.
+@MainActor
+final class ImpressV3RatingOverlay: UIView {
+    init(direction: SwipeDirection) {
+        super.init(frame: .zero)
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+
+        let title: String
+        let symbol: String
+        switch direction {
+        case .left:  title = V3L("困难"); symbol = "arrow.left"
+        case .up:    title = V3L("良好"); symbol = "arrow.up"
+        case .right: title = V3L("容易"); symbol = "arrow.right"
+        case .down:  title = V3L("重来"); symbol = "arrow.down"
+        }
+
+        let badge = UIView()
+        badge.translatesAutoresizingMaskIntoConstraints = false
+        badge.backgroundColor = ImpressV3Appearance.reviewOverlaySurface
+        badge.layer.cornerRadius = ImpressV3Appearance.Metrics.reviewOverlayBadgeHeight / 2
+        badge.clipsToBounds = true
+
+        let image = UIImageView(image: UIImage(systemName: symbol,
+            withConfiguration: UIImage.SymbolConfiguration(
+                pointSize: ImpressV3Appearance.Metrics.reviewOverlaySymbolSize,
+                weight: .medium)))
+        image.tintColor = ImpressV3Appearance.reviewOverlaySymbol
+        image.contentMode = .scaleAspectFit
+
+        let text = UILabel()
+        text.text = title
+        text.font = ImpressV3Appearance.Typography.supporting
+        text.adjustsFontForContentSizeCategory = true
+        text.textColor = ImpressV3Appearance.primaryText
+        text.textAlignment = .center
+
+        let content = UIStackView(arrangedSubviews: [image, text])
+        content.axis = .horizontal
+        content.spacing = ImpressV3Appearance.Metrics.symbolGap
+        content.alignment = .center
+        content.translatesAutoresizingMaskIntoConstraints = false
+        badge.addSubview(content)
+        addSubview(badge)
+        NSLayoutConstraint.activate([
+            badge.centerXAnchor.constraint(equalTo: centerXAnchor),
+            badge.centerYAnchor.constraint(equalTo: centerYAnchor),
+            badge.heightAnchor.constraint(greaterThanOrEqualToConstant:
+                ImpressV3Appearance.Metrics.reviewOverlayBadgeHeight),
+            badge.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor,
+                                           constant: 16),
+            badge.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor,
+                                            constant: -16),
+            content.leadingAnchor.constraint(equalTo: badge.leadingAnchor, constant: 18),
+            content.trailingAnchor.constraint(equalTo: badge.trailingAnchor, constant: -18),
+            content.topAnchor.constraint(equalTo: badge.topAnchor, constant: 10),
+            content.bottomAnchor.constraint(equalTo: badge.bottomAnchor, constant: -10),
+            image.widthAnchor.constraint(equalToConstant:
+                ImpressV3Appearance.Metrics.reviewOverlaySymbolSize),
+            image.heightAnchor.constraint(equalToConstant:
+                ImpressV3Appearance.Metrics.reviewOverlaySymbolSize)
+        ])
+        accessibilityLabel = title
+        accessibilityTraits = .staticText
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+}
