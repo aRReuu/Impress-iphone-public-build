@@ -59,7 +59,9 @@ jobs:
 
           # Guard unique old histories before removing refs.
           while read -r ref tag expected; do
-            existing="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '.object.sha' 2>/dev/null || true)"
+            existing="$(gh api "repos/$GITHUB_REPOSITORY/git/refs/tags" \
+              --jq ".[] | select(.ref == \"refs/tags/$tag\") | .object.sha" || true)"
+            [ "$existing" = "null" ] && existing=""
             if [ -n "$existing" ] && [ "$existing" != "$expected" ]; then
               echo "::error::Archive tag exists at another commit: $tag"; exit 1
             fi
