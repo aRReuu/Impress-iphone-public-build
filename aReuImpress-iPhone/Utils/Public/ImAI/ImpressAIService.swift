@@ -143,19 +143,39 @@ actor ImpressAIHTTPClient {
     }
 
     private func request(_ connection: ImpressAIConnection, path: String,
-                         method: String, body: [String: Any]? = nil) throws -> URLRequest {
+                         method: String, wireProtocol: ImpressAIProtocol,
+                         body: [String: Any]? = nil) throws -> URLRequest {
+        try connection.effectiveEndpoints.validate()
+        guard wireProtocol == .geminiGenerateContent ||
+              ImpressAIEndpointPaths.safePath(path) else {
+            throw ImpressAIServiceError.invalidURL
+        }
         var result = URLRequest(url: try endpoint(connection, route: path))
         result.httpMethod = method
         result.setValue("application/json", forHTTPHeaderField: "Accept")
-        let secret = try ImpressAIKeychain.read(id: connection.credentialID)
-        switch connection.apiProtocol {
-        case .responses, .chatCompletions:
-            result.setValue("Bearer " + secret, forHTTPHeaderField: "Authorization")
-        case .anthropicMessages:
-            result.setValue(secret, forHTTPHeaderField: "x-api-key")
+        // Auth is configured per connection, independently of each model's
+        // payload protocol. This supports Bearer-auth Messages gateways.
+        let auth = connection.effectiveAuthentication
+        if auth != .none {
+            let secret = try ImpressAIKeychain.read(id: connection.credentialID)
+            switch auth {
+            case .bearer:
+                result.setValue("Bearer " + secret, forHTTPHeaderField: "Authorization")
+            case .apiKeyHeader:
+                result.setValue(secret, forHTTPHeaderField: "x-api-key")
+            case .googleAPIKeyHeader:
+                result.setValue(secret, forHTTPHeaderField: "x-goog-api-key")
+            case .customHeader:
+                guard ImpressAIRegistry.safeCustomHeader(connection.customHeaderName ?? "") else {
+                    throw ImpressAIServiceError.invalidURL
+                }
+                result.setValue(secret, forHTTPHeaderField: connection.customHeaderName!)
+            case .none:
+                break
+            }
+        }
+        if wireProtocol == .anthropicMessages {
             result.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        case .geminiGenerateContent:
-            result.setValue(secret, forHTTPHeaderField: "x-goog-api-key")
         }
         if let body {
             let data = try JSONSerialization.data(withJSONObject: body)
@@ -184,7 +204,10 @@ actor ImpressAIHTTPClient {
 
     // No inference of models' structured-output capability from this listing.
     func listModels(connection: ImpressAIConnection) async throws -> [String] {
-        let obj = try await execute(request(connection, path: "models", method: "GET"))
+        let path = connection.effectiveEndpoints.modelsPath
+        guard !path.isEmpty else { throw ImpressAIServiceError.emptyModelList }
+        let obj = try await execute(request(connection, path: path, method: "GET",
+                                            wireProtocol: connection.apiProtocol))
         let entries = obj["data"] as? [[String: Any]] ??
                       obj["models"] as? [[String: Any]] ?? []
         let values = entries.compactMap { item -> String? in
@@ -202,38 +225,44 @@ actor ImpressAIHTTPClient {
         let c = route.connection
         let model = route.model.identifier
         guard system.utf8.count + user.utf8.count <= 65_000 else { throw ImpressAIServiceError.tooLarge }
-        let payload: [String: Any]
+        var payload: [String: Any]
         let path: String
-        switch c.apiProtocol {
+        let wire = route.effectiveProtocol
+        switch wire {
         case .responses:
-            path = "responses"
+            path = c.effectiveEndpoints.responsesPath
             payload = ["model": model, "instructions": system, "input": user,
                        "store": false, "max_output_tokens": 2200]
         case .chatCompletions:
-            path = "chat/completions"
+            path = c.effectiveEndpoints.chatPath
             payload = ["model": model, "stream": false,
-                       "response_format": ["type": "json_object"],
                        "messages": [
                            ["role": "system", "content": system],
                            ["role": "user", "content": user]
                        ]]
+            if route.model.jsonMode != .promptOnly {
+                payload["response_format"] = ["type": "json_object"]
+            }
         case .anthropicMessages:
-            path = "messages"
+            path = c.effectiveEndpoints.messagesPath
             payload = ["model": model, "max_tokens": 2200,
                        "system": system,
                        "messages": [["role": "user", "content": user]]]
         case .geminiGenerateContent:
-            let encoded = model.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? model
+            let characters = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))
+            let encoded = model.addingPercentEncoding(withAllowedCharacters: characters) ?? model
             path = "models/" + encoded + ":generateContent"
             payload = [
                 "systemInstruction": ["parts": [["text": system]]],
                 "contents": [["role": "user", "parts": [["text": user]]]],
-                "generationConfig": ["responseMimeType": "application/json"]
+                "generationConfig": route.model.jsonMode == .promptOnly ? [:] :
+                                    ["responseMimeType": "application/json"]
             ]
         }
-        let json = try await execute(request(c, path: path, method: "POST", body: payload))
+        let json = try await execute(request(c, path: path, method: "POST",
+                                             wireProtocol: wire, body: payload))
         var answer: String?
-        switch c.apiProtocol {
+        switch wire {
         case .responses:
             if let output = json["output"] as? [[String: Any]] {
                 let parts = output.flatMap { $0["content"] as? [[String: Any]] ?? [] }
