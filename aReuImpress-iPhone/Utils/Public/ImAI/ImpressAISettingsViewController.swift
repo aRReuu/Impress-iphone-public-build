@@ -226,6 +226,13 @@ final class ImpressAIConnectionEditor: UITableViewController {
                         throw ImpressAIServiceError.configuration
                     }
                     reg.connections[index].credentialID = id
+                    // Rotating or replacing a key requires another safe
+                    // model capability probe before private document upload.
+                    for i in reg.models.indices
+                        where reg.models[i].connectionID == self.connectionID {
+                        reg.models[i].jsonVerified = false
+                        reg.models[i].toolsVerified = false
+                    }
                 } } catch {
                     if current.credentialID == nil { ImpressAIKeychain.delete(id: id) }
                     throw error
@@ -251,7 +258,22 @@ final class ImpressAIConnectionEditor: UITableViewController {
                 guard let index = reg.connections.firstIndex(where: { $0.id == self.connectionID }) else {
                     throw ImpressAIServiceError.configuration
                 }
+                let previous = reg.connections[index]
                 modify(&reg.connections[index])
+                let updated = reg.connections[index]
+                // A model probe is bound to its endpoint and auth settings.
+                // Do not keep JSON verified after switching a destination.
+                if previous.baseURL != updated.baseURL ||
+                   previous.apiProtocol != updated.apiProtocol ||
+                   previous.authentication != updated.authentication ||
+                   previous.customHeaderName != updated.customHeaderName ||
+                   previous.endpoints != updated.endpoints {
+                    for i in reg.models.indices
+                        where reg.models[i].connectionID == self.connectionID {
+                        reg.models[i].jsonVerified = false
+                        reg.models[i].toolsVerified = false
+                    }
+                }
             }
             tableView.reloadData()
         } catch { showError(error) }
@@ -290,7 +312,18 @@ final class ImpressAIConnectionEditor: UITableViewController {
         let sheet = UIAlertController(title: V3L("认证方式"), message: nil, preferredStyle: .actionSheet)
         for option in ImpressAIAuthentication.allCases {
             sheet.addAction(UIAlertAction(title: option.rawValue, style: .default) { [weak self] _ in
-                self?.edit { $0.authentication = option }
+                guard let self else { return }
+                if option == .customHeader {
+                    self.editText(title: V3L("自定义 Header 名称"), secure: false,
+                                  value: self.connection?.customHeaderName ?? "") { [weak self] name in
+                        self?.edit {
+                            $0.customHeaderName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                            $0.authentication = .customHeader
+                        }
+                    }
+                } else {
+                    self.edit { $0.authentication = option }
+                }
             })
         }
         sheet.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
