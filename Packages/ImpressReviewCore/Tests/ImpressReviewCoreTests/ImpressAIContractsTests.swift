@@ -205,7 +205,7 @@ extension ImpressAIContractsTests {
     func testAuthModeNoneRequiresNoCredentialButBearerDoes() throws {
         let emptyKey = ImpressAIConnection(title: "TLS Gateway", provider: .custom,
                  apiProtocol: .chatCompletions, baseURL: safeURL,
-                 authentication: .none)
+                 authentication: .noAuthentication)
         let verified = ImpressAIModel(connectionID: emptyKey.id, identifier: "my-model",
                                       jsonVerified: true)
         let routing = [ImpressAIRoute(task: .questionGeneration, primaryModelID: verified.id)]
