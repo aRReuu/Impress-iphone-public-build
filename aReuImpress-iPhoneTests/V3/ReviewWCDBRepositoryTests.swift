@@ -942,6 +942,71 @@ final class ImVaultSyncIntegrationTests: XCTestCase {
     }
 
 
+    func testComplexMarkdownQAWritePreservesUnrelatedSourceAndRecoveryBytes() throws {
+        let root = try createRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = """
+        ---
+        tags: [learning, note]
+        ---
+        # 学习
+
+        - [[概念图]]
+        - ![[示意图.png]]
+
+        | A | B |
+        |---|---|
+        | 原理 | 应用 |
+
+        ```swift
+        print("do not modify fenced code")
+        ```
+        """
+        let sourceFile = try put(original, root: root)
+        let identity = try ImVaultFileIdentity(
+            vaultID: UUID().uuidString, relativePath: "Notes/Topic.md")
+        let raw = try ImVaultReadSync.load(root: root, identity: identity)
+        var draft = try ImVaultDraft(identity: identity, baseText: raw.markdown,
+                                    baseRawData: raw.sourceBytes)
+        let updated = original + "\n\n## 我的新理解\n增加了与原文相关的解释。\n"
+        try draft.update(updated)
+        let result = try ImVaultGuardedWrite.commitFixture(
+            root: root, draft: draft, userConfirmedDiff: true)
+        guard case let .written(recovery) = result else {
+            XCTFail("Expected exact UTF-8 write and byte-for-byte recovery")
+            return
+        }
+        XCTAssertEqual(try Data(contentsOf: recovery), raw.sourceBytes)
+        XCTAssertEqual(try Data(contentsOf: sourceFile), Data(updated.utf8))
+        XCTAssertTrue(updated.contains("[[概念图]]"))
+        XCTAssertTrue(updated.contains("![[示意图.png]]"))
+        XCTAssertTrue(updated.contains("print(\"do not modify fenced code\")"))
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    func testConcurrentExternalVaultEditDoesNotDestroySavedPrivateDraft() throws {
+        let root = try createRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceFile = try put("# First\n[[Keep]]", root: root)
+        let identity = try ImVaultFileIdentity(
+            vaultID: UUID().uuidString, relativePath: "Notes/Topic.md")
+        let original = try ImVaultReadSync.load(root: root, identity: identity)
+        var draft = try ImVaultDraft(
+            identity: identity, baseText: original.markdown,
+            baseRawData: original.sourceBytes)
+        try draft.update("# First\n[[Keep]]\nnew idea")
+        try ImVaultPrivateStore.saveDraft(draft)
+        let external = Data("# First\nchanged in Obsidian".utf8)
+        try external.write(to: sourceFile, options: .atomic)
+
+        XCTAssertThrowsError(try ImVaultGuardedWrite.commitFixture(
+            root: root, draft: draft, userConfirmedDiff: true))
+        XCTAssertEqual(try Data(contentsOf: sourceFile), external)
+        let recovered = try XCTUnwrap(ImVaultPrivateStore.loadDraft(identity: identity))
+        XCTAssertEqual(recovered.editedText, draft.editedText)
+        XCTAssertEqual(recovered.baseDigest, draft.baseDigest)
+    }
+
     func testDocumentViewerIsNotAnEditableSourceTextView() throws {
         let root = try createRoot()
         defer { try? FileManager.default.removeItem(at: root) }
