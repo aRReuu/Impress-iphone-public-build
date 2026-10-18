@@ -15,7 +15,7 @@ public enum ImpressAIProtocol: String, Codable, CaseIterable, Sendable {
 // Gateways such as Command Code can expose Anthropic-format Messages with
 // Bearer authorization instead of Anthropic's own x-api-key header.
 public enum ImpressAIAuthentication: String, Codable, CaseIterable, Sendable {
-    case bearer, apiKeyHeader, googleAPIKeyHeader, customHeader, none
+    case bearer, rawAuthorization, apiKeyHeader, googleAPIKeyHeader, customHeader, none
 
     public static func defaultFor(_ provider: ImpressAIProvider) -> Self {
         switch provider {
