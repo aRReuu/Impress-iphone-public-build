@@ -1,17 +1,19 @@
 # SMOKE_TEST_MATRIX — Impress V3.2 acceptance evidence
 
 ## Current evidence boundary
-The latest verified pre-hardening baseline is `40f65b03469908a733a4de4bd9afc1782105927a`, [CI #39090442833](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39090442833): 87/87 UIKit XCTest and successful Swift Core, Simulator and unsigned ARM64 candidate. Later P0 process-death recovery and P1 Vault-index changes require new verification at the **final** HEAD. No prior run automatically signs off subsequent commits. Simulator is not the iPhone 13 device gate.
+The last verified V3.2 baseline is `58987edfe550f9ccd4f7b7168b12c1f83c98b920`, [CI #39093765853](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39093765853): 90/90 native UIKit XCTest, 17/17 portable Swift tests, Simulator and unsigned ARM64 candidate. The new theme, three-language UI, editable understanding and Notes redesign **require fresh CI on their own final HEAD**; no prior run is proof of these new edits. Simulator does not certify iPhone 13.
 
 ## Native Simulator / automation
 | Area | Required actual gate |
 | --- | --- |
 | Branch / privacy | Public feature HEAD, no private/main changes, credential and source privacy checks |
 | Core | All `ImpressReviewCore` tests including five-indicator scoring, calendar, mood skip, extras, trends and reminder plan |
-| Navigation | Exactly three tabs ordered 闪卡 / 校准 / 设置; distinct visible 笔记 and 卡片集 right-header actions on flashcard home; Notes pushes the existing read-only Vault list without changing the review session |
+| Navigation | Exactly three tabs ordered 闪卡 / 校准 / 设置, with localized labels and distinct visible 笔记 and 卡片集 right-header actions; Notes pushes the existing read-only Vault list without changing the review session |
+| Appearance & locale | System/Light/Dark persistent window overrides, System fallback; three independent language modes (zh-Hans, zh-Hant, en), immediate native navigation refresh, no mutation of personal content or persisted reviews |
+| Understanding edit | Detail exposes explicit editor; successful CAS updates answer and appends previous revision to learning journal; invalid/blank/stale edits fail without changing data; ID, question, original AI feedback and FSRS remain stable |
 | Flashcards | Show Answer, four swipes, exactly-one FSRS event, card CRUD/pagination/content CAS and V3 schema upgrade |
 | Cards/media | Text QA, image BLOB, single/multiple choice, search, import, stale-save rejection |
-| Obsidian | External read-only Vault index, bounded 128-note enumeration progress, verified-scope provisional cache, folder/path search, 120-item list paging, local attachments and iCloud-not-downloaded error; no automatic original writes |
+| Obsidian | Native inset-grouped Notes table, central font/color/spacing tokens, restrained Markdown reader, external read-only Vault index, bounded 128-note enumeration progress, verified-scope provisional cache, folder/path search, 120-item list paging, local attachments and iCloud-not-downloaded error; no automatic original writes |
 | Calibration check-ins | All five evaluated, unknown remains unknown, mood not scored, mutable current goals, immutable historic snapshots, manual +/- boundaries |
 | Calibration UI/chart | Week 7 days, month 30 days, year monthly daily mean, axes, missing-day gaps, readable Dynamic Type |
 | Notifications | Calibration IDs separate from FSRS, permissions, duplicate reconciliation, pending-day cancellation and click route |
@@ -26,7 +28,7 @@ The latest verified pre-hardening baseline is `40f65b03469908a733a4de4bd9afc1782
 - iCloud Drive folder picker, stale bookmark after app restart, Files-provider local write versus server upload, offline retry.
 - Recovery from ZIP on a fresh device and app termination between staged restore and next cold start; no partial SQLite/JSON/prompt/calibration restore.
 - Local alert delivery at 20:00/22:00 across sleep/reboot, permission denial, Focus mode, timezone change, badges and FSRS coexistence.
-- UIKit appearance, Dynamic Type, Safe Area and Y-axis readability on iPhone 13, original iPhone App Icon visible; missing marketing 1024 icon still blocks final release.
+- UIKit appearance, Dynamic Type, Safe Area and Y-axis readability on iPhone 13; manually switch System/Light/Dark and zh-Hans/zh-Hant/en while navigating Flashcards, Calibration, Settings, Vault and understanding editor. Check text truncation, keyboard layout, saved editor revisions and theme persistence across relaunch. Original iPhone icon visual and missing marketing 1024 icon remain a release gate.
 - External Obsidian Vault remains read-only by design, including iCloud placeholders, images and safe path resolution.
 
 ## Mandatory evidence format

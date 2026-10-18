@@ -69,14 +69,14 @@ struct ImpressV3CardDraft {
         case duplicateOption, missingCorrect, singleCorrectOnly, missingImage
         var errorDescription: String? {
             switch self {
-            case .missingQuestion: return "请填写卡片的问题。"
-            case .missingAnswer: return "问答卡片需要一个答案。"
-            case .optionCount: return "选择题需要 2 到 12 个选项。"
-            case .emptyOption: return "请填写全部选项；单个选项不能包含换行。"
-            case .duplicateOption: return "选择题的选项不能重复。"
-            case .missingCorrect: return "请直接点选至少一个正确答案。"
-            case .singleCorrectOnly: return "单选模式只能标记一个正确答案；也可以切换到多选。"
-            case .missingImage: return "请选择并完成压缩一张图片。"
+            case .missingQuestion: return V3L("请填写卡片的问题。")
+            case .missingAnswer: return V3L("问答卡片需要一个答案。")
+            case .optionCount: return V3L("选择题需要 2 到 12 个选项。")
+            case .emptyOption: return V3L("请填写全部选项；单个选项不能包含换行。")
+            case .duplicateOption: return V3L("选择题的选项不能重复。")
+            case .missingCorrect: return V3L("请直接点选至少一个正确答案。")
+            case .singleCorrectOnly: return V3L("单选模式只能标记一个正确答案；也可以切换到多选。")
+            case .missingImage: return V3L("请选择并完成压缩一张图片。")
             }
         }
     }
@@ -88,13 +88,13 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
 
     private let scroll = UIScrollView()
     private let stack = UIStackView()
-    private let typePicker = UISegmentedControl(items: ["问答", "选择题", "图片"])
+    private let typePicker = UISegmentedControl(items: [V3L("问答"), V3L("选择题"), V3L("图片")])
     private let questionView = UITextView()
     private let answerView = UITextView()
     private let qaSection = UIStackView()
     private let choiceSection = UIStackView()
     private let photoSection = UIStackView()
-    private let choiceMode = UISegmentedControl(items: ["单选", "多选"])
+    private let choiceMode = UISegmentedControl(items: [V3L("单选"), V3L("多选")])
     private let optionList = UIStackView()
     private let addOptionButton = UIButton(type: .system)
     private let imageButton = UIButton(type: .system)
@@ -124,12 +124,12 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = editingCardID == nil ? "新增卡片" : "编辑卡片"
+        title = editingCardID == nil ? V3L("新增卡片") : V3L("编辑卡片")
         navigationItem.largeTitleDisplayMode = .never
         view.backgroundColor = ImpressV3Appearance.page
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
-        let save = UIBarButtonItem(title: "保存", style: .done,
+        let save = UIBarButtonItem(title: V3L("保存"), style: .done,
                                    target: self, action: #selector(saveCard))
         navigationItem.rightBarButtonItem = save
         saveItem = save
@@ -161,10 +161,10 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
             (currentType == .multipleChoice ? 1 : 2)
         // Native control, but with stronger selected contrast and hierarchy.
         ImpressV3Appearance.styleSegmentedControl(typePicker, prominent: true)
-        typePicker.accessibilityLabel = "卡片类型"
+        typePicker.accessibilityLabel = V3L("卡片类型")
         typePicker.addTarget(self, action: #selector(typeDidChange), for: .valueChanged)
         // The control labels already name the types; a second visible
-        // "卡片类型" heading would add friction without information.
+        // V3L("卡片类型") heading would add friction without information.
         stack.addArrangedSubview(ImpressV3Appearance.segmentedRow(typePicker))
 
         questionView.backgroundColor = ImpressV3Appearance.surface
@@ -175,8 +175,8 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         questionView.text = originalDraft.question
         questionView.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding, bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
         questionView.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.questionEditorMinHeight).isActive = true
-        questionView.accessibilityLabel = "问题"
-        stack.addArrangedSubview(makeLabeledGroup("问题", child: questionView))
+        questionView.accessibilityLabel = V3L("问题")
+        stack.addArrangedSubview(makeLabeledGroup(V3L("问题"), child: questionView))
 
         configureQA()
         configureChoices()
@@ -226,8 +226,8 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         answerView.text = originalDraft.answer
         answerView.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding, bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
         answerView.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.answerEditorMinHeight).isActive = true
-        answerView.accessibilityLabel = "答案"
-        qaSection.addArrangedSubview(makeLabeledGroup("答案", child: answerView))
+        answerView.accessibilityLabel = V3L("答案")
+        qaSection.addArrangedSubview(makeLabeledGroup(V3L("答案"), child: answerView))
     }
 
     private func configureChoices() {
@@ -235,28 +235,28 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         choiceSection.spacing = ImpressV3Appearance.Metrics.sectionSpacing
         choiceMode.selectedSegmentIndex = originalDraft.allowsMultipleCorrect ? 1 : 0
         ImpressV3Appearance.styleSegmentedControl(choiceMode, prominent: false)
-        choiceMode.accessibilityLabel = "单选或多选"
+        choiceMode.accessibilityLabel = V3L("单选或多选")
         choiceMode.addTarget(self, action: #selector(modeDidChange), for: .valueChanged)
         choiceSection.addArrangedSubview(
             ImpressV3Appearance.segmentedRow(choiceMode, compact: true))
         optionList.axis = .vertical
         optionList.spacing = ImpressV3Appearance.Metrics.choiceSpacing
-        choiceSection.addArrangedSubview(makeLabeledGroup("选项（点选正确答案）", child: optionList))
-        addOptionButton.setTitle("添加选项", for: .normal)
+        choiceSection.addArrangedSubview(makeLabeledGroup(V3L("选项（点选正确答案）"), child: optionList))
+        addOptionButton.setTitle(V3L("添加选项"), for: .normal)
         ImpressV3Appearance.styleQuietButton(
-            addOptionButton, title: "添加选项", symbol: "plus")
+            addOptionButton, title: V3L("添加选项"), symbol: "plus")
         addOptionButton.addTarget(self, action: #selector(addOption), for: .touchUpInside)
         choiceSection.addArrangedSubview(addOptionButton)
-        choiceSection.addArrangedSubview(caption("正确答案直接点击圆形标记；单选与多选均使用同一套 FSRS 复习评分。"))
+        choiceSection.addArrangedSubview(caption(V3L("正确答案直接点击圆形标记；单选与多选均使用同一套 FSRS 复习评分。")))
         renderOptionRows()
     }
 
     private func configurePhoto() {
         photoSection.axis = .vertical
         photoSection.spacing = ImpressV3Appearance.Metrics.sectionSpacing
-        imageButton.setTitle("从照片选择图片", for: .normal)
+        imageButton.setTitle(V3L("从照片选择图片"), for: .normal)
         ImpressV3Appearance.styleQuietButton(
-            imageButton, title: "从照片选择图片", symbol: "photo.on.rectangle")
+            imageButton, title: V3L("从照片选择图片"), symbol: "photo.on.rectangle")
         imageButton.addTarget(self, action: #selector(selectPhoto), for: .touchUpInside)
         photoSection.addArrangedSubview(imageButton)
         imagePreview.contentMode = .scaleAspectFit
@@ -267,7 +267,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         imagePreview.image = imageData.flatMap { UIImage(data: $0) }
         imagePreview.isHidden = imageData == nil
         photoSection.addArrangedSubview(imagePreview)
-        photoStatus = caption("仅访问所选图片；取消不修改草稿，保存前在本机压缩。")
+        photoStatus = caption(V3L("仅访问所选图片；取消不修改草稿，保存前在本机压缩。"))
         photoSection.addArrangedSubview(photoStatus)
     }
 
@@ -385,8 +385,8 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
     }
 
     private func showProblem(_ text: String) {
-        let alert = UIAlertController(title: "无法保存", message: text, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        let alert = UIAlertController(title: V3L("无法保存"), message: text, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
         present(alert, animated: true)
     }
 
@@ -400,11 +400,11 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
             dismiss(animated: true)
             return
         }
-        let alert = UIAlertController(title: "放弃未保存的内容？",
-                                      message: "取消不会写入 WCDB 或修改原始笔记。",
+        let alert = UIAlertController(title: V3L("放弃未保存的内容？"),
+                                      message: V3L("取消不会写入 WCDB 或修改原始笔记。"),
                                       preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "继续编辑", style: .cancel))
-        alert.addAction(UIAlertAction(title: "放弃", style: .destructive) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: V3L("继续编辑"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("放弃"), style: .destructive) { [weak self] _ in
             self?.dismiss(animated: true)
         })
         present(alert, animated: true)
@@ -428,12 +428,12 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
             UTType($0)?.conforms(to: .image) == true
         }) ?? UTType.image.identifier
         guard provider.hasItemConformingToTypeIdentifier(fileType) else {
-            showProblem("选中的项目不是受支持的图片。")
+            showProblem(V3L("选中的项目不是受支持的图片。"))
             return
         }
         processingPhoto = true
         saveItem?.isEnabled = false
-        photoStatus.text = "正在本机压缩图片…"
+        photoStatus.text = V3L("正在本机压缩图片…")
         let kind: ImpressImageOptimizer.ContentKind =
             UTType(fileType)?.conforms(to: .png) == true ? .document : .photo
         provider.loadFileRepresentation(forTypeIdentifier: fileType) { [weak self] temporary, error in
@@ -441,7 +441,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
             // is deleted once the callback returns. Never decode full 48MP.
             guard let temporary, let source = CGImageSourceCreateWithURL(temporary as CFURL, nil) else {
                 DispatchQueue.main.async {
-                    self?.photoFailed(error?.localizedDescription ?? "图片读取失败或 iCloud 尚未下载。")
+                    self?.photoFailed(error?.localizedDescription ?? V3L("图片读取失败或 iCloud 尚未下载。"))
                 }
                 return
             }
@@ -451,7 +451,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
                 kCGImageSourceThumbnailMaxPixelSize: kind == .document ? 2000 : 1280
             ]
             guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, opts as CFDictionary) else {
-                DispatchQueue.main.async { self?.photoFailed("无法读取图片缩略图。") }
+                DispatchQueue.main.async { self?.photoFailed(V3L("无法读取图片缩略图。")) }
                 return
             }
             let image = UIImage(cgImage: thumbnail)
@@ -468,7 +468,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
                     self.photoStatus.text = "图片已准备好 · \(data.count / 1024) KB"
                 case .failure(let reason):
                     self.showProblem("压缩失败：" + reason.localizedDescription)
-                    self.photoStatus.text = "图片未修改，请重试。"
+                    self.photoStatus.text = V3L("图片未修改，请重试。")
                 }
             }
         }
@@ -477,7 +477,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
     private func photoFailed(_ reason: String) {
         processingPhoto = false
         saveItem?.isEnabled = !saving
-        photoStatus.text = "图片未修改，请重试。"
+        photoStatus.text = V3L("图片未修改，请重试。")
         showProblem(reason)
     }
 
@@ -518,13 +518,13 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
             actions.tintColor = ImpressV3Appearance.secondaryText
             actions.accessibilityLabel = "调整或删除选项 \(index + 1)"
             actions.menu = UIMenu(children: [
-                UIAction(title: "上移", image: UIImage(systemName: "arrow.up")) { [weak self] _ in
+                UIAction(title: V3L("上移"), image: UIImage(systemName: "arrow.up")) { [weak self] _ in
                     guard let self else { return }; self.onMove?(self.id, -1)
                 },
-                UIAction(title: "下移", image: UIImage(systemName: "arrow.down")) { [weak self] _ in
+                UIAction(title: V3L("下移"), image: UIImage(systemName: "arrow.down")) { [weak self] _ in
                     guard let self else { return }; self.onMove?(self.id, 1)
                 },
-                UIAction(title: "删除", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
+                UIAction(title: V3L("删除"), image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
                     guard let self else { return }; self.onDelete?(self.id)
                 }
             ])

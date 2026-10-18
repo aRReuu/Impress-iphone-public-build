@@ -408,7 +408,7 @@ extension ImMarkdownViewController
             UIPasteboard.general.string = selectedText
         }
 
-        let cancelAction = UIAlertAction(title: "取消", style: .cancel, handler: nil)
+        let cancelAction = UIAlertAction(title: V3L("取消"), style: .cancel, handler: nil)
 
         alertController.addAction(excerptAction)
         alertController.addAction(cancelAction)
@@ -647,6 +647,7 @@ final class ImVaultDocumentController: UIViewController {
     private let document: ImVaultRawDocument
     private let readingView = UITextView()
     private let richView = MarkdownView()
+    private let pathLabel = UILabel()
     private var preparedMarkdown: String?
     private var isSourceMode = false
     private let renderer = MarkdownKitRenderer()
@@ -657,18 +658,31 @@ final class ImVaultDocumentController: UIViewController {
     }
     required init?(coder: NSCoder) { fatalError("init(document:) required") }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        pathLabel.text = V3L("只读") + " · " + document.identity.relativePath
+        navigationItem.rightBarButtonItems?.first?.accessibilityLabel = V3L("编辑独立草稿")
+        navigationItem.rightBarButtonItems?.last?.accessibilityLabel = V3L("切换 Markdown 源码")
+    }
+
+
     override func viewDidLoad() {
         super.viewDidLoad()
         title = URL(fileURLWithPath: document.identity.relativePath)
             .deletingPathExtension().lastPathComponent
         view.backgroundColor = ImpressV3Appearance.page
-        readingView.backgroundColor = ImpressV3Appearance.surface
-        richView.backgroundColor = ImpressV3Appearance.surface
-        readingView.isEditable = false
-        readingView.isSelectable = true
+        navigationItem.largeTitleDisplayMode = .never
+        ImpressV3Appearance.styleReadingTextView(readingView)
+        ImpressV3Appearance.styleVaultDocument(richView)
         readingView.textAlignment = .left
-        readingView.textContainerInset = UIEdgeInsets(top: 20, left: 17,
-                                                     bottom: 28, right: 17)
+        pathLabel.text = V3L("只读") + " · " + document.identity.relativePath
+        pathLabel.font = ImpressV3Appearance.Typography.footnote
+        pathLabel.adjustsFontForContentSizeCategory = true
+        pathLabel.textColor = ImpressV3Appearance.secondaryText
+        pathLabel.numberOfLines = 2
+        pathLabel.lineBreakMode = .byTruncatingMiddle
+        pathLabel.accessibilityIdentifier = "impress.notes.source-path"
+        pathLabel.translatesAutoresizingMaskIntoConstraints = false
         readingView.translatesAutoresizingMaskIntoConstraints = false
         richView.translatesAutoresizingMaskIntoConstraints = false
         richView.isScrollEnabled = true
@@ -686,24 +700,38 @@ final class ImVaultDocumentController: UIViewController {
             self?.followWikiLink(target)
             return false
         }
+        view.addSubview(pathLabel)
         view.addSubview(readingView)
         view.addSubview(richView)
+        let safe = view.safeAreaLayoutGuide
+        let inset = ImpressV3Appearance.Metrics.screenInset
+        let top = ImpressV3Appearance.Metrics.compactInset
+        let bottom = ImpressV3Appearance.Metrics.compactInset
+        let gap = ImpressV3Appearance.Metrics.rowSpacing
         NSLayoutConstraint.activate([
-            readingView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            readingView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            readingView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
-            readingView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
-            richView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            richView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            richView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
-            richView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor)
+            pathLabel.topAnchor.constraint(equalTo: safe.topAnchor, constant: top),
+            pathLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: inset),
+            pathLabel.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -inset),
+            readingView.topAnchor.constraint(equalTo: pathLabel.bottomAnchor, constant: gap),
+            readingView.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -bottom),
+            readingView.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: inset),
+            readingView.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -inset),
+            richView.topAnchor.constraint(equalTo: readingView.topAnchor),
+            richView.bottomAnchor.constraint(equalTo: readingView.bottomAnchor),
+            richView.leadingAnchor.constraint(equalTo: readingView.leadingAnchor),
+            richView.trailingAnchor.constraint(equalTo: readingView.trailingAnchor)
         ])
-        navigationItem.rightBarButtonItems = [
-            UIBarButtonItem(title: "草稿", style: .plain,
-                            target: self, action: #selector(editDraft)),
-            UIBarButtonItem(title: "源码", style: .plain,
-                            target: self, action: #selector(toggleSource))
-        ]
+        let draft = UIBarButtonItem(
+            image: UIImage(systemName: "square.and.pencil"), style: .plain,
+            target: self, action: #selector(editDraft))
+        draft.accessibilityLabel = V3L("编辑独立草稿")
+        draft.accessibilityIdentifier = "impress.notes.draft"
+        let source = UIBarButtonItem(
+            image: UIImage(systemName: "chevron.left.forwardslash.chevron.right"), style: .plain,
+            target: self, action: #selector(toggleSource))
+        source.accessibilityLabel = V3L("切换 Markdown 源码")
+        source.accessibilityIdentifier = "impress.notes.source-toggle"
+        navigationItem.rightBarButtonItems = [draft, source]
         renderBody()
         // Replaces only explicitly referenced local image embeds with bounded
         // in-memory data URIs. Never reads outside this authorized Vault.
@@ -782,7 +810,7 @@ final class ImVaultDocumentController: UIViewController {
                         ? "目标笔记不存在或索引需要刷新。"
                         : "存在同名笔记。请使用包含完整相对目录的 Obsidian 链接。",
                     preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "确定", style: .default))
+                alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
                 present(alert, animated: true)
                 return
             }
@@ -811,7 +839,7 @@ final class ImVaultDocumentController: UIViewController {
             navigationController?.pushViewController(
                 ImVaultDraftEditorController(draft: draft), animated: true)
         } catch {
-            showVaultError("无法打开独立草稿", error: error)
+            showVaultError(V3L("无法打开独立草稿"), error: error)
         }
     }
 
@@ -819,7 +847,7 @@ final class ImVaultDocumentController: UIViewController {
         let alert = UIAlertController(title: title,
                                       message: error.localizedDescription,
                                       preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
         present(alert, animated: true)
     }
 }
@@ -843,10 +871,10 @@ final class ImVaultDraftEditorController: UIViewController, UITextViewDelegate {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "编辑私有草稿"
+        title = V3L("编辑私有草稿")
         view.backgroundColor = ImpressV3Appearance.page
         let notice = UILabel()
-        notice.text = "只保存在 Impress · 不直接修改 Obsidian"
+        notice.text = V3L("只保存在 Impress · 不直接修改 Obsidian")
         notice.textColor = ImpressV3Appearance.secondaryText
         notice.textAlignment = .center
         notice.font = ImpressV3Appearance.Typography.footnote
@@ -883,9 +911,9 @@ final class ImVaultDraftEditorController: UIViewController, UITextViewDelegate {
                 equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -ImpressV3Appearance.Metrics.compactInset)
         ])
         navigationItem.rightBarButtonItems = [
-            UIBarButtonItem(title: "查看差异", style: .done, target: self,
+            UIBarButtonItem(title: V3L("查看差异"), style: .done, target: self,
                             action: #selector(showDiff)),
-            UIBarButtonItem(title: "保存草稿", style: .plain, target: self,
+            UIBarButtonItem(title: V3L("保存草稿"), style: .plain, target: self,
                             action: #selector(saveDraftNow))
         ]
     }
@@ -952,10 +980,10 @@ final class ImVaultDraftEditorController: UIViewController, UITextViewDelegate {
             try ImVaultPrivateStore.saveDraft(draft)
             autosaveFailure = nil
             navigationItem.prompt = nil
-            let notice = UIAlertController(title: "草稿已保存",
+            let notice = UIAlertController(title: V3L("草稿已保存"),
                 message: "仅存储在 Impress 私有目录，没有修改 Obsidian 文件。",
                 preferredStyle: .alert)
-            notice.addAction(UIAlertAction(title: "确定", style: .default))
+            notice.addAction(UIAlertAction(title: V3L("确定"), style: .default))
             present(notice, animated: true)
         } catch { presentError("保存草稿失败", error) }
     }
@@ -990,7 +1018,7 @@ final class ImVaultDraftEditorController: UIViewController, UITextViewDelegate {
         let alert = UIAlertController(title: title,
                                       message: error.localizedDescription,
                                       preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
         present(alert, animated: true)
     }
 }
@@ -1050,7 +1078,7 @@ final class ImVaultDiffController: UIViewController {
             title: "确认修改 Obsidian 源文件？",
             message: "将重新验证源文件 SHA-256，并先保存私有恢复副本。如果出现版本冲突会拒绝覆盖。",
             preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
         alert.addAction(UIAlertAction(title: "确认写回", style: .destructive) { [weak self] _ in
             guard let self = self else { return }
             ImVaultGuardedWrite.commitAuthorized(draft: self.draft,
@@ -1062,7 +1090,7 @@ final class ImVaultDiffController: UIViewController {
                 }
                 let response = UIAlertController(title: "Vault 写回结果",
                     message: content, preferredStyle: .alert)
-                response.addAction(UIAlertAction(title: "确定", style: .default))
+                response.addAction(UIAlertAction(title: V3L("确定"), style: .default))
                 self.present(response, animated: true)
             }
         })

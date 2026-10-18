@@ -4,7 +4,7 @@
 
 ## 1. 产品边界与架构
 Impress 是低摩擦个人成长工具：一方面通过闪卡、主动回忆与 FSRS-6 进行结构化认知巩固；另一方面通过极少量行为指标进行自我观察与校准。它不是心理诊断工具、临床健康评价、无穷累计积分游戏，也不是完整任务管理器。情绪与睡眠、运动、饮食可能相互影响，不能从本工具的趋势推断因果。
-三个原生一级 Tab（顺序固定）：闪卡、校准、设置。「笔记」不是一级 Tab，而是闪卡首页导航栏右侧的显式独立文字按钮，与「卡片集」独立并列；点击进入原有 Obsidian Vault 只读笔记控制器，返回仍在闪卡导航栈内。校准入口为 ImCalibrationVC/ImpressCalibrationViewController.swift；外观复用 ImpressV3Appearance、UIKit Dynamic Type、系统 Light/Dark，图表为带 X/Y 刻度的周/月/年二维折线。既有闪卡四向滑动、FSRS 状态、Obsidian Vault 只读入口及设置不得回退。
+三个原生一级 Tab（顺序固定）：闪卡、校准、设置。「笔记」不是一级 Tab，而是闪卡首页导航栏右侧的显式独立文字按钮，与「卡片集」独立并列；点击进入原有 Obsidian Vault 只读笔记控制器，返回仍在闪卡导航栈内。校准入口为 ImCalibrationVC/ImpressCalibrationViewController.swift；外观复用 ImpressV3Appearance、UIKit Dynamic Type、系统 Light/Dark，图表为带 X/Y 刻度的周/月/年二维折线。既有闪卡四向滑动、FSRS 状态、Obsidian Vault 只读入口及设置不得回退。设置新增 App 内 System/Light/Dark 三态与简体中文/繁体中文/英文语言选项；界面文案与外观 token 集中配置。该变化仅影响呈现，不修改历史校准得分、目标快照、情绪或复习事件。
 
 ## 2. 五项指标与完成标准
 | 指标 | 记录 | 是否计分 |
@@ -45,7 +45,7 @@ UNUserNotificationCenterDelegate 仅由 ImpressV3NotificationCoordinator 管理�
 备份只由 V3 BackupCoordinator 统一负责，校准器不另造 iCloud 或网络同步业务。校准文件在落盘并解码校验之后标记 V3 数据变化；iCloud Drive 仅向用户明确授权的文件夹尝试复制，文件提供者写入成功不等于服务器同步完成。**当前 ZIP 没有密码加密**，即使具备 SHA/CRC 完整性验证也不等于保密；不要将该文件视作端到端加密资料。
 
 ## 9. 测试、CI 与验收事实
-CalibrationScoreCoreTests、CalibrationCheckInCoreTests 覆盖五项完成门禁、情绪跳过、休息、额外计分、历史快照、周/月/年、民用日期与提醒规划。ImpressCalibrationIntegrationTests 覆盖四 Tab、路由及临时 JSON 持久化；ReviewWCDBRepositoryTests 增加 V1/V2 归档与校准记录验证。
+CalibrationScoreCoreTests、CalibrationCheckInCoreTests 覆盖五项完成门禁、情绪跳过、休息、额外计分、历史快照、周/月/年、民用日期与提醒规划。ImpressCalibrationIntegrationTests 覆盖三个一级 Tab、路由及临时 JSON 持久化；ReviewWCDBRepositoryTests 增加 V1/V2 归档与校准记录验证。
 历史可复验的 R04.2 基线：commit e9eb5e92679907ab95c6aff615d5a6719b69eb46，对应 https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39054675238：78/78 UIKit XCTest 通过，但该运行早于 V3.2 合并。**V3.2 最终 HEAD 的完整 CI 和物理 iPhone 13 尚待重新验收**；不能引用旧 CI 当作新版本 PASS。
 
 ## 10. 后续修改、公开来源与发布门禁

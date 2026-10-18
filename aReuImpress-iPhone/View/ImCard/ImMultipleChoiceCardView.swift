@@ -160,7 +160,7 @@ class ImMultipleChoiceCardView: UIView {
             ImpressV3Appearance.styleChoiceOption(button, feedback: .idle)
             button.heightAnchor.constraint(greaterThanOrEqualToConstant:
                 ImpressV3Appearance.Metrics.answerOptionHeight).isActive = true
-            button.accessibilityHint = "选项选择不计入复习评分"
+            button.accessibilityHint = V3L("选项选择不计入复习评分")
         } else {
             button.titleLabel?.font = UIFont.preferredFont(forTextStyle: .body)
             button.setTitleColor(titleColor, for: .normal)
@@ -228,7 +228,7 @@ class ImMultipleChoiceCardView: UIView {
             for button in optionButtons {
                 ImpressV3Appearance.styleChoiceOption(
                     button, feedback: selectedIndices.contains(button.tag) ? .selected : .idle)
-                button.accessibilityValue = selectedIndices.contains(button.tag) ? "已选择" : "未选择"
+                button.accessibilityValue = selectedIndices.contains(button.tag) ? V3L("已选择") : V3L("未选择")
             }
             return
         }
@@ -267,7 +267,7 @@ class ImMultipleChoiceCardView: UIView {
                 ImpressV3Appearance.styleChoiceOption(button, feedback:
                     isCorrect ? .correct : (isSelected ? .incorrect : .idle))
                 button.accessibilityValue = isCorrect
-                    ? "正确答案" : (isSelected ? "已选择，错误答案" : "未选择")
+                    ? V3L("正确答案") : (isSelected ? V3L("已选择，错误答案") : V3L("未选择"))
                 continue
             }
 

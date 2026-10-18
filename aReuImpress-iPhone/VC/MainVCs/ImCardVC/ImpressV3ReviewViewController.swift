@@ -43,7 +43,7 @@ final class ImpressV3ReviewViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "闪卡"
+        title = V3L("闪卡")
         view.backgroundColor = ImpressV3Appearance.page
         setupNativeLayout()
         setupNavigation()
@@ -58,12 +58,36 @@ final class ImpressV3ReviewViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        refreshLocalizedReview()
         if needsReloadAfterCollection && pending == nil {
             needsReloadAfterCollection = false
             reloadSession()
         } else if hasLoaded && pending == nil {
             setRatingGesturesEnabled(canRateCurrentCard)
         }
+    }
+
+    /// Re-label the existing controls without recreating a live FSRS session.
+    private func refreshLocalizedReview() {
+        title = V3L("闪卡")
+        setupNavigation()
+        let titles = ["记录想法", "深入探讨", "历史"]
+        for (i, view) in answerTools.arrangedSubviews.enumerated() {
+            guard let button = view as? UIButton, i < titles.count else { continue }
+            let text = V3L(titles[i])
+            if #available(iOS 15.0, *) {
+                ImpressV3NativeButtonAppearance.secondary(button, title: text)
+            } else {
+                button.setTitle(text, for: .normal)
+            }
+        }
+        if #available(iOS 15.0, *) {
+            ImpressV3NativeButtonAppearance.primary(revealButton, title: V3L("查看答案"))
+        } else {
+            revealButton.setTitle(V3L("查看答案"), for: .normal)
+        }
+        ImpressV3Appearance.styleQuietButton(
+            repeatButton, title: V3L("刷新到期卡片"))
     }
 
     private var canRateCurrentCard: Bool {
@@ -88,35 +112,35 @@ final class ImpressV3ReviewViewController: UIViewController {
         answerTools.spacing = ImpressV3Appearance.Metrics.rowSpacing
         answerTools.isHidden = true
         let reflect = UIButton(type: .system)
-        reflect.setTitle("记录想法", for: .normal)
+        reflect.setTitle(V3L("记录想法"), for: .normal)
         reflect.titleLabel?.font = ImpressV3Appearance.Typography.supporting
         if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.secondary(reflect, title: "记录想法")
+            ImpressV3NativeButtonAppearance.secondary(reflect, title: V3L("记录想法"))
         }
         reflect.addTarget(self, action: #selector(captureFromAnswer), for: .touchUpInside)
         let explore = UIButton(type: .system)
-        explore.setTitle("深入探讨", for: .normal)
+        explore.setTitle(V3L("深入探讨"), for: .normal)
         explore.titleLabel?.font = ImpressV3Appearance.Typography.supporting
         if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.secondary(explore, title: "深入探讨")
+            ImpressV3NativeButtonAppearance.secondary(explore, title: V3L("深入探讨"))
         }
-        explore.accessibilityHint = "在 DeepSeek 网页继续讨论当前问题"
+        explore.accessibilityHint = V3L("在 DeepSeek 网页继续讨论当前问题")
         explore.addTarget(self, action: #selector(exploreFromAnswer), for: .touchUpInside)
         let timeline = UIButton(type: .system)
-        timeline.setTitle("历史", for: .normal)
+        timeline.setTitle(V3L("历史"), for: .normal)
         if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.secondary(timeline, title: "历史")
+            ImpressV3NativeButtonAppearance.secondary(timeline, title: V3L("历史"))
         }
-        timeline.accessibilityLabel = "查看当前卡片的理解时间线"
+        timeline.accessibilityLabel = V3L("查看当前卡片的理解时间线")
         timeline.addTarget(self, action: #selector(openCurrentTimeline), for: .touchUpInside)
         answerTools.addArrangedSubview(reflect)
         answerTools.addArrangedSubview(explore)
         answerTools.addArrangedSubview(timeline)
-        revealButton.setTitle("查看答案", for: .normal)
+        revealButton.setTitle(V3L("查看答案"), for: .normal)
         revealButton.titleLabel?.font = ImpressV3Appearance.Typography.heading
         revealButton.titleLabel?.adjustsFontForContentSizeCategory = true
         if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.primary(revealButton, title: "查看答案")
+            ImpressV3NativeButtonAppearance.primary(revealButton, title: V3L("查看答案"))
         } else {
             revealButton.setTitleColor(ImpressV3Appearance.primaryButtonText, for: .normal)
             revealButton.backgroundColor = ImpressV3Appearance.accent
@@ -124,7 +148,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         }
         revealButton.addTarget(self, action: #selector(revealCurrentAnswer),
                                for: .touchUpInside)
-        revealButton.accessibilityHint = "显示答案后才可以通过四向滑动进行复习评分"
+        revealButton.accessibilityHint = V3L("显示答案后才可以通过四向滑动进行复习评分")
         revealButton.isHidden = true
         busyIndicator.translatesAutoresizingMaskIntoConstraints = false
         completionLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -134,7 +158,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         statusLabel.adjustsFontForContentSizeCategory = true
         statusLabel.textColor = ImpressV3Appearance.secondaryText
         statusLabel.textAlignment = .left
-        statusLabel.text = "正在准备复习…"
+        statusLabel.text = V3L("正在准备复习…")
 
         completionLabel.font = ImpressV3Appearance.Typography.body
         completionLabel.textColor = ImpressV3Appearance.secondaryText
@@ -142,8 +166,8 @@ final class ImpressV3ReviewViewController: UIViewController {
         completionLabel.numberOfLines = 0
         completionLabel.isHidden = true
 
-        repeatButton.setTitle("刷新到期卡片", for: .normal)
-        ImpressV3Appearance.styleQuietButton(repeatButton, title: "刷新到期卡片")
+        repeatButton.setTitle(V3L("刷新到期卡片"), for: .normal)
+        ImpressV3Appearance.styleQuietButton(repeatButton, title: V3L("刷新到期卡片"))
         repeatButton.addTarget(self, action: #selector(refreshCards), for: .touchUpInside)
         repeatButton.isHidden = true
 
@@ -182,17 +206,17 @@ final class ImpressV3ReviewViewController: UIViewController {
 
     private func setupNavigation() {
         // One creation menu, no misleading secondary chat/settings controls.
-        let single = UIAction(title: "新建卡片",
+        let single = UIAction(title: V3L("新建卡片"),
                               image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
             self?.createCard()
         }
-        let batch = UIAction(title: "批量导入",
+        let batch = UIAction(title: V3L("批量导入"),
                              image: UIImage(systemName: "square.stack.3d.up")) { [weak self] _ in
             self?.startBatchImport()
         }
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             image: UIImage(systemName: "plus"), menu: UIMenu(children: [single, batch]))
-        navigationItem.leftBarButtonItem?.accessibilityLabel = "添加内容"
+        navigationItem.leftBarButtonItem?.accessibilityLabel = V3L("添加内容")
         updateNavigationActions()
     }
 
@@ -203,15 +227,15 @@ final class ImpressV3ReviewViewController: UIViewController {
             image: UIImage(systemName: "square.stack"),
             style: .plain, target: self,
             action: #selector(openCardCollection))
-        cardCollection.accessibilityLabel = "卡片集"
+        cardCollection.accessibilityLabel = V3L("卡片集")
         cardCollection.accessibilityIdentifier = "impress.review.card-collection"
 
         // A visible native text action remains recognizable on iPhone 13;
         // not hidden inside a menu or the card-creation (+) control.
         let notes = UIBarButtonItem(
-            title: "笔记", style: .plain, target: self,
+            title: V3L("笔记"), style: .plain, target: self,
             action: #selector(openNotes))
-        notes.accessibilityLabel = "笔记"
+        notes.accessibilityLabel = V3L("笔记")
         notes.accessibilityIdentifier = "impress.review.notes"
         navigationItem.rightBarButtonItems = [notes, cardCollection]
     }
@@ -242,10 +266,10 @@ final class ImpressV3ReviewViewController: UIViewController {
     }
 
     private func displayFailure(_ error: Swift.Error) {
-        let alert = UIAlertController(title: "复习操作未完成",
+        let alert = UIAlertController(title: V3L("复习操作未完成"),
                                       message: error.localizedDescription,
                                       preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
         if presentedViewController == nil { present(alert, animated: true) }
     }
 
@@ -255,7 +279,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         guard !isLoading, pending == nil else { return }
         isLoading = true
         hasLoaded = true
-        statusLabel.text = "正在载入到期卡片…"
+        statusLabel.text = V3L("正在载入到期卡片…")
         cardStack.isUserInteractionEnabled = false
         busyIndicator.startAnimating()
         completionLabel.isHidden = true
@@ -298,7 +322,7 @@ final class ImpressV3ReviewViewController: UIViewController {
                 self.isLoading = false
                 self.busyIndicator.stopAnimating()
                 self.cardStack.isHidden = true
-                self.statusLabel.text = "无法读取 V3 复习数据"
+                self.statusLabel.text = V3L("无法读取 V3 复习数据")
                 self.displayFailure(error)
             }
         }
@@ -312,9 +336,9 @@ final class ImpressV3ReviewViewController: UIViewController {
             repeatButton.isHidden = false
             revealButton.isHidden = true
             answerTools.isHidden = true
-            completionLabel.text = items.isEmpty ? "暂无到期卡片，可以稍后再来。" :
+            completionLabel.text = items.isEmpty ? V3L("暂无到期卡片，可以稍后再来。") :
                 "本轮复习完成：\(items.count) 张"
-            statusLabel.text = "本轮完成"
+            statusLabel.text = V3L("本轮完成")
             return
         }
         cardStack.isHidden = false
@@ -353,8 +377,8 @@ final class ImpressV3ReviewViewController: UIViewController {
                 self.revealButton.isHidden = revealed
                 self.answerTools.isHidden = !revealed
                 self.statusLabel.text = revealed
-                    ? "左·困难   上·良好   右·简单   下·再次"
-                    : "先回忆，再查看答案"
+                    ? V3L("左·困难   上·良好   右·简单   下·再次")
+                    : V3L("先回忆，再查看答案")
                 self.updateNavigationActions()
             } catch {
                 self.setRatingGesturesEnabled(false)
@@ -468,10 +492,10 @@ final class ImpressV3ReviewViewController: UIViewController {
             if success {
                 ImpressV3NotificationCoordinator.shared.enableSmartReminders()
             } else {
-                let alert = UIAlertController(title: "通知未授权",
+                let alert = UIAlertController(title: V3L("通知未授权"),
                                               message: "可以在 iOS 设置中允许 Impress 的通知。",
                                               preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "确定", style: .default))
+                alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
                 self.present(alert, animated: true)
             }
         }
@@ -483,10 +507,10 @@ final class ImpressV3ReviewViewController: UIViewController {
             if success {
                 ImpressV3NotificationCoordinator.shared.enableHabitReminders()
             } else {
-                let alert = UIAlertController(title: "通知未授权",
+                let alert = UIAlertController(title: V3L("通知未授权"),
                                               message: "可以在 iOS 设置中允许 Impress 的通知。",
                                               preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "确定", style: .default))
+                alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
                 self.present(alert, animated: true)
             }
         }
@@ -546,7 +570,7 @@ final class ImpressV3ReviewViewController: UIViewController {
                         choicesView.showAnswer()
                     }
                     setRatingGesturesEnabled(false) // Reveal callback re-enables after the animation.
-                    statusLabel.text = "保存未成功，请重新滑动评分"
+                    statusLabel.text = V3L("保存未成功，请重新滑动评分")
                     updateNavigationActions()
                 } catch { recoverUnexpectedError(error, cardID: id) }
             }
@@ -671,13 +695,32 @@ private extension Array {
 // MARK: - V3.1 optional capture and understanding history
 // Stored in a separate private, atomic journal. No legacy-card/FSRS schema
 // changes, no Obsidian write, and cancelling NEVER creates a record.
+struct ImpressV3LearningRevision: Codable, Equatable {
+    let priorAnswer: String
+    let replacedAt: Date
+}
+
 struct ImpressV3LearningEntry: Codable, Equatable {
     let id: UUID
     let cardID: UUID?
     let question: String
-    let userAnswer: String
+    var userAnswer: String
     let createdAt: Date
     var aiEvaluation: String?
+    // Optional for transparent decoding of legacy LearningEntry-v1.json files.
+    var revisions: [ImpressV3LearningRevision]? = nil
+}
+
+enum ImpressV3LearningEditError: LocalizedError {
+    case missing, outdated, emptyAnswer, tooLong
+    var errorDescription: String? {
+        switch self {
+        case .missing: return "原理解记录已不存在，未保存修改。"
+        case .outdated: return "记录已在另一处更新，请重新打开后再修改。"
+        case .emptyAnswer: return "理解内容不能留空。"
+        case .tooLong: return "理解内容超出当前支持的长度，请精简后保存。"
+        }
+    }
 }
 
 enum ImpressV3LearningJournal {
@@ -691,13 +734,16 @@ enum ImpressV3LearningJournal {
         return path.appendingPathComponent("LearningEntry-v1.json")
     }
 
-    static func load() throws -> [ImpressV3LearningEntry] {
-        lock.lock()
-        defer { lock.unlock() }
-        let path = try storeURL()
+    private static func load(at path: URL) throws -> [ImpressV3LearningEntry] {
         guard FileManager.default.fileExists(atPath: path.path) else { return [] }
         return try JSONDecoder().decode([ImpressV3LearningEntry].self,
                                         from: Data(contentsOf: path))
+    }
+
+    static func load() throws -> [ImpressV3LearningEntry] {
+        lock.lock()
+        defer { lock.unlock() }
+        return try load(at: storeURL())
     }
 
     static func save(_ entry: ImpressV3LearningEntry) throws {
@@ -720,8 +766,56 @@ enum ImpressV3LearningJournal {
         try persist(records)
     }
 
-    private static func persist(_ entries: [ImpressV3LearningEntry]) throws {
-        let url = try storeURL()
+    /// A compare-and-save edit protects the original answer and retains
+    /// previous versions without modifying FSRS events or historic AI feedback.
+    static func updateAnswer(id: UUID, expectedAnswer: String,
+                             editedAnswer: String) throws -> ImpressV3LearningEntry {
+        try updateAnswer(id: id, expectedAnswer: expectedAnswer,
+                         editedAnswer: editedAnswer, at: nil, now: Date())
+    }
+
+    #if DEBUG
+    static func testUpdateAnswer(id: UUID, expectedAnswer: String,
+                                 editedAnswer: String, at url: URL,
+                                 now: Date = Date()) throws -> ImpressV3LearningEntry {
+        try updateAnswer(id: id, expectedAnswer: expectedAnswer,
+                         editedAnswer: editedAnswer, at: url, now: now)
+    }
+    #endif
+
+    private static func updateAnswer(id: UUID, expectedAnswer: String,
+                                     editedAnswer: String, at url: URL?,
+                                     now: Date) throws -> ImpressV3LearningEntry {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !editedAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ImpressV3LearningEditError.emptyAnswer
+        }
+        guard editedAnswer.utf8.count <= 100_000 else {
+            throw ImpressV3LearningEditError.tooLong
+        }
+        let path = try url ?? storeURL()
+        var records = try load(at: path)
+        guard let index = records.firstIndex(where: { $0.id == id }) else {
+            throw ImpressV3LearningEditError.missing
+        }
+        guard records[index].userAnswer == expectedAnswer else {
+            throw ImpressV3LearningEditError.outdated
+        }
+        if editedAnswer == expectedAnswer { return records[index] }
+        var revisions = records[index].revisions ?? []
+        revisions.append(ImpressV3LearningRevision(
+            priorAnswer: records[index].userAnswer, replacedAt: now))
+        records[index].revisions = revisions
+        records[index].userAnswer = editedAnswer
+        try persist(records, to: path, notifyBackup: url == nil)
+        return records[index]
+    }
+
+    private static func persist(_ entries: [ImpressV3LearningEntry],
+                                to target: URL? = nil,
+                                notifyBackup: Bool = true) throws {
+        let url = try target ?? storeURL()
         let data = try JSONEncoder().encode(entries)
         try data.write(to: url, options: .atomic)
         try FileManager.default.setAttributes(
@@ -738,11 +832,17 @@ enum ImpressV3LearningJournal {
                   persisted.question == original.question &&
                   persisted.userAnswer == original.userAnswer &&
                   persisted.aiEvaluation == original.aiEvaluation &&
-                  abs(persisted.createdAt.timeIntervalSince(original.createdAt)) < 0.002
+                  abs(persisted.createdAt.timeIntervalSince(original.createdAt)) < 0.002 &&
+                  (persisted.revisions ?? []).count == (original.revisions ?? []).count &&
+                  zip(persisted.revisions ?? [], original.revisions ?? [])
+                      .allSatisfy { a, b in
+                          a.priorAnswer == b.priorAnswer &&
+                          abs(a.replacedAt.timeIntervalSince(b.replacedAt)) < 0.002
+                      }
               }) else {
             throw CocoaError(.fileWriteUnknown)
         }
-        ImpressV3BackupCoordinator.markDataChanged()
+        if notifyBackup { ImpressV3BackupCoordinator.markDataChanged() }
     }
 }
 
@@ -762,10 +862,10 @@ final class ImpressV3CaptureViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "记录理解"
+        title = V3L("记录理解")
         view.backgroundColor = ImpressV3Appearance.page
         let subtitle = UILabel()
-        subtitle.text = question.isEmpty ? "记录此刻的想法" : question
+        subtitle.text = question.isEmpty ? V3L("记录此刻的想法") : question
         subtitle.numberOfLines = 3
         subtitle.textColor = ImpressV3Appearance.secondaryText
         subtitle.font = ImpressV3Appearance.Typography.supporting
@@ -777,7 +877,7 @@ final class ImpressV3CaptureViewController: UIViewController {
         input.textContainerInset = UIEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
         input.layer.cornerRadius = ImpressV3Appearance.Radius.field
         input.translatesAutoresizingMaskIntoConstraints = false
-        input.accessibilityLabel = "本次理解的文字记录"
+        input.accessibilityLabel = V3L("本次理解的文字记录")
         view.addSubview(subtitle)
         view.addSubview(input)
         NSLayoutConstraint.activate([
@@ -803,7 +903,7 @@ final class ImpressV3CaptureViewController: UIViewController {
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
         navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: "提交", style: .done, target: self, action: #selector(save))
+            title: V3L("提交"), style: .done, target: self, action: #selector(save))
     }
 
     @objc private func cancel() { dismiss(animated: true) }
@@ -818,9 +918,9 @@ final class ImpressV3CaptureViewController: UIViewController {
             try ImpressV3LearningJournal.save(entry)
             dismiss(animated: true) { [weak self] in self?.onSaved?() }
         } catch {
-            let alert = UIAlertController(title: "记录未保存",
+            let alert = UIAlertController(title: V3L("记录未保存"),
                 message: error.localizedDescription, preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "确定", style: .default))
+            alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
             present(alert, animated: true)
         }
     }
@@ -858,7 +958,7 @@ final class ImpressV3TimelineViewController: UITableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "理解时间线"
+        title = V3L("理解时间线")
         navigationItem.largeTitleDisplayMode = .never
         tableView.backgroundColor = ImpressV3Appearance.page
         tableView.separatorStyle = .none
@@ -891,9 +991,9 @@ final class ImpressV3TimelineViewController: UITableViewController {
             notes = try ImpressV3LearningJournal.load()
                 .filter { cardID == nil || $0.cardID == cardID }
         } catch {
-            let alert = UIAlertController(title: "读取历史失败",
+            let alert = UIAlertController(title: V3L("读取历史失败"),
                 message: error.localizedDescription, preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "确定", style: .default))
+            alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
             if presentedViewController == nil { present(alert, animated: true) }
         }
         tableView.reloadData()
@@ -907,7 +1007,7 @@ final class ImpressV3TimelineViewController: UITableViewController {
         empty.textColor = ImpressV3Appearance.secondaryText
         empty.numberOfLines = 0
         empty.textAlignment = .center
-        empty.text = "还没有记录。\n回答、回顾和评价完成后会按时间展示在这里。"
+        empty.text = V3L("还没有记录。\n回答、回顾和评价完成后会按时间展示在这里。")
         tableView.backgroundView = ordered.isEmpty ? empty : nil
     }
 
@@ -921,21 +1021,21 @@ final class ImpressV3TimelineViewController: UITableViewController {
         ) as? ImpressV3TimelineNodeCell else { return UITableViewCell() }
         switch ordered[indexPath.row] {
         case .understanding(let entry):
-            cell.configure(time: entry.createdAt, title: "理解记录",
+            cell.configure(time: entry.createdAt, title: V3L("理解记录"),
                            excerpt: entry.userAnswer,
-                           footnote: entry.aiEvaluation == nil ? "未评价" : "含历史 AI 评价",
+                           footnote: entry.aiEvaluation == nil ? V3L("未评价") : V3L("含历史 AI 评价"),
                            emphasized: true)
         case .review(let event):
             let rating: String
             switch event.rating {
-            case .again: rating = "重来"
-            case .hard: rating = "困难"
-            case .good: rating = "良好"
-            case .easy: rating = "容易"
+            case .again: rating = V3L("重来")
+            case .hard: rating = V3L("困难")
+            case .good: rating = V3L("良好")
+            case .easy: rating = V3L("容易")
             }
             cell.configure(time: event.reviewedAt, title: "复习 · " + rating,
                            excerpt: "FSRS-6 · 修订 \(event.before.revision) → \(event.after.revision)",
-                           footnote: "真实评分事件", emphasized: false)
+                           footnote: V3L("真实评分事件"), emphasized: false)
         }
         return cell
     }
@@ -946,17 +1046,16 @@ final class ImpressV3TimelineViewController: UITableViewController {
         guard ordered.indices.contains(indexPath.row) else { return }
         switch ordered[indexPath.row] {
         case .understanding(let entry):
-            let detail = makeTextDetail(title: "理解记录", content:
-                "题目\n" + entry.question + "\n\n本次理解\n" + entry.userAnswer +
-                "\n\nAI 历史评价\n" + (entry.aiEvaluation ?? "尚未评价"))
-            navigationController?.pushViewController(detail, animated: true)
+            navigationController?.pushViewController(
+                ImpressV3UnderstandingDetailViewController(entry: entry),
+                animated: true)
         case .review(let event):
             let rating: String
             switch event.rating {
-            case .again: rating = "重来"
-            case .hard: rating = "困难"
-            case .good: rating = "良好"
-            case .easy: rating = "容易"
+            case .again: rating = V3L("重来")
+            case .hard: rating = V3L("困难")
+            case .good: rating = V3L("良好")
+            case .easy: rating = V3L("容易")
             }
             let date = DateFormatter()
             date.dateStyle = .medium
@@ -966,7 +1065,7 @@ final class ImpressV3TimelineViewController: UITableViewController {
                 "\n\n复习修订\n\(event.before.revision) → \(event.after.revision)" +
                 "\n\n下一次到期\n" + date.string(from: event.after.dueAt)
             navigationController?.pushViewController(
-                makeTextDetail(title: "复习记录", content: details), animated: true)
+                makeTextDetail(title: V3L("复习记录"), content: details), animated: true)
         }
     }
 
@@ -999,6 +1098,196 @@ final class ImpressV3TimelineViewController: UITableViewController {
                 equalTo: detail.view.safeAreaLayoutGuide.bottomAnchor, constant: -ImpressV3Appearance.Metrics.compactInset)
         ])
         return detail
+    }
+}
+
+/// The editable understanding body is not an FSRS grade. Edits preserve a
+/// separate historical answer version; original AI evaluation is read-only.
+@MainActor
+final class ImpressV3UnderstandingDetailViewController: UITableViewController {
+    private var entry: ImpressV3LearningEntry
+
+    init(entry: ImpressV3LearningEntry) {
+        self.entry = entry
+        super.init(style: .insetGrouped)
+    }
+    required init?(coder: NSCoder) { fatalError("init(entry:) required") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = V3L("理解记录")
+        navigationItem.largeTitleDisplayMode = .never
+        ImpressV3Appearance.styleGroupedTable(tableView)
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: V3L("编辑"), style: .plain, target: self, action: #selector(editAnswer))
+        navigationItem.rightBarButtonItem?.accessibilityIdentifier = "impress.learning.edit"
+    }
+
+    override func numberOfSections(in tableView: UITableView) -> Int {
+        (entry.revisions ?? []).isEmpty ? 3 : 4
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            numberOfRowsInSection section: Int) -> Int {
+        section == 3 ? (entry.revisions ?? []).count : 1
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            titleForHeaderInSection section: Int) -> String? {
+        switch section {
+        case 0: return V3L("原始题目")
+        case 1: return V3L("我的理解")
+        case 2: return V3L("历史 AI 评价（只读）")
+        default: return V3L("之前的版本 · 不会被覆盖")
+        }
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            titleForFooterInSection section: Int) -> String? {
+        section == 1 ? V3L("修改理解会保存上一版本，不影响既有复习评分和历史评价。") : nil
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "learning.detail")
+            ?? UITableViewCell(style: .subtitle, reuseIdentifier: "learning.detail")
+        var content = UIListContentConfiguration.subtitleCell()
+        content.textProperties.font = ImpressV3Appearance.Typography.body
+        content.textProperties.color = ImpressV3Appearance.primaryText
+        content.textProperties.numberOfLines = 0
+        content.secondaryTextProperties.font = ImpressV3Appearance.Typography.footnote
+        content.secondaryTextProperties.color = ImpressV3Appearance.secondaryText
+        content.secondaryTextProperties.numberOfLines = 1
+        cell.accessoryType = .none
+        cell.selectionStyle = .none
+        switch indexPath.section {
+        case 0: content.text = entry.question
+        case 1: content.text = entry.userAnswer
+        case 2: content.text = entry.aiEvaluation ?? V3L("尚未评价")
+        default:
+            let revisions = Array((entry.revisions ?? []).reversed())
+            let prior = revisions[indexPath.row]
+            content.text = prior.priorAnswer
+            let date = DateFormatter()
+            date.dateStyle = .medium
+            date.timeStyle = .short
+            content.secondaryText = date.string(from: prior.replacedAt)
+            content.textProperties.numberOfLines = 3
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+        }
+        cell.contentConfiguration = content
+        ImpressV3Appearance.styleGroupedCell(cell)
+        return cell
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        guard indexPath.section == 3 else { return }
+        let revisions = Array((entry.revisions ?? []).reversed())
+        guard revisions.indices.contains(indexPath.row) else { return }
+        let detail = UIViewController()
+        detail.title = V3L("历史版本")
+        detail.view.backgroundColor = ImpressV3Appearance.page
+        let body = UITextView()
+        ImpressV3Appearance.styleReadingTextView(body)
+        body.text = revisions[indexPath.row].priorAnswer
+        body.translatesAutoresizingMaskIntoConstraints = false
+        detail.view.addSubview(body)
+        NSLayoutConstraint.activate([
+            body.topAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.topAnchor,
+                                      constant: ImpressV3Appearance.Metrics.compactInset),
+            body.bottomAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.bottomAnchor,
+                                         constant: -ImpressV3Appearance.Metrics.compactInset),
+            body.leadingAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.leadingAnchor,
+                                          constant: ImpressV3Appearance.Metrics.screenInset),
+            body.trailingAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.trailingAnchor,
+                                           constant: -ImpressV3Appearance.Metrics.screenInset)
+        ])
+        navigationController?.pushViewController(detail, animated: true)
+    }
+
+    @objc private func editAnswer() {
+        navigationController?.pushViewController(
+            ImpressV3UnderstandingEditorViewController(entry: entry) { [weak self] saved in
+                self?.entry = saved
+                self?.tableView.reloadData()
+            }, animated: true)
+    }
+}
+
+@MainActor
+final class ImpressV3UnderstandingEditorViewController: UIViewController, UITextViewDelegate {
+    private let entry: ImpressV3LearningEntry
+    private let onSaved: (ImpressV3LearningEntry) -> Void
+    private let input = UITextView()
+    private var saveAction: UIBarButtonItem!
+
+    init(entry: ImpressV3LearningEntry,
+         onSaved: @escaping (ImpressV3LearningEntry) -> Void) {
+        self.entry = entry
+        self.onSaved = onSaved
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError("init(entry:onSaved:) required") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = V3L("编辑理解")
+        navigationItem.largeTitleDisplayMode = .never
+        view.backgroundColor = ImpressV3Appearance.page
+        ImpressV3Appearance.styleReadingTextView(input)
+        input.isEditable = true
+        input.delegate = self
+        input.accessibilityIdentifier = "impress.learning.edit.body"
+        input.text = entry.userAnswer
+        input.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(input)
+        NSLayoutConstraint.activate([
+            input.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor,
+                                       constant: ImpressV3Appearance.Metrics.compactInset),
+            input.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor,
+                                           constant: ImpressV3Appearance.Metrics.screenInset),
+            input.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor,
+                                            constant: -ImpressV3Appearance.Metrics.screenInset)
+        ])
+        if #available(iOS 15.0, *) {
+            input.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor,
+                constant: -ImpressV3Appearance.Metrics.compactInset).isActive = true
+        } else {
+            input.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor,
+                constant: -ImpressV3Appearance.Metrics.compactInset).isActive = true
+        }
+        saveAction = UIBarButtonItem(
+            title: V3L("保存"), style: .done, target: self, action: #selector(save))
+        saveAction.accessibilityIdentifier = "impress.learning.edit.save"
+        navigationItem.rightBarButtonItem = saveAction
+        updateSaveEnabled()
+    }
+
+    func textViewDidChange(_ textView: UITextView) { updateSaveEnabled() }
+
+    private func updateSaveEnabled() {
+        let text = input.text ?? ""
+        saveAction.isEnabled = text != entry.userAnswer &&
+            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            text.utf8.count <= 100_000
+    }
+
+    @objc private func save() {
+        do {
+            let saved = try ImpressV3LearningJournal.updateAnswer(
+                id: entry.id, expectedAnswer: entry.userAnswer,
+                editedAnswer: input.text ?? "")
+            onSaved(saved)
+            navigationController?.popViewController(animated: true)
+        } catch {
+            let alert = UIAlertController(title: V3L("无法保存理解记录"),
+                message: error.localizedDescription, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+            present(alert, animated: true)
+        }
     }
 }
 
@@ -1089,7 +1378,7 @@ final class ImpressV3TimelineNodeCell: UITableViewCell {
 @MainActor
 final class ImpressV3SettingsHubViewController: UITableViewController {
     private enum Destination {
-        case promptLibrary, reminders, backup
+        case promptLibrary, reminders, appearance, language, backup
     }
     private struct Item {
         let title: String
@@ -1106,6 +1395,12 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
             Item(title: "复习通知", detail: "关闭、到期提醒或每日习惯提醒",
                  symbol: "bell", destination: .reminders)
         ]),
+        ("外观", [
+            Item(title: "显示模式", detail: "跟随系统、浅色或深色",
+                 symbol: "circle.lefthalf.filled", destination: .appearance),
+            Item(title: "应用语言", detail: "简体中文、繁体中文或英文",
+                 symbol: "globe", destination: .language)
+        ]),
         ("数据安全", [
             Item(title: "数据与备份", detail: "静默自动备份、iCloud 副本与受控恢复",
                  symbol: "externaldrive", destination: .backup)
@@ -1117,12 +1412,18 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "设置"
+        title = V3L("设置")
         navigationItem.largeTitleDisplayMode = .always
         tableView.backgroundColor = ImpressV3Appearance.page
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 66
         tableView.cellLayoutMarginsFollowReadableWidth = true
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        title = V3L("设置")
+        tableView.reloadData()
     }
 
     override func numberOfSections(in tableView: UITableView) -> Int { groups.count }
@@ -1132,14 +1433,15 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
     }
     override func tableView(_ tableView: UITableView,
                             titleForHeaderInSection section: Int) -> String? {
-        groups[section].name
+        V3L(groups[section].name)
     }
     override func tableView(_ tableView: UITableView,
                             titleForFooterInSection section: Int) -> String? {
         switch section {
-        case 0: return "本地模板仅在用户明确操作后复制，不自动上传私人内容。"
-        case 1: return "FSRS-6 决定到期时间；通知仅负责提醒。"
-        default: return "备份保存在本机；连接 iCloud Drive 文件夹后可自动创建副本。"
+        case 0: return V3L("本地模板仅在用户明确操作后复制，不自动上传私人内容。")
+        case 1: return V3L("FSRS-6 决定到期时间；通知仅负责提醒。")
+        case 2: return V3L("默认跟随系统；手动选择仅影响 Impress，不修改 iPhone 系统外观。")
+        default: return V3L("备份保存在本机；连接 iCloud Drive 文件夹后可自动创建副本。")
         }
     }
     override func tableView(_ tableView: UITableView,
@@ -1148,8 +1450,18 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
         let cell = tableView.dequeueReusableCell(withIdentifier: "setting")
             ?? UITableViewCell(style: .subtitle, reuseIdentifier: "setting")
         var content = UIListContentConfiguration.subtitleCell()
-        content.text = item.title
-        content.secondaryText = item.detail
+        content.text = V3L(item.title)
+        switch item.destination {
+        case .appearance:
+            content.secondaryText = ImpressV3Appearance.selectedMode().title
+        case .language:
+            content.secondaryText = ImpressV3Language.selected().title
+        default:
+            content.secondaryText = V3L(item.detail)
+        }
+        content.textProperties.font = ImpressV3Appearance.Typography.body
+        content.secondaryTextProperties.font = ImpressV3Appearance.Typography.supporting
+        content.secondaryTextProperties.color = ImpressV3Appearance.secondaryText
         content.secondaryTextProperties.numberOfLines = 2
         content.image = UIImage(systemName: item.symbol)
         content.imageProperties.tintColor = ImpressV3Appearance.secondaryText
@@ -1169,6 +1481,12 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
         case .reminders:
             navigationController?.pushViewController(
                 ImpressV3ReminderSettingsController(), animated: true)
+        case .appearance:
+            navigationController?.pushViewController(
+                ImpressV3AppearanceSettingsViewController(), animated: true)
+        case .language:
+            navigationController?.pushViewController(
+                ImpressV3LanguageSettingsViewController(), animated: true)
         case .backup:
             navigationController?.pushViewController(
                 ImpressV3BackupSettingsViewController(), animated: true)
@@ -1176,9 +1494,117 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
     }
 }
 
+/// Native selection rows keep the current theme visible without an extra
+/// global UI state manager. UIWindow traits propagate through existing UIKit.
+@MainActor
+final class ImpressV3AppearanceSettingsViewController: UITableViewController {
+    private let choices = ImpressV3Appearance.Mode.allCases
+
+    init() { super.init(style: .insetGrouped) }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = V3L("显示模式")
+        navigationItem.largeTitleDisplayMode = .never
+        ImpressV3Appearance.styleGroupedTable(tableView)
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            numberOfRowsInSection section: Int) -> Int { choices.count }
+
+    override func tableView(_ tableView: UITableView,
+                            titleForFooterInSection section: Int) -> String? {
+        V3L("跟随系统是默认选项。浅色或深色仅对本 App 生效，并在重新启动后保留。")
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "appearance.mode")
+            ?? UITableViewCell(style: .default, reuseIdentifier: "appearance.mode")
+        var content = UIListContentConfiguration.cell()
+        content.text = choices[indexPath.row].title
+        content.textProperties.font = ImpressV3Appearance.Typography.body
+        cell.contentConfiguration = content
+        ImpressV3Appearance.styleGroupedCell(cell)
+        cell.accessoryType = ImpressV3Appearance.selectedMode() == choices[indexPath.row]
+            ? .checkmark : .none
+        cell.accessibilityIdentifier = "impress.settings.appearance.\(choices[indexPath.row].rawValue)"
+        return cell
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        ImpressV3Appearance.setAppearance(choices[indexPath.row])
+        tableView.reloadData()
+    }
+}
+
+/// Three user-selected interface languages. The installed data and private
+/// Vault are never transformed, rewritten, migrated or machine translated.
+@MainActor
+final class ImpressV3LanguageSettingsViewController: UITableViewController {
+    private let choices = ImpressV3Language.allCases
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        super.init(style: .insetGrouped)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        navigationItem.largeTitleDisplayMode = .never
+        ImpressV3Appearance.styleGroupedTable(tableView)
+        refreshLanguage()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        refreshLanguage()
+    }
+
+    private func refreshLanguage() {
+        title = V3L("应用语言")
+        tableView.reloadData()
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            numberOfRowsInSection section: Int) -> Int { choices.count }
+
+    override func tableView(_ tableView: UITableView,
+                            titleForFooterInSection section: Int) -> String? {
+        V3L("显示语言只改变界面文本，不会翻译或修改你保存的卡片、笔记和历史。")
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let mode = choices[indexPath.row]
+        let cell = tableView.dequeueReusableCell(withIdentifier: "impress.language")
+            ?? UITableViewCell(style: .default, reuseIdentifier: "impress.language")
+        var content = UIListContentConfiguration.cell()
+        content.text = mode.title
+        content.textProperties.font = ImpressV3Appearance.Typography.body
+        cell.contentConfiguration = content
+        ImpressV3Appearance.styleGroupedCell(cell)
+        cell.accessoryType = mode == ImpressV3Language.selected(in: defaults) ? .checkmark : .none
+        cell.accessibilityIdentifier = "impress.settings.language.\(mode.rawValue)"
+        return cell
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        ImpressV3Language.change(to: choices[indexPath.row], defaults: defaults)
+        refreshLanguage()
+    }
+}
+
 @MainActor
 final class ImpressV3ReminderSettingsController: UITableViewController {
-    private let labels = ["关闭提醒", "智能到期提醒 · 每天 09:00 起", "每日习惯提醒 · 09:00"]
+    private let labels = [V3L("关闭提醒"), V3L("智能到期提醒 · 每天 09:00 起"), V3L("每日习惯提醒 · 09:00")]
     private let modeKey = "ImpressV3ReminderMode"
 
     init() { super.init(style: .insetGrouped) }
@@ -1186,7 +1612,7 @@ final class ImpressV3ReminderSettingsController: UITableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "提醒通知"
+        title = V3L("提醒通知")
         navigationItem.largeTitleDisplayMode = .never
         tableView.backgroundColor = ImpressV3Appearance.page
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "reminder")
@@ -1226,10 +1652,10 @@ final class ImpressV3ReminderSettingsController: UITableViewController {
             [weak self] granted in
             guard let self = self else { return }
             guard granted else {
-                let notice = UIAlertController(title: "通知未授权",
+                let notice = UIAlertController(title: V3L("通知未授权"),
                     message: "可在 iOS 系统设置中允许通知；当前模式不会被强制修改。",
                     preferredStyle: .alert)
-                notice.addAction(UIAlertAction(title: "确定", style: .default))
+                notice.addAction(UIAlertAction(title: V3L("确定"), style: .default))
                 self.present(notice, animated: true)
                 return
             }

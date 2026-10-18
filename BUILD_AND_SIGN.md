@@ -21,7 +21,7 @@ xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone 
 xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone-AltStore -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' IPHONEOS_DEPLOYMENT_TARGET=15.0 CODE_SIGNING_ALLOWED=NO CODE_SIGN_ENTITLEMENTS= ENABLE_DEBUG_DYLIB=NO build
 ```
 
-The full XCTest requires a real available iPhone Simulator destination and the project's shared XCTest scheme; consult CI rather than substituting a build-only command for the test result. Do not run the six non-icon placeholder generator on original icons.
+The full XCTest requires a real available iPhone Simulator destination and the project's shared XCTest scheme; consult CI rather than substituting a build-only command for the test result. New acceptance requires regression of live System/Light/Dark switching, three persisted UI languages, stale-safe understanding edits with historical revisions, native Notes grouped-list style and read-only Markdown document presentation. Do not run the six non-icon placeholder generator on original icons.
 
 ## User signing and iCloud limitations
 The IPA is unsigned and must be signed with the user's own Apple identity/provisioning on a compatible tool. A free Personal Team can restrict iCloud and App Groups entitlements; removing entitlement requests may allow installation **but does not certify iCloud Files Provider access**. iCloud backup folder selection, security-scoped bookmarks, notification delivery after reboot, time-zone changes and dark/light UI require iPhone 13 physical QA.

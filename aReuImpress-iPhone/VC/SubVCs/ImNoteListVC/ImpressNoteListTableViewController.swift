@@ -61,12 +61,13 @@ private final class ImVaultFolderPickerViewController:
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "按文件夹浏览"
+        title = V3L("按文件夹浏览")
         navigationItem.largeTitleDisplayMode = .never
+        ImpressV3Appearance.styleGroupedTable(tableView)
         let search = UISearchController(searchResultsController: nil)
         search.searchResultsUpdater = self
         search.obscuresBackgroundDuringPresentation = false
-        search.searchBar.placeholder = "搜索相对路径"
+        search.searchBar.placeholder = V3L("搜索相对路径")
         navigationItem.searchController = search
         navigationItem.hidesSearchBarWhenScrolling = false
     }
@@ -90,11 +91,13 @@ private final class ImVaultFolderPickerViewController:
         let cell = tableView.dequeueReusableCell(withIdentifier: "folder-path")
             ?? UITableViewCell(style: .default, reuseIdentifier: "folder-path")
         var configuration = UIListContentConfiguration.cell()
-        configuration.text = indexPath.row == 0 ? "全部文档" : filteredFolders[indexPath.row - 1]
+        configuration.text = indexPath.row == 0 ? V3L("全部文档") : filteredFolders[indexPath.row - 1]
         configuration.textProperties.numberOfLines = 2
         configuration.image = UIImage(systemName: indexPath.row == 0
                                       ? "square.grid.2x2" : "folder")
+        configuration.textProperties.font = ImpressV3Appearance.Typography.body
         cell.contentConfiguration = configuration
+        ImpressV3Appearance.styleGroupedCell(cell)
         cell.accessoryType = .disclosureIndicator
         return cell
     }
@@ -110,7 +113,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
 {
     private var cancellables = Set<AnyCancellable>()
     
-    let tableView = UITableView(frame: .zero, style: .plain)
+    let tableView = UITableView(frame: .zero, style: .insetGrouped)
     ///
     private var viewModel: ImNotesViewModelProtocol! = ImpressNotesViewModel()
     
@@ -186,6 +189,10 @@ class ImpressNoteListTableViewController: ImBaseViewController
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        title = V3L("笔记")
+        navigationItem.searchController?.searchBar.placeholder = V3L("搜索相对路径")
+        setupNavigationBarItems()
+        tableView.reloadData()
         navigationItem.largeTitleDisplayMode = .always
         if ImVaultReadOnlyProbe.shared.hasAuthorizedBookmark && !externalLoading {
             refreshNotes()
@@ -195,10 +202,8 @@ class ImpressNoteListTableViewController: ImBaseViewController
     /// 初始化UI
     private func initUISetting()
     {
-        title = "笔记"
-        view.backgroundColor = ImpressV3ReviewEnvironment.pilotEnabled
-            ? ImpressV3Appearance.page : bgColor
-//        navigationItem.largeTitleDisplayMode = .always
+        title = V3L("笔记")
+        view.backgroundColor = ImpressV3Appearance.page
         searchControllerSetting()
         tableViewSetting()
         setupNavigationBarItems()
@@ -212,27 +217,28 @@ class ImpressNoteListTableViewController: ImBaseViewController
 
         // P0-1: explicit read-only external Vault probe. The old importer
         // is still available only as a first-time, NON-overwriting local copy.
-        let browseFolders = UIAction(title: "按文件夹浏览",
+        let browseFolders = UIAction(title: V3L("按文件夹浏览"),
                                      image: UIImage(systemName: "folder.fill")) { [weak self] _ in
             self?.showVaultFolderPicker()
         }
-        let connectVault = UIAction(title: "选择 Obsidian Vault（只读）",
+        let connectVault = UIAction(title: V3L("选择 Obsidian Vault（只读）"),
                                     image: UIImage(systemName: "folder.badge.plus")) { [weak self] _ in
             self?.chooseReadOnlyVault()
         }
-        let inspectSaved = UIAction(title: "验证已授权 Vault（只读）",
+        let inspectSaved = UIAction(title: V3L("验证已授权 Vault（只读）"),
                                     image: UIImage(systemName: "checkmark.shield")) { [weak self] _ in
             self?.inspectSavedVault()
         }
-        let disconnectVault = UIAction(title: "断开 Vault 授权（不删除文件）",
+        let disconnectVault = UIAction(title: V3L("断开 Vault 授权（不删除文件）"),
                                        image: UIImage(systemName: "xmark.shield")) { [weak self] _ in
             self?.confirmVaultDisconnect()
         }
         let vaultItem = UIBarButtonItem(image: UIImage(systemName: "folder"),
                                          style: .plain, target: nil, action: nil)
-        vaultItem.menu = UIMenu(title: "Vault · 只读", children: [
+        vaultItem.menu = UIMenu(title: V3L("Vault · 只读"), children: [
             browseFolders, connectVault, inspectSaved, disconnectVault
         ])
+        vaultItem.accessibilityLabel = V3L("Vault · 只读")
         navigationItem.rightBarButtonItem = vaultItem
     }
     
@@ -252,11 +258,11 @@ class ImpressNoteListTableViewController: ImBaseViewController
 
     private func confirmVaultDisconnect() {
         let alert = UIAlertController(
-            title: "断开 Obsidian Vault 授权？",
-            message: "只清除 Impress 保存的访问书签，不会删除、修改或移动任何 Obsidian 文件，也不会删除本地笔记镜像。",
+            title: V3L("断开 Obsidian Vault 授权？"),
+            message: V3L("只清除 Impress 保存的访问书签，不会删除、修改或移动任何 Obsidian 文件，也不会删除本地笔记镜像。"),
             preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-        alert.addAction(UIAlertAction(title: "断开", style: .destructive) { _ in
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("断开"), style: .destructive) { _ in
             ImVaultReadOnlyProbe.shared.disconnectSavedPermission()
             self.externalMode = true
             self.externalNotes = []
@@ -282,15 +288,15 @@ class ImpressNoteListTableViewController: ImBaseViewController
                 ? "无 Markdown 样本。请确认所选目录。"
                 : report.sampleRelativePaths.joined(separator: "\n")
             let text = "Vault: \(report.name)\nMarkdown: \(report.markdownCount) 篇\(report.wasTruncated ? "（扫描上限）" : "")\n样本读取: \(report.sampleBytesRead) bytes\n授权恢复: \(report.restoredFromBookmark ? "已验证" : "首次连接")\n\n\(sample)\n\n仅校验授权和读取，未写入任何 Obsidian 文件。真实双向同步尚未启用。"
-            alert = UIAlertController(title: "Vault 只读验证完成",
+            alert = UIAlertController(title: V3L("Vault 只读验证完成"),
                                       message: text, preferredStyle: .alert)
         case let .failure(error):
             if let vaultError = error as? ImVaultReadOnlyError, case .noFolder = vaultError { return }
-            alert = UIAlertController(title: "Vault 只读验证未通过",
+            alert = UIAlertController(title: V3L("Vault 只读验证未通过"),
                                       message: error.localizedDescription,
                                       preferredStyle: .alert)
         }
-        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
         present(alert, animated: true)
     }
 
@@ -426,10 +432,10 @@ class ImpressNoteListTableViewController: ImBaseViewController
         contents.translatesAutoresizingMaskIntoConstraints = false
         let message = UILabel()
         message.text = externalError ??
-            (externalLoading ? "正在分批读取 Obsidian 文档…" :
+            (externalLoading ? V3L("正在分批读取 Obsidian 文档…") :
              ImVaultReadOnlyProbe.shared.hasAuthorizedBookmark
-                ? "此位置没有可读取的 Markdown 文档"
-                : "连接 Obsidian Vault 后查看笔记")
+                ? V3L("此位置没有可读取的 Markdown 文档")
+                : V3L("连接 Obsidian Vault 后查看笔记"))
         message.numberOfLines = 0
         message.textColor = ImpressV3Appearance.secondaryText
         message.textAlignment = .center
@@ -438,7 +444,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
         contents.addArrangedSubview(message)
         if !ImVaultReadOnlyProbe.shared.hasAuthorizedBookmark {
             let connect = UIButton(type: .system)
-            connect.setTitle("连接 Obsidian Vault", for: .normal)
+            connect.setTitle(V3L("连接 Obsidian Vault"), for: .normal)
             connect.accessibilityIdentifier = "impress.notes.connect-vault"
             connect.addTarget(self, action: #selector(connectVaultFromEmptyState),
                               for: .touchUpInside)
@@ -467,7 +473,7 @@ extension ImpressNoteListTableViewController: UISearchBarDelegate
     private func searchControllerSetting()
     {
         let controller = UISearchController.init(searchResultsController: nil)
-        controller.searchBar.placeholder = impressPageForNotesSearchBarDes
+        controller.searchBar.placeholder = V3L("搜索相对路径")
         controller.searchBar.delegate = self
         controller.searchBar.tintColor = ImpressV3ReviewEnvironment.pilotEnabled
             ? ImpressV3Appearance.accent : titleColor
@@ -530,13 +536,10 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
     private func tableViewSetting()
     {
         view.addSubview(tableView)
-        tableView.backgroundColor = ImpressV3ReviewEnvironment.pilotEnabled
-            ? ImpressV3Appearance.page : bgColor
+        ImpressV3Appearance.styleGroupedTable(tableView)
         tableView.contentInsetAdjustmentBehavior = .automatic
         tableView.translatesAutoresizingMaskIntoConstraints = false
         tableView.showsVerticalScrollIndicator = true
-        tableView.rowHeight = UITableView.automaticDimension
-        tableView.estimatedRowHeight = 65
         let safeArea = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
             tableView.topAnchor.constraint(equalTo: safeArea.topAnchor),
@@ -567,8 +570,8 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
                    titleForHeaderInSection section: Int) -> String? {
         externalMode
             ? ((showingCachedIndex || showingPartialIndex)
-               ? "Vault 索引预览 · 正在验证"
-               : "Obsidian · " + (selectedVaultFolder ?? "全部文档")
+               ? V3L("Vault 索引预览 · 正在验证")
+               : "Obsidian · " + (selectedVaultFolder ?? V3L("全部文档"))
                    + " · " + String(matchedExternalCount) + " 篇（只读）")
             : nil
     }
@@ -583,7 +586,9 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
                 content.text = "加载更多 · 已显示 " + String(visibleExternalNotes.count)
                     + " / " + String(matchedExternalCount)
                 content.textProperties.color = ImpressV3Appearance.accent
+                content.textProperties.font = ImpressV3Appearance.Typography.supporting
                 cell.contentConfiguration = content
+                ImpressV3Appearance.styleGroupedCell(cell)
                 cell.accessibilityIdentifier = "impress.notes.load-more"
                 return cell
             }
@@ -600,6 +605,9 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
             content.image = UIImage(systemName: "doc.text")
             content.imageProperties.tintColor = ImpressV3Appearance.accent
             content.textProperties.numberOfLines = 2
+            content.textProperties.font = ImpressV3Appearance.Typography.body
+            content.secondaryTextProperties.font = ImpressV3Appearance.Typography.supporting
+            content.secondaryTextProperties.color = ImpressV3Appearance.secondaryText
             content.secondaryTextProperties.numberOfLines = 2
             cell.contentConfiguration = content
             ImpressV3Appearance.styleGroupedCell(cell)
@@ -610,7 +618,7 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
             ?? UITableViewCell(style: .subtitle, reuseIdentifier: reuseID)
         if let note = viewModel.getCurrentNote(indexPath: indexPath) {
             var content = UIListContentConfiguration.subtitleCell()
-            content.text = note.mainTitle ?? "无标题"
+            content.text = note.mainTitle ?? V3L("无标题")
             let excerpt = (note.markdownText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let directory = (note.directoryPath ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let preview = excerpt.isEmpty ? "无内容" : String(excerpt.prefix(160))
@@ -651,9 +659,9 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
                     self.navigationController?.pushViewController(
                         ImVaultDocumentController(document: source), animated: true)
                 case let .failure(error):
-                    let alert = UIAlertController(title: "无法读取源笔记",
+                    let alert = UIAlertController(title: V3L("无法读取源笔记"),
                         message: error.localizedDescription, preferredStyle: .alert)
-                    alert.addAction(UIAlertAction(title: "确定", style: .default))
+                    alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
                     self.present(alert, animated: true)
                 }
             }

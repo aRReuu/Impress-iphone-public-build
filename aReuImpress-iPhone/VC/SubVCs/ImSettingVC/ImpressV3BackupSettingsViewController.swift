@@ -15,7 +15,7 @@ final class ImpressV3BackupSettingsViewController: UITableViewController,
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "数据与备份"
+        title = V3L("数据与备份")
         navigationItem.largeTitleDisplayMode = .never
         tableView.backgroundColor = ImpressV3Appearance.page
         tableView.rowHeight = UITableView.automaticDimension
@@ -27,6 +27,12 @@ final class ImpressV3BackupSettingsViewController: UITableViewController,
         tableView.reloadData()
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        title = V3L("数据与备份")
+        tableView.reloadData()
+    }
+
     override func numberOfSections(in tableView: UITableView) -> Int { 3 }
     override func tableView(_ tableView: UITableView,
                             numberOfRowsInSection section: Int) -> Int {
@@ -35,7 +41,7 @@ final class ImpressV3BackupSettingsViewController: UITableViewController,
 
     override func tableView(_ tableView: UITableView,
                             titleForHeaderInSection section: Int) -> String? {
-        ["本地自动备份", "iCloud Drive 副本", "恢复"][section]
+        V3L([V3L("本地自动备份"), V3L("iCloud Drive 副本"), V3L("恢复")][section])
     }
 
     override func tableView(_ tableView: UITableView,
@@ -44,20 +50,20 @@ final class ImpressV3BackupSettingsViewController: UITableViewController,
         case 0:
             let timestamp = UserDefaults.standard.object(
                 forKey: ImpressV3BackupCoordinator.localDateKey) as? Date
-            let last = timestamp.map { Self.dateFormatter.string(from: $0) } ?? "尚无成功备份"
-            return "V3 数据变化后自动生成一致性快照。最近成功：\(last)。" +
-                "不包含旧数据库、外部 Obsidian 原件、API Key 或 Vault 授权。" +
-                "当前 ZIP 未加密，获取文件者可读取其中学习数据。"
+            let last = timestamp.map { Self.dateFormatter.string(from: $0) } ?? V3L("尚无成功备份")
+            return String(format: V3L("V3 数据变化后自动生成一致性快照。最近成功：%@。"), last) +
+                V3L("不包含旧数据库、外部 Obsidian 原件、API Key 或 Vault 授权。") +
+                V3L("当前 ZIP 未加密，获取文件者可读取其中学习数据。")
         case 1:
             let last = UserDefaults.standard.object(
                 forKey: ImpressV3BackupCoordinator.cloudDateKey) as? Date
-            let copied = last.map { Self.dateFormatter.string(from: $0) } ?? "尚未写入"
-            return "首次手动授权文件夹，此后尝试静默复制。最近写入文件提供者：\(copied)。" +
-                "副本为未加密 ZIP，请只授权个人可信目录。系统 iCloud 上传可能延迟；" +
-                "此状态不代表云端服务器已完成同步。"
+            let copied = last.map { Self.dateFormatter.string(from: $0) } ?? V3L("尚未写入")
+            return String(format: V3L("首次手动授权文件夹，此后尝试静默复制。最近写入文件提供者：%@。"), copied) +
+                V3L("副本为未加密 ZIP，请只授权个人可信目录。系统 iCloud 上传可能延迟；") +
+                V3L("此状态不代表云端服务器已完成同步。")
         default:
-            return "恢复前验证归档，并创建当前数据的回滚备份。" +
-                "确认后仅暂存，新数据在下次完全退出并重新启动 App 时载入。"
+            return V3L("恢复前验证归档，并创建当前数据的回滚备份。") +
+                V3L("确认后仅暂存，新数据在下次完全退出并重新启动 App 时载入。")
         }
     }
 
@@ -75,21 +81,21 @@ final class ImpressV3BackupSettingsViewController: UITableViewController,
         let symbol: String
         switch (indexPath.section, indexPath.row) {
         case (0, _):
-            config.text = "立即备份并导出"
-            config.secondaryText = "同时生成本地备份；可保存到文件 App"
+            config.text = V3L("立即备份并导出")
+            config.secondaryText = V3L("同时生成本地备份；可保存到文件 App")
             symbol = "square.and.arrow.up"
         case (1, 0):
             config.text = ImpressV3BackupCoordinator.cloudFolderSelected
-                ? "重新选择备份文件夹" : "连接 iCloud Drive 文件夹"
-            config.secondaryText = "仅在手动授权后自动写入副本"
+                ? V3L("重新选择备份文件夹") : V3L("连接 iCloud Drive 文件夹")
+            config.secondaryText = V3L("仅在手动授权后自动写入副本")
             symbol = "cloud"
         case (1, 1):
-            config.text = "断开自动云盘备份"
-            config.secondaryText = "只清除本 App 的授权，不删除云盘文件"
+            config.text = V3L("断开自动云盘备份")
+            config.secondaryText = V3L("只清除本 App 的授权，不删除云盘文件")
             symbol = "xmark.icloud"
         default:
-            config.text = "从备份恢复"
-            config.secondaryText = "先验证，再确认；不会直接覆盖当前数据库"
+            config.text = V3L("从备份恢复")
+            config.secondaryText = V3L("先验证，再确认；不会直接覆盖当前数据库")
             symbol = "arrow.uturn.backward"
         }
         config.image = UIImage(systemName: symbol)
@@ -138,11 +144,11 @@ final class ImpressV3BackupSettingsViewController: UITableViewController,
 
     private func chooseCloudFolder() {
         let warning = UIAlertController(
-            title: "确认备份隐私范围",
-            message: "Impress 备份 ZIP 当前没有密码加密，任何获得该文件的人都可能读取卡片、复习历史、理解记录与提示词。请选择仅自己可以访问的 iCloud Drive 文件夹。授权后将尝试静默复制，上传到 iCloud 服务器是否完成由系统决定。",
+            title: V3L("确认备份隐私范围"),
+            message: V3L("Impress 备份 ZIP 当前没有密码加密，任何获得该文件的人都可能读取卡片、复习历史、理解记录与提示词。请选择仅自己可以访问的 iCloud Drive 文件夹。授权后将尝试静默复制，上传到 iCloud 服务器是否完成由系统决定。"),
             preferredStyle: .alert)
-        warning.addAction(UIAlertAction(title: "取消", style: .cancel))
-        warning.addAction(UIAlertAction(title: "继续选择文件夹", style: .default) {
+        warning.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        warning.addAction(UIAlertAction(title: V3L("继续选择文件夹"), style: .default) {
             [weak self] _ in self?.presentCloudFolderPicker()
         })
         present(warning, animated: true)
@@ -221,12 +227,12 @@ final class ImpressV3BackupSettingsViewController: UITableViewController,
                     "Obsidian 外部原件不会被修改。\n\n" +
                     "当前数据会先创建回滚备份，恢复在下次重新启动时生效。"
                 let alert = UIAlertController(
-                    title: "确认恢复 Impress 数据？",
+                    title: V3L("确认恢复 Impress 数据？"),
                     message: info, preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "取消", style: .cancel) { _ in
+                alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel) { _ in
                     try? FileManager.default.removeItem(at: archive)
                 })
-                alert.addAction(UIAlertAction(title: "确认恢复", style: .destructive) {
+                alert.addAction(UIAlertAction(title: V3L("确认恢复"), style: .destructive) {
                     [weak self] _ in
                     guard let self else { return }
                     self.stageRestore(archive)
@@ -252,19 +258,19 @@ final class ImpressV3BackupSettingsViewController: UITableViewController,
             do {
                 try await ImpressV3BackupCoordinator.shared.stageRecovery(archive)
                 let alert = UIAlertController(
-                    title: "恢复文件已安全暂存",
-                    message: "请完全退出 Impress，再重新打开。恢复前的数据库备份已保留；不会触碰 Obsidian 源文件。",
+                    title: V3L("恢复文件已安全暂存"),
+                    message: V3L("请完全退出 Impress，再重新打开。恢复前的数据库备份已保留；不会触碰 Obsidian 源文件。"),
                     preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "确定", style: .default))
+                alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
                 present(alert, animated: true)
             } catch { report(error) }
         }
     }
 
     private func report(_ error: Error) {
-        let alert = UIAlertController(title: "操作未完成",
+        let alert = UIAlertController(title: V3L("操作未完成"),
             message: error.localizedDescription, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
         if presentedViewController == nil { present(alert, animated: true) }
     }
 }

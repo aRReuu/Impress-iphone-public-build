@@ -67,17 +67,19 @@ final class ImpressV3PromptLibraryViewController: UITableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "提示词"
+        title = V3L("提示词")
         navigationItem.largeTitleDisplayMode = .never
         tableView.backgroundColor = ImpressV3Appearance.page
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .add, target: self, action: #selector(add))
-        navigationItem.rightBarButtonItem?.accessibilityLabel = "新增提示词"
+        navigationItem.rightBarButtonItem?.accessibilityLabel = V3L("新增提示词")
         reloadTemplates()
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        title = V3L("提示词")
+        navigationItem.rightBarButtonItem?.accessibilityLabel = V3L("新增提示词")
         reloadTemplates()
     }
 
@@ -85,7 +87,7 @@ final class ImpressV3PromptLibraryViewController: UITableViewController {
         templates = ImpressV3PromptLibrary.load()
         tableView.reloadData()
         let empty = UILabel()
-        empty.text = "暂无提示词。点右上角 ＋ 创建。"
+        empty.text = V3L("暂无提示词。点右上角 ＋ 创建。")
         empty.textColor = ImpressV3Appearance.secondaryText
         empty.font = ImpressV3Appearance.Typography.body
         empty.numberOfLines = 0
@@ -98,11 +100,11 @@ final class ImpressV3PromptLibraryViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView,
                             titleForHeaderInSection section: Int) -> String? {
-        "本机保存 · 可编辑、可复制"
+        V3L("本机保存 · 可编辑、可复制")
     }
     override func tableView(_ tableView: UITableView,
                             titleForFooterInSection section: Int) -> String? {
-        "网页聊天不会自动收到提示词或私人笔记。在网页聊天中选择提示词后，会先复制到剪贴板，由你自行粘贴和发送。"
+        V3L("网页聊天不会自动收到提示词或私人笔记。在网页聊天中选择提示词后，会先复制到剪贴板，由你自行粘贴和发送。")
     }
 
     override func tableView(_ tableView: UITableView,
@@ -133,7 +135,7 @@ final class ImpressV3PromptLibraryViewController: UITableViewController {
                             trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath)
     -> UISwipeActionsConfiguration? {
         let id = templates[indexPath.row].id
-        let copy = UIContextualAction(style: .normal, title: "复制") { [weak self] _, _, done in
+        let copy = UIContextualAction(style: .normal, title: V3L("复制")) { [weak self] _, _, done in
             guard let self,
                   let selected = self.templates.first(where: { $0.id == id }) else {
                 done(false); return
@@ -142,7 +144,7 @@ final class ImpressV3PromptLibraryViewController: UITableViewController {
             done(true)
         }
         copy.backgroundColor = ImpressV3Appearance.mutedAction
-        let delete = UIContextualAction(style: .destructive, title: "删除") { [weak self] _, _, done in
+        let delete = UIContextualAction(style: .destructive, title: V3L("删除")) { [weak self] _, _, done in
             guard let self else { done(false); return }
             let changed = self.templates.filter { $0.id != id }
             do {
@@ -181,10 +183,10 @@ final class ImpressV3PromptLibraryViewController: UITableViewController {
     }
 
     private func showFailure(_ error: Error) {
-        let alert = UIAlertController(title: "提示词未保存",
+        let alert = UIAlertController(title: V3L("提示词未保存"),
                                       message: error.localizedDescription,
                                       preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
         present(alert, animated: true)
     }
 }
@@ -205,13 +207,13 @@ final class ImpressV3PromptEditorViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = original == nil ? "新增提示词" : "编辑提示词"
+        title = original == nil ? V3L("新增提示词") : V3L("编辑提示词")
         navigationItem.largeTitleDisplayMode = .never
         view.backgroundColor = ImpressV3Appearance.page
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
         navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: "保存", style: .done, target: self, action: #selector(save))
+            title: V3L("保存"), style: .done, target: self, action: #selector(save))
         let scroll = UIScrollView()
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.keyboardDismissMode = .interactive
@@ -237,18 +239,18 @@ final class ImpressV3PromptEditorViewController: UIViewController {
             scroll.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor).isActive = true
         }
         let titleLabel = UILabel()
-        titleLabel.text = "名称"
+        titleLabel.text = V3L("名称")
         titleLabel.font = ImpressV3Appearance.Typography.heading
         stack.addArrangedSubview(titleLabel)
         ImpressV3Appearance.styleTextField(titleField)
-        titleField.placeholder = "例如：费曼总结"
+        titleField.placeholder = V3L("例如：费曼总结")
         titleField.text = original?.title
-        titleField.accessibilityLabel = "提示词名称"
+        titleField.accessibilityLabel = V3L("提示词名称")
         titleField.heightAnchor.constraint(
             greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.controlHeight).isActive = true
         stack.addArrangedSubview(titleField)
         let instruction = UILabel()
-        instruction.text = "内容"
+        instruction.text = V3L("内容")
         instruction.font = ImpressV3Appearance.Typography.heading
         stack.addArrangedSubview(instruction)
         contentView.font = ImpressV3Appearance.Typography.body
@@ -259,11 +261,11 @@ final class ImpressV3PromptEditorViewController: UIViewController {
         contentView.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding,
                                                    bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
         contentView.text = original?.content ?? ""
-        contentView.accessibilityLabel = "可复制的提示词正文"
+        contentView.accessibilityLabel = V3L("可复制的提示词正文")
         contentView.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.promptEditorMinHeight).isActive = true
         stack.addArrangedSubview(contentView)
         let note = UILabel()
-        note.text = "只会在本机保存。调用时复制内容，不会自动发送到网页。"
+        note.text = V3L("只会在本机保存。调用时复制内容，不会自动发送到网页。")
         note.textColor = ImpressV3Appearance.secondaryText
         note.font = ImpressV3Appearance.Typography.footnote
         note.numberOfLines = 0
@@ -279,9 +281,9 @@ final class ImpressV3PromptEditorViewController: UIViewController {
             try callback(next)
             dismiss(animated: true)
         } catch {
-            let alert = UIAlertController(title: "无法保存", message: error.localizedDescription,
+            let alert = UIAlertController(title: V3L("无法保存"), message: error.localizedDescription,
                                           preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "确定", style: .default))
+            alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
             present(alert, animated: true)
         }
     }
@@ -290,10 +292,10 @@ final class ImpressV3PromptEditorViewController: UIViewController {
         let changed = titleField.text != (original?.title ?? "") ||
             contentView.text != (original?.content ?? "")
         guard changed else { dismiss(animated: true); return }
-        let alert = UIAlertController(title: "放弃未保存的提示词？", message: nil,
+        let alert = UIAlertController(title: V3L("放弃未保存的提示词？"), message: nil,
                                       preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "继续编辑", style: .cancel))
-        alert.addAction(UIAlertAction(title: "放弃", style: .destructive) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: V3L("继续编辑"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("放弃"), style: .destructive) { [weak self] _ in
             self?.dismiss(animated: true)
         })
         present(alert, animated: true)

@@ -100,7 +100,8 @@ extension SceneDelegate
     {
         let tabBarVC = ImTabBarViewController()
         window?.rootViewController = tabBarVC
-        window?.backgroundColor = bgColor
+        window?.backgroundColor = ImpressV3Appearance.page
+        ImpressV3Appearance.applyAppearance(to: window)
         window?.makeKeyAndVisible()
     }
     
@@ -120,6 +121,7 @@ extension SceneDelegate
             message.centerYAnchor.constraint(equalTo: unavailableVC.view.centerYAnchor)
         ])
         window?.rootViewController = unavailableVC
+        ImpressV3Appearance.applyAppearance(to: window)
         window?.makeKeyAndVisible()
     }
 

@@ -22,13 +22,13 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "卡片集"
+        title = V3L("卡片集")
         navigationItem.largeTitleDisplayMode = .always
         tableView.backgroundColor = ImpressV3Appearance.page
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 72
 
-        searchController.searchBar.placeholder = "搜索问题、答案、来源"
+        searchController.searchBar.placeholder = V3L("搜索问题、答案、来源")
         searchController.searchResultsUpdater = self
         searchController.obscuresBackgroundDuringPresentation = false
         navigationItem.searchController = searchController
@@ -93,8 +93,8 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
         }
         let label = UILabel()
         label.text = searchController.searchBar.text?.isEmpty == false
-            ? "没有找到匹配的卡片"
-            : "暂无卡片，点击右上角新建"
+            ? V3L("没有找到匹配的卡片")
+            : V3L("暂无卡片，点击右上角新建")
         label.textColor = ImpressV3Appearance.secondaryText
         label.textAlignment = .center
         label.font = ImpressV3Appearance.Typography.supporting
@@ -118,13 +118,13 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
         let symbol: String
         switch item.cardType {
         case CardType.multipleChoice.rawValue:
-            kind = "选择题"; symbol = "list.bullet.rectangle"
+            kind = V3L("选择题"); symbol = "list.bullet.rectangle"
         case CardType.image.rawValue:
-            kind = "图片"; symbol = "photo"
+            kind = V3L("图片"); symbol = "photo"
         default:
-            kind = "问答"; symbol = "text.book.closed"
+            kind = V3L("问答"); symbol = "text.book.closed"
         }
-        let status = item.isSuspended ? "已暂停" : "参与复习"
+        let status = item.isSuspended ? V3L("已暂停") : V3L("参与复习")
         content.secondaryText = [kind, status, item.sourceNotePath]
             .compactMap { $0 }.joined(separator: " · ")
         content.textProperties.numberOfLines = 2
@@ -228,11 +228,11 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
 
     private func confirmDelete(_ item: WCDBV3ManagedCard) {
         let alert = UIAlertController(
-            title: "永久删除卡片？",
-            message: "这将同时删除该卡片的 FSRS 复习事件。外部 Obsidian 原始笔记不会被修改。",
+            title: V3L("永久删除卡片？"),
+            message: V3L("这将同时删除该卡片的 FSRS 复习事件。外部 Obsidian 原始笔记不会被修改。"),
             preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-        alert.addAction(UIAlertAction(title: "删除", style: .destructive) {
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("删除"), style: .destructive) {
             [weak self] _ in
             guard let self else { return }
             Task {
@@ -252,13 +252,13 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
     ) -> UISwipeActionsConfiguration? {
         guard cards.indices.contains(indexPath.row) else { return nil }
         let item = cards[indexPath.row]
-        let delete = UIContextualAction(style: .destructive, title: "删除") {
+        let delete = UIContextualAction(style: .destructive, title: V3L("删除")) {
             [weak self] _, _, finish in
             self?.confirmDelete(item)
             finish(false)
         }
         let pause = UIContextualAction(style: .normal,
-            title: item.isSuspended ? "恢复" : "暂停") {
+            title: item.isSuspended ? V3L("恢复") : V3L("暂停")) {
             [weak self] _, _, finish in
             self?.changeSuspension(item)
             finish(true)
@@ -269,9 +269,9 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
     }
 
     private func showError(_ error: Error) {
-        let alert = UIAlertController(title: "操作未完成",
+        let alert = UIAlertController(title: V3L("操作未完成"),
             message: error.localizedDescription, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
         if presentedViewController == nil { present(alert, animated: true) }
     }
 }

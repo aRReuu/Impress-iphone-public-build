@@ -381,22 +381,79 @@ final class ImpressV3DeepSeekHandoffTests: XCTestCase {
 // with prompt-library / reminder choices, not legacy chat and model rows.
 @MainActor
 final class ImpressR041NativeNavigationTests: XCTestCase {
-    func testSettingsHasThreeNativeGroupedSectionsIncludingDataSafety() {
+    func testSettingsIncludesAppearanceLanguageAndDataSafety() {
         let settings = ImpressV3SettingsHubViewController()
         settings.loadViewIfNeeded()
-        XCTAssertEqual(settings.numberOfSections(in: settings.tableView), 3)
+        XCTAssertEqual(settings.numberOfSections(in: settings.tableView), 4)
         XCTAssertEqual(settings.navigationItem.largeTitleDisplayMode, .always)
         // R04.2 added data safety as a distinct native settings group.
-        for (section, title) in ["提示词", "复习通知", "数据与备份"].enumerated() {
+        for (section, title) in ["提示词", "复习通知", "显示模式", "数据与备份"].enumerated() {
             XCTAssertEqual(settings.tableView(settings.tableView,
-                              numberOfRowsInSection: section), 1)
+                              numberOfRowsInSection: section), section == 2 ? 2 : 1)
             let cell = settings.tableView(settings.tableView,
                               cellForRowAt: IndexPath(row: 0, section: section))
             let content = cell.contentConfiguration as? UIListContentConfiguration
-            XCTAssertEqual(content?.text, title)
+            XCTAssertEqual(content?.text, V3L(title))
         }
+        let language = settings.tableView(settings.tableView,
+            cellForRowAt: IndexPath(row: 1, section: 2))
+        XCTAssertEqual((language.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("应用语言"))
         XCTAssertEqual(settings.tableView(settings.tableView,
-                          titleForHeaderInSection: 2), "数据安全")
+                          titleForHeaderInSection: 3), V3L("数据安全"))
+    }
+
+    func testAppearanceModesPersistAndApplyOnlyToRequestedWindow() throws {
+        let suite = "test.appearance." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        XCTAssertEqual(ImpressV3Appearance.selectedMode(in: defaults), .system)
+        ImpressV3Appearance.setAppearance(.dark, defaults: defaults, windows: [window])
+        XCTAssertEqual(window.overrideUserInterfaceStyle, .dark)
+        XCTAssertEqual(ImpressV3Appearance.selectedMode(in: defaults), .dark)
+        ImpressV3Appearance.setAppearance(.light, defaults: defaults, windows: [window])
+        XCTAssertEqual(window.overrideUserInterfaceStyle, .light)
+        ImpressV3Appearance.setAppearance(.system, defaults: defaults, windows: [window])
+        XCTAssertEqual(window.overrideUserInterfaceStyle, .unspecified)
+        XCTAssertEqual(ImpressV3Appearance.selectedMode(in: defaults), .system)
+    }
+
+    func testThreeUserLanguagesPersistWithoutEditingSavedContent() throws {
+        let suite = "test.interface.language." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertEqual(ImpressV3Language.selected(in: defaults), .simplified)
+        XCTAssertEqual(ImpressV3Language.text("闪卡", language: .traditional), "閃卡")
+        XCTAssertEqual(ImpressV3Language.text("闪卡", language: .english), "Flashcards")
+        XCTAssertEqual(ImpressV3Language.text("数据与备份", language: .english),
+                       "Data & Backup")
+        XCTAssertEqual(ImpressV3Language.text("用户保存的自定义笔记", language: .english),
+                       "用户保存的自定义笔记")
+        let controller = ImpressV3LanguageSettingsViewController(defaults: defaults)
+        controller.loadViewIfNeeded()
+        XCTAssertEqual(controller.tableView.numberOfRows(inSection: 0), 3)
+        controller.tableView(controller.tableView,
+            didSelectRowAt: IndexPath(row: 2, section: 0))
+        XCTAssertEqual(ImpressV3Language.selected(in: defaults), .english)
+        let selected = controller.tableView(controller.tableView,
+            cellForRowAt: IndexPath(row: 2, section: 0))
+        XCTAssertEqual(selected.accessoryType, .checkmark)
+        controller.tableView(controller.tableView,
+            didSelectRowAt: IndexPath(row: 1, section: 0))
+        XCTAssertEqual(ImpressV3Language.selected(in: defaults), .traditional)
+        controller.tableView(controller.tableView,
+            didSelectRowAt: IndexPath(row: 0, section: 0))
+        XCTAssertEqual(ImpressV3Language.selected(in: defaults), .simplified)
+    }
+
+    func testVaultListMatchesSettingsNativeInsetGroupedAppearance() {
+        let notes = ImpressNoteListTableViewController()
+        notes.loadViewIfNeeded()
+        XCTAssertEqual(notes.tableView.style, .insetGrouped)
+        XCTAssertEqual(notes.tableView.backgroundColor, ImpressV3Appearance.page)
+        XCTAssertEqual(notes.tableView.estimatedRowHeight,
+                       ImpressV3Appearance.Metrics.noteRowEstimatedHeight)
     }
 
     func testDirectWebBrowserDoesNotAutoSendPrivateQuestions() {

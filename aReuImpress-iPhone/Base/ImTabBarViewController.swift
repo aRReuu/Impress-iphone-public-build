@@ -13,6 +13,20 @@ class ImTabBarViewController: UITabBarController
     {
         super.viewDidLoad()
         tabBarSetting()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(refreshLanguage),
+            name: ImpressV3Language.didChange, object: nil)
+    }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    @objc private func refreshLanguage() {
+        guard let navigation = viewControllers?.compactMap({ $0 as? UINavigationController }),
+              navigation.count == 3 else { return }
+        let keys = ["闪卡", "校准", "设置"]
+        for (index, item) in navigation.enumerated() {
+            item.tabBarItem.title = V3L(keys[index])
+        }
     }
 
     override func viewDidAppear(_ animated: Bool)
@@ -25,20 +39,20 @@ class ImTabBarViewController: UITabBarController
     {
         let cardVC = ImpressV3ReviewViewController()
         let cardNav = ImNavigationViewController(rootViewController: cardVC)
-        cardNav.tabBarItem.title = "闪卡"
+        cardNav.tabBarItem.title = V3L("闪卡")
         cardNav.tabBarItem.image = UIImage(systemName: "square.stack.3d.up")
         cardNav.tabBarItem.selectedImage = UIImage(systemName: "square.stack.3d.up.fill")
         
         // Dedicated calibration tab; preserve all existing roots.
         let calibrationVC = ImpressCalibrationViewController()
         let calibrationNav = ImNavigationViewController(rootViewController: calibrationVC)
-        calibrationNav.tabBarItem.title = "校准"
+        calibrationNav.tabBarItem.title = V3L("校准")
         calibrationNav.tabBarItem.image = UIImage(systemName: "chart.xyaxis.line")
         calibrationNav.tabBarItem.selectedImage = UIImage(systemName: "chart.xyaxis.line")
 
         let settingsVC = ImpressV3SettingsHubViewController()
         let settingsNav = ImNavigationViewController(rootViewController: settingsVC)
-        settingsNav.tabBarItem.title = "设置"
+        settingsNav.tabBarItem.title = V3L("设置")
         settingsNav.tabBarItem.image = UIImage(systemName: "gearshape")
         settingsNav.tabBarItem.selectedImage = UIImage(systemName: "gearshape.fill")
 

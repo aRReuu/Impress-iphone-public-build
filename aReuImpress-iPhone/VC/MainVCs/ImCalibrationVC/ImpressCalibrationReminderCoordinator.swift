@@ -145,8 +145,8 @@ actor ImpressCalibrationReminderReconciler {
         for key in desired.keys.sorted() where !existingIDs.contains(key) {
             guard let slot = desired[key] else { continue }
             let content = UNMutableNotificationContent()
-            content.title = "今日校准尚未完成"
-            content.body = "还有每日指标待评估。完成全部五项后，今天的后续提醒会停止。"
+            content.title = V3L("今日校准尚未完成")
+            content.body = V3L("还有每日指标待评估。完成全部五项后，今天的后续提醒会停止。")
             content.sound = .default
             content.badge = 1
             content.threadIdentifier = "impress.calibration"

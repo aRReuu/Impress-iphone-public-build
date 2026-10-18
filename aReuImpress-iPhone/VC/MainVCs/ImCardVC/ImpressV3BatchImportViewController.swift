@@ -69,7 +69,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
                                                 UITextViewDelegate {
     var onCommit: (([WCDBV3CardInput]) async throws -> Void)?
 
-    private let formatPicker = UISegmentedControl(items: ["文本", "CSV", "TSV", "MD"])
+    private let formatPicker = UISegmentedControl(items: [V3L("文本"), "CSV", "TSV", "MD"])
     private let editor = UITextView()
     private let sourceLabel = UILabel()
     private var authorizedIdentity: ImVaultFileIdentity?
@@ -77,13 +77,13 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "批量导入"
+        title = V3L("批量导入")
         navigationItem.largeTitleDisplayMode = .never
         view.backgroundColor = ImpressV3Appearance.page
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
         navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: "预览", style: .done, target: self, action: #selector(preview))
+            title: V3L("预览"), style: .done, target: self, action: #selector(preview))
         let scroll = UIScrollView()
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.keyboardDismissMode = .interactive
@@ -110,7 +110,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
         }
 
         let intro = UILabel()
-        intro.text = "选择输入格式，在本机解析。预览和逐题校验通过后才会写入闪卡数据库。"
+        intro.text = V3L("选择输入格式，在本机解析。预览和逐题校验通过后才会写入闪卡数据库。")
         intro.numberOfLines = 0
         intro.font = ImpressV3Appearance.Typography.supporting
         intro.adjustsFontForContentSizeCategory = true
@@ -118,21 +118,21 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
         stack.addArrangedSubview(intro)
         formatPicker.selectedSegmentIndex = 0
         ImpressV3Appearance.styleSegmentedControl(formatPicker, prominent: false)
-        formatPicker.accessibilityLabel = "导入格式"
-        formatPicker.accessibilityHint = "MD 表示 Markdown；选择一种格式后，输入文本并预览。"
+        formatPicker.accessibilityLabel = V3L("导入格式")
+        formatPicker.accessibilityHint = V3L("MD 表示 Markdown；选择一种格式后，输入文本并预览。")
         stack.addArrangedSubview(ImpressV3Appearance.segmentedRow(formatPicker))
         let buttons = UIStackView()
         buttons.axis = .horizontal
         buttons.spacing = ImpressV3Appearance.Metrics.rowSpacing
         buttons.distribution = .fillEqually
-        buttons.addArrangedSubview(actionButton("选择文件", icon: "doc", selector: #selector(chooseFile)))
-        buttons.addArrangedSubview(actionButton("Obsidian 笔记", icon: "folder", selector: #selector(chooseVault)))
+        buttons.addArrangedSubview(actionButton(V3L("选择文件"), icon: "doc", selector: #selector(chooseFile)))
+        buttons.addArrangedSubview(actionButton(V3L("Obsidian 笔记"), icon: "folder", selector: #selector(chooseVault)))
         stack.addArrangedSubview(buttons)
         sourceLabel.numberOfLines = 0
         sourceLabel.font = ImpressV3Appearance.Typography.caption
         sourceLabel.adjustsFontForContentSizeCategory = true
         sourceLabel.textColor = ImpressV3Appearance.secondaryText
-        sourceLabel.text = "粘贴文本，或选择 CSV / TSV / Markdown 文件。"
+        sourceLabel.text = V3L("粘贴文本，或选择 CSV / TSV / Markdown 文件。")
         stack.addArrangedSubview(sourceLabel)
         editor.font = ImpressV3Appearance.Typography.body
         editor.adjustsFontForContentSizeCategory = true
@@ -141,7 +141,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
         editor.layer.cornerRadius = ImpressV3Appearance.Radius.field
         editor.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding,
                                                   bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
-        editor.accessibilityLabel = "本地批量导入原始文本"
+        editor.accessibilityLabel = V3L("本地批量导入原始文本")
         editor.delegate = self
         stack.addArrangedSubview(editor)
         editor.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.batchEditorMinHeight).isActive = true
@@ -150,7 +150,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
         hint.font = ImpressV3Appearance.Typography.footnote
         hint.adjustsFontForContentSizeCategory = true
         hint.textColor = ImpressV3Appearance.secondaryText
-        hint.text = "文本/Markdown：Q: 问题、A: 答案。CSV/TSV：question、answer；选择题另提供 type=choice、options=A|B|C、correct=1,3（从 1 起）。无法识别的内容保留原文供修正。"
+        hint.text = V3L("文本/Markdown：Q: 问题、A: 答案。CSV/TSV：question、answer；选择题另提供 type=choice、options=A|B|C、correct=1,3（从 1 起）。无法识别的内容保留原文供修正。")
         stack.addArrangedSubview(hint)
     }
 
@@ -165,7 +165,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
     func textViewDidChange(_ textView: UITextView) {
         if authorizedIdentity != nil {
             authorizedIdentity = nil
-            sourceLabel.text = "已修改输入文本，解除原 Obsidian 来源关联，避免来源错配。"
+            sourceLabel.text = V3L("已修改输入文本，解除原 Obsidian 来源关联，避免来源错配。")
         }
     }
 
@@ -202,7 +202,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
             case "md", "markdown": formatPicker.selectedSegmentIndex = 3
             default: formatPicker.selectedSegmentIndex = 0
             }
-        } catch { showError("无法读取文件", error.localizedDescription) }
+        } catch { showError(V3L("无法读取文件"), error.localizedDescription) }
     }
 
     @objc private func chooseVault() {
@@ -218,11 +218,11 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
                 switch result {
                 case .success(let document):
                     guard document.identity == identity else {
-                        self.showError("来源不一致", "授权笔记的身份发生变化。")
+                        self.showError(V3L("来源不一致"), V3L("授权笔记的身份发生变化。"))
                         return
                     }
                     guard document.sourceBytes.count <= ImpressBatchParser.maximumBytes else {
-                        self.showError("文本过长", "导入文本不能超过 2MB。")
+                        self.showError(V3L("文本过长"), V3L("导入文本不能超过 2MB。"))
                         return
                     }
                     self.editor.text = document.markdown
@@ -230,7 +230,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
                     self.formatPicker.selectedSegmentIndex = 3
                     self.sourceLabel.text = identity.relativePath + " · 授权 Vault（仅读）"
                 case .failure(let error):
-                    self.showError("无法读取笔记", error.localizedDescription)
+                    self.showError(V3L("无法读取笔记"), error.localizedDescription)
                 }
             }
         }
@@ -245,7 +245,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
                              ? formatPicker.selectedSegmentIndex : 0]
         let parsed = ImpressBatchParser.parse(editor.text, as: format)
         guard !parsed.isEmpty else {
-            showError("没有候选卡片", "先粘贴或选择包含问题和答案的文本。")
+            showError(V3L("没有候选卡片"), V3L("先粘贴或选择包含问题和答案的文本。"))
             return
         }
         do {
@@ -254,15 +254,15 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
             let preview = ImpressV3BatchPreviewViewController(rows: rows)
             preview.onCommit = onCommit
             navigationController?.pushViewController(preview, animated: true)
-        } catch { showError("来源身份无效", error.localizedDescription) }
+        } catch { showError(V3L("来源身份无效"), error.localizedDescription) }
     }
 
     @objc private func cancel() {
         guard editor.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            let alert = UIAlertController(title: "放弃这次导入？",
-                message: "未确认的候选不会写入数据库，也不会修改来源笔记。", preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "继续编辑", style: .cancel))
-            alert.addAction(UIAlertAction(title: "放弃", style: .destructive) { [weak self] _ in
+            let alert = UIAlertController(title: V3L("放弃这次导入？"),
+                message: V3L("未确认的候选不会写入数据库，也不会修改来源笔记。"), preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: V3L("继续编辑"), style: .cancel))
+            alert.addAction(UIAlertAction(title: V3L("放弃"), style: .destructive) { [weak self] _ in
                 self?.dismiss(animated: true)
             })
             present(alert, animated: true)
@@ -273,7 +273,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
 
     private func showError(_ title: String, _ message: String) {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
         present(alert, animated: true)
     }
 }
@@ -287,7 +287,7 @@ final class ImpressV3BatchVaultPickerViewController: UITableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "选择已授权笔记"
+        title = V3L("选择已授权笔记")
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
         search.obscuresBackgroundDuringPresentation = false
@@ -300,9 +300,9 @@ final class ImpressV3BatchVaultPickerViewController: UITableViewController {
                 self.notes = index.notes
                 self.filterNotes()
             case .failure(let error):
-                let alert = UIAlertController(title: "Vault 未授权或无法读取",
+                let alert = UIAlertController(title: V3L("Vault 未授权或无法读取"),
                     message: error.localizedDescription, preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "确定", style: .default))
+                alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
                 self.present(alert, animated: true)
             }
         }
@@ -363,12 +363,12 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "导入预览"
+        title = V3L("导入预览")
         navigationItem.largeTitleDisplayMode = .never
         tableView.backgroundColor = ImpressV3Appearance.page
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 78
-        let commit = UIBarButtonItem(title: "全部导入", style: .done,
+        let commit = UIBarButtonItem(title: V3L("全部导入"), style: .done,
                                      target: self, action: #selector(commitBatch))
         commitButton = commit
         navigationItem.rightBarButtonItem = commit
@@ -386,7 +386,7 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
         var seen = Set<String>()
         return rows.map { candidate in
             if let error = candidate.problem { return error }
-            if !seen.insert(key(for: candidate)).inserted { return "与另一条候选问题重复。" }
+            if !seen.insert(key(for: candidate)).inserted { return V3L("与另一条候选问题重复。") }
             return nil
         }
     }
@@ -429,7 +429,7 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
         cell.contentConfiguration = cfg
         ImpressV3Appearance.styleGroupedCell(cell)
         cell.accessoryType = .detailDisclosureButton
-        cell.accessibilityHint = "点按编辑本题，详情按钮查看原文与原始错误，左滑移除。"
+        cell.accessibilityHint = V3L("点按编辑本题，详情按钮查看原文与原始错误，左滑移除。")
         return cell
     }
 
@@ -456,9 +456,9 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
         body.layer.cornerRadius = ImpressV3Appearance.Radius.compactField
         body.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding,
                                               bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
-        body.accessibilityLabel = "原始导入文本及解析问题"
+        body.accessibilityLabel = V3L("原始导入文本及解析问题")
         let diagnostics = record.issues.isEmpty
-            ? "原始解析没有错误。"
+            ? V3L("原始解析没有错误。")
             : record.issues.map { "• " + $0 }.joined(separator: "\n")
         body.text = "原始解析信息\n" + diagnostics + "\n\n原始文本（只读）\n" + record.raw
         body.translatesAutoresizingMaskIntoConstraints = false
@@ -504,10 +504,10 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
         guard !saving, !rows.isEmpty, problems().allSatisfy({ $0 == nil }),
               onCommit != nil else { return }
         let alert = UIAlertController(title: "确认导入 \(rows.count) 张卡片？",
-            message: "先确保所有候选正确。本次操作使用一次 WCDB 事务，源文件不会改变。",
+            message: V3L("先确保所有候选正确。本次操作使用一次 WCDB 事务，源文件不会改变。"),
             preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "返回预览", style: .cancel))
-        alert.addAction(UIAlertAction(title: "确认导入", style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: V3L("返回预览"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("确认导入"), style: .default) { [weak self] _ in
             self?.performBatchCommit()
         })
         present(alert, animated: true)
@@ -519,7 +519,7 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
         let inputs: [WCDBV3CardInput]
         do { inputs = try rows.map { try $0.draft.validatedInput() } }
         catch {
-            showError("预览校验失败", error.localizedDescription)
+            showError(V3L("预览校验失败"), error.localizedDescription)
             return
         }
         saving = true
@@ -534,21 +534,21 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
                 let alert = UIAlertController(title: "成功导入 \(inputs.count) 张卡片",
                     message: "问答 \(qa) 张 · 选择题 \(choices) 张 · 图片 \(images) 张。\n当前复习队列未重置；原始文件未修改。",
                     preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "完成", style: .default) { [weak self] _ in
+                alert.addAction(UIAlertAction(title: V3L("完成"), style: .default) { [weak self] _ in
                     self?.dismiss(animated: true)
                 })
                 self.present(alert, animated: true)
             } catch {
                 self.saving = false
                 self.refreshValidation()
-                self.showError("导入未确认完成", "请先核对卡片列表，再决定是否重试。整批事务不会持久化部分记录。\n" + error.localizedDescription)
+                self.showError(V3L("导入未确认完成"), "请先核对卡片列表，再决定是否重试。整批事务不会持久化部分记录。\n" + error.localizedDescription)
             }
         }
     }
 
     private func showError(_ title: String, _ message: String) {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
         present(alert, animated: true)
     }
 }

@@ -1182,13 +1182,81 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         XCTAssertEqual(try ImpressV3LearningJournal.load().filter { $0.id == id }.count, 1)
     }
 
+    func testUnderstandingAnswerEditsPreserveOriginalFeedbackAndHistory() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "ImpressLearningEdit-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root,
+                                                withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let path = root.appendingPathComponent("LearningEntry-v1.json")
+        let id = UUID()
+        let original = ImpressV3LearningEntry(
+            id: id, cardID: UUID(), question: "Explain the mechanism",
+            userAnswer: "First understanding", createdAt: Date(timeIntervalSince1970: 1_720_000_000),
+            aiEvaluation: "Evaluation belongs to the original submission")
+        try JSONEncoder().encode([original]).write(to: path, options: .atomic)
+        let first = try ImpressV3LearningJournal.testUpdateAnswer(
+            id: id, expectedAnswer: original.userAnswer,
+            editedAnswer: "Improved understanding", at: path,
+            now: Date(timeIntervalSince1970: 1_730_000_000))
+        XCTAssertEqual(first.userAnswer, "Improved understanding")
+        XCTAssertEqual(first.revisions?.count, 1)
+        XCTAssertEqual(first.revisions?.first?.priorAnswer, original.userAnswer)
+        XCTAssertEqual(first.aiEvaluation, original.aiEvaluation)
+        XCTAssertEqual(first.createdAt, original.createdAt)
+        XCTAssertEqual(first.cardID, original.cardID)
+        let persisted = try JSONDecoder().decode(
+            [ImpressV3LearningEntry].self, from: Data(contentsOf: path))
+        XCTAssertEqual(persisted.count, 1)
+        XCTAssertEqual(persisted.first?.revisions?.first?.priorAnswer, original.userAnswer)
+
+        let beforeFailure = try Data(contentsOf: path)
+        XCTAssertThrowsError(try ImpressV3LearningJournal.testUpdateAnswer(
+            id: id, expectedAnswer: original.userAnswer,
+            editedAnswer: "Overwrite", at: path)) { error in
+                guard case ImpressV3LearningEditError.outdated = error else {
+                    XCTFail("Expected stale revision conflict"); return
+                }
+            }
+        XCTAssertThrowsError(try ImpressV3LearningJournal.testUpdateAnswer(
+            id: id, expectedAnswer: first.userAnswer,
+            editedAnswer: "   ", at: path))
+        XCTAssertEqual(try Data(contentsOf: path), beforeFailure)
+        let unchanged = try ImpressV3LearningJournal.testUpdateAnswer(
+            id: id, expectedAnswer: first.userAnswer,
+            editedAnswer: first.userAnswer, at: path)
+        XCTAssertEqual(unchanged.revisions?.count, 1)
+        let second = try ImpressV3LearningJournal.testUpdateAnswer(
+            id: id, expectedAnswer: first.userAnswer,
+            editedAnswer: "Third version", at: path)
+        XCTAssertEqual(second.revisions?.map(\.priorAnswer),
+                       [original.userAnswer, first.userAnswer])
+        XCTAssertEqual(second.aiEvaluation, original.aiEvaluation)
+    }
+
+    func testUnderstandingDetailIsReadOnlyUntilExplicitEditorOpens() {
+        let entry = ImpressV3LearningEntry(
+            id: UUID(), cardID: UUID(), question: "Q",
+            userAnswer: "Current answer", createdAt: Date(), aiEvaluation: nil)
+        let viewer = ImpressV3UnderstandingDetailViewController(entry: entry)
+        viewer.loadViewIfNeeded()
+        XCTAssertEqual(viewer.navigationItem.rightBarButtonItem?.title, V3L("编辑"))
+        XCTAssertEqual(viewer.tableView.numberOfSections, 3)
+        let cell = viewer.tableView(viewer.tableView,
+            cellForRowAt: IndexPath(row: 0, section: 1))
+        XCTAssertEqual((cell.contentConfiguration as? UIListContentConfiguration)?.text,
+                       "Current answer")
+        XCTAssertEqual(viewer.tableView.style, .insetGrouped)
+    }
+
     func testModernSettingsIncludesDataAndBackup() {
         let settings = ImpressV3SettingsHubViewController()
         settings.loadViewIfNeeded()
-        XCTAssertEqual(settings.tableView.numberOfSections, 3)
+        XCTAssertEqual(settings.tableView.numberOfSections, 4)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 0), 1)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 1), 1)
-        XCTAssertEqual(settings.tableView.numberOfRows(inSection: 2), 1)
+        XCTAssertEqual(settings.tableView.numberOfRows(inSection: 2), 2)
+        XCTAssertEqual(settings.tableView.numberOfRows(inSection: 3), 1)
         let prompts = settings.tableView(settings.tableView,
             cellForRowAt: IndexPath(row: 0, section: 0))
         XCTAssertEqual(prompts.contentConfiguration is UIListContentConfiguration, true)
