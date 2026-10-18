@@ -956,7 +956,13 @@ final class ImVaultSyncIntegrationTests: XCTestCase {
         let textViews = viewer.view.subviews.compactMap { $0 as? UITextView }
         XCTAssertEqual(textViews.count, 1)
         XCTAssertFalse(textViews[0].isEditable)
-        XCTAssertEqual(viewer.navigationItem.rightBarButtonItems?.count, 2)
+        // The third action generates questions from the authorized, read-only
+        // document. Neither the viewer nor this navigation mutates source bytes.
+        XCTAssertEqual(viewer.navigationItem.rightBarButtonItems?.count, 3)
+        XCTAssertEqual(Set(viewer.navigationItem.rightBarButtonItems?
+            .compactMap(\.accessibilityIdentifier) ?? []),
+            Set(["impress.notes.draft", "impress.notes.source-toggle",
+                 "impress.notes.generate-questions"]))
         XCTAssertEqual(try Data(contentsOf: file), original)
     }
 
@@ -1253,14 +1259,21 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         let settings = ImpressV3SettingsHubViewController()
         settings.loadViewIfNeeded()
         XCTAssertEqual(settings.tableView.numberOfSections, 5)
-        XCTAssertEqual(settings.tableView.numberOfRows(inSection: 0), 1)
+        // AI Services and local prompts share Content Tools. Appearance,
+        // reminder, backup and calibration routes remain unchanged.
+        XCTAssertEqual(settings.tableView.numberOfRows(inSection: 0), 2)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 1), 1)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 2), 2)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 3), 1)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 4), 1)
         let prompts = settings.tableView(settings.tableView,
             cellForRowAt: IndexPath(row: 0, section: 0))
-        XCTAssertEqual(prompts.contentConfiguration is UIListContentConfiguration, true)
+        XCTAssertEqual((prompts.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("AI 服务"))
+        let promptCell = settings.tableView(settings.tableView,
+            cellForRowAt: IndexPath(row: 1, section: 0))
+        XCTAssertEqual((promptCell.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("提示词"))
         let legacy = SettingsConfiguration.default
         XCTAssertEqual(legacy.displaySections.count, 1)
     }
@@ -1297,8 +1310,10 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         XCTAssertEqual(Set(controller.navigationItem.rightBarButtonItems?
             .compactMap(\.accessibilityLabel) ?? []), Set(["卡片集", "笔记"]))
         XCTAssertEqual(controller.navigationItem.rightBarButtonItems?.count, 2)
+        // The primary '+' has become low-friction Quick Capture; manual card
+        // CRUD and batch import are accessible from the Card Collection.
         XCTAssertEqual(controller.navigationItem.leftBarButtonItem?.accessibilityLabel,
-                       "添加内容")
+                       V3L("快速记录"))
         XCTAssertFalse(buttons.contains { $0.title(for: .normal) == "困难" })
         XCTAssertFalse(buttons.contains { $0.title(for: .normal) == "简单" })
     }
