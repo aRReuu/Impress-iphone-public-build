@@ -662,7 +662,9 @@ final class ImVaultDocumentController: UIViewController {
         super.viewWillAppear(animated)
         pathLabel.text = V3L("只读") + " · " + document.identity.relativePath
         navigationItem.rightBarButtonItems?.first?.accessibilityLabel = V3L("编辑独立草稿")
-        navigationItem.rightBarButtonItems?.last?.accessibilityLabel = V3L("切换 Markdown 源码")
+        if let actions = navigationItem.rightBarButtonItems, actions.count >= 2 {
+            actions[1].accessibilityLabel = V3L("切换 Markdown 源码")
+        }
     }
 
 
@@ -731,7 +733,12 @@ final class ImVaultDocumentController: UIViewController {
             target: self, action: #selector(toggleSource))
         source.accessibilityLabel = V3L("切换 Markdown 源码")
         source.accessibilityIdentifier = "impress.notes.source-toggle"
-        navigationItem.rightBarButtonItems = [draft, source]
+        let generate = UIBarButtonItem(
+            image: UIImage(systemName: "questionmark.square"), style: .plain,
+            target: self, action: #selector(generateAIQuestions))
+        generate.accessibilityLabel = V3L("根据笔记生成综合问题")
+        generate.accessibilityIdentifier = "impress.notes.generate-questions"
+        navigationItem.rightBarButtonItems = [draft, source, generate]
         renderBody()
         // Replaces only explicitly referenced local image embeds with bounded
         // in-memory data URIs. Never reads outside this authorized Vault.
@@ -827,6 +834,11 @@ final class ImVaultDocumentController: UIViewController {
         } catch {
             showVaultError("内部链接索引不可用", error: error)
         }
+    }
+
+    @objc private func generateAIQuestions() {
+        navigationController?.pushViewController(
+            ImpressAIQuestionGenerationViewController(document: document), animated: true)
     }
 
     @objc private func editDraft() {
