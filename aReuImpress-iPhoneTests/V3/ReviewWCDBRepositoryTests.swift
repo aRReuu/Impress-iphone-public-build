@@ -1507,6 +1507,36 @@ final class ImpressV3BatchPreviewIntegrationTests: XCTestCase {
 // must not create API keys, send network requests or alter the real Vault.
 @MainActor
 final class ImpressAICustomAPIUITests: XCTestCase {
+    func testNativeChatHasPrivacyDisclosureAndSendIsInitiallyDisabled() {
+        let conversation = ImpressAINativeChatViewController()
+        conversation.loadViewIfNeeded()
+        XCTAssertEqual(conversation.title, V3L("AI 讨论"))
+        let sendButton = conversation.view.subviews
+            .flatMap { $0.subviews }
+            .compactMap { $0 as? UIButton }
+            .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.send" })
+        XCTAssertNotNil(sendButton)
+        XCTAssertFalse(sendButton?.isEnabled ?? true)
+        let prompt = conversation.view.subviews
+            .compactMap { $0 as? UILabel }
+            .first { $0.text == V3L("讨论记录仅在本页面保留，不会自动写入 Obsidian。") }
+        XCTAssertNotNil(prompt)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    func testV3RatingOverlayUsesCompactSemanticFeedback() {
+        for direction in [SwipeDirection.left, .up, .right, .down] {
+            let overlay = ImpressV3RatingOverlay(direction: direction)
+            overlay.frame = CGRect(x: 0, y: 0, width: 300, height: 420)
+            overlay.layoutIfNeeded()
+            XCTAssertFalse(overlay.isUserInteractionEnabled)
+            XCTAssertEqual(overlay.subviews.count, 1)
+            XCTAssertEqual(overlay.subviews.first?.layer.borderWidth, 0)
+            XCTAssertEqual(overlay.subviews.first?.layer.shadowOpacity, 0)
+        }
+    }
+
+
     func testAISettingsHasProviderAndTaskRoutingWithoutNewPrimaryTab() {
         let ai = ImpressAISettingsViewController()
         ai.loadViewIfNeeded()
