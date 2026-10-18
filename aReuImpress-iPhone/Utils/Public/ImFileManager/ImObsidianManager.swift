@@ -317,7 +317,7 @@ final class ImVaultReadOnlyProbe: NSObject, UIDocumentPickerDelegate {
 
 enum ImVaultSyncFailure: LocalizedError {
     case wrongVault, unsafePath, unavailable, notDownloaded, tooLarge, notUTF8, incompleteIndex
-    case conflict, previewTruncated, approvalMissing, writesLocked, verificationFailed
+    case conflict, previewTruncated, approvalMissing, writesLocked, verificationFailed, deviceTestVaultRequired
     var errorDescription: String? {
         switch self {
         case .wrongVault: return "Vault 与草稿身份不匹配，拒绝操作。"
@@ -331,6 +331,7 @@ enum ImVaultSyncFailure: LocalizedError {
         case .previewTruncated: return "Diff 未完整显示，禁止提交。"
         case .approvalMissing: return "未确认本次修改，禁止提交。"
         case .writesLocked: return "真实 Vault 写回尚未通过设备安全 Gate；草稿已保留。"
+        case .deviceTestVaultRequired: return "只允许在 Debug QA 中操作通过「文件」选定、名称为 Impress-Write-Test-Vault 的独立测试副本。真实 Vault 保持只读；草稿已保留。"
         case .verificationFailed: return "备份或写后回读验证失败，保留草稿以供恢复。"
         }
     }
@@ -622,19 +623,54 @@ enum ImVaultCommitOutcome {
     case written(recoveryURL: URL)
 }
 
-/// Full P0-4 compare-and-swap implementation with a deliberate production
-/// write lock. Test fixtures can exercise this implementation without ever
-/// enabling source Vault writes. The lock can only be changed after a future
-/// real File Provider/iCloud device-acceptance decision.
+/// Source writes are blocked in production until physical File Provider /
+/// iCloud validation succeeds. The DEBUG-only QA flow is deliberately separate:
+/// only a user-selected disposable folder with an exact sentinel *folder name*
+/// can be changed, and only following a complete diff and explicit confirmation.
 enum ImVaultGuardedWrite {
     static let productionWriteEnabled = false
     private static let mutex = NSLock()
 
+    #if DEBUG
+    static let deviceQAFolderName = "Impress-Write-Test-Vault"
+
+    /// Resolving symlinks before comparing the *entire last folder component*
+    /// prevents accepting a folder named e.g. "Impress-Write-Test-Vault-Old".
+    static func isExplicitQAVault(_ root: URL) -> Bool {
+        let resolved = root.standardizedFileURL.resolvingSymlinksInPath()
+        return resolved.lastPathComponent == deviceQAFolderName
+    }
+    #endif
+
+    /// An eligibility probe is read-only. The check is repeated inside the
+    /// security-scoped coordinated write transaction, not trusted at UI time.
+    static func checkQAVaultEligibility(
+        for identity: ImVaultFileIdentity,
+        completion: @escaping (Result<Bool, Error>) -> Void
+    ) {
+        #if DEBUG
+        ImVaultReadOnlyProbe.shared.withAuthorizedRoot({ root, vaultID in
+            guard identity.vaultID == vaultID else {
+                throw ImVaultSyncFailure.wrongVault
+            }
+            return isExplicitQAVault(root)
+        }, completion: completion)
+        #else
+        completion(.success(false))
+        #endif
+    }
+
     static func commitAuthorized(
         draft: ImVaultDraft, userConfirmedDiff: Bool,
+        deviceQATestCopyConfirmed: Bool = false,
         completion: @escaping (Result<ImVaultCommitOutcome, Error>) -> Void
     ) {
-        guard productionWriteEnabled else {
+        #if DEBUG
+        let canTryQACopy = deviceQATestCopyConfirmed
+        #else
+        let canTryQACopy = false
+        #endif
+        guard productionWriteEnabled || canTryQACopy else {
             completion(.failure(ImVaultSyncFailure.writesLocked))
             return
         }
@@ -642,31 +678,39 @@ enum ImVaultGuardedWrite {
             guard draft.identity.vaultID == vaultID else {
                 throw ImVaultSyncFailure.wrongVault
             }
-            return try commitFixture(root: root, draft: draft,
-                                     userConfirmedDiff: userConfirmedDiff)
+            #if DEBUG
+            if !productionWriteEnabled && !Self.isExplicitQAVault(root) {
+                throw ImVaultSyncFailure.deviceTestVaultRequired
+            }
+            #endif
+            return try commitVerified(root: root, draft: draft,
+                                      userConfirmedDiff: userConfirmedDiff)
         }, completion: completion)
     }
 
-    // XCTest ONLY: caller passes a unique disposable test-Vault directory.
-    // This does NOT take or restore security-scoped bookmarks.
+    // XCTest ONLY: callers must provide a temporary disposable test Vault.
+    // Release builds may not exercise the fixture write implementation.
     static func commitFixture(root: URL, draft: ImVaultDraft,
                               userConfirmedDiff: Bool) throws -> ImVaultCommitOutcome {
-        try draft.validate()
         #if !DEBUG
-        // This fixture method is intentionally unusable in Release.
         throw ImVaultSyncFailure.writesLocked
         #else
-        // Defense in depth: a Debug build must also refuse to write the
-        // user's iCloud/File Provider Vault through the fixture API.
-        // Only disposable paths under the app's own temporary directory
-        // are permitted. Avoid string-prefix confusion such as tmp2.
         let testRoot = FileManager.default.temporaryDirectory
             .standardizedFileURL.resolvingSymlinksInPath().path
         let fixtureRoot = root.standardizedFileURL.resolvingSymlinksInPath().path
         guard fixtureRoot.hasPrefix(testRoot + "/") else {
             throw ImVaultSyncFailure.writesLocked
         }
+        return try commitVerified(root: root, draft: draft,
+                                  userConfirmedDiff: userConfirmedDiff)
         #endif
+    }
+
+    /// The only authorized common write mechanism for fixtures and a
+    /// deliberately selected QA-only test Vault. Production remains locked.
+    private static func commitVerified(root: URL, draft: ImVaultDraft,
+                              userConfirmedDiff: Bool) throws -> ImVaultCommitOutcome {
+        try draft.validate()
         guard userConfirmedDiff else { throw ImVaultSyncFailure.approvalMissing }
         let preview = ImVaultDiff.summary(base: draft.baseText,
                                           edited: draft.editedText, maximumLines: 200)
