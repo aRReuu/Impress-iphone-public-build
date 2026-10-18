@@ -1254,6 +1254,10 @@ enum ImpressV3Language: String, CaseIterable {
         "请求失败，输入内容已保留。": ("請求失敗，輸入內容已保留。", "Request failed. Your draft is preserved."),
         "AI 对话失败": ("AI 對話失敗", "AI Chat Failed"),
         "← 困难   ↑ 良好   → 容易   ↓ 重来": ("← 困難   ↑ 良好   → 容易   ↓ 重來", "← Hard   ↑ Good   → Easy   ↓ Again"),
+        "OpenCode 免费模型（测试）": ("OpenCode 免費模型（測試）", "OpenCode Free Models (QA)"),
+        "本 QA 版只允许 OpenCode 官方免费模型；推荐添加「OpenCode 免费模型（测试）」，不需要密钥。使用 Keychain 密钥时也只允许相同的免费型号。": ("此 QA 版本僅允許 OpenCode 官方免費模型。建議新增「OpenCode 免費模型（測試）」，無需密鑰；使用 Keychain 密鑰時也只能使用相同的免費型號。", "This QA build permits only OpenCode's documented free models. Add OpenCode Free Models (QA) without a key; Keychain-based requests remain restricted to those free IDs."),
+        "仅限免费模型测试": ("僅限免費模型測試", "Free Models Only"),
+        "当前 QA 只允许 OpenCode 官方免费型号，推荐选择免费连接进行测试。": ("目前 QA 僅允許 OpenCode 官方免費型號，建議使用免費連線測試。", "This QA build accepts only OpenCode's official free model IDs. Select a free connection for testing."),
         "模型下载失败": ("模型下載失敗", "Model Download Failed")
     ]
 
