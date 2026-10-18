@@ -1261,6 +1261,8 @@ enum ImpressV3Language: String, CaseIterable {
         "测试免费对话": ("測試免費對話", "Test Free Chat"),
         "免费模型连接成功": ("免費模型連線成功", "Free Model Connected"),
         "已收到模型响应；没有发送私人笔记。": ("已收到模型回應；未傳送私人筆記。", "The model responded. No private notes were sent."),
+        "API 授权失败（401），请检查密钥。": ("API 授權失敗（401），請檢查密鑰。", "API authorization failed (401). Check the key."),
+        "免费 API 请求被拒绝（403）；可能是账号认证、地区或网络限制，请尝试在设置中保存新的 OpenCode API Key 后重测。": ("免費 API 請求遭拒（403）；可能是帳戶認證、地區或網路限制。請嘗試在設定中儲存新的 OpenCode API Key 後重測。", "Free API request blocked (403). This may be an account, regional or network restriction. Try saving a fresh OpenCode API key in Settings and test again."),
         "模型下载失败": ("模型下載失敗", "Model Download Failed")
     ]
 
