@@ -728,6 +728,53 @@ final class ImVaultSafetyTests: XCTestCase {
         return root
     }
 
+    func testVaultFolderBrowsingAndBoundedPagesKeepDistinctPathIdentities() throws {
+        let names = ["Notes/One.md", "Notes/Physics/One.md",
+                     "Reading/One.md", "Root.md"]
+        let records = try names.map { path in
+            ImVaultIndexNote(identity: try ImVaultFileIdentity(
+                vaultID: "fixture-vault", relativePath: path), bytes: 10, modified: nil)
+        }
+        XCTAssertEqual(ImVaultListPresentation.folders(in: records),
+                       ["Notes", "Notes/Physics", "Reading"])
+        let selection = ImVaultListPresentation.matched(
+            records, query: "one", folder: "Notes")
+        XCTAssertEqual(selection.map(\.identity.relativePath),
+                       ["Notes/One.md", "Notes/Physics/One.md"])
+        XCTAssertEqual(ImVaultListPresentation.matched(
+            records, query: "reading/", folder: nil).count, 1)
+        let large = try (0..<265).map { n in
+            ImVaultIndexNote(identity: try ImVaultFileIdentity(
+                vaultID: "fixture-vault", relativePath: "Large/note-\(n).md"),
+                bytes: 1, modified: nil)
+        }
+        XCTAssertEqual(ImVaultListPresentation.page(large, limit: 120).count, 120)
+        XCTAssertEqual(ImVaultListPresentation.page(large, limit: 240).count, 240)
+        XCTAssertEqual(ImVaultListPresentation.page(large, limit: 360).count, 265)
+        XCTAssertEqual(Set(large.map(\.identity)).count, 265)
+    }
+
+    func testVaultEnumerationReportsBoundedBatchesAndLeavesSourceUntouched() throws {
+        let root = try fixtureRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let collection = root.appendingPathComponent("Articles", isDirectory: true)
+        try FileManager.default.createDirectory(at: collection,
+                                                withIntermediateDirectories: true)
+        for n in 0..<265 {
+            try "# Article \(n)".write(
+                to: collection.appendingPathComponent("note-\(n).md"),
+                atomically: true, encoding: .utf8)
+        }
+        var sizes: [Int] = []
+        let listed = try ImVaultReadSync.list(root: root, vaultID: "local-fixture",
+            onBatch: { sizes.append($0.count) })
+        XCTAssertEqual(listed.count, 265)
+        XCTAssertEqual(sizes.reduce(0, +), 265)
+        XCTAssertTrue(sizes.allSatisfy { $0 > 0 && $0 <= 128 })
+        XCTAssertEqual(try String(contentsOf: collection.appendingPathComponent("note-0.md"),
+                                  encoding: .utf8), "# Article 0")
+    }
+
     func testFirstImportCopiesNewDestinationWithoutChangingSource() throws {
         let root = try fixtureRoot()
         defer { try? FileManager.default.removeItem(at: root) }

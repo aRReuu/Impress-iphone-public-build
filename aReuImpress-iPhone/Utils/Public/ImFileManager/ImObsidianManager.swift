@@ -316,13 +316,14 @@ final class ImVaultReadOnlyProbe: NSObject, UIDocumentPickerDelegate {
 // MARK: - P0-2 / authorized source-of-truth read-only index and raw Markdown
 
 enum ImVaultSyncFailure: LocalizedError {
-    case wrongVault, unsafePath, unavailable, tooLarge, notUTF8, incompleteIndex
+    case wrongVault, unsafePath, unavailable, notDownloaded, tooLarge, notUTF8, incompleteIndex
     case conflict, previewTruncated, approvalMissing, writesLocked, verificationFailed
     var errorDescription: String? {
         switch self {
         case .wrongVault: return "Vault 与草稿身份不匹配，拒绝操作。"
         case .unsafePath: return "路径不安全；禁止访问或写回。"
         case .unavailable: return "源文件丢失、移动或不可读取，原内容未改变。"
+        case .notDownloaded: return "这份笔记尚未从 iCloud 下载到本机。请先在「文件」App 中下载原件后重新打开。"
         case .tooLarge: return "Markdown 超过 8MB 安全编辑上限。"
         case .notUTF8: return "该文件不是有效 UTF-8，原文件保持不变。"
         case .incompleteIndex: return "Vault 索引扫描未完成，不能覆盖已有索引。"
@@ -396,9 +397,19 @@ final class ImVaultReadSync {
     static let shared = ImVaultReadSync()
     private init() {}
 
-    func refresh(_ completion: @escaping (Result<ImVaultIndexResult, Error>) -> Void) {
+    func cachedIndex(_ completion: @escaping (Result<[ImVaultIndexNote], Error>) -> Void) {
+        // The saved index is provisional and scoped to a validated Vault ID.
+        ImVaultReadOnlyProbe.shared.withAuthorizedRoot({ _, id in
+            try ImVaultPrivateStore.loadIndex(vaultID: id)
+        }, completion: completion)
+    }
+
+    func refresh(progress: (([ImVaultIndexNote]) -> Void)? = nil,
+                 _ completion: @escaping (Result<ImVaultIndexResult, Error>) -> Void) {
         ImVaultReadOnlyProbe.shared.withAuthorizedRoot({ root, id in
-            let next = try Self.list(root: root, vaultID: id)
+            let next = try Self.list(root: root, vaultID: id, onBatch: { batch in
+                DispatchQueue.main.async { progress?(batch) }
+            })
             let previous = (try? ImVaultPrivateStore.loadIndex(vaultID: id)) ?? []
             let old = Dictionary(uniqueKeysWithValues: previous.map { ($0.identity, $0) })
             let current = Set(next.map { $0.identity })
@@ -435,7 +446,8 @@ final class ImVaultReadSync {
         return path
     }
 
-    static func list(root: URL, vaultID: String) throws -> [ImVaultIndexNote] {
+    static func list(root: URL, vaultID: String,
+                     onBatch: (([ImVaultIndexNote]) -> Void)? = nil) throws -> [ImVaultIndexNote] {
         let coordinator = NSFileCoordinator(filePresenter: nil)
         var coordinationError: NSError?
         var operationError: Error?
@@ -451,6 +463,7 @@ final class ImVaultReadSync {
                     options: [.skipsHiddenFiles],
                     errorHandler: { _, error in operationError = error; return false }
                 ) else { throw ImVaultSyncFailure.incompleteIndex }
+                var batch = [ImVaultIndexNote]()
                 while let url = enumerator.nextObject() as? URL {
                     guard url.pathExtension.lowercased() == "md" else { continue }
                     let resolved = url.standardizedFileURL.resolvingSymlinksInPath()
@@ -461,9 +474,16 @@ final class ImVaultReadSync {
                     guard v.isRegularFile == true && v.isSymbolicLink != true else { continue }
                     let relative = String(resolved.path.dropFirst(prefix.count))
                     let id = try ImVaultFileIdentity(vaultID: vaultID, relativePath: relative)
-                    notes.append(ImVaultIndexNote(identity: id, bytes: v.fileSize ?? 0,
-                                                  modified: v.contentModificationDate))
+                    let note = ImVaultIndexNote(identity: id, bytes: v.fileSize ?? 0,
+                                                modified: v.contentModificationDate)
+                    notes.append(note)
+                    batch.append(note)
+                    if batch.count == 128 {
+                        onBatch?(batch)
+                        batch.removeAll(keepingCapacity: true)
+                    }
                 }
+                if !batch.isEmpty { onBatch?(batch) }
             } catch { operationError = error }
         }
         if let error = coordinationError { throw error }
@@ -482,7 +502,12 @@ final class ImVaultReadSync {
             do {
                 try enforceContainment(file, root: root)
                 let v = try file.resourceValues(forKeys: [
-                    .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+                    .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey,
+                    .isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey])
+                if v.isUbiquitousItem == true &&
+                   v.ubiquitousItemDownloadingStatus == .notDownloaded {
+                    throw ImVaultSyncFailure.notDownloaded
+                }
                 guard v.isRegularFile == true && v.isSymbolicLink != true else {
                     throw ImVaultSyncFailure.unsafePath
                 }

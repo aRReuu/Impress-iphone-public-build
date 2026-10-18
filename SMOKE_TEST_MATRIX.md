@@ -1,7 +1,7 @@
 # SMOKE_TEST_MATRIX — Impress V3.2 acceptance evidence
 
 ## Current evidence boundary
-Baseline R04.2 commit `e9eb5e92679907ab95c6aff615d5a6719b69eb46` completed [CI #39054675238](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39054675238): 78/78 UIKit XCTest, Core, Simulator and ARM64 candidate. **That run predates V3.2 calibration integration and does not sign off the newly added code.** Update this matrix only from the final target SHA and its real Actions log.
+The latest verified pre-hardening baseline is `40f65b03469908a733a4de4bd9afc1782105927a`, [CI #39090442833](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39090442833): 87/87 UIKit XCTest and successful Swift Core, Simulator and unsigned ARM64 candidate. Later P0 process-death recovery and P1 Vault-index changes require new verification at the **final** HEAD. No prior run automatically signs off subsequent commits. Simulator is not the iPhone 13 device gate.
 
 ## Native Simulator / automation
 | Area | Required actual gate |
@@ -11,13 +11,14 @@ Baseline R04.2 commit `e9eb5e92679907ab95c6aff615d5a6719b69eb46` completed [CI #
 | Navigation | Exactly three tabs ordered 闪卡 / 校准 / 设置; distinct visible 笔记 and 卡片集 right-header actions on flashcard home; Notes pushes the existing read-only Vault list without changing the review session |
 | Flashcards | Show Answer, four swipes, exactly-one FSRS event, card CRUD/pagination/content CAS and V3 schema upgrade |
 | Cards/media | Text QA, image BLOB, single/multiple choice, search, import, stale-save rejection |
-| Obsidian | External Vault read-only index, path containment, search and local attachments; no automatic original writes |
+| Obsidian | External read-only Vault index, bounded 128-note enumeration progress, verified-scope provisional cache, folder/path search, 120-item list paging, local attachments and iCloud-not-downloaded error; no automatic original writes |
 | Calibration check-ins | All five evaluated, unknown remains unknown, mood not scored, mutable current goals, immutable historic snapshots, manual +/- boundaries |
 | Calibration UI/chart | Week 7 days, month 30 days, year monthly daily mean, axes, missing-day gaps, readable Dynamic Type |
 | Notifications | Calibration IDs separate from FSRS, permissions, duplicate reconciliation, pending-day cancellation and click route |
 | Backup V1 | Legacy 3-data-member ZIP remains readable; does not delete calibration ledger |
 | Backup V2 | SQLite, JSON learning history, prompts, image BLOB, FSRS events and checkins all survive CRC/SHA/semantic validation |
-| Restore | User confirmation, recovery preview, local rollback snapshot, cold-start substitution and fault-injected failure recovery |
+| Restore | User confirmation, recovery preview, durable pre-image of SQLite/WAL, learning history, prompts and calibration; process-death recovery before WCDB opens; fault-injected rollback |
+| Backup mutation race | Opaque mutation generations prevent concurrent writes clearing Dirty and reject mixed-era ZIP publication |
 | Device build | iPhoneOS ARM64 unsigned app, no embedded XCTest, IPA ZIP integrity and SHA-256 Artifact |
 
 ## Device-only gates (not passed by Simulator)
