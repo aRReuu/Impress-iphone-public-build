@@ -87,7 +87,19 @@ def assert_clean() -> None:
     assert "imDatabase.drop(table: table)" in db
     assert "printSqlText()" not in db, "SQL_TRACE_MUST_NOT_LOG_PRIVATE_DATA"
     tab = (APP / "Base/ImTabBarViewController.swift").read_text()
-    assert "ImpressV3ReviewViewController()" in tab and "ImpressNoteListTableViewController()" in tab
+    # Navigation was deliberately simplified: three primary tabs; Notes remains
+    # a visible, independent native action on the flashcard page.
+    assert "ImpressV3ReviewViewController()" in tab
+    assert "ImpressCalibrationViewController()" in tab
+    assert "ImpressV3SettingsHubViewController()" in tab
+    assert "self.viewControllers = [cardNav, calibrationNav, settingsNav]" in tab
+    assert "ImpressNoteListTableViewController()" not in tab
+    review = (APP / "VC/MainVCs/ImCardVC/ImpressV3ReviewViewController.swift").read_text()
+    assert "ImpressNoteListTableViewController()" in review
+    assert "navigationItem.rightBarButtonItems = [notes, cardCollection]" in review
+    assert 'title: "笔记", style: .plain, target: self' in review
+    assert 'accessibilityLabel = "笔记"' in review
+    assert 'accessibilityLabel = "卡片集"' in review
     vault = (APP / "Utils/Public/ImFileManager/ImObsidianManager.swift").read_text()
     assert re.search(r"productionWriteEnabled\s*=\s*false\b", vault)
     app = (APP / "Base/AppDelegate.swift").read_text()

@@ -8,7 +8,7 @@ Baseline R04.2 commit `e9eb5e92679907ab95c6aff615d5a6719b69eb46` completed [CI #
 | --- | --- |
 | Branch / privacy | Public feature HEAD, no private/main changes, credential and source privacy checks |
 | Core | All `ImpressReviewCore` tests including five-indicator scoring, calendar, mood skip, extras, trends and reminder plan |
-| Navigation | Exactly four tabs ordered 闪卡 / 校准 / 笔记 / 设置; no return to legacy entry |
+| Navigation | Exactly three tabs ordered 闪卡 / 校准 / 设置; distinct visible 笔记 and 卡片集 right-header actions on flashcard home; Notes pushes the existing read-only Vault list without changing the review session |
 | Flashcards | Show Answer, four swipes, exactly-one FSRS event, card CRUD/pagination/content CAS and V3 schema upgrade |
 | Cards/media | Text QA, image BLOB, single/multiple choice, search, import, stale-save rejection |
 | Obsidian | External Vault read-only index, path containment, search and local attachments; no automatic original writes |

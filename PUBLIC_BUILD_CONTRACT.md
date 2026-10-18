@@ -3,8 +3,8 @@
 ## Authority and provenance
 Development authority is `aRReuu/Impress-iphone-public-build`, branch `feature/impress-v3-r04-2-build`. The earlier private repository and private revision listed in `SOURCE_MANIFEST.json` are historical source lineage, not the current workflow, and shall not be modified under this contract. `feature/impress-calibration-v01` at `c16c4a605c5b6018861ff1691d6e6abbba0d8901` supplied V0.2 calibration business code. Do not merge public main or cherry-pick unrelated private work.
 
-## Only four first-level native destinations
-`SceneDelegate -> ImTabBarViewController` presents `闪卡 / 校准 / 笔记 / 设置`. `ImpressV3ReviewEnvironment.pilotEnabled` is a no-op compatibility surface returning `true`; V3 startup never opens `impressdata.db`. Settings has three native groups (内容工具 / 学习节奏 / 数据安全). Keep Apple native semantic styles, Dynamic Type, Light/Dark, readable margins, and responsive touch targets.
+## Three first-level native destinations, with direct Notes access
+`SceneDelegate -> ImTabBarViewController` presents `闪卡 / 校准 / 设置`. The flashcard home navigation bar contains two independent right actions: visible `笔记` (pushes existing read-only Vault note list) and `卡片集` (searchable card CRUD). The Notes screen retains its own permission and folder menu; it is not a Tab. `ImpressV3ReviewEnvironment.pilotEnabled` is a no-op compatibility surface returning `true`; V3 startup never opens `impressdata.db`. Settings has three native groups (内容工具 / 学习节奏 / 数据安全). Keep Apple native semantic styles, Dynamic Type, Light/Dark, readable margins, and responsive touch targets.
 
 ## Independent business authorities
 - **Flashcards**: `ReviewWCDBRepository` + `FSRS6ReviewCalculator` + `ImpressReviewCore` review contracts. One WCDB transaction per FSRS event, idempotent rating, independent content CAS, SQL pagination, and schema upgrade from pre-R04.2 V3. Four swipe ratings (left Hard, up Good, right Easy, down Again). Text, image, single/multiple choice remain editable. Legacy migrations are not reintroduced.

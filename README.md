@@ -3,7 +3,7 @@
 This **public repository** is the active source authority for Impress V3.2 development on `feature/impress-v3-r04-2-build`. It originated as a sanitized independent-history build mirror; historical private upstream SHA references in `SOURCE_MANIFEST.json` remain provenance **only**, not an instruction to modify the private repository.
 
 ## Product and navigation
-Impress combines low-friction structured recall with a deliberately small daily self-calibration instrument. UIKit has **four first-level tabs** in order: **闪卡 / 校准 / 笔记 / 设置**. The V3 WCDB/FSRS-6 review workflow is the only active flashcard data source; there is no legacy database migration. The calibration module uses five indicators (sleep, exercise, nutrition, non-scoring mood, custom), a separate atomic JSON ledger, and a single pure `CalibrationScoreCore` implementation.
+Impress combines low-friction structured recall with a deliberately small daily self-calibration instrument. UIKit has **three first-level tabs** in order: **闪卡 / 校准 / 设置**. The **笔记** Vault destination is opened through its own visibly labeled button in the flashcard header, beside the separate 卡片集 action. It is no longer a primary Tab. The V3 WCDB/FSRS-6 review workflow is the only active flashcard data source; there is no legacy database migration. The calibration module uses five indicators (sleep, exercise, nutrition, non-scoring mood, custom), a separate atomic JSON ledger, and a single pure `CalibrationScoreCore` implementation.
 
 The original four-direction flashcard gestures, native dark/light appearance, card collection CRUD, protected Obsidian external Vault reading, and editable settings remain separate from calibration.
 

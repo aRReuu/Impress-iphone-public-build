@@ -4,7 +4,7 @@
 
 ## 1. 产品边界与架构
 Impress 是低摩擦个人成长工具：一方面通过闪卡、主动回忆与 FSRS-6 进行结构化认知巩固；另一方面通过极少量行为指标进行自我观察与校准。它不是心理诊断工具、临床健康评价、无穷累计积分游戏，也不是完整任务管理器。情绪与睡眠、运动、饮食可能相互影响，不能从本工具的趋势推断因果。
-四个原生一级 Tab（顺序固定）：闪卡、校准、笔记、设置。校准入口为 ImCalibrationVC/ImpressCalibrationViewController.swift；外观复用 ImpressV3Appearance、UIKit Dynamic Type、系统 Light/Dark，图表为带 X/Y 刻度的周/月/年二维折线。既有闪卡四向滑动、FSRS 状态、Obsidian Vault 只读入口及设置不得回退。
+三个原生一级 Tab（顺序固定）：闪卡、校准、设置。「笔记」不是一级 Tab，而是闪卡首页导航栏右侧的显式独立文字按钮，与「卡片集」独立并列；点击进入原有 Obsidian Vault 只读笔记控制器，返回仍在闪卡导航栈内。校准入口为 ImCalibrationVC/ImpressCalibrationViewController.swift；外观复用 ImpressV3Appearance、UIKit Dynamic Type、系统 Light/Dark，图表为带 X/Y 刻度的周/月/年二维折线。既有闪卡四向滑动、FSRS 状态、Obsidian Vault 只读入口及设置不得回退。
 
 ## 2. 五项指标与完成标准
 | 指标 | 记录 | 是否计分 |

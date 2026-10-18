@@ -123,7 +123,6 @@
     "first_level_tabs": [
       "闪卡",
       "校准",
-      "笔记",
       "设置"
     ],
     "archive_format_versions": [
@@ -134,7 +133,14 @@
     "archive_encrypted": false,
     "vault_source_writes_enabled": false,
     "marketing_icon_1024_present": false,
-    "iphone13_device_validation": "NOT_TESTED"
+    "iphone13_device_validation": "NOT_TESTED",
+    "notes_entry": {
+      "host": "闪卡 right navigation bar",
+      "button": "笔记",
+      "target": "ImpressNoteListTableViewController",
+      "navigation": "push",
+      "independent_from": "卡片集"
+    }
   },
   "historical_provenance_note": "authority, source_files_sha, source_head_sha, original_r03_source_sha and earlier CI failures preserve historical public-mirror provenance only; these are not live V3.2 content checksums or approval to modify the private repository."
 }
