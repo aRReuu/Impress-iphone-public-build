@@ -1173,6 +1173,13 @@ enum ImpressV3Language: String, CaseIterable {
         "模型协议": ("模型協定", "Model Protocol"),
         "JSON 输出模式": ("JSON 輸出模式", "JSON Output Mode"),
         "沿用连接协议": ("沿用連線協定", "Use Connection Protocol"),
+        "真机 QA 仅支持独立的测试 Vault 副本": ("真機 QA 僅支援獨立的測試 Vault 副本", "Device QA is limited to a separate test Vault copy"),
+        "测试副本写回": ("測試副本寫回", "Write Test Copy"),
+        "仅限测试副本；原始 Vault 仍保持只读": ("僅限測試副本；原始 Vault 仍維持唯讀", "Test copy only; original Vault remains read-only"),
+        "请在「文件」App 选择 Impress-Write-Test-Vault 测试副本": ("請在「檔案」App 選取 Impress-Write-Test-Vault 測試副本", "Choose the Impress-Write-Test-Vault copy in Files"),
+        "确认修改独立测试副本？": ("確認修改獨立測試副本？", "Modify the Separate Test Copy?"),
+        "仅操作「文件」中名称为 Impress-Write-Test-Vault 的独立副本。正式 Vault 不可写入。将重新核对原文 SHA-256，保存恢复副本后再尝试写入；请先自行复制重要笔记。": ("僅操作「檔案」中名稱為 Impress-Write-Test-Vault 的獨立副本。正式 Vault 不可寫入。將重新驗證原始 SHA-256，建立復原副本後再嘗試寫入；請先另外備份重要筆記。", "Only the independent folder named Impress-Write-Test-Vault in Files can be modified. The real Vault remains read-only. The original SHA-256 is rechecked and a recovery copy saved before writing. Back up important notes first."),
+        "确认测试副本写回": ("確認測試副本寫回", "Confirm Test Copy Write"),
         "模型下载失败": ("模型下載失敗", "Model Download Failed")
     ]
 
