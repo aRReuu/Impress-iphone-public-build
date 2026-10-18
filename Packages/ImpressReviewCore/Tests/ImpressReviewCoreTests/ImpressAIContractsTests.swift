@@ -289,3 +289,95 @@ extension ImpressAIContractsTests {
         XCTAssertEqual(try config.resolve(.conversation).model.jsonMode, .promptOnly)
     }
 }
+
+
+// Free-only means exact documented OpenCode model IDs and endpoints; no
+// paid model can be substituted by changing a label or using another gateway.
+extension ImpressAIContractsTests {
+    func testOpenCodeFreeQAPresetIsAnonymousAndUsesOfficialPaths() throws {
+        let connection = ImpressAIOpenCodeFreeQA.connection()
+        XCTAssertEqual(connection.provider, .openCode)
+        XCTAssertEqual(connection.baseURL.absoluteString, "https://opencode.ai/inference")
+        XCTAssertEqual(connection.effectiveAuthentication, .noAuthentication)
+        XCTAssertNil(connection.credentialID)
+        XCTAssertEqual(connection.effectiveEndpoints.modelsPath, "v1/models")
+        XCTAssertEqual(connection.effectiveEndpoints.chatPath, "openai/v1/chat/completions")
+        let models = ImpressAIOpenCodeFreeQA.models(for: connection.id)
+        XCTAssertEqual(models.map(\.identifier), [
+            "glm-5.3-flash-free", "deepseek-v4.1-flash-free"
+        ])
+        XCTAssertTrue(models.allSatisfy { $0.jsonMode == .promptOnly })
+        try ImpressAIOpenCodeFreeQA.validate(
+            ImpressAIResolvedRoute(connection: connection, model: models[0]))
+        XCTAssertNoThrow(try ImpressAIRegistry(connections: [connection], models: models))
+    }
+
+    func testOpenCodeFreeQARejectsPaidOrUnapprovedIdentifiers() throws {
+        let connection = ImpressAIOpenCodeFreeQA.connection()
+        for id in ["glm-5.3-flash", "deepseek-v4.1-flash",
+                   "gpt-6-sol", "other-model-free", ""] {
+            let model = ImpressAIModel(connectionID: connection.id, identifier: id)
+            XCTAssertThrowsError(try ImpressAIOpenCodeFreeQA.validate(
+                ImpressAIResolvedRoute(connection: connection, model: model)))
+            XCTAssertFalse(ImpressAIOpenCodeFreeQA.allowedForCatalog(id))
+        }
+    }
+
+    func testOpenCodeFreeQARejectsRedirectGatewayAndPaidProtocol() throws {
+        let original = ImpressAIOpenCodeFreeQA.connection()
+        let model = ImpressAIOpenCodeFreeQA.models(for: original.id)[0]
+        var wrongHost = original
+        wrongHost.baseURL = URL(string: "https://not-opencode.example/inference")!
+        XCTAssertThrowsError(try ImpressAIOpenCodeFreeQA.validate(
+            ImpressAIResolvedRoute(connection: wrongHost, model: model)))
+        var wrongPath = original
+        wrongPath.endpoints = .init(modelsPath: "v1/models",
+             chatPath: "other/v1/chat/completions")
+        XCTAssertThrowsError(try ImpressAIOpenCodeFreeQA.validate(
+            ImpressAIResolvedRoute(connection: wrongPath, model: model)))
+        var wrongWire = model
+        wrongWire.protocolOverride = .responses
+        XCTAssertThrowsError(try ImpressAIOpenCodeFreeQA.validate(
+            ImpressAIResolvedRoute(connection: original, model: wrongWire)))
+        var wrongAuth = original
+        wrongAuth.authentication = .customHeader
+        wrongAuth.customHeaderName = "X-Key"
+        wrongAuth.credentialID = UUID()
+        XCTAssertThrowsError(try ImpressAIOpenCodeFreeQA.validate(
+            ImpressAIResolvedRoute(connection: wrongAuth, model: model)))
+    }
+
+    func testOpenCodeFreeQAAllowsExplicitUserKeyButOnlyFreeModels() throws {
+        var connection = ImpressAIOpenCodeFreeQA.connection()
+        connection.authentication = .bearer
+        connection.credentialID = UUID()
+        let model = ImpressAIOpenCodeFreeQA.models(for: connection.id)[0]
+        XCTAssertNoThrow(try ImpressAIOpenCodeFreeQA.validate(
+            ImpressAIResolvedRoute(connection: connection, model: model)))
+        var missingCredential = connection
+        missingCredential.credentialID = nil
+        XCTAssertThrowsError(try ImpressAIOpenCodeFreeQA.validate(
+            ImpressAIResolvedRoute(connection: missingCredential, model: model)))
+        let paidModel = ImpressAIModel(
+            connectionID: connection.id, identifier: "glm-5.3-flash")
+        XCTAssertThrowsError(try ImpressAIOpenCodeFreeQA.validate(
+            ImpressAIResolvedRoute(connection: connection, model: paidModel)))
+    }
+
+    func testOpenCodeFreeQARequiresJSONProbeBeforeNoteGeneration() throws {
+        let c = ImpressAIOpenCodeFreeQA.connection()
+        let models = ImpressAIOpenCodeFreeQA.models(for: c.id)
+        let routes: [ImpressAIRoute] = [
+            .init(task: .conversation, primaryModelID: models[0].id),
+            .init(task: .questionGeneration, primaryModelID: models[0].id)
+        ]
+        let registry = try ImpressAIRegistry(connections: [c], models: models, routes: routes)
+        XCTAssertNoThrow(try registry.resolve(.conversation))
+        XCTAssertThrowsError(try registry.resolve(.questionGeneration))
+        var verified = models
+        verified[0].jsonVerified = true
+        let verifiedRegistry = try ImpressAIRegistry(connections: [c], models: verified,
+                                                     routes: routes)
+        XCTAssertNoThrow(try verifiedRegistry.resolve(.questionGeneration))
+    }
+}
