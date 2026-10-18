@@ -1,5 +1,5 @@
 # Uncomment the next line to define a global platform for your project
-platform :ios, '13.0'
+platform :ios, '26.0'
 
 use_frameworks! # 启用动态框架
 inhibit_all_warnings!
@@ -20,12 +20,12 @@ target 'aReuImpress-iPhone' do
   end
 end
 
-# Xcode 16+ no longer ships libarclite for obsolete iOS 8/9 Pods targets.
-# Apply the deployment floor to generated Pods only; preserve upstream code.
+# Align generated Pod targets to the app and test targets' iOS 26 floor.
+# Do not rewrite vendor sources or reinterpret the preserved WCDB data model.
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '26.0'
     end
   end
 end

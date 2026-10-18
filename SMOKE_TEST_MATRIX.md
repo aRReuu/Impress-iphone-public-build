@@ -33,3 +33,11 @@ The last verified V3.2 baseline is `58987edfe550f9ccd4f7b7168b12c1f83c98b920`, [
 
 ## Mandatory evidence format
 Record final Git SHA, Actions run URL, each job conclusion, **total native XCTest passed/failed**, portable Swift tests and unsigned IPA SHA-256. A compiled source file is not a test result, and a CI artifact is not proof of phone-level Files/iCloud entitlement.
+
+## iOS 26 platform migration gate
+| Gate | Verifiable requirement | Current evidence type |
+| --- | --- | --- |
+| Deployment settings | Six Xcode app/test deployment values, Podfile and generated Pods floor, three native build overrides all 26.0 | New static audit in CI |
+| Binary | Signed state unchanged; unsigned ARM64 QA .app reports `MinimumOSVersion=26.0`, IPA ZIP/SHA valid | New native packaging assertion; pending CI |
+| iPhone 13 | iOS 26 installation and SpeechTranscriber hardware/locale/download checks; old-system support intentionally dropped | **Device PENDING** |
+| Global STT/Markdown | Apple SpeechAnalyzer and unified renderer/voice UI not yet implemented | **Development PENDING** |

@@ -27,3 +27,6 @@ Preserve the original seven public iPhone AppIcon sizes byte-for-byte. `icon_102
 
 ## Maintenance and sign-off
 Follow [CALIBRATION_V3_2_INTEGRATION.md](CALIBRATION_V3_2_INTEGRATION.md) for the five-indicator rules, calendar boundaries, storage schemas, notification namespace and backup member list. Test results must reference the exact GitHub Actions run and SHA; the previous verified R04.2 baseline (`e9eb5e92679907ab95c6aff615d5a6719b69eb46`, 78/78 UIKit tests) predates the calibration merge. V3.2 is not PASS until its exact final HEAD completes all regression jobs. Protect `main` and all unrelated branches.
+
+## iOS 26-only platform contract
+Every project app/test configuration, Podfile platform and generated Pods floor, and native CI xcodebuild override must be iOS **26.0**. The built unsigned QA app must report `MinimumOSVersion=26.0` and ARM64 architecture. Support for iOS 13–25 is intentionally discontinued. **No SpeechAnalyzer, STT user interface, or Markdown-engine migration is claimed as complete by this configuration-only change**. Speech model hardware/locale compatibility must be checked on the real device; never infer it from the OS floor. Never modify user data or private Obsidian originals as part of SDK migration.

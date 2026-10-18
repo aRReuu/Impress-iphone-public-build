@@ -25,6 +25,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/scripts/verify_retired_native_chat.py
+      - name: Verify iOS 26 minimum is enforced across project, Pods and CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/verify_ios26_floor.py
       - name: Test local FSRS and Vault core
         shell: bash
         run: |
@@ -88,7 +93,7 @@ jobs:
             -scheme aReuImpress-iPhone -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/PrivacyDebug" \
-            IPHONEOS_DEPLOYMENT_TARGET=15.0 CODE_SIGNING_ALLOWED=NO \
+            IPHONEOS_DEPLOYMENT_TARGET=26.0 CODE_SIGNING_ALLOWED=NO \
             build 2>&1 | tee out/simulator-build.log
       - name: Run real XCTest on available iPhone Simulator
         shell: bash
@@ -112,7 +117,7 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIM_ID" \
             -derivedDataPath "$RUNNER_TEMP/PrivacyDebug" \
             -resultBundlePath "$GITHUB_WORKSPACE/out/Privacy.xcresult" \
-            -parallel-testing-enabled NO IPHONEOS_DEPLOYMENT_TARGET=15.0 \
+            -parallel-testing-enabled NO IPHONEOS_DEPLOYMENT_TARGET=26.0 \
             CODE_SIGNING_ALLOWED=NO test 2>&1 | tee out/ios-xctest.log
           xcrun xcresulttool get test-results summary \
             --path out/Privacy.xcresult --format json > out/xctest-summary.json
@@ -124,7 +129,7 @@ jobs:
             -scheme aReuImpress-iPhone-AltStore -configuration Debug \
             -sdk iphoneos -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/PrivacyPhone" \
-            IPHONEOS_DEPLOYMENT_TARGET=15.0 CODE_SIGNING_ALLOWED=NO \
+            IPHONEOS_DEPLOYMENT_TARGET=26.0 CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_ENTITLEMENTS= ENABLE_DEBUG_DYLIB=NO \
             build 2>&1 | tee out/iphoneos-build.log
       - name: Verify packaging candidate but do not release incomplete original Icon
@@ -136,6 +141,8 @@ jobs:
           test -s "$APP/aReuImpress-iPhone"
           lipo -info "$APP/aReuImpress-iPhone" | tee out/architecture.txt
           grep -q arm64 out/architecture.txt
+          /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Info.plist" | tee out/minimum-ios-version.txt
+          test "$(cat out/minimum-ios-version.txt)" = '26.0'
           test ! -e "$APP/embedded.mobileprovision"
           if codesign --verify "$APP" >/dev/null 2>&1; then
             echo "Unexpected signature"; exit 1
