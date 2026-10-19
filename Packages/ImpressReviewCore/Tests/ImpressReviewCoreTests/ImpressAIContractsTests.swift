@@ -336,8 +336,10 @@ extension ImpressAIContractsTests {
         XCTAssertEqual(connection.effectiveEndpoints.chatPath, "openai/v1/chat/completions")
         let models = ImpressAIOpenCodeFreeQA.models(for: connection.id)
         XCTAssertEqual(models.map(\.identifier), [
-            "glm-5.3-flash-free", "deepseek-v4.1-flash-free"
+            "mimo-v2.6-flash-free", "longcat-2.5-preview-free",
+            "nemotron-3.5-lightning-free", "space-bunny-free"
         ])
+        XCTAssertEqual(ImpressAIOpenCodeFreeQA.modelIDs.count, 4)
         XCTAssertTrue(models.allSatisfy { $0.jsonMode == .promptOnly })
         try ImpressAIOpenCodeFreeQA.validate(
             ImpressAIResolvedRoute(connection: connection, model: models[0]))
@@ -347,7 +349,7 @@ extension ImpressAIContractsTests {
     func testOpenCodeFreeQARejectsPaidOrUnapprovedIdentifiers() throws {
         let connection = ImpressAIOpenCodeFreeQA.connection()
         for id in ["glm-5.3-flash", "deepseek-v4.1-flash",
-                   "gpt-6-sol", "other-model-free", ""] {
+                   "gpt-6-sol", "glm-5.3-flash-free", "other-model-free", ""] {
             let model = ImpressAIModel(connectionID: connection.id, identifier: id)
             XCTAssertThrowsError(try ImpressAIOpenCodeFreeQA.validate(
                 ImpressAIResolvedRoute(connection: connection, model: model)))
