@@ -1006,7 +1006,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
             let session = try JSONDecoder().decode(WCDBV3ChatSession.self, from: bytes)
             guard session.sessionID == sessionID,
                   session.sourceIdentity == row.sourceIdentity,
-                  session.updatedAt == row.updatedAt else {
+                  abs(session.updatedAt.timeIntervalSince(row.updatedAt)) < 0.002 else {
                 throw WCDBV3ChatStorageError.invalidRecord
             }
             return session
@@ -1032,6 +1032,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
         row.updatedAt = session.updatedAt
         row.record = bytes
         let tx = try database.getTransaction()
+        var didChange = false
         try tx.run(transaction: {
             let prior: WCDBV3ChatSessionRow? = try tx.getObject(
                 fromTable: Self.chatSessionsTable,
@@ -1054,14 +1055,16 @@ public actor ReviewWCDBRepository: ReviewRepository {
                     with: row,
                     where: WCDBV3ChatSessionRow.Properties.sessionID == session.sessionID.uuidString)
                 guard tx.changes == 1 else { throw WCDBV3ChatStorageError.conflict }
+                didChange = true
             } else {
                 guard expectedRevision == nil, session.revision == 0 else {
                     throw WCDBV3ChatStorageError.conflict
                 }
                 try tx.insert(objects: [row], intoTable: Self.chatSessionsTable)
+                didChange = true
             }
         })
-        ImpressV3BackupCoordinator.markDataChanged()
+        if didChange { ImpressV3BackupCoordinator.markDataChanged() }
     }
 
     /// The content history is not the FSRS ReviewEvent history.
