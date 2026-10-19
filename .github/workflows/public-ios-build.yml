@@ -127,7 +127,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/ImpressPhone" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee out/iphoneos-arm64-build.log
+          # The installable QA target must contain only the app, never XCTest bundles.
+          # Match the previously successful unsigned ARM64 AltStore CI settings.
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone-AltStore -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/ImpressPhone" IPHONEOS_DEPLOYMENT_TARGET=26.0 CODE_SIGNING_ALLOWED=NO CODE_SIGN_ENTITLEMENTS= ENABLE_DEBUG_DYLIB=NO build 2>&1 | tee out/iphoneos-arm64-build.log
       - name: Package and hash unsigned iPhoneOS IPA
         shell: bash
         run: |
