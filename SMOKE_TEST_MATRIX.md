@@ -16,9 +16,9 @@ This section is the current navigation/knowledge acceptance contract. **Status i
 | A06 | Old LearningEntry archive compatibility/migration | Existing journal preserved; migration audit pending |
 | A07 | Edits and rating interleaving, no stale display and no FSRS reset | Partial UI code; concurrency regression pending |
 | A08 | Note search/selection/reader/draft and Markdown fidelity | Existing reader; new workflow pending |
-| A09 | Chat model/prompt selection, provider scope | Config exists; Chat override UI pending |
-| A10 | Durable context, local Chat history and resume | G1 storage API exists, UI binding pending |
-| A11 | Failure, cancel, retries and no-cost fallback | Persistence substrate; end-to-end pending |
+| A09 | Chat model/prompt selection, provider scope | G3 native model chooser + provider consent code submitted; session prompt editing/native XCTest pending |
+| A10 | Durable context, local Chat history and resume | G3 cardID/revision-bound UI, full local history/draft resume and native test submitted; Notes/selection contexts pending |
+| A11 | Failure, cancel, retries and no-cost fallback | Failed message and unsent draft preserved; no silent paid fallback; native/retry/device verification pending |
 | A12 | Distinguish summarize vs explicit update | Proposal schema; executor pending |
 | A13 | Card → Chat → explicit test note safe diff/write/readback | BLOCKED until fixture executor/device |
 | A14 | Preview cancel/conflict/idempotence | BLOCKED |
