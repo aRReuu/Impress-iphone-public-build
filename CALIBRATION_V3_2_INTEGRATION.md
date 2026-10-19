@@ -1,10 +1,12 @@
 # Impress V3.2 — 校准器统一业务与集成权威
 
-> 当前开发权威：公开仓库 aRReuu/Impress-iphone-public-build / feature/impress-v3-r04-2-build。原 feature/impress-calibration-v01 为校准器来源，源 HEAD c16c4a605c5b6018861ff1691d6e6abbba0d8901。本文不授予私有仓库写权限。
+> 当前开发权威：公开仓库 aRReuu/Impress-iphone-public-build / feature/impress-vault-device-write-qa。原 feature/impress-calibration-v01 为校准器来源，源 HEAD c16c4a605c5b6018861ff1691d6e6abbba0d8901。本文不授予私有仓库写权限。
 
 ## 1. 产品边界与架构
+
+**2026-10-19 导航规则权威**：[KNOWLEDGE_LIFECYCLE_V1.md](KNOWLEDGE_LIFECYCLE_V1.md)；本文保留五指标、净分、通知和完整周/月/年图的领域规范。旧独立校准 Tab 已废止。
 Impress 是低摩擦个人成长工具：一方面通过闪卡、主动回忆与 FSRS-6 进行结构化认知巩固；另一方面通过极少量行为指标进行自我观察与校准。它不是心理诊断工具、临床健康评价、无穷累计积分游戏，也不是完整任务管理器。情绪与睡眠、运动、饮食可能相互影响，不能从本工具的趋势推断因果。
-三个原生一级 Tab（顺序固定）：闪卡、校准、设置。「笔记」不是一级 Tab，而是闪卡首页导航栏右侧的显式独立文字按钮，与「卡片集」独立并列；点击进入原有 Obsidian Vault 只读笔记控制器，返回仍在闪卡导航栈内。校准入口为 ImCalibrationVC/ImpressCalibrationViewController.swift；外观复用 ImpressV3Appearance、UIKit Dynamic Type、系统 Light/Dark，图表为带 X/Y 刻度的周/月/年二维折线。既有闪卡四向滑动、FSRS 状态、Obsidian Vault 只读入口及设置不得回退。设置新增 App 内 System/Light/Dark 三态与简体中文/繁体中文/英文语言选项；界面文案与外观 token 集中配置。该变化仅影响呈现，不修改历史校准得分、目标快照、情绪或复习事件。
+三个原生一级 Tab（顺序固定）：闪卡、笔记、设置。完整校准器从「设置 → 学习节奏 → 每日校准」进入；闪卡首页仅展示本周周一至周日的每日净分缩略图，点击进入同一控制器；不是新的评分或提醒数据源。校准入口为 ImCalibrationVC/ImpressCalibrationViewController.swift；外观复用 ImpressV3Appearance、UIKit Dynamic Type、系统 Light/Dark，图表为带 X/Y 刻度的周/月/年二维折线。既有闪卡四向滑动、FSRS 状态、Obsidian Vault 只读入口及设置不得回退。设置新增 App 内 System/Light/Dark 三态与简体中文/繁体中文/英文语言选项；界面文案与外观 token 集中配置。该变化仅影响呈现，不修改历史校准得分、目标快照、情绪或复习事件。
 
 ## 2. 五项指标与完成标准
 | 指标 | 记录 | 是否计分 |
