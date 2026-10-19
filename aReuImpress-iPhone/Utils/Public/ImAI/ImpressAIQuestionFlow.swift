@@ -230,8 +230,21 @@ final class ImpressAIQuestionGenerationViewController: UITableViewController {
     }
 
     private func showFailure(_ error: Error) {
+        let detail: String
+        switch error as? ImpressAIContractError {
+        case .unverifiedModel:
+            detail = V3L("出题模型尚未通过 JSON 验证，请在 AI 服务中测试该模型后重试。")
+        case .missingCredential:
+            detail = V3L("出题模型未保存 API Key，请先在 AI 服务中配置凭据。")
+        case .invalidRoute:
+            detail = V3L("请先在 AI 服务 → 业务默认模型中选择出题模型。")
+        case .disabled:
+            detail = V3L("当前出题模型或连接已停用，请重新选择。")
+        default:
+            detail = error.localizedDescription
+        }
         let alert = UIAlertController(title: V3L("无法生成问题"),
-             message: error.localizedDescription, preferredStyle: .alert)
+             message: detail, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
         present(alert, animated: true)
     }
