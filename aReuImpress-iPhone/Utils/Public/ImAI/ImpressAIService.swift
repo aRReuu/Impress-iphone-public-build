@@ -6,7 +6,7 @@ import ImpressReviewCore
 // The UI manages provider-owned credentials; no API key value is Codable or logged.
 enum ImpressAIServiceError: LocalizedError {
     case configuration, credential, invalidURL, unauthorized, forbidden, status(Int), response, tooLarge, emptyModelList
-    case freeModelOnly
+    case freeModelOnly, rateLimited
     var errorDescription: String? {
         switch self {
         case .configuration: return V3L("请先在设置中配置并测试 AI 出题模型。")
@@ -14,7 +14,8 @@ enum ImpressAIServiceError: LocalizedError {
         case .credential: return V3L("API Key 不可用，请重新保存密钥。")
         case .invalidURL: return V3L("API 地址不安全或不正确。")
         case .unauthorized: return V3L("API 授权失败（401），请检查密钥。")
-        case .forbidden: return V3L("免费 API 请求被拒绝（403）；可能是账号认证、地区或网络限制，请尝试在设置中保存新的 OpenCode API Key 后重测。")
+        case .forbidden: return V3L("OpenCode 返回 HTTP 403：可能是当前网络、账户权限或访问限制。确认免费定价后，再使用设备 Keychain 中的新 Key 重试。")
+        case .rateLimited: return V3L("OpenCode 返回 HTTP 429：免费模型暂时受限，请稍后重试；不会自动切换收费模型。")
         case .status(let code): return "AI API 请求失败（HTTP \(code)），原始数据未改变。"
         case .response: return V3L("模型响应不符合格式要求，未生成卡片。")
         case .tooLarge: return V3L("请求或响应超出安全长度限制。")
@@ -202,11 +203,13 @@ actor ImpressAIHTTPClient {
         return result
     }
 
-    private func execute(_ request: URLRequest) async throws -> [String: Any] {
+    private func executeDetailed(_ request: URLRequest) async throws
+        -> (body: [String: Any], statusCode: Int) {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ImpressAIServiceError.response }
         if http.statusCode == 401 { throw ImpressAIServiceError.unauthorized }
         if http.statusCode == 403 { throw ImpressAIServiceError.forbidden }
+        if http.statusCode == 429 { throw ImpressAIServiceError.rateLimited }
         guard (200...299).contains(http.statusCode) else {
             throw ImpressAIServiceError.status(http.statusCode)
         }
@@ -214,7 +217,12 @@ actor ImpressAIHTTPClient {
               let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw ImpressAIServiceError.response
         }
-        return obj
+        return (obj, http.statusCode)
+    }
+
+    private func execute(_ request: URLRequest) async throws -> [String: Any] {
+        let result = try await executeDetailed(request)
+        return result.body
     }
 
     // No inference of models' structured-output capability from this listing.
@@ -296,8 +304,7 @@ actor ImpressAIHTTPClient {
             }
             if answer?.isEmpty != false { answer = json["output_text"] as? String }
         case .chatCompletions:
-            let choices = json["choices"] as? [[String: Any]] ?? []
-            answer = (choices.first?["message"] as? [String: Any])?["content"] as? String
+            answer = try? ImpressAIChatResponseParser.chatCompletionText(json)
         case .anthropicMessages:
             let content = json["content"] as? [[String: Any]] ?? []
             answer = content.filter { ($0["type"] as? String) == "text" }
@@ -318,6 +325,14 @@ actor ImpressAIHTTPClient {
     /// Only an explicit Send tap reaches this method. No Vault read/write tools.
     func converse(route: ImpressAIResolvedRoute, system: String,
                   turns: [ImpressAIChatTurn]) async throws -> String {
+        let result = try await converseDetailed(route: route, system: system, turns: turns)
+        return result.text
+    }
+
+    /// The actual HTTP status is surfaced only for an explicit, harmless probe.
+    func converseDetailed(route: ImpressAIResolvedRoute, system: String,
+                         turns: [ImpressAIChatTurn]) async throws
+        -> (text: String, statusCode: Int) {
         guard !turns.isEmpty, turns.last?.role == .user, turns.count <= 20,
               system.utf8.count <= 4_000,
               turns.allSatisfy({ !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -360,25 +375,25 @@ actor ImpressAIHTTPClient {
                             "parts": [["text": item.text]]]
                        }]
         }
-        let response = try await execute(request(connection, path: endpointPath,
+        let response = try await executeDetailed(request(connection, path: endpointPath,
                             method: "POST", wireProtocol: wire, body: payload))
+        let body = response.body
         let text: String?
         switch wire {
         case .responses:
-            let items = response["output"] as? [[String: Any]] ?? []
+            let items = body["output"] as? [[String: Any]] ?? []
             let parts = items.flatMap { $0["content"] as? [[String: Any]] ?? [] }
             let combined = parts.filter { $0["type"] as? String == "output_text" }
                 .compactMap { $0["text"] as? String }.joined()
-            text = combined.isEmpty ? response["output_text"] as? String : combined
+            text = combined.isEmpty ? body["output_text"] as? String : combined
         case .chatCompletions:
-            let choices = response["choices"] as? [[String: Any]] ?? []
-            text = (choices.first?["message"] as? [String: Any])?["content"] as? String
+            text = try? ImpressAIChatResponseParser.chatCompletionText(body)
         case .anthropicMessages:
-            let parts = response["content"] as? [[String: Any]] ?? []
+            let parts = body["content"] as? [[String: Any]] ?? []
             text = parts.filter { $0["type"] as? String == "text" }
                 .compactMap { $0["text"] as? String }.joined()
         case .geminiGenerateContent:
-            let responses = response["candidates"] as? [[String: Any]] ?? []
+            let responses = body["candidates"] as? [[String: Any]] ?? []
             let content = responses.first?["content"] as? [String: Any]
             text = (content?["parts"] as? [[String: Any]] ?? [])
                 .compactMap { $0["text"] as? String }.joined()
@@ -387,7 +402,7 @@ actor ImpressAIHTTPClient {
               !value.isEmpty, value.utf8.count <= 65_000 else {
             throw ImpressAIServiceError.response
         }
-        return value
+        return (value, response.statusCode)
     }
 
     /// Harmless connectivity + JSON probe. It is not a guarantee of factual correctness.
