@@ -23,7 +23,7 @@ class ImTabBarViewController: UITabBarController
     @objc private func refreshLanguage() {
         guard let navigation = viewControllers?.compactMap({ $0 as? UINavigationController }),
               navigation.count == 3 else { return }
-        let keys = ["闪卡", "校准", "设置"]
+        let keys = ["闪卡", "笔记", "设置"]
         for (index, item) in navigation.enumerated() {
             item.tabBarItem.title = V3L(keys[index])
         }
@@ -43,12 +43,13 @@ class ImTabBarViewController: UITabBarController
         cardNav.tabBarItem.image = UIImage(systemName: "square.stack.3d.up")
         cardNav.tabBarItem.selectedImage = UIImage(systemName: "square.stack.3d.up.fill")
         
-        // Dedicated calibration tab; preserve all existing roots.
-        let calibrationVC = ImpressCalibrationViewController()
-        let calibrationNav = ImNavigationViewController(rootViewController: calibrationVC)
-        calibrationNav.tabBarItem.title = V3L("校准")
-        calibrationNav.tabBarItem.image = UIImage(systemName: "chart.xyaxis.line")
-        calibrationNav.tabBarItem.selectedImage = UIImage(systemName: "chart.xyaxis.line")
+        // The existing Vault reader is now a primary, independent destination.
+        // It keeps the same permission, search and Markdown controller.
+        let notesVC = ImpressNoteListTableViewController()
+        let notesNav = ImNavigationViewController(rootViewController: notesVC)
+        notesNav.tabBarItem.title = V3L("笔记")
+        notesNav.tabBarItem.image = UIImage(systemName: "text.book.closed")
+        notesNav.tabBarItem.selectedImage = UIImage(systemName: "text.book.closed.fill")
 
         let settingsVC = ImpressV3SettingsHubViewController()
         let settingsNav = ImNavigationViewController(rootViewController: settingsVC)
@@ -56,7 +57,7 @@ class ImTabBarViewController: UITabBarController
         settingsNav.tabBarItem.image = UIImage(systemName: "gearshape")
         settingsNav.tabBarItem.selectedImage = UIImage(systemName: "gearshape.fill")
 
-        self.viewControllers = [cardNav, calibrationNav, settingsNav]
+        self.viewControllers = [cardNav, notesNav, settingsNav]
         // Page extends underneath the native floating bar; no fake glass.
         view.backgroundColor = ImpressV3Appearance.page
         ImpressV3Appearance.styleTabBar(tabBar)
