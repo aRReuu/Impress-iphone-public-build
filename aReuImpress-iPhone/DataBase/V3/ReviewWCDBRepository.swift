@@ -1004,9 +1004,10 @@ public actor ReviewWCDBRepository: ReviewRepository {
                 throw WCDBV3ChatStorageError.invalidRecord
             }
             let session = try JSONDecoder().decode(WCDBV3ChatSession.self, from: bytes)
-            guard session.sessionID == sessionID,
+            guard let storedUpdatedAt = row.updatedAt,
+                  session.sessionID == sessionID,
                   session.sourceIdentity == row.sourceIdentity,
-                  abs(session.updatedAt.timeIntervalSince(row.updatedAt)) < 0.002 else {
+                  abs(session.updatedAt.timeIntervalSince(storedUpdatedAt)) < 0.002 else {
                 throw WCDBV3ChatStorageError.invalidRecord
             }
             return session
