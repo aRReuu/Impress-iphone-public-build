@@ -1,6 +1,6 @@
 # Impress V1 · OpenCode 免费模型 + Obsidian 真机验收
 
-> 适用：`feature/impress-vault-device-write-qa` 的 Debug QA iPhoneOS 构建，不适用于公开发布。此阶段只允许免费模型的网络推理，**不得向付费模型发请求**；正式 Obsidian 生产写回始终关闭。
+> 适用：`feature/impress-vault-device-write-qa` 的 Debug QA iPhoneOS 构建，不适用于正式发布。**此文档的 OpenCode Free 白名单仅约束用户显式添加的「OpenCode 免费模型（测试）」连接**，不会封锁其他独立配置的 GLM / Z.AI / 自定义连接。CI 不使用收费模型进行真实调用；在设备上对非 QA 连接发起探针前必须由用户确认可能产生 API 费用。正式 Obsidian 生产写回仍关闭。
 >
 > 当前 OpenCode Console 官方模型目录：`https://opencode.ai/inference/v1/models`；
 > 免费 Chat Completions Endpoint：`https://opencode.ai/inference/openai/v1/chat/completions`。
