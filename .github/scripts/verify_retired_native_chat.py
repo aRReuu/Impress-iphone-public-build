@@ -87,23 +87,23 @@ def assert_clean() -> None:
     assert "imDatabase.drop(table: table)" in db
     assert "printSqlText()" not in db, "SQL_TRACE_MUST_NOT_LOG_PRIVATE_DATA"
     tab = (APP / "Base/ImTabBarViewController.swift").read_text()
-    # Navigation was deliberately simplified: three primary tabs; Notes remains
-    # a visible, independent native action on the flashcard page.
+    # 2026-10-19 authority: exactly three primary tabs. The explicit +
+    # creates a card, not a knowledge log; no duplicated global Notes action.
     assert "ImpressV3ReviewViewController()" in tab
-    assert "ImpressCalibrationViewController()" in tab
+    assert "ImpressNoteListTableViewController()" in tab
     assert "ImpressV3SettingsHubViewController()" in tab
-    assert "self.viewControllers = [cardNav, calibrationNav, settingsNav]" in tab
-    assert "ImpressNoteListTableViewController()" not in tab
+    assert "self.viewControllers = [cardNav, notesNav, settingsNav]" in tab
+    assert "calibrationNav" not in tab
     review = (APP / "VC/MainVCs/ImCardVC/ImpressV3ReviewViewController.swift").read_text()
-    assert "ImpressNoteListTableViewController()" in review
-    assert "navigationItem.rightBarButtonItems = [notes, cardCollection]" in review
-    # Active V3 native UI is localized; require explicit Chinese-key lookup
-    # rather than a single hard-coded language or an invisible overflow menu.
-    assert 'title: V3L("笔记"), style: .plain, target: self' in review
-    assert 'notes.accessibilityLabel = V3L("笔记")' in review
+    assert 'target: self, action: #selector(createCard))' in review
+    assert 'navigationItem.leftBarButtonItem?.accessibilityLabel = V3L("新增卡片")' in review
+    assert "navigationItem.rightBarButtonItems = [cardCollection]" in review
+    assert "navigationItem.rightBarButtonItems = [notes, cardCollection]" not in review
     assert 'cardCollection.accessibilityLabel = V3L("卡片集")' in review
-    assert 'notes.accessibilityIdentifier = "impress.review.notes"' in review
     assert 'cardCollection.accessibilityIdentifier = "impress.review.card-collection"' in review
+    assert 'Item(title: "每日校准"' in review
+    assert 'ImpressCalibrationViewController()' in review
+    # Safeguards below still reject retired chat code, secrets and production writes.
     config = (APP / "Utils/Constansts/ImColorConstants.swift").read_text()
     assert 'enum ImpressV3Language: String, CaseIterable' in config
     for language in ('"zh-Hans"', '"zh-Hant"', '"en"'):
