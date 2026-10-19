@@ -1862,8 +1862,9 @@ final class ImpressAITransportAndCredentialTests: XCTestCase {
         ImpressAIMockURLProtocol.resetAuthCapture()
 
         ImpressAIMockURLProtocol.respond(status: 200, json: "{}")
-        XCTAssertEqual(try await client.probeOpenCodeServiceAccount(
-            connection: connection), 200)
+        let keyProbeStatus = try await client.probeOpenCodeServiceAccount(
+            connection: connection)
+        XCTAssertEqual(keyProbeStatus, 200)
 
         ImpressAIMockURLProtocol.respond(status: 200, json:
             #"{"choices":[{"message":{"role":"assistant","content":"OK"}}]}"#)
