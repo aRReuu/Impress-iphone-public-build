@@ -208,8 +208,8 @@ final class ImpressV3ReviewViewController: UIViewController {
         // import now belong exclusively in Card Collection.
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             image: UIImage(systemName: "plus"), style: .plain,
-            target: self, action: #selector(openQuickCapture))
-        navigationItem.leftBarButtonItem?.accessibilityLabel = V3L("快速记录")
+            target: self, action: #selector(createCard))
+        navigationItem.leftBarButtonItem?.accessibilityLabel = V3L("新增卡片")
         updateNavigationActions()
     }
 
@@ -225,8 +225,7 @@ final class ImpressV3ReviewViewController: UIViewController {
     }
 
     private func updateNavigationActions() {
-        // Distinct first-class destinations. Keep the searchable card
-        // collection, and expose external Obsidian notes without another Tab.
+        // Notes now has its own Tab. Keep only Card Collection in the header.
         let cardCollection = UIBarButtonItem(
             image: UIImage(systemName: "square.stack"),
             style: .plain, target: self,
@@ -234,14 +233,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         cardCollection.accessibilityLabel = V3L("卡片集")
         cardCollection.accessibilityIdentifier = "impress.review.card-collection"
 
-        // A visible native text action remains recognizable on iPhone 13;
-        // not hidden inside a menu or the card-creation (+) control.
-        let notes = UIBarButtonItem(
-            title: V3L("笔记"), style: .plain, target: self,
-            action: #selector(openNotes))
-        notes.accessibilityLabel = V3L("笔记")
-        notes.accessibilityIdentifier = "impress.review.notes"
-        navigationItem.rightBarButtonItems = [notes, cardCollection]
+        navigationItem.rightBarButtonItems = [cardCollection]
     }
 
     @objc private func openNotes() {
