@@ -103,6 +103,8 @@ def assert_clean() -> None:
     assert 'cardCollection.accessibilityIdentifier = "impress.review.card-collection"' in review
     assert 'Item(title: "每日校准"' in review
     assert 'ImpressCalibrationViewController()' in review
+    assert 'calibrationWeek.accessibilityIdentifier = "impress.review.calibration-week"' in review
+    assert 'calibrationWeek.addTarget(self, action: #selector(openCalibrationDetail),' in review
     # Safeguards below still reject retired chat code, secrets and production writes.
     config = (APP / "Utils/Constansts/ImColorConstants.swift").read_text()
     assert 'enum ImpressV3Language: String, CaseIterable' in config
