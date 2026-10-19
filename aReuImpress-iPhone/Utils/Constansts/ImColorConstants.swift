@@ -723,8 +723,6 @@ enum ImpressV3Language: String, CaseIterable {
         "查看历史版本": ("查看歷史版本", "View Version History"),
         "恢复历史版本": ("還原歷史版本", "Restore Version"),
         "恢复将产生新版本，保留现有历史；不会修改 FSRS 评分。": ("還原會建立新版本，保留既有歷史；不會修改 FSRS 評分。", "Restoring creates a new version without changing FSRS history."),
-        "恢复": ("還原", "Restore"),
-        "先回忆，再查看答案": ("先回想，再查看答案", "Recall first, then reveal the answer"),
 
         "每日校准": ("每日校準", "Daily Calibration"),
         "五项评估、历史走势与提醒": ("五項評估、歷史走勢與提醒", "Five checks, trends, and reminders"),
