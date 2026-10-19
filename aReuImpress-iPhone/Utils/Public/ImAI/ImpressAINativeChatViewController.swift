@@ -28,9 +28,10 @@ enum ImpressAIChatPromptSelection {
     }
 }
 
-/// V1 native API chat. Uses the same per-business AI registry as question
-/// generation, but its request/response is ordinary text, NOT question JSON.
-/// Nothing is automatically appended to learning history or source Markdown.
+/// Source-scoped native API chat. A cardID (not a mutable title) binds the
+/// conversation to the existing V3 SQLite/backup authority. Local history is
+/// complete; the remote request window is bounded and independently consented.
+/// Ordinary Chat produces no FSRS events or Markdown writes.
 @MainActor
 final class ImpressAINativeChatViewController: UIViewController,
                                                 UITableViewDataSource, UITextViewDelegate {
