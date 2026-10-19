@@ -1774,6 +1774,48 @@ final class ImpressAITransportAndCredentialTests: XCTestCase {
         }
     }
 
+    func testSyntheticGenerationCallsRealJSONRequestParserAndEvidenceValidator() async throws {
+        let connection = ImpressAIOpenCodeFreeQA.connection()
+        let model = ImpressAIOpenCodeFreeQA.models(for: connection.id)[0]
+        let route = ImpressAIResolvedRoute(connection: connection, model: model)
+        let source = ImpressAISource(vaultID: "qa-only",
+            relativePath: "Synthetic_QA.md",
+            documentSHA256: String(repeating: "a", count: 64),
+            heading: "Synthetic")
+        let excerpt = ImpressAIExcerpt(id: "qa-evidence-1",
+            source: source,
+            text: "Active recall retrieves knowledge without looking at the answer.")
+        let envelope: [String: Any] = [
+            "questions": [[
+                "question": "How does active recall differ from rereading?",
+                "answer": "It tests retrieval without showing the answer first.",
+                "dimension": "comparison",
+                "evidenceIDs": ["qa-evidence-1"]
+            ]]
+        ]
+        let encoded = try JSONSerialization.data(withJSONObject: envelope)
+        let answer = try XCTUnwrap(String(data: encoded, encoding: .utf8))
+        let body: [String: Any] = [
+            "choices": [["message": ["role": "assistant", "content": answer]]]
+        ]
+        let serialized = try JSONSerialization.data(withJSONObject: body)
+        ImpressAIMockURLProtocol.respond(status: 200,
+            json: try XCTUnwrap(String(data: serialized, encoding: .utf8)))
+        let completion = try await mockClient().completeDetailed(
+            route: route, system: ImpressAIQuestionPrompt.system(count: 1),
+            user: try ImpressAIQuestionPrompt.input([excerpt]))
+        XCTAssertEqual(completion.statusCode, 200)
+        let candidates = try ImpressAIQuestionPrompt.decode(completion.text)
+        let pool = ImpressAIQuestionPool(source: source, excerpts: [excerpt],
+            requestedCount: 1, modelProfileID: model.id,
+            candidates: candidates.map {
+                ImpressAIQuestionCandidate(question: $0.question,
+                    answer: $0.answer, dimension: $0.dimension,
+                    evidenceIDs: $0.evidenceIDs)
+            })
+        XCTAssertEqual(try ImpressAIQuestionValidator.validatedSelection(pool).count, 1)
+    }
+
     func testCredentialStoreSupportsRotationAndDeletionWithoutLoggingSecrets() throws {
         let id = UUID()
         defer { ImpressAIKeychain.delete(id: id) }
