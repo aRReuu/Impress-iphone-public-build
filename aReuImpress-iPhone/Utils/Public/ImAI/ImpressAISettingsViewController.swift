@@ -2,6 +2,7 @@ import UIKit
 import ImpressReviewCore
 
 // A local-only filter shared by model catalogs and task selection.
+@MainActor
 private enum ImpressAIModelSearchFilter {
     static func apply(_ models: [ImpressAIModel], query: String) -> [ImpressAIModel] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
