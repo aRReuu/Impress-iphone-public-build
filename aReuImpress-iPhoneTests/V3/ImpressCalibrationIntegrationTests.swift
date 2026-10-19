@@ -62,28 +62,24 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testTapWeeklyChartOpensFullCalibrationWithoutReplacingReviewController() throws {
+    func testReviewExcludesLargeCalibrationChartAndSettingsRetainsDetailRoute() throws {
         let tabs = ImTabBarViewController()
         tabs.loadViewIfNeeded()
         let flashcardNav = try XCTUnwrap(tabs.viewControllers?[0] as? UINavigationController)
         let review = try XCTUnwrap(flashcardNav.viewControllers.first
                                    as? ImpressV3ReviewViewController)
         review.loadViewIfNeeded()
-        // A real UIControl covers the chart area; do not rely on a tiny
-        // title or an invisible navigation button to open the detail.
-        let overview = try XCTUnwrap(review.view.subviews.first {
+        XCTAssertNil(review.view.subviews.first {
             $0.accessibilityIdentifier == "impress.review.calibration-week"
-        } as? UIControl)
-        XCTAssertTrue(overview.isUserInteractionEnabled)
-        XCTAssertTrue(overview.accessibilityTraits.contains(.button))
-        XCTAssertTrue(overview.actions(forTarget: review, forControlEvent: .touchUpInside)?
-            .contains("openCalibrationDetail") ?? false)
-        overview.sendActions(for: .touchUpInside)
-        XCTAssertTrue(flashcardNav.topViewController is ImpressCalibrationViewController)
-        XCTAssertTrue(flashcardNav.viewControllers.first === review)
-        XCTAssertEqual(flashcardNav.viewControllers.count, 2)
-        XCTAssertEqual(tabs.selectedIndex, 0)
-        flashcardNav.popViewController(animated: false)
+        })
+        XCTAssertEqual(flashcardNav.viewControllers.count, 1)
+        let settingsNav = try XCTUnwrap(tabs.viewControllers?[2] as? UINavigationController)
+        let settings = try XCTUnwrap(settingsNav.viewControllers.first
+                                    as? ImpressV3SettingsHubViewController)
+        settings.loadViewIfNeeded()
+        settings.tableView(settings.tableView,
+                           didSelectRowAt: IndexPath(row: 0, section: 1))
+        XCTAssertTrue(settingsNav.topViewController is ImpressCalibrationViewController)
         XCTAssertTrue(flashcardNav.topViewController === review)
     }
 

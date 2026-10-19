@@ -608,7 +608,7 @@ final class ImpressR042AppearanceTests: XCTestCase {
             .resolvedColor(with: lightTraits)
         XCTAssertEqual(
             selected.titleTextAttributes(for: .selected)?[.foregroundColor] as? UIColor,
-            ImpressV3Appearance.primaryButtonText)
+            ImpressV3Appearance.reviewPrimaryInk)
 
         window.overrideUserInterfaceStyle = .dark
         window.layoutIfNeeded()
@@ -620,7 +620,7 @@ final class ImpressR042AppearanceTests: XCTestCase {
         XCTAssertEqual(after,
             ImpressV3Appearance.page.resolvedColor(with: darkTraits))
         XCTAssertEqual(selected.selectedSegmentTintColor,
-                       ImpressV3Appearance.accent)
+                       ImpressV3Appearance.reviewPrimarySurface)
     }
 
     func testLocalVaultMarkdownHasNativeDarkCSSWithoutRemoteNetworkInjection() {
@@ -665,7 +665,7 @@ final class ImpressR042AppearanceTests: XCTestCase {
         let selectors = findSegments(composer.view)
         let types = try XCTUnwrap(selectors.first(where: { $0.numberOfSegments == 3 }))
         let answerMode = try XCTUnwrap(selectors.first(where: { $0.numberOfSegments == 2 }))
-        XCTAssertEqual(types.selectedSegmentTintColor, ImpressV3Appearance.accent)
+        XCTAssertEqual(types.selectedSegmentTintColor, ImpressV3Appearance.reviewPrimarySurface)
         XCTAssertEqual(types.backgroundColor, ImpressV3Appearance.segmentTrack)
         XCTAssertEqual(types.accessibilityLabel, "卡片类型")
         XCTAssertEqual(types.selectedSegmentIndex, 0)
@@ -675,7 +675,7 @@ final class ImpressR042AppearanceTests: XCTestCase {
         let attrs = types.titleTextAttributes(for: .selected)
         XCTAssertNotNil(attrs?[.font] as? UIFont)
         XCTAssertEqual(attrs?[.foregroundColor] as? UIColor,
-                       ImpressV3Appearance.primaryButtonText)
+                       ImpressV3Appearance.reviewPrimaryInk)
     }
     func testCentralButtonTapTargetsAndQuietSecondaryFeedback() {
         guard #available(iOS 15.0, *) else { return }

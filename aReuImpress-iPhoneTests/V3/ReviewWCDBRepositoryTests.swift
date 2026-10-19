@@ -1659,9 +1659,9 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         // The primary '+' directly opens the three-type native card editor.
         XCTAssertEqual(controller.navigationItem.leftBarButtonItem?.accessibilityLabel,
                        V3L("新增卡片"))
-        // The full weekly chart surface provides a second route to the same
-        // calibration controller without replacing the active review root.
-        XCTAssertNotNil(controller.view.subviews.first {
+        // NAV-04 supersedes the old chart mandate: full calibration is not
+        // embedded above the active review card or in the primary review path.
+        XCTAssertNil(controller.view.subviews.first {
             $0.accessibilityIdentifier == "impress.review.calibration-week"
         })
         XCTAssertFalse(buttons.contains { $0.title(for: .normal) == "困难" })
@@ -1835,7 +1835,7 @@ final class ImpressAICustomAPIUITests: XCTestCase {
         XCTAssertFalse(sendButton?.isEnabled ?? true)
         let prompt = conversation.view.subviews
             .compactMap { $0 as? UILabel }
-            .first { $0.text == V3L("讨论记录仅在本页面保留，不会自动写入 Obsidian。") }
+            .first { $0.text == V3L("对话与草稿保存在本机；只有点击发送并确认材料后才会发送给服务商。不会自动写入 Obsidian。") }
         XCTAssertNotNil(prompt)
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
