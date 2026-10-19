@@ -120,7 +120,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Release -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/ImpressReleaseSim" CODE_SIGNING_ALLOWED=NO ENABLE_TESTABILITY=YES build 2>&1 | tee out/release-simulator-build.log
+          # App-only Release scheme: the main scheme also builds DEBUG-only XCTest helpers.
+          # Native XCTest already ran in the separate signed Debug test step.
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone-AltStore -configuration Release -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/ImpressReleaseSim" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee out/release-simulator-build.log
       - name: Compile unsigned Debug iPhoneOS arm64
         shell: bash
         run: |
