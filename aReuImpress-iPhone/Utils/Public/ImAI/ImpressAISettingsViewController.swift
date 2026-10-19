@@ -187,9 +187,14 @@ final class ImpressAISettingsViewController: UITableViewController {
                     }
                     // Keep only the currently approved Free model IDs in this
                     // QA profile. Do not touch any custom/other-provider profile.
-                    registry.models.removeAll {
+                    let retiredIDs = Set(registry.models.filter {
                         $0.connectionID == selectedID &&
                         !ImpressAIOpenCodeFreeQA.allowedForCatalog($0.identifier)
+                    }.map(\.id))
+                    registry.models.removeAll { retiredIDs.contains($0.id) }
+                    registry.routes.removeAll {
+                        retiredIDs.contains($0.primaryModelID) ||
+                        ($0.fallbackModelID.map(retiredIDs.contains) ?? false)
                     }
                     for fresh in ImpressAIOpenCodeFreeQA.models(for: selectedID) {
                         if let index = registry.models.firstIndex(where: {
