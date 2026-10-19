@@ -20,9 +20,12 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Existing public privacy guards
         run: |
           set -euo pipefail
+          python3 .github/scripts/check_git_history_secrets.py
           python3 .github/scripts/verify_retired_native_chat.py
           python3 .github/scripts/verify_ios26_floor.py
           python3 .github/scripts/verify_apple_stt_contract.py
