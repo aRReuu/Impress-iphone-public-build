@@ -250,7 +250,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
             return
         }
         do {
-            let source = try authorizedIdentity.map(ImpressBatchSourceKey.encode)
+            let source = try authorizedIdentity.map { try ImpressBatchSourceKey.encode($0) }
             let rows = parsed.map { ImpressV3BatchCandidate(parsed: $0, sourceKey: source) }
             let preview = ImpressV3BatchPreviewViewController(rows: rows)
             preview.onCommit = onCommit
