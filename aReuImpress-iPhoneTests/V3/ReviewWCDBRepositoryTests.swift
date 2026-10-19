@@ -26,6 +26,33 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         return folder.appendingPathComponent("v3.sqlite").path
     }
 
+    func testVersionedNoteSourceLookupPreservesLegacyLinksAndSeparatesSameTitle() async throws {
+        let calc = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(), calculator: calc)
+        let source = try ImVaultFileIdentity(vaultID: "vault-1", relativePath: "A/Same.md")
+        let other = try ImVaultFileIdentity(vaultID: "vault-2", relativePath: "A/Same.md")
+        let digest = String(repeating: "a", count: 64)
+        let oldKey = try ImpressBatchSourceKey.encode(source)
+        let newKey = try ImpressBatchSourceKey.encode(source, documentDigest: digest)
+        let foreignKey = try ImpressBatchSourceKey.encode(other, documentDigest: digest)
+        let now = Date(timeIntervalSince1970: 1_726_000_000)
+        var ids: [UUID] = []
+        for (index, key) in [oldKey, newKey, foreignKey].enumerated() {
+            let card = WCDBV3CardInput(question: "Unique question \\(index)",
+                answerText: "Answer \\(index)", sourceNotePath: key)
+            ids.append(card.cardID)
+            try await repo.insertNewCard(card,
+                initial: try calc.newCardSnapshot(id: card.cardID, now: now),
+                now: now.addingTimeInterval(Double(index)))
+        }
+        let related = try await repo.listRelatedCards(for: source)
+        let unrelated = try await repo.listRelatedCards(for: other)
+        XCTAssertEqual(Set(related.map(\\.cardID)), Set(ids.prefix(2)))
+        XCTAssertEqual(unrelated.map(\\.cardID), [ids[2]])
+        XCTAssertEqual(try ImpressBatchSourceKey.documentDigest(for: newKey), digest)
+        XCTAssertNil(try ImpressBatchSourceKey.documentDigest(for: oldKey))
+    }
+
     func testBidirectionalVaultLinksUseExactIdentityAndPreserveOriginalCard() async throws {
         let calculator = FSRS6ReviewCalculator()
         let repo = try ReviewWCDBRepository(databasePath: temporaryPath(), calculator: calculator)

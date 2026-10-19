@@ -687,6 +687,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
             throw ReviewWCDBError.invalidSchedulerOutput
         }
         let encoded = try ImpressBatchSourceKey.encode(source)
+        let versionedPrefix = try ImpressBatchSourceKey.versionedPrefix(for: source)
         let selected = [
             WCDBV3CardRow.Properties.cardID,
             WCDBV3CardRow.Properties.question,
@@ -701,32 +702,31 @@ public actor ReviewWCDBRepository: ReviewRepository {
             WCDBV3CardRow.Properties.updatedAt.asOrder(by: .descending),
             WCDBV3CardRow.Properties.cardID.asOrder(by: .ascending)
         ]
+        // LIKE is a coarse prefilter. URL-safe base64 may contain '_', which
+        // SQLite treats as a wildcard, so ALWAYS verify the decoded identity.
         let sourceFilter = WCDBV3CardRow.Properties.sourceNotePath == encoded
+            || WCDBV3CardRow.Properties.sourceNotePath.like(versionedPrefix + "%")
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        let rows: [WCDBV3CardRow]
-        if query.isEmpty {
-            rows = try database.getObjects(on: selected, fromTable: Self.cardsTable,
-                where: sourceFilter, orderBy: ordering, limit: limit, offset: offset)
-        } else {
-            // Scan only this exact file's linked rows in bounded batches.
-            // A literal '%' or '_' must never widen SQLite LIKE matching.
-            var matches: [WCDBV3CardRow] = []
-            var scanned = 0
-            var skipped = 0
-            while matches.count < limit {
-                let block: [WCDBV3CardRow] = try database.getObjects(
-                    on: selected, fromTable: Self.cardsTable, where: sourceFilter,
-                    orderBy: ordering, limit: 200, offset: scanned)
-                if block.isEmpty { break }
-                scanned += block.count
-                for row in block where [row.question, row.answerText]
-                    .compactMap({ $0 }).contains(where: { $0.localizedStandardContains(query) }) {
-                    if skipped < offset { skipped += 1 }
-                    else if matches.count < limit { matches.append(row) }
-                }
-                if block.count < 200 { break }
+        var rows: [WCDBV3CardRow] = []
+        var scanned = 0
+        var skipped = 0
+        while rows.count < limit {
+            let block: [WCDBV3CardRow] = try database.getObjects(
+                on: selected, fromTable: Self.cardsTable, where: sourceFilter,
+                orderBy: ordering, limit: 200, offset: scanned)
+            guard !block.isEmpty else { break }
+            scanned += block.count
+            for row in block {
+                guard let key = row.sourceNotePath,
+                      let decoded = try? ImpressBatchSourceKey.decode(key),
+                      decoded == source else { continue }
+                let matches = query.isEmpty || [row.question, row.answerText]
+                    .compactMap({ $0 }).contains(where: { $0.localizedStandardContains(query) })
+                guard matches else { continue }
+                if skipped < offset { skipped += 1 }
+                else if rows.count < limit { rows.append(row) }
             }
-            rows = matches
+            if block.count < 200 { break }
         }
         return try rows.map { row in
             guard let rawID = row.cardID, let id = UUID(uuidString: rawID),

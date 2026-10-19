@@ -268,27 +268,66 @@ public enum ImpressBatchParser {
 /// Backwards-compatible Vault + complete relative-path authority carried in
 /// the existing source_note_path column. No WCDB 1.1.0 migration is needed.
 public enum ImpressBatchSourceKey {
-    private static let prefix = "obsidian+v1:"
+    private static let legacyPrefix = "obsidian+v1:"
+    private static let versionedPrefix = "obsidian+v2:"
 
-    public static func encode(_ identity: ImVaultFileIdentity) throws -> String {
+    private static func payload(for identity: ImVaultFileIdentity) throws -> String {
         let data = try JSONEncoder().encode(identity)
-        return prefix + data.base64EncodedString()
+        return data.base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
     }
 
+    private static func verifiedDigest(_ digest: String) throws -> String {
+        guard digest.range(of: "^[0-9a-fA-F]{64}$", options: .regularExpression) != nil
+        else { throw ImVaultCoreError.invalidVaultIdentity }
+        return digest.lowercased()
+    }
+
+    /// Existing cards keep the v1 encoding; newly imported note-backed cards
+    /// also retain the exact SHA-256 digest observed when questions were made.
+    /// Both encodings live in the existing source_note_path column.
+    public static func encode(_ identity: ImVaultFileIdentity,
+                              documentDigest: String? = nil) throws -> String {
+        let value = try payload(for: identity)
+        guard let documentDigest else { return legacyPrefix + value }
+        return versionedPrefix + value + ":" + (try verifiedDigest(documentDigest))
+    }
+
+    /// Allows one scoped SQL prefix search for v2 links; callers MUST decode
+    /// and compare complete file identities before presenting a match.
+    public static func versionedPrefix(for identity: ImVaultFileIdentity) throws -> String {
+        versionedPrefix + (try payload(for: identity)) + ":"
+    }
+
+    private static func components(_ value: String) throws -> (String, String?)? {
+        if value.hasPrefix(legacyPrefix) {
+            return (String(value.dropFirst(legacyPrefix.count)), nil)
+        }
+        if value.hasPrefix(versionedPrefix) {
+            let items = value.dropFirst(versionedPrefix.count)
+                .split(separator: ":", omittingEmptySubsequences: false)
+            guard items.count == 2 else { throw ImVaultCoreError.invalidVaultIdentity }
+            return (String(items[0]), try verifiedDigest(String(items[1])))
+        }
+        return nil // Legacy unverified plain paths have no stable Vault ID.
+    }
+
     public static func decode(_ value: String) throws -> ImVaultFileIdentity? {
-        guard value.hasPrefix(prefix) else { return nil } // legacy source paths stay valid
-        let payload = String(value.dropFirst(prefix.count))
-            .replacingOccurrences(of: "-", with: "+")
+        guard let (payload, _) = try components(value) else { return nil }
+        let raw = payload.replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
-        let padded = payload + String(repeating: "=", count: (4 - payload.count % 4) % 4)
+        let padded = raw + String(repeating: "=", count: (4 - raw.count % 4) % 4)
         guard let data = Data(base64Encoded: padded),
               let identity = try? JSONDecoder().decode(ImVaultFileIdentity.self, from: data)
         else { throw ImVaultCoreError.invalidVaultIdentity }
-        // Decoding bypasses a synthesized init's validation. Revalidate now.
+        // Codable decoding bypasses the initializer's path-validation rules.
         return try ImVaultFileIdentity(vaultID: identity.vaultID,
                                        relativePath: identity.relativePath)
+    }
+
+    public static func documentDigest(for value: String) throws -> String? {
+        try components(value)?.1
     }
 }

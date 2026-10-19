@@ -197,16 +197,18 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
             var actions = [timeline, edit]
             if let raw = card.sourceNotePath,
                let source = try? ImpressBatchSourceKey.decode(raw) {
+                let expectedDigest = try? ImpressBatchSourceKey.documentDigest(for: raw)
                 actions.append(UIAction(title: V3L("打开来源笔记"),
                     image: UIImage(systemName: "doc.text")) { [weak self] _ in
-                    self?.openLinkedNote(source)
+                    self?.openLinkedNote(source, expectedDigest: expectedDigest)
                 })
             }
             return UIMenu(children: actions)
         }
     }
 
-    private func openLinkedNote(_ identity: ImVaultFileIdentity) {
+    private func openLinkedNote(_ identity: ImVaultFileIdentity,
+                                expectedDigest: String?) {
         // Do not infer a Vault from a title or cross an expired permission.
         guard ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID else {
             showLinkedNoteProblem(V3L("来源 Vault 未授权，无法打开原笔记。"))
@@ -220,8 +222,22 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
                     self.showLinkedNoteProblem(V3L("来源身份不匹配，请刷新 Vault 授权。"))
                     return
                 }
-                self.navigationController?.pushViewController(
-                    ImVaultDocumentController(document: source), animated: true)
+                if let expectedDigest, source.digest != expectedDigest {
+                    // Path may have been replaced or its contents legitimately
+                    // edited. Do NOT claim that the old card is now incorrect.
+                    let alert = UIAlertController(title: V3L("来源笔记已变化"),
+                        message: V3L("当前内容与生成卡片时的文档版本不同。仅供手动核查；不会自动更新或覆盖原卡。"),
+                        preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+                    alert.addAction(UIAlertAction(title: V3L("只读查看"), style: .default) { _ in
+                        self.navigationController?.pushViewController(
+                            ImVaultDocumentController(document: source), animated: true)
+                    })
+                    self.present(alert, animated: true)
+                } else {
+                    self.navigationController?.pushViewController(
+                        ImVaultDocumentController(document: source), animated: true)
+                }
             case .failure(let error):
                 self.showLinkedNoteProblem(error.localizedDescription)
             }

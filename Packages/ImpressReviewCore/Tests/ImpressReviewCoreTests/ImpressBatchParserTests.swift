@@ -2,6 +2,25 @@ import XCTest
 @testable import ImpressReviewCore
 
 final class ImpressBatchParserTests: XCTestCase {
+    func testVersionedVaultSourceKeyRoundTripAndDigestValidation() throws {
+        let source = try ImVaultFileIdentity(vaultID: "vault-1",
+                                             relativePath: "Folder/Topic.md")
+        let digest = String(repeating: "Ab", count: 32)
+        let versioned = try ImpressBatchSourceKey.encode(source, documentDigest: digest)
+        XCTAssertEqual(try ImpressBatchSourceKey.decode(versioned), source)
+        XCTAssertEqual(try ImpressBatchSourceKey.documentDigest(for: versioned),
+                       digest.lowercased())
+        XCTAssertTrue(versioned.hasPrefix(try ImpressBatchSourceKey.versionedPrefix(for: source)))
+        XCTAssertNil(try ImpressBatchSourceKey.documentDigest(
+            for: ImpressBatchSourceKey.encode(source)))
+        XCTAssertThrowsError(try ImpressBatchSourceKey.encode(
+            source, documentDigest: "not-a-real-sha"))
+        XCTAssertThrowsError(try ImpressBatchSourceKey.decode(versioned + ":spoofed"))
+        let other = try ImVaultFileIdentity(vaultID: "vault-2",
+                                            relativePath: "Folder/Topic.md")
+        XCTAssertFalse(versioned.hasPrefix(try ImpressBatchSourceKey.versionedPrefix(for: other)))
+    }
+
     func testUnicodeAndMultilineLabeledQuestions() {
         let rows = ImpressBatchParser.parse("Q: 光合作用的机理？\nA: 光能转化为\n化学能。\n\n问题：为什么回忆？\n答案：检索会巩固记忆。", as: .text)
         XCTAssertEqual(rows.count, 2)
