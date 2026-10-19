@@ -51,7 +51,7 @@ final class ImpressAISettingsViewController: UITableViewController {
         switch task {
         case .questionGeneration: return V3L("指定笔记出题")
         case .knowledgeSynthesis: return V3L("知识重构（尚未启用）")
-        case .conversation: return V3L("原生对话（尚未启用）")
+        case .conversation: return V3L("原生对话")
         }
     }
 
@@ -635,7 +635,12 @@ final class ImpressAIModelsViewController: UITableViewController {
                 alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
                 present(alert, animated: true)
             } catch {
-                showError(error)
+                let details = connection.title + "\n" + model.identifier +
+                    "\nChat Completions\n" + error.localizedDescription
+                let alert = UIAlertController(title: V3L("免费模型连接失败"),
+                    message: details, preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+                present(alert, animated: true)
             }
         }
     }
