@@ -246,6 +246,7 @@ final class ImpressAISettingsViewController: UITableViewController {
                         if let index = registry.connections.firstIndex(where: { $0.id == old.id }) {
                             registry.connections[index].apiProtocol = .chatCompletions
                             registry.connections[index].endpoints = ImpressAIOpenCodeFreeQA.endpoints
+                            registry.connections[index].freeQAOnly = true
                         }
                     } else {
                         registry.connections.append(preset)
@@ -281,8 +282,10 @@ final class ImpressAISettingsViewController: UITableViewController {
                         $0.connectionID == selectedID &&
                         $0.identifier == ImpressAIOpenCodeFreeQA.preferredModelID
                     }) else { throw ImpressAIServiceError.configuration }
-                    for task in [ImpressAITask.questionGeneration, .conversation] {
-                        registry.routes.removeAll { $0.task == task }
+                    // Adding a QA profile must NEVER replace a user-selected
+                    // GLM / custom default. Only seed a missing task selection.
+                    for task in [ImpressAITask.questionGeneration, .conversation]
+                        where !registry.routes.contains(where: { $0.task == task }) {
                         registry.routes.append(ImpressAIRoute(
                             task: task, primaryModelID: primary.id))
                     }
@@ -450,6 +453,12 @@ final class ImpressAIConnectionEditor: UITableViewController {
                     throw ImpressAIServiceError.configuration
                 }
                 let previous = reg.connections[index]
+                // Upgrading an old unflagged QA profile before a rename avoids
+                // accidentally turning its free-only credentials into a
+                // unrestricted account profile.
+                if ImpressAIOpenCodeFreeQA.isQAProfile(previous) {
+                    reg.connections[index].freeQAOnly = true
+                }
                 modify(&reg.connections[index])
                 let updated = reg.connections[index]
                 // A model probe is bound to its endpoint and auth settings.
@@ -557,17 +566,9 @@ final class ImpressAIConnectionEditor: UITableViewController {
                       preferredStyle: .alert)
         a.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
         a.addAction(UIAlertAction(title: V3L("删除"), style: .destructive) { [weak self] _ in
-            guard let self, let c = self.connection else { return }
+            guard let self, self.connection != nil else { return }
             do {
-                try ImpressAIConfigStore.shared.update { reg in
-                    let oldIDs = Set(reg.models.filter { $0.connectionID == self.connectionID }.map(\.id))
-                    reg.models.removeAll { oldIDs.contains($0.id) }
-                    reg.routes.removeAll {
-                        oldIDs.contains($0.primaryModelID) || ($0.fallbackModelID.map(oldIDs.contains) ?? false)
-                    }
-                    reg.connections.removeAll { $0.id == self.connectionID }
-                }
-                ImpressAIKeychain.delete(id: c.credentialID)
+                try ImpressAIConfigStore.shared.deleteConnection(id: self.connectionID)
                 self.navigationController?.popViewController(animated: true)
             } catch { self.showError(error) }
         })
