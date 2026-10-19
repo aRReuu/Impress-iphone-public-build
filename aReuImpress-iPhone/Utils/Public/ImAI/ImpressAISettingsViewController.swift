@@ -603,6 +603,22 @@ final class ImpressAIModelsViewController: UITableViewController {
                             target: self, action: #selector(refreshModels))
         ]
     }
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        refreshEmptyState()
+        tableView.reloadData()
+    }
+
+    private func refreshEmptyState() {
+        let empty = UILabel()
+        empty.text = V3L("尚无模型。点击右上角 + 手动输入模型 ID，或点击刷新尝试获取目录。")
+        empty.textColor = ImpressV3Appearance.secondaryText
+        empty.font = ImpressV3Appearance.Typography.body
+        empty.textAlignment = .center
+        empty.numberOfLines = 0
+        tableView.backgroundView = models.isEmpty ? empty : nil
+    }
+
     override func numberOfSections(in tableView: UITableView) -> Int { 1 }
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { models.count }
     override func tableView(_ tableView: UITableView,
@@ -624,15 +640,19 @@ final class ImpressAIModelsViewController: UITableViewController {
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         let model = models[indexPath.row]
+        let qaOnly = connection.map(ImpressAIOpenCodeFreeQA.isQAProfile) ?? false
         let a = UIAlertController(title: model.identifier, message: nil, preferredStyle: .actionSheet)
-        a.addAction(UIAlertAction(title: V3L("测试免费对话"), style: .default) { [weak self] _ in
-            self?.testFreeConversation(model)
+        a.addAction(UIAlertAction(title: qaOnly ? V3L("测试免费对话") : V3L("测试对话连接"),
+                                  style: .default) { [weak self] _ in
+            self?.confirmConversationProbe(model)
         })
-        a.addAction(UIAlertAction(title: V3L("免费 API 全链路验收"), style: .default) { [weak self] _ in
-            self?.confirmFreeWorkflow(model)
-        })
+        if qaOnly {
+            a.addAction(UIAlertAction(title: V3L("免费 API 全链路验收"), style: .default) { [weak self] _ in
+                self?.confirmFreeWorkflow(model)
+            })
+        }
         a.addAction(UIAlertAction(title: V3L("测试 JSON 输出"), style: .default) { [weak self] _ in
-            self?.testModel(model)
+            self?.confirmJSONProbe(model)
         })
         a.addAction(UIAlertAction(title: V3L("模型协议"), style: .default) { [weak self] _ in
             self?.chooseModelProtocol(model)
@@ -649,13 +669,9 @@ final class ImpressAIModelsViewController: UITableViewController {
         a.addAction(UIAlertAction(title: V3L("删除模型"), style: .destructive) { [weak self] _ in
             guard let self else { return }
             do {
-                try ImpressAIConfigStore.shared.update { reg in
-                    reg.routes.removeAll {
-                        $0.primaryModelID == model.id || $0.fallbackModelID == model.id
-                    }
-                    reg.models.removeAll { $0.id == model.id }
-                }
+                try ImpressAIConfigStore.shared.update { try $0.removeModel(model.id) }
                 self.tableView.reloadData()
+                self.refreshEmptyState()
             } catch { self.showError(error) }
         })
         a.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
@@ -731,7 +747,7 @@ final class ImpressAIModelsViewController: UITableViewController {
         present(a, animated: true)
     }
     private func addModelID(_ id: String) {
-        if connection?.effectiveAuthentication == .noAuthentication &&
+        if let c = connection, ImpressAIOpenCodeFreeQA.isQAProfile(c),
            !ImpressAIOpenCodeFreeQA.allowedForCatalog(id) {
             showError(ImpressAIServiceError.freeModelOnly)
             return
@@ -741,6 +757,7 @@ final class ImpressAIModelsViewController: UITableViewController {
                     identifier: id.trimmingCharacters(in: .whitespacesAndNewlines))
             try ImpressAIConfigStore.shared.update { $0.models.append(model) }
             tableView.reloadData()
+            refreshEmptyState()
         } catch { showError(error) }
     }
     @objc private func refreshModels() {
@@ -750,6 +767,9 @@ final class ImpressAIModelsViewController: UITableViewController {
             do {
                 let names = try await ImpressAIHTTPClient.shared.listModels(connection: c)
                 try ImpressAIConfigStore.shared.update { registry in
+                    guard registry.connections.contains(where: { $0.id == self.connectionID }) else {
+                        throw ImpressAIServiceError.configuration
+                    }
                     let existing = Set(registry.models.filter { $0.connectionID == self.connectionID }
                         .map { $0.identifier.lowercased() })
                     for id in names where !existing.contains(id.lowercased()) {
@@ -757,6 +777,7 @@ final class ImpressAIModelsViewController: UITableViewController {
                     }
                 }
                 tableView.reloadData()
+                refreshEmptyState()
             } catch { showError(error) }
             navigationItem.rightBarButtonItems?.forEach { $0.isEnabled = true }
         }
