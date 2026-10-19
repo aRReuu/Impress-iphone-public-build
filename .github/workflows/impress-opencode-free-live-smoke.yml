@@ -1,4 +1,4 @@
-name: OpenCode FREE Model Live Smoke (No Key)
+name: OpenCode Free Models Live API (Anonymous, No Key)
 
 on:
   push:
@@ -12,56 +12,84 @@ permissions:
   contents: read
 
 jobs:
-  free-model-anonymous:
-    name: Anonymous OpenCode free-only live API
+  no-key-live:
+    name: Official free models · actual Chat and JSON smoke
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - name: Read catalog and send two minimal FREE-only requests
+      - name: Verify four currently documented free models and real requests
         shell: bash
         run: |
           set -euo pipefail
-          # No API key or user note is ever sent or written to Action logs.
-          # A free model changing to paid must fail anonymously instead of
-          # debiting anyone's account. Never substitute a charged fallback.
           python3 - <<'PY'
-          import json, urllib.request, urllib.error
-          url = "https://opencode.ai/inference/openai/v1/chat/completions"
+          import json, urllib.request, urllib.error, urllib.parse
+          # Official Free pricing verified separately; the live public catalog
+          # must also list each ID. Never try arbitrary free-suffixed or paid IDs.
+          models = ("mimo-v2.6-flash-free", "longcat-2.5-preview-free",
+                    "nemotron-3.5-lightning-free", "space-bunny-free")
           catalog = "https://opencode.ai/inference/v1/models"
-          allowed = ("glm-5.3-flash-free", "deepseek-v4.1-flash-free")
-          headers = {"Accept": "application/json", "User-Agent": "Impress-Free-QA/1.0"}
-          def fetch(req):
+          endpoint = "https://opencode.ai/inference/openai/v1/chat/completions"
+          headers = {"Accept":"application/json", "User-Agent":"Impress-QA-Free-Only/2",
+                     "Content-Type":"application/json"}
+          def fetch(request):
               try:
-                  with urllib.request.urlopen(req, timeout=45) as resp:
-                      payload = resp.read(512_000)
-                      return resp.status, json.loads(payload)
+                  with urllib.request.urlopen(request, timeout=45) as response:
+                      raw=response.read(128_000)
+                      return response.status, json.loads(raw)
               except urllib.error.HTTPError as e:
                   return e.code, None
-              except (urllib.error.URLError, TimeoutError, ValueError) as e:
+              except (TimeoutError, urllib.error.URLError, ValueError):
                   return 0, None
-          status, doc = fetch(urllib.request.Request(catalog, headers=headers))
-          assert status == 200 and isinstance(doc, dict), "public catalog unavailable"
-          model_ids = {v.get("id") for v in doc.get("data", []) if isinstance(v, dict)}
-          for name in allowed:
-              assert name in model_ids, "chosen free ID absent from official catalog"
-          print("FREE_CATALOG: checked two exact public free IDs, no authorization")
-          failures = []
-          for name in allowed:
-              body = json.dumps({
-                  "model": name, "stream": False,
-                  "messages": [{"role": "user", "content": "Reply with only OK."}]
-              }).encode("utf-8")
-              req = urllib.request.Request(url, data=body, method="POST",
-                  headers={**headers, "Content-Type": "application/json"})
-              code, response = fetch(req)
-              choices = response.get("choices", []) if isinstance(response, dict) else []
-              message = choices[0].get("message", {}) if choices else {}
-              answer = message.get("content") if isinstance(message, dict) else None
-              healthy = code == 200 and isinstance(answer, str) and bool(answer.strip())
-              print("FREE_ONLY_RESULT model=" + name +
-                    " status=" + str(code) + " nonempty_response=" + str(healthy))
-              if not healthy:
-                  failures.append(name)
-          assert not failures, "one or more free anonymous endpoints did not respond"
-          print("FREE_ONLY_LIVE_SMOKE_PASS; no API credentials, no private notes")
+          def post(model, messages):
+              raw=json.dumps({"model":model,"messages":messages,"stream":False},
+                             ensure_ascii=True).encode("utf-8")
+              return fetch(urllib.request.Request(endpoint,method="POST",
+                  data=raw,headers=headers))
+          def visible(body):
+              if not isinstance(body,dict): return ""
+              choices=body.get("choices")
+              if not isinstance(choices,list) or not choices: return ""
+              message=choices[0].get("message")
+              if not isinstance(message,dict): return ""
+              content=message.get("content")
+              if isinstance(content,str): return content.strip()
+              if isinstance(content,list):
+                  return "".join(p.get("text","") for p in content if isinstance(p,dict)
+                     and isinstance(p.get("text"),str)).strip()
+              return ""
+          code,catalog_data=fetch(urllib.request.Request(catalog,headers=headers))
+          assert code == 200 and isinstance(catalog_data,dict), "catalog HTTP 200 required"
+          found={i.get("id") for i in catalog_data.get("data",[]) if isinstance(i,dict)}
+          eligible=[m for m in models if m in found]
+          print("CATALOG HTTP",code,"eligible_free_ids=",",".join(eligible))
+          assert eligible, "None of the documented free IDs is in the actual catalog"
+          succeeded=[]
+          for model in eligible:
+              status,body=post(model,[{"role":"user","content":"Reply with only OK."}])
+              output=visible(body)
+              healthy=status==200 and bool(output)
+              print("LIVE_CHAT model="+model+" protocol=chat_completions HTTP="+str(status)+
+                    " visible_answer="+str(healthy))
+              if healthy: succeeded.append((model,output))
+          if not succeeded:
+              raise SystemExit("REAL_FREE_CHAT_BLOCKED: no success; no paid fallback, no key sent")
+          model,first=succeeded[0]
+          history=[{"role":"user","content":"Reply with only OK."},
+                   {"role":"assistant","content":first},
+                   {"role":"user","content":"This is turn two. Reply with only TWO."}]
+          two_code,two_body=post(model,history)
+          two_ok=two_code==200 and bool(visible(two_body))
+          print("LIVE_MULTITURN model="+model+" HTTP="+str(two_code)+" ok="+str(two_ok))
+          question=[{"role":"system","content":"Return only a JSON object with a boolean ok=true."},
+                    {"role":"user","content":"Return exactly: {\\"ok\\":true}"}]
+          json_code,json_body=post(model,question)
+          json_output=visible(json_body)
+          try:
+              parsed=json.loads(json_output)
+              json_ok=parsed == {"ok":True}
+          except (ValueError,TypeError):
+              json_ok=False
+          print("LIVE_JSON model="+model+" HTTP="+str(json_code)+" valid="+str(json_ok))
+          assert two_ok and json_ok, "Live Chat or JSON not confirmed; no paid fallback"
+          print("FREE_ONLY_CHAT_MULTITURN_JSON_LIVE_PASS")
           PY
