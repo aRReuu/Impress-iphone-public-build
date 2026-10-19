@@ -1888,13 +1888,13 @@ final class ImpressAITransportAndCredentialTests: XCTestCase {
         XCTAssertEqual(available, ["mimo-v2.6-flash-free"])
 
         let captures = ImpressAIMockURLProtocol.authenticatedPaths()
-        XCTAssertEqual(captures.map(\.path), [
+        XCTAssertEqual(captures.map { $0.path }, [
             "/console/api/v2/config",
             "/inference/openai/v1/chat/completions",
             "/inference/openai/v1/chat/completions",
             "/inference/v1/models"
         ])
-        XCTAssertTrue(captures.allSatisfy(\.valid),
+        XCTAssertTrue(captures.allSatisfy { $0.valid },
                       "Every explicit Free API request must attach the Keychain Bearer")
     }
 }
