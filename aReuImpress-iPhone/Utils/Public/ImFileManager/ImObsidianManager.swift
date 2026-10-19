@@ -603,6 +603,57 @@ enum ImVaultPrivateStore {
         return draft
     }
 
+    // Pending question candidates share the existing Vault private store.
+    // This snapshot is NOT a second card database or a source Markdown backup.
+    private static func questionPoolURL(_ identity: ImVaultFileIdentity) throws -> URL {
+        try directory("AIQuestionPool").appendingPathComponent(opaqueKey(identity) + ".json")
+    }
+
+    static func saveQuestionPool(_ pool: ImpressAIQuestionPool) throws {
+        let identity = try ImVaultFileIdentity(vaultID: pool.source.vaultID,
+                                               relativePath: pool.source.relativePath)
+        guard (1...20).contains(pool.requestedCount),
+              pool.candidates.count <= 20, !pool.excerpts.isEmpty,
+              pool.excerpts.allSatisfy({ $0.source == pool.source }) else {
+            throw ImpressAIContractError.invalidRequest
+        }
+        let encoded = try JSONEncoder().encode(pool)
+        guard encoded.count <= 256_000 else { throw ImVaultSyncFailure.tooLarge }
+        let url = try questionPoolURL(identity)
+        try encoded.write(to: url, options: [
+            .atomic, .completeFileProtectionUntilFirstUserAuthentication
+        ])
+        protectPrivateFile(url)
+        let restored = try loadQuestionPool(identity: identity)
+        guard restored?.id == pool.id,
+              restored?.source == pool.source,
+              restored?.candidates.count == pool.candidates.count else {
+            throw ImVaultSyncFailure.verificationFailed
+        }
+    }
+
+    static func loadQuestionPool(identity: ImVaultFileIdentity) throws -> ImpressAIQuestionPool? {
+        let url = try questionPoolURL(identity)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let data = try Data(contentsOf: url)
+        guard data.count <= 256_000 else { throw ImVaultSyncFailure.tooLarge }
+        let pool = try JSONDecoder().decode(ImpressAIQuestionPool.self, from: data)
+        guard pool.source.vaultID == identity.vaultID,
+              pool.source.relativePath == identity.relativePath,
+              pool.excerpts.allSatisfy({ $0.source == pool.source }),
+              (1...20).contains(pool.requestedCount) else {
+            throw ImVaultSyncFailure.wrongVault
+        }
+        return pool
+    }
+
+    static func deleteQuestionPool(identity: ImVaultFileIdentity) throws {
+        let url = try questionPoolURL(identity)
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+    }
+
     /// The only source pre-write backup location: private Application Support.
     /// Recovery files are unique, verified and never automatically removed.
     static func backupBeforeWrite(identity: ImVaultFileIdentity, data: Data) throws -> URL {
