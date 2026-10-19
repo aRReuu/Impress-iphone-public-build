@@ -13,9 +13,16 @@ public enum ImpressAIProvider: String, Codable, CaseIterable, Sendable {
 /// a user-held key. This is not a claim that free availability is permanent.
 /// Official console: https://opencode.ai/v2/docs/console/models/
 public enum ImpressAIOpenCodeFreeQA {
-    public static let preferredModelID = "glm-5.3-flash-free"
-    public static let backupModelID = "deepseek-v4.1-flash-free"
-    public static let modelIDs: Set<String> = [preferredModelID, backupModelID]
+    // Exact IDs are drawn from OpenCode's published Free pricing table and
+    // public /inference/v1/models catalog. A "-free" suffix alone is NOT proof
+    // of free pricing or of account/network access.
+    public static let preferredModelID = "mimo-v2.6-flash-free"
+    public static let backupModelID = "longcat-2.5-preview-free"
+    public static let orderedModelIDs = [
+        preferredModelID, backupModelID,
+        "nemotron-3.5-lightning-free", "space-bunny-free"
+    ]
+    public static let modelIDs = Set(orderedModelIDs)
     public static let baseURL = URL(string: "https://opencode.ai/inference")!
     public static let endpoints = ImpressAIEndpointPaths(
         modelsPath: "v1/models",
@@ -32,7 +39,7 @@ public enum ImpressAIOpenCodeFreeQA {
     }
 
     public static func models(for connectionID: UUID) -> [ImpressAIModel] {
-        [preferredModelID, backupModelID].map { id in
+        orderedModelIDs.map { id in
             ImpressAIModel(connectionID: connectionID, identifier: id,
                            jsonMode: .promptOnly)
         }
