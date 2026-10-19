@@ -98,6 +98,33 @@ private struct WCDBV3CardRow: TableCodable {
     }
 }
 
+/// Immutable content snapshots are separate from ReviewEvent/FSRS scheduling.
+/// A stable (cardID, contentRevision) ID prevents duplicate history on retries.
+private struct WCDBV3ContentVersionRow: TableCodable {
+    var versionID: String?
+    var cardID: String?
+    var contentRevision: Int?
+    var recordedAt: Date?
+    var snapshot: Data?
+
+    enum CodingKeys: String, CodingTableKey {
+        typealias Root = WCDBV3ContentVersionRow
+        static let objectRelationalMapping = TableBinding(CodingKeys.self)
+        case versionID = "version_id"
+        case cardID = "card_id"
+        case contentRevision = "content_revision"
+        case recordedAt = "recorded_at"
+        case snapshot
+
+        static var columnConstraintBindings: [CodingKeys: ColumnConstraintBinding]? {
+            [.versionID: ColumnConstraintBinding(isPrimary: true, isNotNull: true)]
+        }
+        static var indexBindings: [IndexBinding.Subfix: IndexBinding]? {
+            ["_by_card": IndexBinding(indexesBy: cardID, contentRevision)]
+        }
+    }
+}
+
 private struct WCDBV3EventRow: TableCodable {
     var eventID: String?
     var cardID: String?
@@ -176,11 +203,33 @@ public struct WCDBV3CardContent: Sendable {
     public let contentRevision: Int
 }
 
+/// The exact fields that were effective at a particular content revision.
+/// Existing cards only gain history from the first version actually observed:
+/// we NEVER synthesize the inaccessible revisions of an old installation.
+public enum WCDBV3ContentVersionOrigin: String, Codable, Sendable {
+    case manual, approvedAI, restored, observedBaseline
+}
+
+public struct WCDBV3ContentVersion: Codable, Equatable, Sendable {
+    public let cardID: UUID
+    public let contentRevision: Int
+    public let recordedAt: Date
+    public let origin: WCDBV3ContentVersionOrigin
+    public let question: String
+    public let answerText: String?
+    public let choices: String?
+    public let correctIndices: String?
+    public let cardType: Int
+    public let imageData: Data?
+    public let sourceNotePath: String?
+}
+
 /// An actor serializes the review transactions. The underlying WCDB connection
 /// pool is thread-safe; every transaction is synchronous and has no await.
 public actor ReviewWCDBRepository: ReviewRepository {
     private static let cardsTable = "impress_v3_memory_card"
     private static let eventsTable = "impress_v3_review_event"
+    private static let contentVersionsTable = "impress_v3_content_version"
     private static let schema = 1
 
     private let database: Database
@@ -205,6 +254,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
         try db.run(transaction: {
             try db.create(table: Self.cardsTable, of: WCDBV3CardRow.self)
             try db.create(table: Self.eventsTable, of: WCDBV3EventRow.self)
+            try db.create(table: Self.contentVersionsTable, of: WCDBV3ContentVersionRow.self)
         })
         database = db
         self.calculator = calculator
@@ -323,7 +373,13 @@ public actor ReviewWCDBRepository: ReviewRepository {
                               initial: ReviewScheduleSnapshot,
                               now: Date) throws {
         let row = try Self.makeNewCardRow(input, initial: initial, now: now)
-        try database.insert(objects: [row], intoTable: Self.cardsTable)
+        let tx = try database.getTransaction()
+        try tx.run(transaction: {
+            try tx.insert(objects: [row], intoTable: Self.cardsTable)
+            let version = try Self.makeContentVersionRow(
+                row, origin: .manual, recordedAt: now)
+            try tx.insert(objects: [version], intoTable: Self.contentVersionsTable)
+        })
         ImpressV3BackupCoordinator.markDataChanged()
     }
 
@@ -370,6 +426,9 @@ public actor ReviewWCDBRepository: ReviewRepository {
                 )
                 guard priorID == nil else { throw ReviewWCDBError.duplicateCard }
                 try transaction.insert(objects: [row], intoTable: Self.cardsTable)
+                let version = try Self.makeContentVersionRow(
+                    row, origin: .manual, recordedAt: now)
+                try transaction.insert(objects: [version], intoTable: Self.contentVersionsTable)
             }
         })
         ImpressV3BackupCoordinator.markDataChanged()
@@ -498,7 +557,8 @@ public actor ReviewWCDBRepository: ReviewRepository {
     public func updateManagedCard(_ input: WCDBV3CardInput,
                                   expectedRevision: Int,
                                   expectedContentRevision: Int,
-                                  now: Date = Date()) throws {
+                                  now: Date = Date(),
+                                  origin: WCDBV3ContentVersionOrigin = .manual) throws {
         guard !input.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               [0, 2, 3].contains(input.cardType),
               (input.cardType != 0 || !(input.answerText ?? "").isEmpty),
@@ -510,6 +570,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
         }
         let key = input.cardID.uuidString
         let tx = try database.getTransaction()
+        var didChange = false
         try tx.run(transaction: {
             guard let old: WCDBV3CardRow = try tx.getObject(
                 fromTable: Self.cardsTable,
@@ -521,6 +582,9 @@ public actor ReviewWCDBRepository: ReviewRepository {
             guard (old.contentRevision ?? 0) == expectedContentRevision else {
                 throw ReviewWCDBError.contentConflict
             }
+            // A save with no effective edits must not create a noise version,
+            // change updatedAt, invalidate the current answer or dirty backup.
+            guard !Self.sameContent(old, input) else { return }
             let all: [WCDBV3CardRow] = try tx.getObjects(
                 on: [WCDBV3CardRow.Properties.cardID,
                      WCDBV3CardRow.Properties.question,
@@ -539,6 +603,17 @@ public actor ReviewWCDBRepository: ReviewRepository {
             guard !all.contains(where: {
                 $0.cardID != key && Self.duplicateKey($0) == Self.duplicateKey(edited)
             }) else { throw ReviewWCDBError.duplicateContent }
+            // Pre-upgrade cards did not have recorded history. Snapshot the
+            // currently observed content (never invent revisions -1, -2...).
+            let existing: WCDBV3ContentVersionRow? = try tx.getObject(
+                fromTable: Self.contentVersionsTable,
+                where: WCDBV3ContentVersionRow.Properties.versionID ==
+                    Self.contentVersionID(cardID: key, revision: expectedContentRevision))
+            if existing == nil {
+                try tx.insert(objects: [Self.makeContentVersionRow(
+                    old, origin: .observedBaseline, recordedAt: now)],
+                    intoTable: Self.contentVersionsTable)
+            }
             try tx.update(table: Self.cardsTable, on: [
                 WCDBV3CardRow.Properties.question,
                 WCDBV3CardRow.Properties.answerText,
@@ -553,8 +628,13 @@ public actor ReviewWCDBRepository: ReviewRepository {
                where: WCDBV3CardRow.Properties.cardID == key &&
                       WCDBV3CardRow.Properties.revision == expectedRevision)
             guard tx.changes == 1 else { throw ReviewWCDBError.revisionConflict }
+            // This insert and the current-content CAS are inseparable.
+            try tx.insert(objects: [Self.makeContentVersionRow(
+                edited, origin: origin, recordedAt: now)],
+                intoTable: Self.contentVersionsTable)
+            didChange = true
         })
-        ImpressV3BackupCoordinator.markDataChanged()
+        if didChange { ImpressV3BackupCoordinator.markDataChanged() }
     }
 
     public func setManagedCardSuspended(_ suspended: Bool,
@@ -780,6 +860,85 @@ public actor ReviewWCDBRepository: ReviewRepository {
             try? fileManager.removeItem(at: staging)
             throw error
         }
+    }
+
+    /// The content history is not the FSRS ReviewEvent history.
+    /// Deleted card IDs retain snapshots for explicit archival/recovery;
+    /// no title-based guessing is performed.
+    public func contentHistory(for cardID: UUID) throws -> [WCDBV3ContentVersion] {
+        let rows: [WCDBV3ContentVersionRow] = try database.getObjects(
+            fromTable: Self.contentVersionsTable,
+            where: WCDBV3ContentVersionRow.Properties.cardID == cardID.uuidString,
+            orderBy: [WCDBV3ContentVersionRow.Properties.contentRevision.asOrder(by: .ascending)])
+        return try rows.map { row in
+            guard let blob = row.snapshot else { throw ReviewWCDBError.corruptRecord }
+            let decoded = try JSONDecoder().decode(WCDBV3ContentVersion.self, from: blob)
+            guard decoded.cardID == cardID,
+                  decoded.contentRevision == row.contentRevision,
+                  row.versionID == Self.contentVersionID(
+                      cardID: cardID.uuidString, revision: decoded.contentRevision)
+            else { throw ReviewWCDBError.corruptRecord }
+            return decoded
+        }
+    }
+
+    /// Restore creates a NEW effective version. Intermediate content revisions,
+    /// their media BLOBs, and every FSRS event remain immutable.
+    public func restoreContentVersion(cardID: UUID, savedRevision: Int,
+                                      expectedContentRevision: Int,
+                                      expectedReviewRevision: Int,
+                                      now: Date = Date()) throws {
+        guard let version = try contentHistory(for: cardID)
+            .first(where: { $0.contentRevision == savedRevision }) else {
+            throw ReviewWCDBError.missingCard
+        }
+        try updateManagedCard(
+            WCDBV3CardInput(cardID: cardID, question: version.question,
+                            answerText: version.answerText, choices: version.choices,
+                            correctIndices: version.correctIndices,
+                            cardType: version.cardType, imageData: version.imageData,
+                            sourceNotePath: version.sourceNotePath),
+            expectedRevision: expectedReviewRevision,
+            expectedContentRevision: expectedContentRevision,
+            now: now, origin: .restored)
+    }
+
+    private static func contentVersionID(cardID: String, revision: Int) -> String {
+        cardID + ":" + String(revision)
+    }
+
+    private static func sameContent(_ old: WCDBV3CardRow,
+                                    _ input: WCDBV3CardInput) -> Bool {
+        old.question == input.question &&
+        old.answerText == input.answerText &&
+        old.choices == input.choices &&
+        old.correctIndices == input.correctIndices &&
+        old.cardType == input.cardType &&
+        old.imageData == input.imageData &&
+        old.sourceNotePath == input.sourceNotePath
+    }
+
+    private static func makeContentVersionRow(_ card: WCDBV3CardRow,
+                                              origin: WCDBV3ContentVersionOrigin,
+                                              recordedAt: Date) throws -> WCDBV3ContentVersionRow {
+        guard let rawID = card.cardID, let cardID = UUID(uuidString: rawID),
+              let revision = card.contentRevision, revision >= 0,
+              let question = card.question, let cardType = card.cardType else {
+            throw ReviewWCDBError.corruptRecord
+        }
+        let snapshot = WCDBV3ContentVersion(
+            cardID: cardID, contentRevision: revision,
+            recordedAt: recordedAt, origin: origin, question: question,
+            answerText: card.answerText, choices: card.choices,
+            correctIndices: card.correctIndices, cardType: cardType,
+            imageData: card.imageData, sourceNotePath: card.sourceNotePath)
+        var row = WCDBV3ContentVersionRow()
+        row.versionID = contentVersionID(cardID: rawID, revision: revision)
+        row.cardID = rawID
+        row.contentRevision = revision
+        row.recordedAt = recordedAt
+        row.snapshot = try JSONEncoder().encode(snapshot)
+        return row
     }
 
     /// Fetch the heavy image only when this card is about to be presented.
