@@ -28,6 +28,7 @@ final class ImpressV3ReviewViewController: UIViewController {
     private let revealButton = UIButton(type: .system)
     private let answerTools = UIStackView()
     private let statusLabel = UILabel()
+    private let calibrationWeek = ImpressV3WeeklyCalibrationOverview()
     private let completionLabel = UILabel()
     private let repeatButton = UIButton(type: .system)
     private let busyIndicator = UIActivityIndicatorView(style: .medium)
@@ -47,6 +48,15 @@ final class ImpressV3ReviewViewController: UIViewController {
         view.backgroundColor = ImpressV3Appearance.page
         setupNativeLayout()
         setupNavigation()
+        calibrationWeek.addTarget(self, action: #selector(openCalibrationDetail),
+                                  for: .touchUpInside)
+        for name in [ImpressCalibrationLocalStore.didChange,
+                     .NSCalendarDayChanged,
+                     UIApplication.significantTimeChangeNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(updateCalibrationWeek),
+                                                   name: name, object: nil)
+        }
+        updateCalibrationWeek()
         cardStack.numberOfVisibleCards = 3
         cardStack.protectsVerticalContentScroll = true
         // V3 tap is inert. Only explicit controls can create/edit a card.
@@ -59,12 +69,36 @@ final class ImpressV3ReviewViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         refreshLocalizedReview()
+        updateCalibrationWeek()
         if needsReloadAfterCollection && pending == nil {
             needsReloadAfterCollection = false
             reloadSession()
         } else if hasLoaded && pending == nil {
             setRatingGesturesEnabled(canRateCurrentCard)
         }
+    }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    /// Refreshes only the tiny overview, NEVER the review queue.
+    @objc private func updateCalibrationWeek() {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let records = try await ImpressCalibrationLocalStore.shared.trendRecords()
+                let week = try CalibrationScoreCore.mondayWeekTrend(
+                    records, now: Date(), calendar: Calendar.current)
+                self.calibrationWeek.configure(week)
+            } catch {
+                self.calibrationWeek.configure([])
+            }
+        }
+    }
+
+    @objc private func openCalibrationDetail() {
+        guard navigationController?.topViewController === self else { return }
+        navigationController?.pushViewController(
+            ImpressCalibrationViewController(), animated: true)
     }
 
     /// Re-label the existing controls without recreating a live FSRS session.
@@ -108,6 +142,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         revealButton.translatesAutoresizingMaskIntoConstraints = false
         answerTools.translatesAutoresizingMaskIntoConstraints = false
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        calibrationWeek.translatesAutoresizingMaskIntoConstraints = false
         answerTools.axis = .horizontal
         answerTools.distribution = .fillEqually
         answerTools.spacing = ImpressV3Appearance.Metrics.rowSpacing
@@ -171,6 +206,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         repeatButton.isHidden = true
 
         view.addSubview(statusLabel)
+        view.addSubview(calibrationWeek)
         view.addSubview(cardStack)
         view.addSubview(revealButton)
         view.addSubview(answerTools)
@@ -181,7 +217,13 @@ final class ImpressV3ReviewViewController: UIViewController {
             statusLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
             statusLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             statusLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            cardStack.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 12),
+            calibrationWeek.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 2),
+            calibrationWeek.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor,
+                                                      constant: ImpressV3Appearance.Metrics.compactInset),
+            calibrationWeek.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor,
+                                                       constant: -ImpressV3Appearance.Metrics.compactInset),
+            calibrationWeek.heightAnchor.constraint(equalToConstant: ImpressV3Appearance.Metrics.calibrationWeekHeight),
+            cardStack.topAnchor.constraint(equalTo: calibrationWeek.bottomAnchor, constant: 8),
             cardStack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
             cardStack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
             cardStack.bottomAnchor.constraint(equalTo: revealButton.topAnchor, constant: -12),
@@ -1693,3 +1735,94 @@ final class ImpressV3ReminderSettingsController: UITableViewController {
         }
     }
 }
+
+@MainActor
+final class ImpressV3WeeklyCalibrationOverview: UIControl {
+    private var days: [CalibrationDayPoint] = []
+    private let shortDays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        isAccessibilityElement = true
+        accessibilityTraits = [.button]
+        accessibilityHint = V3L("点击打开每日校准")
+        configure([])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    func configure(_ points: [CalibrationDayPoint]) {
+        days = points.count == 7 ? points : []
+        let values = days.enumerated().map { offset, point in
+            V3L(shortDays[offset]) + " " + (point.netScore.map(String.init) ?? V3L("未评估"))
+        }
+        accessibilityLabel = V3L("本周校准") + "：" + values.joined(separator: "，")
+        setNeedsDisplay()
+    }
+
+    override func draw(_ rect: CGRect) {
+        guard rect.width > 160, rect.height > 85 else { return }
+        let primary = ImpressV3Appearance.secondaryText
+        let axis = ImpressV3Appearance.divider
+        let accent = ImpressV3Appearance.accent
+        let headerFont = UIFont.preferredFont(forTextStyle: .caption1)
+        let labelFont = UIFont.preferredFont(forTextStyle: .caption2)
+        let headerAttributes: [NSAttributedString.Key: Any] = [
+            .font: headerFont, .foregroundColor: primary]
+        let labelAttributes: [NSAttributedString.Key: Any] = [
+            .font: labelFont, .foregroundColor: primary]
+        (V3L("本周校准") as NSString).draw(at: CGPoint(x: 4, y: 0),
+                                         withAttributes: headerAttributes)
+        let left = ImpressV3Appearance.Metrics.calibrationWeekChartInset
+        let right = rect.width - 12
+        let top: CGFloat = 29
+        let bottom = rect.height - 22
+        let mid = (top + bottom) / 2
+        let y: (Int) -> CGFloat = { score in
+            mid - CGFloat(score) / 5 * (bottom - top) / 2
+        }
+        func stroke(_ x1: CGFloat, _ y1: CGFloat, _ x2: CGFloat, _ y2: CGFloat,
+                    width: CGFloat = 0.5, color: UIColor) {
+            let line = UIBezierPath()
+            line.move(to: CGPoint(x: x1, y: y1))
+            line.addLine(to: CGPoint(x: x2, y: y2))
+            line.lineWidth = width
+            color.setStroke()
+            line.stroke()
+        }
+        // Fixed -5/0/+5: no automatic zooming to exaggerate variation.
+        for value in [-5, 0, 5] {
+            let position = y(value)
+            stroke(left, position, right, position,
+                   width: value == 0 ? 1 : 0.45,
+                   color: axis.withAlphaComponent(value == 0 ? 0.8 : 0.3))
+            let label = String(value) as NSString
+            label.draw(at: CGPoint(x: 1, y: position - labelFont.lineHeight / 2),
+                       withAttributes: labelAttributes)
+        }
+        var previous: CGPoint?
+        for index in 0..<7 {
+            let x = left + CGFloat(index) * (right - left) / 6
+            let weekday = V3L(shortDays[index]) as NSString
+            let size = weekday.size(withAttributes: labelAttributes)
+            weekday.draw(at: CGPoint(x: x - size.width / 2, y: bottom + 4),
+                         withAttributes: labelAttributes)
+            guard days.indices.contains(index),
+                  let score = days[index].netScore else {
+                previous = nil // missing data NEVER connected to adjacent days
+                continue
+            }
+            let current = CGPoint(x: x, y: y(score))
+            if let previous {
+                stroke(previous.x, previous.y, current.x, current.y,
+                       width: 1.5, color: accent)
+            }
+            accent.setFill()
+            UIBezierPath(ovalIn: CGRect(x: current.x - 2, y: current.y - 2,
+                                        width: 4, height: 4)).fill()
+            previous = current
+        }
+    }
+}
+
