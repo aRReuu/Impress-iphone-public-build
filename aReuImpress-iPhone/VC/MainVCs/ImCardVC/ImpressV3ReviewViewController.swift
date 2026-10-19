@@ -49,6 +49,8 @@ final class ImpressV3ReviewViewController: UIViewController {
         view.backgroundColor = ImpressV3Appearance.page
         setupNativeLayout()
         setupNavigation()
+        // The entire weekly coordinate surface is a hit target, not only dots.
+        calibrationWeek.accessibilityIdentifier = "impress.review.calibration-week"
         calibrationWeek.addTarget(self, action: #selector(openCalibrationDetail),
                                   for: .touchUpInside)
         for name in [ImpressCalibrationLocalStore.didChange,
