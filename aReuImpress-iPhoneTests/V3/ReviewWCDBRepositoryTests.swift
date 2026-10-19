@@ -1866,7 +1866,8 @@ final class ImpressAITransportAndCredentialTests: XCTestCase {
 
         ImpressAIMockURLProtocol.respond(status: 200, json:
             #"{"data":[{"id":"glm-4.5-flash"}]}"#)
-        XCTAssertEqual(try await client.listModels(connection: c), ["glm-4.5-flash"])
+        let catalog = try await client.listModels(connection: c)
+        XCTAssertEqual(catalog, ["glm-4.5-flash"])
         let captures = ImpressAIMockURLProtocol.authenticatedPaths()
         XCTAssertEqual(captures.map { $0.path }, [
             "/api/paas/v4/chat/completions",
