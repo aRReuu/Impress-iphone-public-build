@@ -125,6 +125,31 @@ private struct WCDBV3ContentVersionRow: TableCodable {
     }
 }
 
+/// Auxiliary chat storage shares the existing encrypted-by-device-protection
+/// backup boundary (ReviewV3.sqlite), not the flashcard or FSRS tables.
+private struct WCDBV3ChatSessionRow: TableCodable {
+    var sessionID: String?
+    var sourceIdentity: String?
+    var updatedAt: Date?
+    var record: Data?
+
+    enum CodingKeys: String, CodingTableKey {
+        typealias Root = WCDBV3ChatSessionRow
+        static let objectRelationalMapping = TableBinding(CodingKeys.self)
+        case sessionID = "session_id"
+        case sourceIdentity = "source_identity"
+        case updatedAt = "updated_at"
+        case record
+
+        static var columnConstraintBindings: [CodingKeys: ColumnConstraintBinding]? {
+            [.sessionID: ColumnConstraintBinding(isPrimary: true, isNotNull: true)]
+        }
+        static var indexBindings: [IndexBinding.Subfix: IndexBinding]? {
+            ["_source": IndexBinding(indexesBy: sourceIdentity, updatedAt)]
+        }
+    }
+}
+
 private struct WCDBV3EventRow: TableCodable {
     var eventID: String?
     var cardID: String?
@@ -224,12 +249,112 @@ public struct WCDBV3ContentVersion: Codable, Equatable, Sendable {
     public let sourceNotePath: String?
 }
 
+/// Stable chat source identities are assembled only from verified cardIDs or
+/// authorized Vault document IDs; a matching title is never an identity.
+public enum WCDBV3ChatMessageRole: String, Codable, Sendable {
+    case user, assistant
+}
+public enum WCDBV3ChatMessageStatus: String, Codable, Sendable {
+    case pending, completed, failed, cancelled
+}
+public struct WCDBV3ChatMessage: Codable, Equatable, Sendable {
+    public let messageID: UUID
+    public var role: WCDBV3ChatMessageRole
+    public var text: String
+    public var status: WCDBV3ChatMessageStatus
+    public let createdAt: Date
+    /// A snapshot of the actual request configuration, not a live global
+    /// preference and NEVER an API Key or authorization token.
+    public var providerID: UUID?
+    public var modelIdentifier: String?
+    public var promptSnapshot: String?
+
+    public init(messageID: UUID = UUID(), role: WCDBV3ChatMessageRole,
+                text: String, status: WCDBV3ChatMessageStatus,
+                createdAt: Date = Date(),
+                providerID: UUID? = nil, modelIdentifier: String? = nil,
+                promptSnapshot: String? = nil) {
+        self.messageID = messageID
+        self.role = role
+        self.text = text
+        self.status = status
+        self.createdAt = createdAt
+        self.providerID = providerID
+        self.modelIdentifier = modelIdentifier
+        self.promptSnapshot = promptSnapshot
+    }
+}
+
+public struct WCDBV3ChatContextReference: Codable, Equatable, Sendable {
+    public let stableIdentity: String
+    public let sourceRevision: String
+    public let excerpt: String
+    public init(stableIdentity: String, sourceRevision: String, excerpt: String) {
+        self.stableIdentity = stableIdentity
+        self.sourceRevision = sourceRevision
+        self.excerpt = excerpt
+    }
+}
+
+public enum WCDBV3ProposalStatus: String, Codable, Sendable {
+    case draft, awaitingConfirmation, applying, applied, conflict, failed, cancelled
+}
+public enum WCDBV3ProposalOperation: String, Codable, Sendable {
+    case cardFieldUpdate, noteReplaceRange, noteCreate
+}
+
+/// Persistence does NOT grant write authority; the downstream guarded executor
+/// must verify permissions, full preview, identity and expected revision again.
+public struct WCDBV3EditProposal: Codable, Equatable, Sendable {
+    public let proposalID: UUID
+    public let idempotencyID: UUID
+    public let targetIdentity: String
+    public let expectedVersion: String
+    public let operation: WCDBV3ProposalOperation
+    public var preview: String
+    public var status: WCDBV3ProposalStatus
+    public var resultReceipt: String?
+}
+
+public struct WCDBV3ChatSession: Codable, Equatable, Sendable {
+    public let sessionID: UUID
+    public let sourceIdentity: String
+    public let createdAt: Date
+    public var updatedAt: Date
+    /// Optimistic locking token; increment once per durable edit.
+    public var revision: Int
+    public var messages: [WCDBV3ChatMessage]
+    public var inputDraft: String
+    public var contextReferences: [WCDBV3ChatContextReference]
+    public var pendingProposal: WCDBV3EditProposal?
+    public var requestError: String?
+
+    public init(sessionID: UUID = UUID(), sourceIdentity: String,
+                createdAt: Date = Date()) {
+        self.sessionID = sessionID
+        self.sourceIdentity = sourceIdentity
+        self.createdAt = createdAt
+        self.updatedAt = createdAt
+        self.revision = 0
+        self.messages = []
+        self.inputDraft = ""
+        self.contextReferences = []
+        self.pendingProposal = nil
+        self.requestError = nil
+    }
+}
+
+public enum WCDBV3ChatStorageError: Error, Equatable {
+    case conflict, invalidRecord, tooLarge
+}
+
 /// An actor serializes the review transactions. The underlying WCDB connection
 /// pool is thread-safe; every transaction is synchronous and has no await.
 public actor ReviewWCDBRepository: ReviewRepository {
     private static let cardsTable = "impress_v3_memory_card"
     private static let eventsTable = "impress_v3_review_event"
     private static let contentVersionsTable = "impress_v3_content_version"
+    private static let chatSessionsTable = "impress_v3_chat_session"
     private static let schema = 1
 
     private let database: Database
@@ -255,6 +380,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
             try db.create(table: Self.cardsTable, of: WCDBV3CardRow.self)
             try db.create(table: Self.eventsTable, of: WCDBV3EventRow.self)
             try db.create(table: Self.contentVersionsTable, of: WCDBV3ContentVersionRow.self)
+            try db.create(table: Self.chatSessionsTable, of: WCDBV3ChatSessionRow.self)
         })
         database = db
         self.calculator = calculator
@@ -860,6 +986,82 @@ public actor ReviewWCDBRepository: ReviewRepository {
             try? fileManager.removeItem(at: staging)
             throw error
         }
+    }
+
+    /// Preserve complete local transcripts and resumable drafts/proposals.
+    /// A model's request context window must be derived from this history
+    /// without deleting earlier stored turns. No raw credentials belong here.
+    public func chatSessions(for sourceIdentity: String) throws -> [WCDBV3ChatSession] {
+        guard !sourceIdentity.isEmpty else { throw WCDBV3ChatStorageError.invalidRecord }
+        let rows: [WCDBV3ChatSessionRow] = try database.getObjects(
+            fromTable: Self.chatSessionsTable,
+            where: WCDBV3ChatSessionRow.Properties.sourceIdentity == sourceIdentity,
+            orderBy: [WCDBV3ChatSessionRow.Properties.updatedAt.asOrder(by: .descending)])
+        return try rows.map { row in
+            guard let bytes = row.record,
+                  let id = row.sessionID,
+                  let sessionID = UUID(uuidString: id) else {
+                throw WCDBV3ChatStorageError.invalidRecord
+            }
+            let session = try JSONDecoder().decode(WCDBV3ChatSession.self, from: bytes)
+            guard session.sessionID == sessionID,
+                  session.sourceIdentity == row.sourceIdentity,
+                  session.updatedAt == row.updatedAt else {
+                throw WCDBV3ChatStorageError.invalidRecord
+            }
+            return session
+        }
+    }
+
+    public func saveChatSession(_ session: WCDBV3ChatSession,
+                                expectedRevision: Int?) throws {
+        guard !session.sourceIdentity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              session.revision >= 0,
+              session.messages.count <= 10_000,
+              Set(session.messages.map(\.messageID)).count == session.messages.count,
+              session.messages.allSatisfy({ !$0.text.isEmpty || $0.status != .completed })
+        else { throw WCDBV3ChatStorageError.invalidRecord }
+        let bytes = try JSONEncoder().encode(session)
+        // A clear error avoids runaway SQLite/image-sized context archives.
+        guard bytes.count <= 8 * 1_024 * 1_024 else {
+            throw WCDBV3ChatStorageError.tooLarge
+        }
+        var row = WCDBV3ChatSessionRow()
+        row.sessionID = session.sessionID.uuidString
+        row.sourceIdentity = session.sourceIdentity
+        row.updatedAt = session.updatedAt
+        row.record = bytes
+        let tx = try database.getTransaction()
+        try tx.run(transaction: {
+            let prior: WCDBV3ChatSessionRow? = try tx.getObject(
+                fromTable: Self.chatSessionsTable,
+                where: WCDBV3ChatSessionRow.Properties.sessionID == session.sessionID.uuidString)
+            if let prior {
+                guard let old = prior.record,
+                      let decoded = try? JSONDecoder().decode(WCDBV3ChatSession.self, from: old),
+                      decoded.sourceIdentity == session.sourceIdentity else {
+                    throw WCDBV3ChatStorageError.invalidRecord
+                }
+                if decoded == session { return } // idempotent same snapshot
+                guard let expectedRevision, decoded.revision == expectedRevision,
+                      session.revision == expectedRevision + 1,
+                      session.updatedAt >= decoded.updatedAt else {
+                    throw WCDBV3ChatStorageError.conflict
+                }
+                try tx.update(table: Self.chatSessionsTable,
+                    on: [WCDBV3ChatSessionRow.Properties.updatedAt,
+                         WCDBV3ChatSessionRow.Properties.record],
+                    with: row,
+                    where: WCDBV3ChatSessionRow.Properties.sessionID == session.sessionID.uuidString)
+                guard tx.changes == 1 else { throw WCDBV3ChatStorageError.conflict }
+            } else {
+                guard expectedRevision == nil, session.revision == 0 else {
+                    throw WCDBV3ChatStorageError.conflict
+                }
+                try tx.insert(objects: [row], intoTable: Self.chatSessionsTable)
+            }
+        })
+        ImpressV3BackupCoordinator.markDataChanged()
     }
 
     /// The content history is not the FSRS ReviewEvent history.
