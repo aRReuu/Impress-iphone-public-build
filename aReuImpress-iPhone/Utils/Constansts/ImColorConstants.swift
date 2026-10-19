@@ -502,6 +502,10 @@ enum ImpressV3Appearance {
         static let primaryActionHeight: CGFloat = 52
         static let reviewOverlayBadgeHeight: CGFloat = 44
         static let reviewOverlaySymbolSize: CGFloat = 17
+        static let reviewOverlayEdgeInset: CGFloat = 16
+        static let reviewOverlayTopInset: CGFloat = 24
+        static let reviewOverlayContentHInset: CGFloat = 18
+        static let reviewOverlayContentVInset: CGFloat = 10
         static let answerOptionHeight: CGFloat = 52
         static let maximumSegmentWidth: CGFloat = 440
         static let compactSegmentWidth: CGFloat = 320
