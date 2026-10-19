@@ -500,6 +500,8 @@ enum ImpressV3Appearance {
         static let controlHeight: CGFloat = 48
         static let segmentHeight: CGFloat = 50
         static let primaryActionHeight: CGFloat = 52
+        static let calibrationWeekHeight: CGFloat = 118
+        static let calibrationWeekChartInset: CGFloat = 36
         static let reviewOverlayBadgeHeight: CGFloat = 44
         static let reviewOverlaySymbolSize: CGFloat = 17
         static let reviewOverlayEdgeInset: CGFloat = 16
@@ -716,6 +718,16 @@ enum ImpressV3Language: String, CaseIterable {
 
     private static let translations: [String: (traditional: String, english: String)] = [
         "闪卡": ("閃卡", "Flashcards"),
+        "本周校准": ("本週校準", "This Week"),
+        "每日校准": ("每日校準", "Daily Calibration"),
+        "五项评估、历史走势与提醒": ("五項評估、歷史走勢與提醒", "Five checks, trends, and reminders"),
+        "周一": ("週一", "Mon"), "周二": ("週二", "Tue"),
+        "周三": ("週三", "Wed"), "周四": ("週四", "Thu"),
+        "周五": ("週五", "Fri"), "周六": ("週六", "Sat"),
+        "周日": ("週日", "Sun"),
+        "未评估": ("未評估", "Not scored"),
+        "点击打开每日校准": ("點選開啟每日校準", "Open daily calibration"),
+
         "校准": ("校準", "Calibration"),
         "设置": ("設定", "Settings"),
         "笔记": ("筆記", "Notes"),
