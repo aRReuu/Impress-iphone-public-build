@@ -137,6 +137,28 @@ final class ImpressAIConfigStore {
             ImpressAIKeychain.delete(id: key)
         }
     }
+
+    func clearCredential(connectionID: UUID) throws {
+        guard let c = registry.connections.first(where: { $0.id == connectionID })
+        else { throw ImpressAIServiceError.configuration }
+        try update { reg in
+            guard let i = reg.connections.firstIndex(where: { $0.id == connectionID })
+            else { throw ImpressAIServiceError.configuration }
+            reg.connections[i].credentialID = nil
+            if ImpressAIOpenCodeFreeQA.isQAProfile(c) {
+                reg.connections[i].freeQAOnly = true
+                reg.connections[i].authentication = .noAuthentication
+            }
+            for m in reg.models.indices where reg.models[m].connectionID == connectionID {
+                reg.models[m].jsonVerified = false
+                reg.models[m].toolsVerified = false
+            }
+        }
+        if let old = c.credentialID,
+           !registry.connections.contains(where: { $0.credentialID == old }) {
+            ImpressAIKeychain.delete(id: old)
+        }
+    }
 }
 
 // Disable automatic redirection, which could otherwise forward an Authorization
