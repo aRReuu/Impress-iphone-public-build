@@ -29,7 +29,9 @@ final class ImpressAISettingsViewController: UITableViewController {
     override func tableView(_ tableView: UITableView,
                             numberOfRowsInSection section: Int) -> Int {
         switch section {
-        case 0: return ImpressAIConfigStore.shared.registry.connections.count
+        case 0:
+            let count = ImpressAIConfigStore.shared.registry.connections.count
+            return count + (count > 0 ? 1 : 0) // Explicit remove-all row
         case 1: return tasks.count
         default: return 3
         }
@@ -62,13 +64,19 @@ final class ImpressAISettingsViewController: UITableViewController {
         let config = ImpressAIConfigStore.shared.registry
         switch indexPath.section {
         case 0:
-            let c = config.connections[indexPath.row]
-            let count = config.models.filter { $0.connectionID == c.id }.count
-            content.text = c.title
-            content.secondaryText = c.effectiveAuthentication == .noAuthentication
-                ? "\(count) \(V3L("个免费模型")) · \(V3L("无需密钥"))"
-                : "\(c.provider.rawValue) · \(count) \(V3L("个模型"))"
-            content.image = UIImage(systemName: "server.rack")
+            if indexPath.row == config.connections.count {
+                content.text = V3L("删除全部 API 连接")
+                content.secondaryText = V3L("同时删除对应模型、业务选择及本机密钥")
+                content.image = UIImage(systemName: "trash")
+            } else {
+                let c = config.connections[indexPath.row]
+                let count = config.models.filter { $0.connectionID == c.id }.count
+                content.text = c.title
+                content.secondaryText = c.effectiveAuthentication == .noAuthentication
+                    ? "\(count) \(V3L("个模型")) · \(V3L("无需密钥"))"
+                    : "\(c.provider.rawValue) · \(count) \(V3L("个模型"))"
+                content.image = UIImage(systemName: "server.rack")
+            }
         case 1:
             let task = tasks[indexPath.row]
             content.text = taskTitle(task)
@@ -99,7 +107,8 @@ final class ImpressAISettingsViewController: UITableViewController {
         content.secondaryTextProperties.numberOfLines = 3
         cell.contentConfiguration = content
         ImpressV3Appearance.styleGroupedCell(cell)
-        cell.accessoryType = .disclosureIndicator
+        cell.accessoryType = indexPath.section == 0 &&
+            indexPath.row == config.connections.count ? .none : .disclosureIndicator
         return cell
     }
 
@@ -108,8 +117,14 @@ final class ImpressAISettingsViewController: UITableViewController {
         tableView.deselectRow(at: indexPath, animated: true)
         switch indexPath.section {
         case 0:
-            let c = ImpressAIConfigStore.shared.registry.connections[indexPath.row]
-            navigationController?.pushViewController(ImpressAIConnectionEditor(connectionID: c.id), animated: true)
+            let all = ImpressAIConfigStore.shared.registry.connections
+            if indexPath.row == all.count {
+                confirmRemoveAll()
+                return
+            }
+            guard all.indices.contains(indexPath.row) else { return }
+            navigationController?.pushViewController(
+                ImpressAIConnectionEditor(connectionID: all[indexPath.row].id), animated: true)
         case 1:
             navigationController?.pushViewController(
                 ImpressAIModelChooser(task: tasks[indexPath.row]), animated: true)
@@ -129,6 +144,56 @@ final class ImpressAISettingsViewController: UITableViewController {
             alert.addAction(UIAlertAction(title: V3L("知道了"), style: .default))
             present(alert, animated: true)
         }
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath)
+    -> UISwipeActionsConfiguration? {
+        let connections = ImpressAIConfigStore.shared.registry.connections
+        guard indexPath.section == 0, connections.indices.contains(indexPath.row) else {
+            return nil
+        }
+        let id = connections[indexPath.row].id
+        let remove = UIContextualAction(style: .destructive, title: V3L("删除")) {
+            [weak self] _, _, done in
+            done(false) // The source row remains until the user confirms.
+            self?.confirmRemoveConnection(id)
+        }
+        return UISwipeActionsConfiguration(actions: [remove])
+    }
+
+    private func confirmRemoveConnection(_ id: UUID) {
+        guard let item = ImpressAIConfigStore.shared.registry.connections.first(where: { $0.id == id })
+        else { return }
+        let alert = UIAlertController(title: V3L("删除 API 连接？"),
+            message: item.title + "\n" +
+                V3L("这将删除当前连接、关联模型、业务选择及未被其他连接使用的 Keychain 密钥。"),
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("删除"), style: .destructive) { [weak self] _ in
+            do {
+                try ImpressAIConfigStore.shared.deleteConnection(id: id)
+                self?.tableView.reloadData()
+            } catch { self?.showFailure(error) }
+        })
+        present(alert, animated: true)
+    }
+
+    private func confirmRemoveAll() {
+        let count = ImpressAIConfigStore.shared.registry.connections.count
+        guard count > 0 else { return }
+        let alert = UIAlertController(title: V3L("删除全部 API 连接？"),
+            message: "\(count) " + V3L("个连接及其模型、业务默认选择和凭据将被清除，不会删除已有卡片与笔记。"),
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("确认全部删除"),
+            style: .destructive) { [weak self] _ in
+                do {
+                    try ImpressAIConfigStore.shared.deleteAllConnections()
+                    self?.tableView.reloadData()
+                } catch { self?.showFailure(error) }
+            })
+        present(alert, animated: true)
     }
 
     private func chooseDefaultChatPrompt() {
