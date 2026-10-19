@@ -2,6 +2,8 @@
 
 ## 2026-10-19 redesign A01–A20 evidence
 
+For exact-SHA validation, CI must compile the iOS 26 Simulator target, execute native XCTest, and build an unsigned iPhoneOS ARM64 QA IPA. Separately record pure Swift tests, UIKit tests, real inference, iPhone Keychain, File Provider and production Vault consent. Never mark a device or real API gate from a build alone.
+
 This section is the current navigation/knowledge acceptance contract. **Status is BLOCKED/NOT RUN unless backed by a CI run on the exact code SHA or a recorded device test.** The historical V3.2 results below are regressions only, not current pass evidence. Single authority: [KNOWLEDGE_LIFECYCLE_V1.md](KNOWLEDGE_LIFECYCLE_V1.md). No paid AI calls, real personal Vault tests, merge, or production-write bypass.
 
 | ID | Required current scenario | Evidence target / current state |
