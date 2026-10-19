@@ -723,6 +723,9 @@ final class ImpressAIModelsViewController: UITableViewController {
                     // Read-check only. Never log, display or cache the secret.
                     _ = try ImpressAIKeychain.read(id: connection.credentialID)
                     lines.append("Keychain: " + V3L("凭据可读取"))
+                    let keyStatus = try await ImpressAIHTTPClient.shared
+                        .probeOpenCodeServiceAccount(connection: connection)
+                    lines.append("Console Key: HTTP \(keyStatus) · PASS")
                 }
                 let firstTurn = ImpressAIChatTurn(role: .user, text: "Reply only with OK.")
                 let first = try await ImpressAIHTTPClient.shared.converseDetailed(
