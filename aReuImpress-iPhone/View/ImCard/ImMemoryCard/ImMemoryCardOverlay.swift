@@ -379,17 +379,23 @@ final class ImpressV3RatingOverlay: UIView {
         addSubview(badge)
         NSLayoutConstraint.activate([
             badge.centerXAnchor.constraint(equalTo: centerXAnchor),
-            badge.centerYAnchor.constraint(equalTo: centerYAnchor),
+            // Keep the rating hint above content instead of hiding the main text.
+            badge.topAnchor.constraint(equalTo: topAnchor,
+                constant: ImpressV3Appearance.Metrics.reviewOverlayTopInset),
             badge.heightAnchor.constraint(greaterThanOrEqualToConstant:
                 ImpressV3Appearance.Metrics.reviewOverlayBadgeHeight),
             badge.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor,
-                                           constant: 16),
+                constant: ImpressV3Appearance.Metrics.reviewOverlayEdgeInset),
             badge.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor,
-                                            constant: -16),
-            content.leadingAnchor.constraint(equalTo: badge.leadingAnchor, constant: 18),
-            content.trailingAnchor.constraint(equalTo: badge.trailingAnchor, constant: -18),
-            content.topAnchor.constraint(equalTo: badge.topAnchor, constant: 10),
-            content.bottomAnchor.constraint(equalTo: badge.bottomAnchor, constant: -10),
+                constant: -ImpressV3Appearance.Metrics.reviewOverlayEdgeInset),
+            content.leadingAnchor.constraint(equalTo: badge.leadingAnchor,
+                constant: ImpressV3Appearance.Metrics.reviewOverlayContentHInset),
+            content.trailingAnchor.constraint(equalTo: badge.trailingAnchor,
+                constant: -ImpressV3Appearance.Metrics.reviewOverlayContentHInset),
+            content.topAnchor.constraint(equalTo: badge.topAnchor,
+                constant: ImpressV3Appearance.Metrics.reviewOverlayContentVInset),
+            content.bottomAnchor.constraint(equalTo: badge.bottomAnchor,
+                constant: -ImpressV3Appearance.Metrics.reviewOverlayContentVInset),
             image.widthAnchor.constraint(equalToConstant:
                 ImpressV3Appearance.Metrics.reviewOverlaySymbolSize),
             image.heightAnchor.constraint(equalToConstant:
