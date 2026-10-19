@@ -16,7 +16,7 @@
 - 相对路径：`models`、`chat/completions`、`responses`、`messages`，可逐项配置，不接受任意完整 URL、`..` 路径、Query 或 URL 编码注入；
 - 一连接可添加多个模型，自动枚举只是便利，**不支持枚举时可手工输入模型 ID**；
 - **每个模型可独立选择 API 协议**（适配混合网关）与 JSON 处理模式（原生/仅提示词约束）；更改协议或目标连接后必须重新进行无私密内容的 JSON 实测；
-- 问题生成、知识整理、原生 Chat 各有业务模型路由。知识整理与原生 Chat 目前仍为后续 Gate，**不可将有路由配置误称为已启用**。
+- 问题生成与原生 Chat 已实现独立的业务模型路由；**知识重构仍未启用**，其入口应明确说明需要额外的安全 Gate。配置路由并不等于真实 API 请求已经通过。
 
 ## 2. 预设示例（只用于填写方便，均可手动改动）
 
@@ -29,7 +29,7 @@
 | 智谱 GLM（国内） | `https://open.bigmodel.cn/api/paas/v4` | `chatCompletions` | Bearer |
 | GLM / Z.AI（国际） | `https://api.z.ai/api/paas/v4` | `chatCompletions` | Bearer |
 | Command Code | `https://api.commandcode.ai/provider/v1` | `chatCompletions` | Bearer |
-| OpenCode Zen | `https://opencode.ai/zen/v1` | `chatCompletions` | Bearer |
+| OpenCode Console | `https://opencode.ai/inference` | `chatCompletions` + 专属相对路径 | Bearer |
 | OpenCode Go | `https://opencode.ai/zen/go/v1` | `chatCompletions` | Bearer |
 | **自定义 API** | 用户自己的 HTTPS 根路径 | 任选支持的协议 | 任选支持的方式 |
 
@@ -44,6 +44,18 @@ OpenCode Zen / Go 亦有混合协议目录；须按该模型支持的 endpoint �
 - OpenCode Providers: `https://docs.opencode.ai/docs/providers/`
 - OpenCode Go: `https://docs.opencode.ai/docs/go/`
 - GLM Z.AI: `https://docs.z.ai/`
+
+
+## 2.1 GLM 真实配置与常见问题排查（2026-10-19）
+
+1. 「设置 → AI 服务 → +」选 **智谱 GLM（国内）** 或 **GLM / Z.AI（国际）**；使用与你 Key 所属账号/区域一致的预设。Base URL **只填写根路径**（国内 `.../api/paas/v4`），不要重复附加 `/chat/completions`。
+2. 在该连接的「API Key」保存密钥至 Keychain，认证保持 **Bearer**；然后从「模型列表」拉取目录，或点右上角 `+` 手工添加账号控制台实际开放的模型 ID。模型列表查询若不被供应商支持，不能据此认定推理不可用；可以手工填写。
+3. 点击模型 → **测试对话连接**。只有确认可能发生的调用费用后才发送无私人内容的测试请求。失败时检查连接、模型、协议、鉴权和 HTTP 状态，而不是笼统显示 OpenCode Free QA 错误。
+4. 点击「模型 → 作为对话模型」，或在「业务默认模型 → 原生对话」中选择这个 GLM 模型。这是**明确选择**，不会因添加另一个免费 QA 连接而自动改回 QA。
+5. 若用于指定 Obsidian 笔记出题，另点「测试 JSON 输出」，通过能力验证后再将它设为「指定笔记出题」默认模型。未验证前仍禁止上传私人笔记。
+6. 对应删除路径：「API 连接」列表左滑删除单项，或列表末尾「删除全部 API 连接」进行二次确认；详情页仍保留「删除连接」。删除会清理关联模型与业务路由，只删除未被其他连接共享的 Keychain 引用。也可仅删除/更换当前连接的 API Key。
+
+**约束**：Free-QA 白名单只绑定显式选择的「OpenCode 免费模型（测试）」连接；GLM、Z.AI、自定义等普通用户连接由自己的 Provider、协议、认证和明确选择的模型决定。CI 只运行模拟的 GLM 请求，不代替用户账号的实际验证。
 
 ## 3. 出题任务与安全规则
 
@@ -62,8 +74,9 @@ OpenCode Zen / Go 亦有混合协议目录；须按该模型支持的 endpoint �
 2. iOS 原生：旧导航与新增“AI 服务/问题生成/快速记录”契约同时验收；不删除旧 FSRS、备份、Obsidian、校准用例。
 3. 真机或授权测试账号：至少验证一个官方 Provider 与一个自定义第三方网关，独立确认 Keychain 读取、JSON 兼容、实际选中文档上传边界和 V3 原子入库。
 4. 仅在 exact HEAD 的 CI 全绿后讨论合并；**模拟器通过不意味着 iPhone 13 端到端通过**。
-5. 当前候选池仅处于页面内存，跨冷启动持久化和备份属于独立的待完成 Gate；不可谎称已经交付。
+5. 问题候选池已有受保护的本地快照恢复机制；正式卡片仅以 V3 WCDB 为权威。恢复时必须重新核对原笔记 SHA-256。
+6. 无真实 GLM API Key 的 CI 只能以 Keychain 测试凭据 + 本地 URLProtocol 检查请求头/URL/解析，**不能声称用户账号 GLM 推理成功**。
 
 ## 5. 非目标
 
-本轮不实现原生多轮 Chat、不实现自动 Markdown 知识重构/写入、不修改校准器、不变更 FSRS 算法、不处理私人 Vault、不将开源工作转入私有仓库、不合并 main。
+本轮仅修复 AI 服务与已存在的原生 Chat/出题路由；不实现自动 Markdown 知识重构/写回，不修改校准器、FSRS 算法或私人 Vault，不同步私有仓库，不合并 main。
