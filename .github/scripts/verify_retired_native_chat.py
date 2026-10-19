@@ -105,6 +105,18 @@ def assert_clean() -> None:
     assert 'ImpressCalibrationViewController()' in review
     assert 'calibrationWeek.accessibilityIdentifier = "impress.review.calibration-week"' in review
     assert 'calibrationWeek.addTarget(self, action: #selector(openCalibrationDetail),' in review
+    # Chat must never replace complete local history with a bounded HTTP window.
+    # Its editor/draft persists only through the existing V3 source-ID database.
+    native_chat = (APP / "Utils/Public/ImAI/ImpressAINativeChatViewController.swift").read_text()
+    assert "private var history: [WCDBV3ChatMessage] = []" in native_chat
+    assert "private var sourceCardID: UUID?" in native_chat
+    assert "private func persistLocal() async -> Bool" in native_chat
+    assert "sourceCardID.map" in native_chat
+    assert "history = Array(history.suffix(" not in native_chat
+    assert "try await repository.saveChatSession(" in native_chat
+    assert "ImpressAIHTTPClient.shared.converse(" in native_chat
+    assert "selectedModelID" in native_chat
+
     # Safeguards below still reject retired chat code, secrets and production writes.
     config = (APP / "Utils/Constansts/ImColorConstants.swift").read_text()
     assert 'enum ImpressV3Language: String, CaseIterable' in config
