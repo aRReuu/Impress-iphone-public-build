@@ -272,7 +272,9 @@ public enum ImpressBatchSourceKey {
     private static let versionedPrefix = "obsidian+v2:"
 
     private static func payload(for identity: ImVaultFileIdentity) throws -> String {
-        let data = try JSONEncoder().encode(identity)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(identity)
         return data.base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")

@@ -686,8 +686,12 @@ public actor ReviewWCDBRepository: ReviewRepository {
         guard offset >= 0, (1...200).contains(limit) else {
             throw ReviewWCDBError.invalidSchedulerOutput
         }
-        let encoded = try ImpressBatchSourceKey.encode(source)
-        let versionedPrefix = try ImpressBatchSourceKey.versionedPrefix(for: source)
+        // Historic v1 keys were serialized by JSONEncoder without sortedKeys,
+        // so identical (vaultID, relativePath) can have different base64 bytes.
+        // Never compare an encoded key to a freshly re-encoded identity in SQL.
+        // Prefilter only the key family; ALWAYS decode and compare full identity
+        // before returning a card. This supports legacy v1 and versioned v2,
+        // including old keys with either JSON property order.
         let selected = [
             WCDBV3CardRow.Properties.cardID,
             WCDBV3CardRow.Properties.question,
@@ -702,10 +706,7 @@ public actor ReviewWCDBRepository: ReviewRepository {
             WCDBV3CardRow.Properties.updatedAt.asOrder(by: .descending),
             WCDBV3CardRow.Properties.cardID.asOrder(by: .ascending)
         ]
-        // LIKE is a coarse prefilter. URL-safe base64 may contain '_', which
-        // SQLite treats as a wildcard, so ALWAYS verify the decoded identity.
-        let sourceFilter = WCDBV3CardRow.Properties.sourceNotePath == encoded
-            || WCDBV3CardRow.Properties.sourceNotePath.like(versionedPrefix + "%")
+        let sourceFilter = WCDBV3CardRow.Properties.sourceNotePath.like("obsidian+v%")
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
         var rows: [WCDBV3CardRow] = []
         var scanned = 0

@@ -2,6 +2,18 @@ import XCTest
 @testable import ImpressReviewCore
 
 final class ImpressBatchParserTests: XCTestCase {
+    func testSortedSourcePayloadIsDeterministicAndLegacyPayloadStillDecodes() throws {
+        let source = try ImVaultFileIdentity(vaultID: "a", relativePath: "Dir/Topic.md")
+        let canonical = try ImpressBatchSourceKey.encode(source)
+        XCTAssertEqual(canonical, try ImpressBatchSourceKey.encode(source))
+        let historicJSON = #"{"relativePath":"Dir/Topic.md","vaultID":"a"}"#
+        let historic = Data(historicJSON.utf8).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        XCTAssertEqual(try ImpressBatchSourceKey.decode("obsidian+v1:" + historic), source)
+    }
+
     func testVersionedVaultSourceKeyRoundTripAndDigestValidation() throws {
         let source = try ImVaultFileIdentity(vaultID: "vault-1",
                                              relativePath: "Folder/Topic.md")

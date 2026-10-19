@@ -26,6 +26,41 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         return folder.appendingPathComponent("v3.sqlite").path
     }
 
+    func testRelatedCardsAcceptHistoricUnsortedJSONKeysWithoutCrossVaultLeak() async throws {
+        let calc = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(), calculator: calc)
+        let source = try ImVaultFileIdentity(vaultID: "old-vault", relativePath: "A/Topic.md")
+        let digest = String(repeating: "f", count: 64)
+        let raw = #"{"vaultID":"old-vault","relativePath":"A/Topic.md"}"#
+        let reversed = #"{"relativePath":"A/Topic.md","vaultID":"old-vault"}"#
+        func originalKey(_ json: String, version: Int) -> String {
+            let payload = Data(json.utf8).base64EncodedString()
+                .replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: "=", with: "")
+            return version == 1 ? "obsidian+v1:" + payload
+                : "obsidian+v2:" + payload + ":" + digest
+        }
+        let keys = [originalKey(raw, version: 1), originalKey(reversed, version: 1),
+                    originalKey(raw, version: 2), originalKey(reversed, version: 2)]
+        let now = Date(timeIntervalSince1970: 1_726_000_000)
+        var cardIDs = Set<UUID>()
+        for (i, key) in keys.enumerated() {
+            let card = WCDBV3CardInput(question: "Legacy serialization \(i)",
+                answerText: "Reply \(i)", sourceNotePath: key)
+            cardIDs.insert(card.cardID)
+            try await repo.insertNewCard(card,
+                initial: try calc.newCardSnapshot(id: card.cardID, now: now),
+                now: now.addingTimeInterval(Double(i)))
+        }
+        let matching = try await repo.listRelatedCards(for: source)
+        XCTAssertEqual(Set(matching.map(\.cardID)), cardIDs)
+        let differentVault = try ImVaultFileIdentity(vaultID: "other",
+                                                      relativePath: "A/Topic.md")
+        let unrelated = try await repo.listRelatedCards(for: differentVault)
+        XCTAssertTrue(unrelated.isEmpty)
+    }
+
     func testVersionedNoteSourceLookupPreservesLegacyLinksAndSeparatesSameTitle() async throws {
         let calc = FSRS6ReviewCalculator()
         let repo = try ReviewWCDBRepository(databasePath: temporaryPath(), calculator: calc)
@@ -1287,11 +1322,11 @@ final class ImVaultSyncIntegrationTests: XCTestCase {
         XCTAssertFalse(textViews[0].isEditable)
         // The third action generates questions from the authorized, read-only
         // document. Neither the viewer nor this navigation mutates source bytes.
-        XCTAssertEqual(viewer.navigationItem.rightBarButtonItems?.count, 3)
+        XCTAssertEqual(viewer.navigationItem.rightBarButtonItems?.count, 4)
         XCTAssertEqual(Set(viewer.navigationItem.rightBarButtonItems?
             .compactMap(\.accessibilityIdentifier) ?? []),
             Set(["impress.notes.draft", "impress.notes.source-toggle",
-                 "impress.notes.generate-questions"]))
+                 "impress.notes.generate-questions", "impress.notes.linked-cards"]))
         XCTAssertEqual(try Data(contentsOf: file), original)
     }
 

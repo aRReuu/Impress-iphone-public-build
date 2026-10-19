@@ -111,7 +111,10 @@ jobs:
             echo "No available iPhone simulator" | tee out/simulator-error.log
             exit 1
           fi
-          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination "platform=iOS Simulator,id=$SIM_ID" -derivedDataPath "$RUNNER_TEMP/ImpressDebugSim" -resultBundlePath "$PWD/out/ImpressV3.xcresult" -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO test 2>&1 | tee out/simulator-xctest.log
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination "platform=iOS Simulator,id=$SIM_ID" -derivedDataPath "$RUNNER_TEMP/ImpressDebugSim" -resultBundlePath "$PWD/out/ImpressV3.xcresult" -parallel-testing-enabled NO \
+             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+             CODE_SIGN_ENTITLEMENTS="$GITHUB_WORKSPACE/.github/ci/ImpressSimulatorKeychainQA.entitlements" \
+             test 2>&1 | tee out/simulator-xctest.log
           xcrun xcresulttool get test-results summary --path out/ImpressV3.xcresult --format json > out/test-summary.json || true
       - name: Build Release iOS Simulator
         shell: bash
