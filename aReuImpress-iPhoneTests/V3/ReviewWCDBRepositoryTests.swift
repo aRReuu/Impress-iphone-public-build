@@ -163,19 +163,23 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         try await repository.updateManagedCard(
             edited, expectedRevision: 1, expectedContentRevision: 1,
             now: now.addingTimeInterval(3))
-        XCTAssertEqual(try await repository.content(for: id)?.contentRevision, 1)
+        let afterNoOp = try await repository.content(for: id)
+        XCTAssertEqual(afterNoOp?.contentRevision, 1)
         let versions = try await repository.contentHistory(for: id)
         XCTAssertEqual(versions.map(\.contentRevision), [0, 1])
         XCTAssertEqual(versions.map(\.answerText), ["A limit", "A limit with examples"])
         try await repository.restoreContentVersion(
             cardID: id, savedRevision: 0, expectedContentRevision: 1,
             expectedReviewRevision: 1, now: now.addingTimeInterval(4))
-        XCTAssertEqual(try await repository.content(for: id)?.answerText, "A limit")
+        let afterRestore = try await repository.content(for: id)
+        XCTAssertEqual(afterRestore?.answerText, "A limit")
         let complete = try await repository.contentHistory(for: id)
         XCTAssertEqual(complete.map(\.contentRevision), [0, 1, 2])
         XCTAssertEqual(complete.last?.origin, .restored)
-        XCTAssertEqual(try await repository.reviewHistory(for: id).count, 1)
-        XCTAssertEqual(try await repository.fetchQueueCandidates().first?.revision, 1)
+        let reviewHistory = try await repository.reviewHistory(for: id)
+        let candidates = try await repository.fetchQueueCandidates()
+        XCTAssertEqual(reviewHistory.count, 1)
+        XCTAssertEqual(candidates.first?.revision, 1)
 
         // The existing SQLite V3 backup automatically captures content history.
         let archive = URL(fileURLWithPath: path).deletingLastPathComponent()
@@ -183,7 +187,8 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         try await repository.createConsistentBackup(to: archive)
         let reopened = try ReviewWCDBRepository(databasePath: archive.path,
                                                 calculator: calculator)
-        XCTAssertEqual(try await reopened.contentHistory(for: id), complete)
+        let recoveredVersions = try await reopened.contentHistory(for: id)
+        XCTAssertEqual(recoveredVersions, complete)
     }
 
     func testObservedLegacyContentHistoryNeverInventsEarlierAnswers() async throws {
@@ -192,7 +197,8 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         try ReviewWCDBRepository.seedPreR042FixtureForTesting(at: path, cardID: id)
         let repository = try ReviewWCDBRepository(
             databasePath: path, calculator: FSRS6ReviewCalculator())
-        XCTAssertTrue(try await repository.contentHistory(for: id).isEmpty)
+        let beforeEditing = try await repository.contentHistory(for: id)
+        XCTAssertTrue(beforeEditing.isEmpty)
         try await repository.updateManagedCard(
             WCDBV3CardInput(cardID: id, question: "Observed edit", answerText: "Changed"),
             expectedRevision: 0, expectedContentRevision: 0)
