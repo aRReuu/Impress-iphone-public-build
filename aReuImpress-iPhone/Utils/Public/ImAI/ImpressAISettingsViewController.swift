@@ -167,20 +167,58 @@ final class ImpressAISettingsViewController: UITableViewController {
             title: V3L("OpenCode 免费模型（测试）"), style: .default
         ) { [weak self] _ in
             guard let self else { return }
-            let connection = ImpressAIOpenCodeFreeQA.connection()
-            let models = ImpressAIOpenCodeFreeQA.models(for: connection.id)
+            let preset = ImpressAIOpenCodeFreeQA.connection()
+            var selectedID = preset.id
             do {
                 try ImpressAIConfigStore.shared.update { registry in
-                    registry.connections.append(connection)
-                    registry.models.append(contentsOf: models)
+                    // Reuse an existing free-QA profile and its device Keychain ID.
+                    // A second tap must not create duplicate providers or erase a key.
+                    if let old = registry.connections.first(where: {
+                        $0.title == preset.title && $0.provider == .openCode &&
+                        $0.baseURL == preset.baseURL
+                    }) {
+                        selectedID = old.id
+                        if let index = registry.connections.firstIndex(where: { $0.id == old.id }) {
+                            registry.connections[index].apiProtocol = .chatCompletions
+                            registry.connections[index].endpoints = ImpressAIOpenCodeFreeQA.endpoints
+                        }
+                    } else {
+                        registry.connections.append(preset)
+                    }
+                    // Keep only the currently approved Free model IDs in this
+                    // QA profile. Do not touch any custom/other-provider profile.
+                    registry.models.removeAll {
+                        $0.connectionID == selectedID &&
+                        !ImpressAIOpenCodeFreeQA.allowedForCatalog($0.identifier)
+                    }
+                    for fresh in ImpressAIOpenCodeFreeQA.models(for: selectedID) {
+                        if let index = registry.models.firstIndex(where: {
+                            $0.connectionID == selectedID &&
+                            $0.identifier == fresh.identifier
+                        }) {
+                            if registry.models[index].jsonMode != .promptOnly ||
+                               registry.models[index].protocolOverride != nil {
+                                registry.models[index].jsonVerified = false
+                                registry.models[index].toolsVerified = false
+                            }
+                            registry.models[index].jsonMode = .promptOnly
+                            registry.models[index].protocolOverride = nil
+                        } else {
+                            registry.models.append(fresh)
+                        }
+                    }
+                    guard let primary = registry.models.first(where: {
+                        $0.connectionID == selectedID &&
+                        $0.identifier == ImpressAIOpenCodeFreeQA.preferredModelID
+                    }) else { throw ImpressAIServiceError.configuration }
                     for task in [ImpressAITask.questionGeneration, .conversation] {
                         registry.routes.removeAll { $0.task == task }
                         registry.routes.append(ImpressAIRoute(
-                            task: task, primaryModelID: models[0].id))
+                            task: task, primaryModelID: primary.id))
                     }
                 }
                 self.navigationController?.pushViewController(
-                    ImpressAIModelsViewController(connectionID: connection.id),
+                    ImpressAIModelsViewController(connectionID: selectedID),
                     animated: true)
             } catch { self.showFailure(error) }
         })
