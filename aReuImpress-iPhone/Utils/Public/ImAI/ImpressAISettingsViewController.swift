@@ -903,6 +903,35 @@ final class ImpressAIModelsViewController: UITableViewController {
         present(report, animated: true)
     }
 
+    private func confirmConversationProbe(_ model: ImpressAIModel) {
+        guard let c = connection else { return }
+        let isQA = ImpressAIOpenCodeFreeQA.isQAProfile(c)
+        let alert = UIAlertController(title: V3L("测试对话连接"),
+            message: c.title + " · " + model.identifier + "\n" +
+                (isQA
+                 ? V3L("仅发送无私人数据的测试文本，限 OpenCode Free QA 模型。")
+                 : V3L("本次将向选定厂商发送一条测试消息，可能产生该厂商的 API 费用。")),
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("开始测试"), style: .default) { [weak self] _ in
+            self?.testFreeConversation(model)
+        })
+        present(alert, animated: true)
+    }
+
+    private func confirmJSONProbe(_ model: ImpressAIModel) {
+        guard let c = connection else { return }
+        let alert = UIAlertController(title: V3L("测试 JSON 输出"),
+            message: c.title + " · " + model.identifier + "\n" +
+                V3L("发送一条无私人内容的 JSON 测试请求，可能产生该服务商的调用费用。成功后才能用于私人笔记出题。"),
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("开始测试"), style: .default) { [weak self] _ in
+            self?.testModel(model)
+        })
+        present(alert, animated: true)
+    }
+
     private func testFreeConversation(_ model: ImpressAIModel) {
         guard let connection else { return }
         let selected = ImpressAIResolvedRoute(connection: connection, model: model)
@@ -914,17 +943,19 @@ final class ImpressAIModelsViewController: UITableViewController {
                     turns: [ImpressAIChatTurn(role: .user, text: "ping")])
                 guard !result.text.isEmpty else { throw ImpressAIServiceError.response }
                 let report = connection.title + "\n" + model.identifier +
-                    "\nChat Completions · HTTP " + String(result.statusCode) + "\n" +
+                    "\n" + selected.effectiveProtocol.rawValue +
+                    " · HTTP " + String(result.statusCode) + "\n" +
                     V3L("测试成功：已收到模型回复，没有发送私人笔记。")
-                let alert = UIAlertController(title: V3L("免费模型连接成功"),
+                let alert = UIAlertController(title: V3L("对话模型连接成功"),
                     message: report,
                     preferredStyle: .alert)
                 alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
                 present(alert, animated: true)
             } catch {
                 let details = connection.title + "\n" + model.identifier +
-                    "\nChat Completions\n" + error.localizedDescription
-                let alert = UIAlertController(title: V3L("免费模型连接失败"),
+                    "\n" + selected.effectiveProtocol.rawValue +
+                    "\n" + error.localizedDescription
+                let alert = UIAlertController(title: V3L("对话模型连接失败"),
                     message: details, preferredStyle: .alert)
                 alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
                 present(alert, animated: true)
@@ -948,19 +979,9 @@ final class ImpressAIModelsViewController: UITableViewController {
         }
     }
     private func setRoute(_ task: ImpressAITask, modelID: UUID) {
-        // Free QA must never silently promote a paid model as a runnable route.
-        let registry = ImpressAIConfigStore.shared.registry
-        if let model = registry.models.first(where: { $0.id == modelID }),
-           let connection = registry.connections.first(where: { $0.id == model.connectionID }),
-           (try? ImpressAIOpenCodeFreeQA.validate(
-                 ImpressAIResolvedRoute(connection: connection, model: model))) == nil {
-            showError(ImpressAIServiceError.freeModelOnly)
-            return
-        }
         do {
-            try ImpressAIConfigStore.shared.update { reg in
-                reg.routes.removeAll { $0.task == task }
-                reg.routes.append(ImpressAIRoute(task: task, primaryModelID: modelID))
+            try ImpressAIConfigStore.shared.update {
+                try $0.setDefaultModel(modelID, for: task)
             }
             let a = UIAlertController(title: V3L("已选择默认模型"), message: nil, preferredStyle: .alert)
             a.addAction(UIAlertAction(title: V3L("确定"), style: .default))
