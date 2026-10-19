@@ -1269,6 +1269,22 @@ enum ImpressV3Language: String, CaseIterable {
         "免费 API 请求被拒绝（403）；可能是账号认证、地区或网络限制，请尝试在设置中保存新的 OpenCode API Key 后重测。": ("免費 API 請求遭拒（403）；可能是帳戶認證、地區或網路限制。請嘗試在設定中儲存新的 OpenCode API Key 後重測。", "Free API request blocked (403). This may be an account, regional or network restriction. Try saving a fresh OpenCode API key in Settings and test again."),
         "个免费模型": (" 個免費模型", " free models"),
         "无需密钥": ("無需密鑰", "No Key Needed"),
+        "请先选择免费对话模型": ("請先選擇免費對話模型", "Select a Free Chat Model"),
+        "原生对话": ("原生對話", "Native Chat"),
+        "默认对话提示词": ("預設對話提示詞", "Default Chat Prompt"),
+        "第一性原理 + 奥卡姆剃刀": ("第一性原理 + 奧卡姆剃刀", "First Principles + Occam's Razor"),
+        "默认使用第一性原理与奥卡姆剃刀，也可选用「提示词」中编辑过的模板。仅在你点击发送时传给当前模型。": ("預設使用第一性原理與奧卡姆剃刀，也可選擇在「提示詞」中編輯的範本。只有點擊傳送時才會傳給模型。", "Defaults to first principles and Occam's razor. You can select an edited prompt from your library. It is shared with the model only when you send."),
+        "打开提示词库编辑": ("開啟提示詞庫編輯", "Edit Prompt Library"),
+        "测试成功：已收到模型回复，没有发送私人笔记。": ("測試成功：已收到模型回覆，未傳送私人筆記。", "Probe passed: model replied. No private notes were sent."),
+        "免费模型连接失败": ("免費模型連線失敗", "Free Model Connection Failed"),
+        "源笔记已发生变化": ("來源筆記已變更", "Source Note Changed"),
+        "旧候选池已保留，但来源版本不一致，禁止直接导入。请重新生成问题。": ("舊候選題已保留，但來源版本不一致，無法直接匯入。請重新產生問題。", "Previous candidates are preserved, but the source version has changed. Regenerate before importing."),
+        "恢复未完成的候选池？": ("要還原未完成的候選題嗎？", "Restore Pending Questions?"),
+        "道候选题已在本机安全保存；恢复不会修改 Obsidian 或 FSRS。": ("道候選題已安全儲存在本機；還原不會修改 Obsidian 或 FSRS。", "questions were saved securely on this device. Restoring will not change Obsidian or FSRS."),
+        "重新生成": ("重新產生", "Regenerate"),
+        "恢复候选池": ("還原候選題", "Restore Questions"),
+        "OpenCode 返回 HTTP 403：可能是当前网络、账户权限或访问限制。确认免费定价后，再使用设备 Keychain 中的新 Key 重试。": ("OpenCode 回傳 HTTP 403：可能是網路、帳戶權限或存取限制。確認免費定價後，再使用裝置 Keychain 中的新密鑰重試。", "OpenCode HTTP 403: network, account or access restrictions may apply. Confirm free pricing before retrying with a new Keychain key."),
+        "OpenCode 返回 HTTP 429：免费模型暂时受限，请稍后重试；不会自动切换收费模型。": ("OpenCode 回傳 HTTP 429：免費模型暫時受到限制，請稍後再試；不會自動切換付費模型。", "OpenCode HTTP 429: free-model requests are rate limited. Try again later. No paid-model fallback is used."),
         "模型下载失败": ("模型下載失敗", "Model Download Failed")
     ]
 
