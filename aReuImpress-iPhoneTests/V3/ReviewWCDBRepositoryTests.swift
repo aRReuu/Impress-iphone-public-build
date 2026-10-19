@@ -1642,4 +1642,34 @@ final class ImpressAICustomAPIUITests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: sourceURL), original)
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
+
+    func testPendingAIQuestionPoolRoundtripAndVaultIsolation() throws {
+        let vault = "qa-pool-" + UUID().uuidString
+        let identity = try ImVaultFileIdentity(vaultID: vault,
+                                                relativePath: "Study/Knowledge.md")
+        let source = ImpressAISource(vaultID: vault,
+             relativePath: identity.relativePath,
+             documentSHA256: String(repeating: "a", count: 64),
+             heading: "Knowledge")
+        let excerpt = ImpressAIExcerpt(id: "section-0", source: source,
+                                        text: "Reasoning is testable.")
+        let candidate = ImpressAIQuestionCandidate(
+            question: "Why test?", answer: "To verify behavior.",
+            dimension: .mechanism, evidenceIDs: ["section-0"], selected: false)
+        let pending = ImpressAIQuestionPool(source: source,
+            excerpts: [excerpt], requestedCount: 5, modelProfileID: UUID(),
+            candidates: [candidate])
+        defer { try? ImVaultPrivateStore.deleteQuestionPool(identity: identity) }
+        try ImVaultPrivateStore.saveQuestionPool(pending)
+        let restored = try XCTUnwrap(ImVaultPrivateStore.loadQuestionPool(identity: identity))
+        XCTAssertEqual(restored.id, pending.id)
+        XCTAssertEqual(restored.source.documentSHA256, source.documentSHA256)
+        XCTAssertEqual(restored.candidates.first?.question, candidate.question)
+        XCTAssertEqual(restored.candidates.first?.selected, false)
+        let other = try ImVaultFileIdentity(vaultID: "separate-" + UUID().uuidString,
+                                            relativePath: identity.relativePath)
+        XCTAssertNil(try ImVaultPrivateStore.loadQuestionPool(identity: other))
+        try ImVaultPrivateStore.deleteQuestionPool(identity: identity)
+        XCTAssertNil(try ImVaultPrivateStore.loadQuestionPool(identity: identity))
+    }
 }
