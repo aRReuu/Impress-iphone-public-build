@@ -35,7 +35,7 @@ public enum ImpressAIOpenCodeFreeQA {
         ImpressAIConnection(title: "OpenCode Free · QA", provider: .openCode,
             apiProtocol: .chatCompletions, baseURL: baseURL,
             credentialID: nil, authentication: .noAuthentication,
-            endpoints: endpoints)
+            endpoints: endpoints, freeQAOnly: true)
     }
 
     public static func models(for connectionID: UUID) -> [ImpressAIModel] {
@@ -43,6 +43,13 @@ public enum ImpressAIOpenCodeFreeQA {
             ImpressAIModel(connectionID: connectionID, identifier: id,
                            jsonMode: .promptOnly)
         }
+    }
+
+    /// Previously persisted QA profiles did not include the explicit flag.
+    public static func isQAProfile(_ c: ImpressAIConnection) -> Bool {
+        c.freeQAOnly == true ||
+            (c.freeQAOnly == nil && c.provider == .openCode &&
+             c.title == "OpenCode Free · QA" && c.baseURL == baseURL)
     }
 
     /// Deliberate fail-closed allowlist; arbitrary `free` suffixes never pass.
@@ -158,6 +165,8 @@ public struct ImpressAIConnection: Codable, Equatable, Sendable {
     public var authentication: ImpressAIAuthentication?
     public var customHeaderName: String?
     public var endpoints: ImpressAIEndpointPaths?
+    /// Opt-in QA restriction, never a rule for normal GLM / custom providers.
+    public var freeQAOnly: Bool?
 
     public var effectiveAuthentication: ImpressAIAuthentication {
         authentication ?? .defaultFor(provider)
@@ -170,7 +179,8 @@ public struct ImpressAIConnection: Codable, Equatable, Sendable {
                 apiProtocol: ImpressAIProtocol, baseURL: URL,
                 credentialID: UUID? = nil, enabled: Bool = true,
                 authentication: ImpressAIAuthentication? = nil,
-                customHeaderName: String? = nil, endpoints: ImpressAIEndpointPaths? = nil) {
+                customHeaderName: String? = nil, endpoints: ImpressAIEndpointPaths? = nil,
+                freeQAOnly: Bool? = nil) {
         self.id = id
         self.title = title
         self.provider = provider
@@ -181,6 +191,7 @@ public struct ImpressAIConnection: Codable, Equatable, Sendable {
         self.authentication = authentication
         self.customHeaderName = customHeaderName
         self.endpoints = endpoints
+        self.freeQAOnly = freeQAOnly
     }
 }
 
