@@ -1314,6 +1314,19 @@ enum ImpressV3Language: String, CaseIterable {
         "对话可选，建议先测试连接": ("可選作對話模型，建議先測試連線", "Available for Chat; test the connection first"),
         "JSON 尚未验证，不能上传笔记": ("JSON 尚未驗證，無法上傳筆記", "JSON not verified; note upload is blocked"),
         "模型没有返回可用文本，或回复格式不兼容。请检查模型及协议。": ("模型未返回可用文字，或回應格式不相容。請檢查模型與協定。", "The model returned no usable text or an incompatible response. Check the model and protocol."),
+        "更新 API Key": ("更新 API Key", "Update API Key"),
+        "删除已保存 API Key": ("刪除已儲存的 API Key", "Remove Saved API Key"),
+        "删除已保存 API Key？": ("刪除已儲存的 API Key？", "Remove Saved API Key?"),
+        "只移除当前连接的本机密钥并撤销模型验证状态，不会删除现有卡片或笔记。": ("只移除此連線的裝置密鑰並撤銷模型驗證狀態，不會刪除卡片或筆記。", "Removes this connection's local key and resets model verification; cards and notes are unchanged."),
+        "所选对话模型尚未保存 API Key，请打开该连接填写密钥。": ("所選對話模型尚未儲存 API Key，請打開該連線填入密鑰。", "The selected Chat model has no API key. Open the connection and save one."),
+        "所选模型或连接已停用，请重新选择有效模型。": ("所選模型或連線已停用，請重新選擇。", "The selected connection or model is disabled. Choose an enabled model."),
+        "当前连接属于 OpenCode 免费 QA，请选择此连接允许的模型。": ("此連線屬於 OpenCode 免費 QA，請選擇允許的模型。", "This is an OpenCode Free QA connection. Choose one of its allowed models."),
+        "请先在「设置 → AI 服务 → 业务默认模型」选择可用的对话模型。": ("請至「設定 → AI 服務 → 業務預設模型」選擇可用的對話模型。", "Select a Chat model in Settings → AI Services → Default Models."),
+        "无法使用当前对话模型": ("無法使用目前的對話模型", "Selected Chat Model Unavailable"),
+        "出题模型尚未通过 JSON 验证，请在 AI 服务中测试该模型后重试。": ("出題模型尚未通過 JSON 驗證，請先在 AI 服務中測試。", "The question model has not passed its JSON test. Verify it in AI Services first."),
+        "出题模型未保存 API Key，请先在 AI 服务中配置凭据。": ("出題模型未儲存 API Key，請在 AI 服務中設定憑據。", "The question model has no saved API key. Configure credentials in AI Services."),
+        "请先在 AI 服务 → 业务默认模型中选择出题模型。": ("請先至 AI 服務 → 業務預設模型選擇出題模型。", "Choose a question-generation model in AI Services → Default Models."),
+        "当前出题模型或连接已停用，请重新选择。": ("目前出題模型或連線已停用，請重新選擇。", "The question model or its connection is disabled. Choose another model."),
         "模型下载失败": ("模型下載失敗", "Model Download Failed")
     ]
 
