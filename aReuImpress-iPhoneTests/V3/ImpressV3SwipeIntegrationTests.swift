@@ -377,8 +377,8 @@ final class ImpressV3DeepSeekHandoffTests: XCTestCase {
 }
 
 
-// R04.2-D current navigation contract: Settings is a primary tab,
-// with prompt-library / reminder choices, not legacy chat and model rows.
+// V3 knowledge lifecycle: Settings remains a primary Tab and Learning Rhythm
+// now exposes both Daily Calibration and Review Notifications.
 @MainActor
 final class ImpressR041NativeNavigationTests: XCTestCase {
     func testSettingsIncludesAppearanceLanguageAndDataSafety() {
@@ -386,15 +386,25 @@ final class ImpressR041NativeNavigationTests: XCTestCase {
         settings.loadViewIfNeeded()
         XCTAssertEqual(settings.numberOfSections(in: settings.tableView), 5)
         XCTAssertEqual(settings.navigationItem.largeTitleDisplayMode, .always)
-        // R04.2 added data safety as a distinct native settings group.
-        for (section, title) in ["提示词", "复习通知", "显示模式", "语音与听写", "数据与备份"].enumerated() {
+        // Exactly two entries under Learning Rhythm: direct calibration
+        // detail, then Review Notifications. Keep the other settings intact.
+        for (section, title) in ["AI 服务", "每日校准", "显示模式", "语音与听写", "数据与备份"].enumerated() {
+            let expectedRows = section <= 2 ? 2 : 1
             XCTAssertEqual(settings.tableView(settings.tableView,
-                              numberOfRowsInSection: section), section == 2 ? 2 : 1)
+                              numberOfRowsInSection: section), expectedRows)
             let cell = settings.tableView(settings.tableView,
                               cellForRowAt: IndexPath(row: 0, section: section))
             let content = cell.contentConfiguration as? UIListContentConfiguration
             XCTAssertEqual(content?.text, V3L(title))
         }
+        let notifications = settings.tableView(settings.tableView,
+            cellForRowAt: IndexPath(row: 1, section: 1))
+        XCTAssertEqual((notifications.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("复习通知"))
+        let prompts = settings.tableView(settings.tableView,
+            cellForRowAt: IndexPath(row: 1, section: 0))
+        XCTAssertEqual((prompts.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("提示词"))
         let language = settings.tableView(settings.tableView,
             cellForRowAt: IndexPath(row: 1, section: 2))
         XCTAssertEqual((language.contentConfiguration as? UIListContentConfiguration)?.text,

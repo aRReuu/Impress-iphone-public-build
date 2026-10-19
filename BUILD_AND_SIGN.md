@@ -1,7 +1,9 @@
 # BUILD_AND_SIGN — Impress V3.2 public feature branch
 
+**2026-10-19 knowledge-workflow candidate:** run current [KNOWLEDGE_LIFECYCLE_V1.md](KNOWLEDGE_LIFECYCLE_V1.md) requirements and [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md) on the exact final head. Old run artifacts do not attest to G0–G6. A QA unsigned IPA, if created, remains non-release and does not establish Keychain/real provider/Obsidian device permissions.
+
 ## Current executable workflow
-For active V3.2 use `feature/impress-v3-r04-2-build` and `.github/workflows/r04-2-privacy-retirement-validation.yml`. Other older R03/main or calibration-v01 workflows have different trigger rules and must not be treated as sign-off of the active branch.
+For active V3.2 use `feature/impress-vault-device-write-qa` and `.github/workflows/r04-2-privacy-retirement-validation.yml`. Other older R03/main or calibration-v01 workflows have different trigger rules and must not be treated as sign-off of the active branch.
 
 GitHub Actions installs pinned CocoaPods, runs all portable Swift Core tests (including calibration), audits retired native Chat and public Git history for credentials, compiles the Simulator app, runs full UIKit XCTest, compiles the `aReuImpress-iPhone-AltStore` iPhoneOS ARM64 app with `CODE_SIGNING_ALLOWED=NO`, verifies executable, unsigned state, ZIP and SHA-256, and uploads the testing Artifact.
 

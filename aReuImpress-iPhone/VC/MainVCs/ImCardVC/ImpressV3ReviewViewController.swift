@@ -27,7 +27,9 @@ final class ImpressV3ReviewViewController: UIViewController {
     private let cardStack = SwipeCardStack()
     private let revealButton = UIButton(type: .system)
     private let answerTools = UIStackView()
+    private let contentHistoryAction = UIButton(type: .system)
     private let statusLabel = UILabel()
+    private let calibrationWeek = ImpressV3WeeklyCalibrationOverview()
     private let completionLabel = UILabel()
     private let repeatButton = UIButton(type: .system)
     private let busyIndicator = UIActivityIndicatorView(style: .medium)
@@ -47,6 +49,17 @@ final class ImpressV3ReviewViewController: UIViewController {
         view.backgroundColor = ImpressV3Appearance.page
         setupNativeLayout()
         setupNavigation()
+        // The entire weekly coordinate surface is a hit target, not only dots.
+        calibrationWeek.accessibilityIdentifier = "impress.review.calibration-week"
+        calibrationWeek.addTarget(self, action: #selector(openCalibrationDetail),
+                                  for: .touchUpInside)
+        for name in [ImpressCalibrationLocalStore.didChange,
+                     .NSCalendarDayChanged,
+                     UIApplication.significantTimeChangeNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(updateCalibrationWeek),
+                                                   name: name, object: nil)
+        }
+        updateCalibrationWeek()
         cardStack.numberOfVisibleCards = 3
         cardStack.protectsVerticalContentScroll = true
         // V3 tap is inert. Only explicit controls can create/edit a card.
@@ -59,6 +72,7 @@ final class ImpressV3ReviewViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         refreshLocalizedReview()
+        updateCalibrationWeek()
         if needsReloadAfterCollection && pending == nil {
             needsReloadAfterCollection = false
             reloadSession()
@@ -67,22 +81,46 @@ final class ImpressV3ReviewViewController: UIViewController {
         }
     }
 
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    /// Refreshes only the tiny overview, NEVER the review queue.
+    @objc private func updateCalibrationWeek() {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let records = try await ImpressCalibrationLocalStore.shared.trendRecords()
+                let week = try CalibrationScoreCore.mondayWeekTrend(
+                    records, now: Date(), calendar: Calendar.current)
+                self.calibrationWeek.configure(week)
+            } catch {
+                self.calibrationWeek.configure([])
+            }
+        }
+    }
+
+    @objc private func openCalibrationDetail() {
+        guard navigationController?.topViewController === self else { return }
+        navigationController?.pushViewController(
+            ImpressCalibrationViewController(), animated: true)
+    }
+
     /// Re-label the existing controls without recreating a live FSRS session.
     private func refreshLocalizedReview() {
         title = V3L("闪卡")
         setupNavigation()
-        let titles = ["记录想法", "深入探讨", "历史"]
+        let titles = ["编辑卡片", "AI 讨论"]
         for (i, view) in answerTools.arrangedSubviews.enumerated() {
             guard let button = view as? UIButton, i < titles.count else { continue }
             let text = V3L(titles[i])
             if #available(iOS 15.0, *) {
-                ImpressV3NativeButtonAppearance.secondary(button, title: text)
+                ImpressV3NativeButtonAppearance.reviewSecondary(button, title: text,
+                    symbol: i == 0 ? "square.and.pencil" : "bubble.left")
             } else {
                 button.setTitle(text, for: .normal)
             }
         }
         if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.primary(revealButton, title: V3L("查看答案"))
+            ImpressV3NativeButtonAppearance.reviewPrimary(revealButton, title: V3L("查看答案"))
         } else {
             revealButton.setTitle(V3L("查看答案"), for: .normal)
         }
@@ -106,45 +144,51 @@ final class ImpressV3ReviewViewController: UIViewController {
         cardStack.translatesAutoresizingMaskIntoConstraints = false
         revealButton.translatesAutoresizingMaskIntoConstraints = false
         answerTools.translatesAutoresizingMaskIntoConstraints = false
+        contentHistoryAction.translatesAutoresizingMaskIntoConstraints = false
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        calibrationWeek.translatesAutoresizingMaskIntoConstraints = false
         answerTools.axis = .horizontal
         answerTools.distribution = .fillEqually
         answerTools.spacing = ImpressV3Appearance.Metrics.rowSpacing
         answerTools.isHidden = true
         let reflect = UIButton(type: .system)
-        reflect.setTitle(V3L("记录想法"), for: .normal)
+        reflect.setTitle(V3L("编辑卡片"), for: .normal)
         reflect.titleLabel?.font = ImpressV3Appearance.Typography.supporting
         if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.secondary(reflect, title: V3L("记录想法"))
+            ImpressV3NativeButtonAppearance.reviewSecondary(
+                reflect, title: V3L("编辑卡片"), symbol: "square.and.pencil")
         }
-        reflect.addTarget(self, action: #selector(captureFromAnswer), for: .touchUpInside)
-        let explore = UIButton(type: .system)
-        explore.setTitle(V3L("深入探讨"), for: .normal)
-        explore.titleLabel?.font = ImpressV3Appearance.Typography.supporting
+        reflect.accessibilityIdentifier = "impress.review.edit-card"
+        reflect.addTarget(self, action: #selector(editCurrentCard), for: .touchUpInside)
+
+        let discuss = UIButton(type: .system)
         if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.secondary(explore, title: V3L("深入探讨"))
+            ImpressV3NativeButtonAppearance.reviewSecondary(
+                discuss, title: V3L("AI 讨论"), symbol: "bubble.left")
+        } else {
+            discuss.setTitle(V3L("AI 讨论"), for: .normal)
         }
-        explore.accessibilityHint = V3L("在 DeepSeek 网页继续讨论当前问题")
-        explore.addTarget(self, action: #selector(exploreFromAnswer), for: .touchUpInside)
-        let timeline = UIButton(type: .system)
-        timeline.setTitle(V3L("历史"), for: .normal)
-        if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.secondary(timeline, title: V3L("历史"))
-        }
-        timeline.accessibilityLabel = V3L("查看当前卡片的理解时间线")
-        timeline.addTarget(self, action: #selector(openCurrentTimeline), for: .touchUpInside)
+        discuss.accessibilityIdentifier = "impress.review.ai-discussion"
+        discuss.addTarget(self, action: #selector(openAIDiscussion), for: .touchUpInside)
+        // Keep a short native footer: review itself remains reveal → swipe.
+        // Both tertiary actions are optional; they do not submit FSRS ratings.
         answerTools.addArrangedSubview(reflect)
-        answerTools.addArrangedSubview(explore)
-        answerTools.addArrangedSubview(timeline)
+        answerTools.addArrangedSubview(discuss)
+        ImpressV3Appearance.styleQuietButton(contentHistoryAction,
+            title: V3L("查看历史版本"))
+        contentHistoryAction.accessibilityIdentifier = "impress.review.content-history"
+        contentHistoryAction.addTarget(self, action: #selector(openContentHistory),
+                                       for: .touchUpInside)
+        contentHistoryAction.isHidden = true
         revealButton.setTitle(V3L("查看答案"), for: .normal)
         revealButton.titleLabel?.font = ImpressV3Appearance.Typography.heading
         revealButton.titleLabel?.adjustsFontForContentSizeCategory = true
         if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.primary(revealButton, title: V3L("查看答案"))
+            ImpressV3NativeButtonAppearance.reviewPrimary(revealButton, title: V3L("查看答案"))
         } else {
-            revealButton.setTitleColor(ImpressV3Appearance.primaryButtonText, for: .normal)
-            revealButton.backgroundColor = ImpressV3Appearance.accent
-            revealButton.layer.cornerRadius = ImpressV3Appearance.Radius.field
+            revealButton.setTitleColor(ImpressV3Appearance.reviewPrimaryInk, for: .normal)
+            revealButton.backgroundColor = ImpressV3Appearance.reviewPrimarySurface
+            revealButton.layer.cornerRadius = ImpressV3Appearance.Metrics.primaryActionHeight / 2
         }
         revealButton.addTarget(self, action: #selector(revealCurrentAnswer),
                                for: .touchUpInside)
@@ -172,9 +216,11 @@ final class ImpressV3ReviewViewController: UIViewController {
         repeatButton.isHidden = true
 
         view.addSubview(statusLabel)
+        view.addSubview(calibrationWeek)
         view.addSubview(cardStack)
         view.addSubview(revealButton)
         view.addSubview(answerTools)
+        view.addSubview(contentHistoryAction)
         view.addSubview(busyIndicator)
         view.addSubview(completionLabel)
         view.addSubview(repeatButton)
@@ -182,10 +228,19 @@ final class ImpressV3ReviewViewController: UIViewController {
             statusLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
             statusLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             statusLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            cardStack.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 12),
+            calibrationWeek.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 2),
+            calibrationWeek.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor,
+                                                      constant: ImpressV3Appearance.Metrics.compactInset),
+            calibrationWeek.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor,
+                                                       constant: -ImpressV3Appearance.Metrics.compactInset),
+            calibrationWeek.heightAnchor.constraint(equalToConstant: ImpressV3Appearance.Metrics.calibrationWeekHeight),
+            cardStack.topAnchor.constraint(equalTo: calibrationWeek.bottomAnchor, constant: 8),
             cardStack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
             cardStack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-            cardStack.bottomAnchor.constraint(equalTo: revealButton.topAnchor, constant: -12),
+            cardStack.bottomAnchor.constraint(equalTo: contentHistoryAction.topAnchor, constant: -4),
+            contentHistoryAction.centerXAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerXAnchor),
+            contentHistoryAction.bottomAnchor.constraint(equalTo: revealButton.topAnchor, constant: -4),
+            contentHistoryAction.heightAnchor.constraint(equalToConstant: 28),
             revealButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: ImpressV3Appearance.Metrics.screenInset),
             revealButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -ImpressV3Appearance.Metrics.screenInset),
             revealButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
@@ -205,24 +260,28 @@ final class ImpressV3ReviewViewController: UIViewController {
     }
 
     private func setupNavigation() {
-        // One creation menu, no misleading secondary chat/settings controls.
-        let single = UIAction(title: V3L("新建卡片"),
-                              image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
-            self?.createCard()
-        }
-        let batch = UIAction(title: V3L("批量导入"),
-                             image: UIImage(systemName: "square.stack.3d.up")) { [weak self] _ in
-            self?.startBatchImport()
-        }
+        // One low-friction entry for an idea; deliberate card CRUD and batch
+        // import now belong exclusively in Card Collection.
         navigationItem.leftBarButtonItem = UIBarButtonItem(
-            image: UIImage(systemName: "plus"), menu: UIMenu(children: [single, batch]))
-        navigationItem.leftBarButtonItem?.accessibilityLabel = V3L("添加内容")
+            image: UIImage(systemName: "plus"), style: .plain,
+            target: self, action: #selector(createCard))
+        navigationItem.leftBarButtonItem?.accessibilityLabel = V3L("新增卡片")
         updateNavigationActions()
     }
 
+    @objc private func openQuickCapture() {
+        guard presentedViewController == nil, pending == nil else { return }
+        // The same durable LearningEntry journal serves standalone thoughts
+        // and card-linked understanding. No new parallel storage authority.
+        let capture = ImpressV3CaptureViewController(cardID: nil, question: "")
+        let navigation = UINavigationController(rootViewController: capture)
+        navigation.modalPresentationStyle = .pageSheet
+        navigation.sheetPresentationController?.detents = [.medium(), .large()]
+        present(navigation, animated: true)
+    }
+
     private func updateNavigationActions() {
-        // Distinct first-class destinations. Keep the searchable card
-        // collection, and expose external Obsidian notes without another Tab.
+        // Notes now has its own Tab. Keep only Card Collection in the header.
         let cardCollection = UIBarButtonItem(
             image: UIImage(systemName: "square.stack"),
             style: .plain, target: self,
@@ -230,14 +289,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         cardCollection.accessibilityLabel = V3L("卡片集")
         cardCollection.accessibilityIdentifier = "impress.review.card-collection"
 
-        // A visible native text action remains recognizable on iPhone 13;
-        // not hidden inside a menu or the card-creation (+) control.
-        let notes = UIBarButtonItem(
-            title: V3L("笔记"), style: .plain, target: self,
-            action: #selector(openNotes))
-        notes.accessibilityLabel = V3L("笔记")
-        notes.accessibilityIdentifier = "impress.review.notes"
-        navigationItem.rightBarButtonItems = [notes, cardCollection]
+        navigationItem.rightBarButtonItems = [cardCollection]
     }
 
     @objc private func openNotes() {
@@ -336,6 +388,7 @@ final class ImpressV3ReviewViewController: UIViewController {
             repeatButton.isHidden = false
             revealButton.isHidden = true
             answerTools.isHidden = true
+            contentHistoryAction.isHidden = true
             completionLabel.text = items.isEmpty ? V3L("暂无到期卡片，可以稍后再来。") :
                 "本轮复习完成：\(items.count) 张"
             statusLabel.text = V3L("本轮完成")
@@ -347,6 +400,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         statusLabel.text = "第 \(currentIndex + 1) / \(items.count) 张 · 先回忆，再揭示答案"
         revealButton.isHidden = false
         answerTools.isHidden = true
+        contentHistoryAction.isHidden = true
         revealButton.isEnabled = true
         cardStack.isUserInteractionEnabled = true
         setRatingGesturesEnabled(false)
@@ -376,8 +430,9 @@ final class ImpressV3ReviewViewController: UIViewController {
                 self.setRatingGesturesEnabled(revealed)
                 self.revealButton.isHidden = revealed
                 self.answerTools.isHidden = !revealed
+                self.contentHistoryAction.isHidden = !revealed
                 self.statusLabel.text = revealed
-                    ? V3L("左·困难   上·良好   右·简单   下·再次")
+                    ? V3L("← 困难   ↑ 良好   → 容易   ↓ 重来")
                     : V3L("先回忆，再查看答案")
                 self.updateNavigationActions()
             } catch {
@@ -399,7 +454,126 @@ final class ImpressV3ReviewViewController: UIViewController {
         revealCurrentAnswer()
     }
 
-    @objc private func captureFromAnswer() { captureUnderstanding() }
+    /// A direct editor; neither a knowledge-capture detour nor a new FSRS session.
+    @objc private func editCurrentCard() {
+        guard pending == nil, !isLoading,
+              let item = items[safe: currentIndex] else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let repo = try repository ?? ImpressV3ReviewEnvironment.repository()
+                guard let stored = try await repo.content(for: item.cardID) else {
+                    throw ReviewWCDBError.missingCard
+                }
+                let correct = Set((stored.correctIndices ?? "")
+                    .split(separator: ",").compactMap { Int($0) })
+                let choices: [ImpressV3CardDraft.Choice] =
+                    (stored.choices ?? "").isEmpty
+                    ? [ImpressV3CardDraft.Choice(), ImpressV3CardDraft.Choice()]
+                    : (stored.choices ?? "").components(separatedBy: "\n")
+                        .enumerated().map { index, value in
+                            ImpressV3CardDraft.Choice(
+                                text: value, isCorrect: correct.contains(index))
+                        }
+                let draft = ImpressV3CardDraft(
+                    kind: CardType(rawValue: stored.cardType) ?? .standard,
+                    question: stored.question, answer: stored.answerText ?? "",
+                    choices: choices, allowsMultipleCorrect: correct.count > 1,
+                    imageData: stored.imageData,
+                    sourceNotePath: stored.sourceNotePath)
+                let editor = ImpressV3CardComposerViewController(
+                    draft: draft, editingCardID: item.cardID)
+                editor.onSave = { [weak self] updated in
+                    guard let self else { throw CocoaError(.userCancelled) }
+                    try await repo.updateManagedCard(
+                        updated, expectedRevision: item.revision,
+                        expectedContentRevision: stored.contentRevision)
+                    // Re-read the authoritative latest content after the same
+                    // atomic transaction; never grade an answer from a stale UI.
+                    guard let newValue = try await repo.content(for: item.cardID) else {
+                        throw ReviewWCDBError.missingCard
+                    }
+                    try await self.refreshEditedCard(newValue, reviewItem: item)
+                }
+                let navigation = ImNavigationViewController(rootViewController: editor)
+                navigation.modalPresentationStyle = .pageSheet
+                navigation.sheetPresentationController?.detents = [.large()]
+                present(navigation, animated: true)
+            } catch { displayFailure(error) }
+        }
+    }
+
+    private func refreshEditedCard(_ value: WCDBV3CardContent,
+                                   reviewItem: ReviewQueueItem) async throws {
+        guard pending == nil, items[safe: currentIndex] == reviewItem else { return }
+        if let session, await session.phase() == .answer(reviewItem.cardID) {
+            try await session.hideAnswer(cardID: reviewItem.cardID)
+        }
+        var model = ImCardModel()
+        model.question = value.question
+        model.answer = value.answerText
+        model.cardType = value.cardType
+        model.imageData = value.imageData
+        model.choices = value.choices
+        model.correctAnswerIndices = value.correctIndices
+        models[reviewItem.cardID] = model
+        // Replace ONLY the top card's view. SwipeCardStack indexes and the
+        // coordinator remain unchanged, so a save cannot restart this round.
+        let refreshed = cardStack(cardStack, cardForIndexAt: currentIndex)
+        cardStack.topCard?.content = refreshed.content
+        setRatingGesturesEnabled(false)
+        answerTools.isHidden = true
+        contentHistoryAction.isHidden = true
+        revealButton.isHidden = false
+        statusLabel.text = V3L("先回忆，再查看答案")
+    }
+
+    @objc private func openContentHistory() {
+        guard pending == nil, !isLoading,
+              let item = items[safe: currentIndex] else { return }
+        do {
+            let repo = try repository ?? ImpressV3ReviewEnvironment.repository()
+            let list = ImpressV3CardVersionHistoryViewController(
+                cardID: item.cardID, expectedReviewRevision: item.revision,
+                repository: repo)
+            list.onRestored = { [weak self] content in
+                guard let self else { return }
+                try await self.refreshEditedCard(content, reviewItem: item)
+            }
+            navigationController?.pushViewController(list, animated: true)
+        } catch { displayFailure(error) }
+    }
+
+
+    @objc private func openAIDiscussion() {
+        guard pending == nil, !isLoading,
+              let item = items[safe: currentIndex] else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let repo = try repository ?? ImpressV3ReviewEnvironment.repository()
+                guard let latest = try await repo.content(for: item.cardID),
+                      pending == nil, items[safe: currentIndex]?.cardID == item.cardID else {
+                    return
+                }
+                // Explicitly prepare only THIS card's effective content;
+                // never read/upload the entire linked Obsidian document.
+                var context = latest.answerText ?? ""
+                if latest.cardType == CardType.multipleChoice.rawValue {
+                    context += "\n" + V3L("全部选项：") + (latest.choices ?? "")
+                    context += "\n" + V3L("正确项索引：") + (latest.correctIndices ?? "")
+                }
+                if latest.cardType == CardType.image.rawValue {
+                    context += "\n" + V3L("这是一张图片卡，本次纯文字对话不包含图片像素。")
+                }
+                let discussion = ImpressAINativeChatViewController(
+                    question: latest.question, answer: context,
+                    cardID: item.cardID, contentRevision: latest.contentRevision,
+                    repository: repo)
+                navigationController?.pushViewController(discussion, animated: true)
+            } catch { displayFailure(error) }
+        }
+    }
 
     @objc private func exploreFromAnswer() {
         guard let current = items[safe: currentIndex],
@@ -599,7 +773,7 @@ extension ImpressV3ReviewViewController: SwipeCardStackDataSource, SwipeCardStac
         card.tapGestureRecognizer.isEnabled = false
         card.swipeDirections = [.left, .up, .right, .down]
         for direction in card.swipeDirections {
-            card.setOverlay(ImMemoryCardOverlay(direction: direction), forDirection: direction)
+            card.setOverlay(ImpressV3RatingOverlay(direction: direction), forDirection: direction)
         }
         guard let item = items[safe: index], let model = models[item.cardID] else {
             return card
@@ -1380,7 +1554,7 @@ final class ImpressV3TimelineNodeCell: UITableViewCell {
 @MainActor
 final class ImpressV3SettingsHubViewController: UITableViewController {
     private enum Destination {
-        case promptLibrary, reminders, appearance, language, speech, backup
+        case aiService, promptLibrary, reminders, calibration, appearance, language, speech, backup
     }
     private struct Item {
         let title: String
@@ -1390,10 +1564,14 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
     }
     private let groups: [(name: String, items: [Item])] = [
         ("内容工具", [
+            Item(title: "AI 服务", detail: "多 API 连接、多模型与智能出题路由",
+                 symbol: "sparkles", destination: .aiService),
             Item(title: "提示词", detail: "费曼总结、选择题、问题与答案 · 可建立多份自定义模板",
                  symbol: "text.book.closed", destination: .promptLibrary)
         ]),
         ("学习节奏", [
+            Item(title: "每日校准", detail: "五项评估、历史走势与提醒",
+                 symbol: "chart.xyaxis.line", destination: .calibration),
             Item(title: "复习通知", detail: "关闭、到期提醒或每日习惯提醒",
                  symbol: "bell", destination: .reminders)
         ]),
@@ -1444,7 +1622,7 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
     override func tableView(_ tableView: UITableView,
                             titleForFooterInSection section: Int) -> String? {
         switch section {
-        case 0: return V3L("本地模板仅在用户明确操作后复制，不自动上传私人内容。")
+        case 0: return V3L("API Key 由 Keychain 管理；私人笔记只在明确授权的生成任务中发送。")
         case 1: return V3L("FSRS-6 决定到期时间；通知仅负责提醒。")
         case 2: return V3L("默认跟随系统；手动选择仅影响 Impress，不修改 iPhone 系统外观。")
         case 3: return V3L("仅使用 Apple 端侧语音模型，录音不会写入历史或发送到服务器。")
@@ -1482,12 +1660,18 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
                             didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         switch groups[indexPath.section].items[indexPath.row].destination {
+        case .aiService:
+            navigationController?.pushViewController(
+                ImpressAISettingsViewController(), animated: true)
         case .promptLibrary:
             navigationController?.pushViewController(
                 ImpressV3PromptLibraryViewController(), animated: true)
         case .reminders:
             navigationController?.pushViewController(
                 ImpressV3ReminderSettingsController(), animated: true)
+        case .calibration:
+            navigationController?.pushViewController(
+                ImpressCalibrationViewController(), animated: true)
         case .appearance:
             navigationController?.pushViewController(
                 ImpressV3AppearanceSettingsViewController(), animated: true)
@@ -1677,4 +1861,251 @@ final class ImpressV3ReminderSettingsController: UITableViewController {
             self.tableView.reloadData()
         }
     }
+}
+
+@MainActor
+final class ImpressV3WeeklyCalibrationOverview: UIControl {
+    private var days: [CalibrationDayPoint] = []
+    private let shortDays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        isAccessibilityElement = true
+        accessibilityTraits = [.button]
+        accessibilityHint = V3L("点击打开每日校准")
+        configure([])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    func configure(_ points: [CalibrationDayPoint]) {
+        days = points.count == 7 ? points : []
+        let values = days.enumerated().map { offset, point in
+            V3L(shortDays[offset]) + " " + (point.netScore.map(String.init) ?? V3L("未评估"))
+        }
+        accessibilityLabel = V3L("本周校准") + "：" + values.joined(separator: "，")
+        setNeedsDisplay()
+    }
+
+    override func draw(_ rect: CGRect) {
+        guard rect.width > 160, rect.height > 85 else { return }
+        let primary = ImpressV3Appearance.secondaryText
+        let axis = ImpressV3Appearance.divider
+        let accent = ImpressV3Appearance.accent
+        let headerFont = UIFont.preferredFont(forTextStyle: .caption1)
+        let labelFont = UIFont.preferredFont(forTextStyle: .caption2)
+        let headerAttributes: [NSAttributedString.Key: Any] = [
+            .font: headerFont, .foregroundColor: primary]
+        let labelAttributes: [NSAttributedString.Key: Any] = [
+            .font: labelFont, .foregroundColor: primary]
+        (V3L("本周校准") as NSString).draw(at: CGPoint(x: 4, y: 0),
+                                         withAttributes: headerAttributes)
+        let left = ImpressV3Appearance.Metrics.calibrationWeekChartInset
+        let right = rect.width - 12
+        let top: CGFloat = 29
+        let bottom = rect.height - 22
+        let mid = (top + bottom) / 2
+        let y: (Int) -> CGFloat = { score in
+            mid - CGFloat(score) / 5 * (bottom - top) / 2
+        }
+        func stroke(_ x1: CGFloat, _ y1: CGFloat, _ x2: CGFloat, _ y2: CGFloat,
+                    width: CGFloat = 0.5, color: UIColor) {
+            let line = UIBezierPath()
+            line.move(to: CGPoint(x: x1, y: y1))
+            line.addLine(to: CGPoint(x: x2, y: y2))
+            line.lineWidth = width
+            color.setStroke()
+            line.stroke()
+        }
+        // Fixed -5/0/+5: no automatic zooming to exaggerate variation.
+        for value in [-5, 0, 5] {
+            let position = y(value)
+            stroke(left, position, right, position,
+                   width: value == 0 ? 1 : 0.45,
+                   color: axis.withAlphaComponent(value == 0 ? 0.8 : 0.3))
+            let label = String(value) as NSString
+            label.draw(at: CGPoint(x: 1, y: position - labelFont.lineHeight / 2),
+                       withAttributes: labelAttributes)
+        }
+        var previous: CGPoint?
+        for index in 0..<7 {
+            let x = left + CGFloat(index) * (right - left) / 6
+            let weekday = V3L(shortDays[index]) as NSString
+            let size = weekday.size(withAttributes: labelAttributes)
+            weekday.draw(at: CGPoint(x: x - size.width / 2, y: bottom + 4),
+                         withAttributes: labelAttributes)
+            guard days.indices.contains(index),
+                  let score = days[index].netScore else {
+                previous = nil // missing data NEVER connected to adjacent days
+                continue
+            }
+            let current = CGPoint(x: x, y: y(score))
+            if let previous {
+                stroke(previous.x, previous.y, current.x, current.y,
+                       width: 1.5, color: accent)
+            }
+            accent.setFill()
+            UIBezierPath(ovalIn: CGRect(x: current.x - 2, y: current.y - 2,
+                                        width: 4, height: 4)).fill()
+            previous = current
+        }
+    }
+}
+
+
+@MainActor
+final class ImpressV3CardVersionHistoryViewController: UITableViewController {
+    var onRestored: ((WCDBV3CardContent) async throws -> Void)?
+    private let cardID: UUID
+    private let expectedReviewRevision: Int
+    private let repository: ReviewWCDBRepository
+    private var versions: [WCDBV3ContentVersion] = []
+    private var openedContentRevision: Int?
+
+    init(cardID: UUID, expectedReviewRevision: Int, repository: ReviewWCDBRepository) {
+        self.cardID = cardID
+        self.expectedReviewRevision = expectedReviewRevision
+        self.repository = repository
+        super.init(style: .insetGrouped)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = V3L("查看历史版本")
+        tableView.backgroundColor = ImpressV3Appearance.page
+        load()
+    }
+    private func load() {
+        Task {
+            do {
+                let loaded = try await repository.contentHistory(for: cardID)
+                versions = Array(loaded.reversed())
+                if openedContentRevision == nil {
+                    openedContentRevision = try await repository.content(for: cardID)?.contentRevision
+                }
+                tableView.reloadData()
+            } catch { showProblem(error) }
+        }
+    }
+    override func tableView(_ tableView: UITableView,
+                            numberOfRowsInSection section: Int) -> Int { versions.count }
+    override func tableView(_ tableView: UITableView,
+                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let version = versions[indexPath.row]
+        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        cell.textLabel?.text = version.question
+        let stamp = DateFormatter()
+        stamp.dateStyle = .medium
+        stamp.timeStyle = .short
+        cell.detailTextLabel?.text = "v\(version.contentRevision) · " +
+            stamp.string(from: version.recordedAt)
+        cell.textLabel?.numberOfLines = 2
+        ImpressV3Appearance.styleGroupedCell(cell)
+        cell.accessoryType = .disclosureIndicator
+        return cell
+    }
+    override func tableView(_ tableView: UITableView,
+                            didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        let version = versions[indexPath.row]
+        let details = ImpressV3CardVersionDetailViewController(version: version)
+        details.onRestore = { [weak self] in self?.confirmRestore(version) }
+        navigationController?.pushViewController(details, animated: true)
+    }
+    private func confirmRestore(_ version: WCDBV3ContentVersion) {
+        let confirm = UIAlertController(
+            title: V3L("恢复历史版本"),
+            message: V3L("恢复将产生新版本，保留现有历史；不会修改 FSRS 评分。"),
+            preferredStyle: .alert)
+        confirm.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        confirm.addAction(UIAlertAction(title: V3L("恢复"), style: .default) { [weak self] _ in
+            guard let self else { return }
+            Task {
+                do {
+                    guard let expected = self.openedContentRevision else {
+                        throw ReviewWCDBError.missingCard
+                    }
+                    try await self.repository.restoreContentVersion(
+                        cardID: self.cardID, savedRevision: version.contentRevision,
+                        expectedContentRevision: expected,
+                        expectedReviewRevision: self.expectedReviewRevision)
+                    guard let latest = try await self.repository.content(for: self.cardID) else {
+                        throw ReviewWCDBError.missingCard
+                    }
+                    try await self.onRestored?(latest)
+                    self.openedContentRevision = latest.contentRevision
+                    self.load()
+                    self.navigationController?.popViewController(animated: true)
+                } catch { self.showProblem(error) }
+            }
+        })
+        present(confirm, animated: true)
+    }
+    private func showProblem(_ error: Error) {
+        let alert = UIAlertController(title: V3L("操作未完成"),
+                                      message: error.localizedDescription,
+                                      preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+        present(alert, animated: true)
+    }
+}
+
+@MainActor
+final class ImpressV3CardVersionDetailViewController: UIViewController {
+    var onRestore: (() -> Void)?
+    private let version: WCDBV3ContentVersion
+    init(version: WCDBV3ContentVersion) {
+        self.version = version
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = "v\(version.contentRevision)"
+        view.backgroundColor = ImpressV3Appearance.page
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: V3L("恢复"), style: .plain, target: self,
+            action: #selector(restoreTapped))
+        let textView = UITextView()
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.backgroundColor = ImpressV3Appearance.surface
+        textView.font = ImpressV3Appearance.Typography.body
+        textView.textColor = ImpressV3Appearance.primaryText
+        textView.adjustsFontForContentSizeCategory = true
+        var body = version.question
+        if let choices = version.choices {
+            body += "\n\n" + choices
+            body += "\n" + (version.correctIndices ?? "")
+        }
+        if let answer = version.answerText { body += "\n\n" + answer }
+        if let path = version.sourceNotePath { body += "\n\n" + path }
+        textView.text = body
+        textView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(textView)
+        let image = UIImageView(image: version.imageData.flatMap { UIImage(data: $0) })
+        image.contentMode = .scaleAspectFit
+        image.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(image)
+        NSLayoutConstraint.activate([
+            textView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor,
+                                          constant: ImpressV3Appearance.Metrics.compactInset),
+            textView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor,
+                                              constant: ImpressV3Appearance.Metrics.screenInset),
+            textView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor,
+                                               constant: -ImpressV3Appearance.Metrics.screenInset),
+            image.topAnchor.constraint(equalTo: textView.bottomAnchor,
+                                       constant: ImpressV3Appearance.Metrics.compactInset),
+            image.leadingAnchor.constraint(equalTo: textView.leadingAnchor),
+            image.trailingAnchor.constraint(equalTo: textView.trailingAnchor),
+            image.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            image.heightAnchor.constraint(equalToConstant: version.imageData == nil ? 0 :
+                ImpressV3Appearance.Metrics.contentVersionImageHeight),
+            textView.heightAnchor.constraint(greaterThanOrEqualTo: view.heightAnchor,
+                                              multiplier: version.imageData == nil ? 0.6 : 0.4)
+        ])
+    }
+    @objc private func restoreTapped() { onRestore?() }
 }

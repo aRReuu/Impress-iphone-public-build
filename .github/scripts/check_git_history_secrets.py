@@ -13,6 +13,7 @@ PATTERNS = {
     "private_key": re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"),
     "github_pat": re.compile(rb"\b(?:gh[pousr]_[A-Za-z0-9]{28,}|github_pat_[A-Za-z0-9_]{20,})\b"),
     "model_key": re.compile(rb"\bsk-(?:proj-|live-)?[A-Za-z0-9_-]{28,}\b"),
+    "opencode_console_key": re.compile(rb"\boc_sk_[A-Za-z0-9_-]{24,}\b"),
     "google_api_key": re.compile(rb"\bAIza[A-Za-z0-9_-]{35}\b"),
     "static_bearer": re.compile(rb"(?i:Authorization)\s*[:=]\s*[\"']?(?i:Bearer)\s+[A-Za-z0-9._-]{30,}"),
     "literal_api_key_value": re.compile(rb"(?i:\bapi[_-]?key\b)\s*[:=]\s*[\"'][A-Za-z0-9_-]{28,}[\"']"),

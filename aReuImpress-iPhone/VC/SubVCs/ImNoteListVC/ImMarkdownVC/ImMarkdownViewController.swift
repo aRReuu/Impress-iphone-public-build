@@ -662,7 +662,9 @@ final class ImVaultDocumentController: UIViewController {
         super.viewWillAppear(animated)
         pathLabel.text = V3L("只读") + " · " + document.identity.relativePath
         navigationItem.rightBarButtonItems?.first?.accessibilityLabel = V3L("编辑独立草稿")
-        navigationItem.rightBarButtonItems?.last?.accessibilityLabel = V3L("切换 Markdown 源码")
+        if let actions = navigationItem.rightBarButtonItems, actions.count >= 2 {
+            actions[1].accessibilityLabel = V3L("切换 Markdown 源码")
+        }
     }
 
 
@@ -731,7 +733,12 @@ final class ImVaultDocumentController: UIViewController {
             target: self, action: #selector(toggleSource))
         source.accessibilityLabel = V3L("切换 Markdown 源码")
         source.accessibilityIdentifier = "impress.notes.source-toggle"
-        navigationItem.rightBarButtonItems = [draft, source]
+        let generate = UIBarButtonItem(
+            image: UIImage(systemName: "questionmark.square"), style: .plain,
+            target: self, action: #selector(generateAIQuestions))
+        generate.accessibilityLabel = V3L("根据笔记生成综合问题")
+        generate.accessibilityIdentifier = "impress.notes.generate-questions"
+        navigationItem.rightBarButtonItems = [draft, source, generate]
         renderBody()
         // Replaces only explicitly referenced local image embeds with bounded
         // in-memory data URIs. Never reads outside this authorized Vault.
@@ -827,6 +834,11 @@ final class ImVaultDocumentController: UIViewController {
         } catch {
             showVaultError("内部链接索引不可用", error: error)
         }
+    }
+
+    @objc private func generateAIQuestions() {
+        navigationController?.pushViewController(
+            ImpressAIQuestionGenerationViewController(document: document), animated: true)
     }
 
     @objc private func editDraft() {
@@ -1067,23 +1079,54 @@ final class ImVaultDiffController: UIViewController {
         ])
         let save = UIBarButtonItem(title: "确认写回", style: .done,
                                    target: self, action: #selector(confirmWrite))
-        // No iCloud device acceptance yet. The production source-write gate is
-        // deliberately false, even if the complete diff is available.
+        // Production stays read-only. Debug QA can only enable this action
+        // when the authorized folder is the explicitly named disposable copy.
         save.isEnabled = canApprove && ImVaultGuardedWrite.productionWriteEnabled
         navigationItem.rightBarButtonItem = save
+        #if DEBUG
+        if canApprove && !ImVaultGuardedWrite.productionWriteEnabled {
+            navigationItem.prompt = V3L("真机 QA 仅支持独立的测试 Vault 副本")
+            ImVaultGuardedWrite.checkQAVaultEligibility(for: draft.identity) { [weak self] result in
+                guard let self else { return }
+                switch result {
+                case .success(true):
+                    save.title = V3L("测试副本写回")
+                    save.isEnabled = true
+                    self.navigationItem.prompt = V3L("仅限测试副本；原始 Vault 仍保持只读")
+                case .success(false):
+                    self.navigationItem.prompt = V3L("请在「文件」App 选择 Impress-Write-Test-Vault 测试副本")
+                case .failure(let error):
+                    self.navigationItem.prompt = error.localizedDescription
+                }
+            }
+        }
+        #endif
     }
 
     @objc private func confirmWrite() {
         guard canApprove else { return }
+        #if DEBUG
+        let qaCopyRequested = !ImVaultGuardedWrite.productionWriteEnabled
+        #else
+        let qaCopyRequested = false
+        #endif
         let alert = UIAlertController(
-            title: "确认修改 Obsidian 源文件？",
-            message: "将重新验证源文件 SHA-256，并先保存私有恢复副本。如果出现版本冲突会拒绝覆盖。",
+            title: qaCopyRequested ? V3L("确认修改独立测试副本？") :
+                                     V3L("确认修改 Obsidian 源文件？"),
+            message: qaCopyRequested
+                ? V3L("仅操作「文件」中名称为 Impress-Write-Test-Vault 的独立副本。正式 Vault 不可写入。将重新核对原文 SHA-256，保存恢复副本后再尝试写入；请先自行复制重要笔记。")
+                : V3L("将重新验证源文件 SHA-256，并先保存私有恢复副本。如果出现版本冲突会拒绝覆盖。"),
             preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
-        alert.addAction(UIAlertAction(title: "确认写回", style: .destructive) { [weak self] _ in
-            guard let self = self else { return }
+        alert.addAction(UIAlertAction(title: qaCopyRequested ? V3L("确认测试副本写回") :
+                                                              V3L("确认写回"),
+                                      style: .destructive) { [weak self] _ in
+            guard let self else { return }
+            self.navigationItem.rightBarButtonItem?.isEnabled = false
             ImVaultGuardedWrite.commitAuthorized(draft: self.draft,
-                                                  userConfirmedDiff: true) { result in
+                                                  userConfirmedDiff: true,
+                                                  deviceQATestCopyConfirmed: qaCopyRequested) { result in
+                self.navigationItem.rightBarButtonItem?.isEnabled = true
                 let content: String
                 switch result {
                 case .success: content = "写入已验证并保留恢复副本。"

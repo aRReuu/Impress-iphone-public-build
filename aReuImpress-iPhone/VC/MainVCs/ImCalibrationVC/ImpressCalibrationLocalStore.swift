@@ -11,6 +11,7 @@ enum ImpressCalibrationStoreError: Error {
 /// Actor-backed, private, atomic JSON ledger. This never writes Obsidian or FSRS.
 actor ImpressCalibrationLocalStore {
     static let shared = ImpressCalibrationLocalStore()
+    static let didChange = Notification.Name("impress.calibration.store.didChange")
 
     private struct Ledger: Codable {
         var version: Int = 1
@@ -149,6 +150,7 @@ actor ImpressCalibrationLocalStore {
         }
         // Only committed updates participate in the existing V3 backup cadence.
         ImpressV3BackupCoordinator.markDataChanged()
+        NotificationCenter.default.post(name: Self.didChange, object: nil)
         Task { @MainActor in
             ImpressCalibrationReminderCoordinator.shared.requestReconciliation()
         }

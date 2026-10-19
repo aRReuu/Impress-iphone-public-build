@@ -88,6 +88,34 @@ final class CalibrationScoreCoreTests: XCTestCase {
         XCTAssertEqual(data[8].trailingSevenDayMean!, 1, accuracy: 0.00001) // Oct 1–2 outside last 7 dates
     }
 
+    func testMondayWeekAcrossYearNeverInventsMissingOrFutureScores() throws {
+        var local = Calendar(identifier: .gregorian)
+        local.timeZone = TimeZone(identifier: "America/Phoenix")!
+        local.firstWeekday = 1 // Explicitly NOT Monday: home must override this.
+        let friday = try XCTUnwrap(local.date(from:
+            DateComponents(year: 2027, month: 1, day: 1, hour: 12)))
+        let records = [
+            day("2026-12-28", [task("sleep", .completed)]),
+            day("2026-12-29", [task("exercise", .missed)]),
+            day("2026-12-30", [task("sleep", .unrecorded)]),
+            day("2026-12-31", [task("sleep", .excused)]),
+            day("2027-01-01", [task("sleep", .completed),
+                               task("exercise", .missed)]),
+            day("2027-01-02", [task("sleep", .completed)]) // FUTURE
+        ]
+        let week = try CalibrationScoreCore.mondayWeekTrend(
+            records, now: friday, calendar: local)
+        XCTAssertEqual(week.map(\.dayID), [
+            "2026-12-28", "2026-12-29", "2026-12-30", "2026-12-31",
+            "2027-01-01", "2027-01-02", "2027-01-03"
+        ])
+        XCTAssertEqual(week.map(\.netScore), [1, -1, nil, nil, 0, nil, nil])
+        XCTAssertNil(week[2].netScore)
+        XCTAssertNil(week[3].netScore)
+        XCTAssertNil(week[5].netScore)
+        XCTAssertNil(week[6].netScore)
+    }
+
     func testMonthMeansDoNotAccumulateAndMissingMonthsAreNil() throws {
         let records = [
             day("2026-01-10", [task("sleep", .completed)]),

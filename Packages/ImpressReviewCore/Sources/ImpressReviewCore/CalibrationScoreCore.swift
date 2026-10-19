@@ -181,6 +181,32 @@ public enum CalibrationScoreCore {
         }
     }
 
+    /// The home-screen overview is the current LOCAL Monday–Sunday week, not
+    /// a rolling 7-day range. Missing, unfinished, excused-only and future
+    /// civil days are nil (never 0). Uses the existing scoring authority;
+    /// no chart code is allowed to recompute or normalize net scores.
+    public static func mondayWeekTrend(_ records: [CalibrationDailyRecord],
+                                       now: Date = Date(),
+                                       calendar: Calendar = .current) throws -> [CalibrationDayPoint] {
+        var weekCalendar = calendar
+        weekCalendar.firstWeekday = 2 // Monday regardless of device's default first weekday
+        weekCalendar.minimumDaysInFirstWeek = 4
+        guard let start = weekCalendar.dateInterval(of: .weekOfYear, for: now)?.start,
+              let last = weekCalendar.date(byAdding: .day, value: 6, to: start) else {
+            throw CalibrationScoreError.invalidRange
+        }
+        let firstKey = CalibrationDayCheckIn.dayID(for: start, calendar: weekCalendar)
+        let lastKey = CalibrationDayCheckIn.dayID(for: last, calendar: weekCalendar)
+        let todayKey = CalibrationDayCheckIn.dayID(for: now, calendar: weekCalendar)
+        return try dailyTrend(records, from: firstKey, through: lastKey).map { point in
+            guard point.dayID <= todayKey else {
+                return CalibrationDayPoint(dayID: point.dayID, netScore: nil,
+                                           trailingSevenDayMean: nil)
+            }
+            return point
+        }
+    }
+
     /// For the year chart: compare months using means of finalized daily scores.
     /// Months with no usable entries remain gaps, rather than invented zeroes.
     public static func monthlyTrend(_ records: [CalibrationDailyRecord], year: Int) throws -> [CalibrationMonthPoint] {

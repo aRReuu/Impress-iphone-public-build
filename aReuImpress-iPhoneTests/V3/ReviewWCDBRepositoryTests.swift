@@ -137,6 +137,159 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertTrue(history.isEmpty)
     }
 
+    @MainActor
+    func testNativeChatRestoresStableCardTranscriptAndUnsentDraft() async throws {
+        let repository = try ReviewWCDBRepository(
+            databasePath: temporaryPath(), calculator: FSRS6ReviewCalculator())
+        let cardID = UUID()
+        let identity = "card:" + cardID.uuidString
+        var saved = WCDBV3ChatSession(sourceIdentity: identity)
+        saved.inputDraft = "Unsent boundary question"
+        saved.messages = [
+            WCDBV3ChatMessage(role: .user, text: "First question",
+                              status: .completed),
+            WCDBV3ChatMessage(role: .assistant, text: "First answer",
+                              status: .completed)
+        ]
+        try await repository.saveChatSession(saved, expectedRevision: nil)
+        let chat = ImpressAINativeChatViewController(
+            question: "Q", answer: "A", cardID: cardID,
+            contentRevision: 0, repository: repository)
+        chat.loadViewIfNeeded()
+        let input = try XCTUnwrap(chat.view.subviews.flatMap { [$0] + $0.subviews }
+            .compactMap { $0 as? UITextView }
+            .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.input" }))
+        let transcript = try XCTUnwrap(chat.view.subviews
+            .compactMap { $0 as? UITableView }.first)
+        for _ in 0..<50 where input.text != saved.inputDraft {
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        XCTAssertEqual(input.text, "Unsent boundary question")
+        XCTAssertEqual(transcript.numberOfRows(inSection: 0), 2)
+        // Load is read-only; opening Chat does not trigger model requests
+        // or modify the saved source content / FSRS database.
+        let durable = try await repository.chatSessions(for: identity)
+        XCTAssertEqual(durable.count, 1)
+        XCTAssertEqual(durable.first?.messages.count, 2)
+        XCTAssertEqual(durable.first?.inputDraft, saved.inputDraft)
+    }
+
+    func testChatSessionReopensDraftAndPreservesHistoryInV3Backup() async throws {
+        let path = temporaryPath()
+        let calculator = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(databasePath: path, calculator: calculator)
+        let source = "card:" + UUID().uuidString
+        let created = Date(timeIntervalSince1970: 1_720_000_000)
+        var session = WCDBV3ChatSession(sourceIdentity: source, createdAt: created)
+        session.messages = [
+            WCDBV3ChatMessage(role: .user, text: "What are the boundaries?",
+                              status: .completed, createdAt: created),
+            WCDBV3ChatMessage(role: .assistant, text: "Here is a draft...",
+                              status: .completed, createdAt: created)
+        ]
+        try await repo.saveChatSession(session, expectedRevision: nil)
+        let initial = try await repo.chatSessions(for: source)
+        XCTAssertEqual(initial, [session])
+        session.inputDraft = "Please shorten the example"
+        session.revision += 1
+        session.updatedAt = created.addingTimeInterval(10)
+        try await repo.saveChatSession(session, expectedRevision: 0)
+        try await repo.saveChatSession(session, expectedRevision: 0) // exact retry
+        let stored = try await repo.chatSessions(for: source)
+        XCTAssertEqual(stored.count, 1)
+        XCTAssertEqual(stored.first?.inputDraft, "Please shorten the example")
+        XCTAssertEqual(stored.first?.messages.count, 2)
+        var outdated = session
+        outdated.inputDraft = "stale overwrite"
+        outdated.revision += 1
+        do {
+            try await repo.saveChatSession(outdated, expectedRevision: 0)
+            XCTFail("A stale chat editor must not overwrite a newer saved draft")
+        } catch WCDBV3ChatStorageError.conflict { }
+
+        let archive = URL(fileURLWithPath: path).deletingLastPathComponent()
+            .appendingPathComponent("chat-backup.sqlite")
+        try await repo.createConsistentBackup(to: archive)
+        let restored = try ReviewWCDBRepository(databasePath: archive.path,
+                                                calculator: calculator)
+        let recovered = try await restored.chatSessions(for: source)
+        XCTAssertEqual(recovered, [session])
+        let other = try await restored.chatSessions(for: "card:" + UUID().uuidString)
+        XCTAssertTrue(other.isEmpty)
+    }
+
+    func testCardContentHistoryIsAtomicNoOpAndRestoresWithoutRescoring() async throws {
+        let path = temporaryPath()
+        let calculator = FSRS6ReviewCalculator()
+        let repository = try ReviewWCDBRepository(databasePath: path, calculator: calculator)
+        let id = UUID()
+        let now = Date(timeIntervalSince1970: 1_720_010_000)
+        let initial = WCDBV3CardInput(cardID: id, question: "What is a boundary?",
+                                       answerText: "A limit", sourceNotePath: "notes/a.md")
+        try await repository.insertNewCard(
+            initial, initial: try calculator.newCardSnapshot(id: id, now: now), now: now)
+        let created = try await repository.contentHistory(for: id)
+        XCTAssertEqual(created.map(\.contentRevision), [0])
+        XCTAssertEqual(created.first?.origin, .manual)
+        _ = try await repository.commit(ReviewSubmission(
+            eventID: UUID(), cardID: id, expectedRevision: 0,
+            rating: .good, reviewedAt: now.addingTimeInterval(1)))
+        let edited = WCDBV3CardInput(cardID: id, question: "What is a boundary?",
+                                      answerText: "A limit with examples",
+                                      sourceNotePath: "notes/a.md")
+        try await repository.updateManagedCard(
+            edited, expectedRevision: 1, expectedContentRevision: 0,
+            now: now.addingTimeInterval(2))
+        // Submitting unchanged content MUST NOT increment content revision.
+        try await repository.updateManagedCard(
+            edited, expectedRevision: 1, expectedContentRevision: 1,
+            now: now.addingTimeInterval(3))
+        let afterNoOp = try await repository.content(for: id)
+        XCTAssertEqual(afterNoOp?.contentRevision, 1)
+        let versions = try await repository.contentHistory(for: id)
+        XCTAssertEqual(versions.map(\.contentRevision), [0, 1])
+        XCTAssertEqual(versions.map(\.answerText), ["A limit", "A limit with examples"])
+        try await repository.restoreContentVersion(
+            cardID: id, savedRevision: 0, expectedContentRevision: 1,
+            expectedReviewRevision: 1, now: now.addingTimeInterval(4))
+        let afterRestore = try await repository.content(for: id)
+        XCTAssertEqual(afterRestore?.answerText, "A limit")
+        let complete = try await repository.contentHistory(for: id)
+        XCTAssertEqual(complete.map(\.contentRevision), [0, 1, 2])
+        XCTAssertEqual(complete.last?.origin, .restored)
+        let reviewHistory = try await repository.reviewHistory(for: id)
+        let candidates = try await repository.fetchQueueCandidates()
+        XCTAssertEqual(reviewHistory.count, 1)
+        XCTAssertEqual(candidates.first?.revision, 1)
+
+        // The existing SQLite V3 backup automatically captures content history.
+        let archive = URL(fileURLWithPath: path).deletingLastPathComponent()
+            .appendingPathComponent("backup-snapshot.sqlite")
+        try await repository.createConsistentBackup(to: archive)
+        let reopened = try ReviewWCDBRepository(databasePath: archive.path,
+                                                calculator: calculator)
+        let recoveredVersions = try await reopened.contentHistory(for: id)
+        XCTAssertEqual(recoveredVersions, complete)
+    }
+
+    func testObservedLegacyContentHistoryNeverInventsEarlierAnswers() async throws {
+        let path = temporaryPath()
+        let id = UUID()
+        try ReviewWCDBRepository.seedPreR042FixtureForTesting(at: path, cardID: id)
+        let repository = try ReviewWCDBRepository(
+            databasePath: path, calculator: FSRS6ReviewCalculator())
+        let beforeEditing = try await repository.contentHistory(for: id)
+        XCTAssertTrue(beforeEditing.isEmpty)
+        try await repository.updateManagedCard(
+            WCDBV3CardInput(cardID: id, question: "Observed edit", answerText: "Changed"),
+            expectedRevision: 0, expectedContentRevision: 0)
+        let versions = try await repository.contentHistory(for: id)
+        XCTAssertEqual(versions.map(\.contentRevision), [0, 1])
+        XCTAssertEqual(versions.first?.origin, .observedBaseline)
+        XCTAssertEqual(versions.first?.answerText, "Do not discard")
+        XCTAssertEqual(versions.last?.answerText, "Changed")
+    }
+
     func testConcurrentContentEditorsRejectStaleSaveWithoutChangingFSRS() async throws {
         let calculator = FSRS6ReviewCalculator()
         let repo = try ReviewWCDBRepository(databasePath: temporaryPath(), calculator: calculator)
@@ -942,6 +1095,71 @@ final class ImVaultSyncIntegrationTests: XCTestCase {
     }
 
 
+    func testComplexMarkdownQAWritePreservesUnrelatedSourceAndRecoveryBytes() throws {
+        let root = try createRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = """
+        ---
+        tags: [learning, note]
+        ---
+        # 学习
+
+        - [[概念图]]
+        - ![[示意图.png]]
+
+        | A | B |
+        |---|---|
+        | 原理 | 应用 |
+
+        ```swift
+        print("do not modify fenced code")
+        ```
+        """
+        let sourceFile = try put(original, root: root)
+        let identity = try ImVaultFileIdentity(
+            vaultID: UUID().uuidString, relativePath: "Notes/Topic.md")
+        let raw = try ImVaultReadSync.load(root: root, identity: identity)
+        var draft = try ImVaultDraft(identity: identity, baseText: raw.markdown,
+                                    baseRawData: raw.sourceBytes)
+        let updated = original + "\n\n## 我的新理解\n增加了与原文相关的解释。\n"
+        try draft.update(updated)
+        let result = try ImVaultGuardedWrite.commitFixture(
+            root: root, draft: draft, userConfirmedDiff: true)
+        guard case let .written(recovery) = result else {
+            XCTFail("Expected exact UTF-8 write and byte-for-byte recovery")
+            return
+        }
+        XCTAssertEqual(try Data(contentsOf: recovery), raw.sourceBytes)
+        XCTAssertEqual(try Data(contentsOf: sourceFile), Data(updated.utf8))
+        XCTAssertTrue(updated.contains("[[概念图]]"))
+        XCTAssertTrue(updated.contains("![[示意图.png]]"))
+        XCTAssertTrue(updated.contains("print(\"do not modify fenced code\")"))
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    func testConcurrentExternalVaultEditDoesNotDestroySavedPrivateDraft() throws {
+        let root = try createRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceFile = try put("# First\n[[Keep]]", root: root)
+        let identity = try ImVaultFileIdentity(
+            vaultID: UUID().uuidString, relativePath: "Notes/Topic.md")
+        let original = try ImVaultReadSync.load(root: root, identity: identity)
+        var draft = try ImVaultDraft(
+            identity: identity, baseText: original.markdown,
+            baseRawData: original.sourceBytes)
+        try draft.update("# First\n[[Keep]]\nnew idea")
+        try ImVaultPrivateStore.saveDraft(draft)
+        let external = Data("# First\nchanged in Obsidian".utf8)
+        try external.write(to: sourceFile, options: .atomic)
+
+        XCTAssertThrowsError(try ImVaultGuardedWrite.commitFixture(
+            root: root, draft: draft, userConfirmedDiff: true))
+        XCTAssertEqual(try Data(contentsOf: sourceFile), external)
+        let recovered = try XCTUnwrap(ImVaultPrivateStore.loadDraft(identity: identity))
+        XCTAssertEqual(recovered.editedText, draft.editedText)
+        XCTAssertEqual(recovered.baseDigest, draft.baseDigest)
+    }
+
     func testDocumentViewerIsNotAnEditableSourceTextView() throws {
         let root = try createRoot()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -956,8 +1174,48 @@ final class ImVaultSyncIntegrationTests: XCTestCase {
         let textViews = viewer.view.subviews.compactMap { $0 as? UITextView }
         XCTAssertEqual(textViews.count, 1)
         XCTAssertFalse(textViews[0].isEditable)
-        XCTAssertEqual(viewer.navigationItem.rightBarButtonItems?.count, 2)
+        // The third action generates questions from the authorized, read-only
+        // document. Neither the viewer nor this navigation mutates source bytes.
+        XCTAssertEqual(viewer.navigationItem.rightBarButtonItems?.count, 3)
+        XCTAssertEqual(Set(viewer.navigationItem.rightBarButtonItems?
+            .compactMap(\.accessibilityIdentifier) ?? []),
+            Set(["impress.notes.draft", "impress.notes.source-toggle",
+                 "impress.notes.generate-questions"]))
         XCTAssertEqual(try Data(contentsOf: file), original)
+    }
+
+    func testDeviceQAWriteRequiresExactExplicitFolderNameAndProductionRemainsLocked() throws {
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+        #if DEBUG
+        let parent = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "ImpressQAPredicate-" + UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        let testFolder = parent.appendingPathComponent(
+            ImVaultGuardedWrite.deviceQAFolderName, isDirectory: true)
+        try FileManager.default.createDirectory(at: testFolder,
+                                                withIntermediateDirectories: true)
+        XCTAssertTrue(ImVaultGuardedWrite.isExplicitQAVault(testFolder))
+        XCTAssertFalse(ImVaultGuardedWrite.isExplicitQAVault(parent))
+        XCTAssertFalse(ImVaultGuardedWrite.isExplicitQAVault(
+            parent.appendingPathComponent(ImVaultGuardedWrite.deviceQAFolderName + "-Old")))
+        let nonTestVault = parent.appendingPathComponent("OriginalVault", isDirectory: true)
+        try FileManager.default.createDirectory(at: nonTestVault,
+                                                withIntermediateDirectories: true)
+        XCTAssertFalse(ImVaultGuardedWrite.isExplicitQAVault(nonTestVault))
+        #endif
+    }
+
+    func testIncompleteSourceDiffNeverActivatesDeviceWriteAction() throws {
+        let id = try ImVaultFileIdentity(vaultID: UUID().uuidString,
+                                         relativePath: "Only/Test.md")
+        var draft = try ImVaultDraft(identity: id, baseText: "# Source")
+        try draft.update("# Source\nmore")
+        let diff = ImVaultDiffController(
+            draft: draft, summary: "Incomplete preview", canApprove: false)
+        diff.loadViewIfNeeded()
+        XCTAssertFalse(diff.navigationItem.rightBarButtonItem?.isEnabled ?? true)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 
     func testDebugFixtureWriteCannotTargetUserDocumentsDirectory() throws {
@@ -1253,14 +1511,29 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         let settings = ImpressV3SettingsHubViewController()
         settings.loadViewIfNeeded()
         XCTAssertEqual(settings.tableView.numberOfSections, 5)
-        XCTAssertEqual(settings.tableView.numberOfRows(inSection: 0), 1)
-        XCTAssertEqual(settings.tableView.numberOfRows(inSection: 1), 1)
+        // AI Services/prompts share Content Tools. Learning Rhythm contains
+        // Daily Calibration and Review Notifications (neither is a fourth Tab).
+        XCTAssertEqual(settings.tableView.numberOfRows(inSection: 0), 2)
+        XCTAssertEqual(settings.tableView.numberOfRows(inSection: 1), 2)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 2), 2)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 3), 1)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 4), 1)
         let prompts = settings.tableView(settings.tableView,
             cellForRowAt: IndexPath(row: 0, section: 0))
-        XCTAssertEqual(prompts.contentConfiguration is UIListContentConfiguration, true)
+        XCTAssertEqual((prompts.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("AI 服务"))
+        let promptCell = settings.tableView(settings.tableView,
+            cellForRowAt: IndexPath(row: 1, section: 0))
+        XCTAssertEqual((promptCell.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("提示词"))
+        let calibration = settings.tableView(settings.tableView,
+            cellForRowAt: IndexPath(row: 0, section: 1))
+        let reminders = settings.tableView(settings.tableView,
+            cellForRowAt: IndexPath(row: 1, section: 1))
+        XCTAssertEqual((calibration.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("每日校准"))
+        XCTAssertEqual((reminders.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("复习通知"))
         let legacy = SettingsConfiguration.default
         XCTAssertEqual(legacy.displaySections.count, 1)
     }
@@ -1292,13 +1565,21 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         let stacks = controller.view.subviews.compactMap { $0 as? SwipeCardStack }
         XCTAssertEqual(stacks.count, 1)
         XCTAssertTrue(stacks[0].protectsVerticalContentScroll)
-        // The collection and Notes have two visible, independent right
-        // navigation buttons; neither is a legacy Chat/LLM overflow menu.
+        // Notes is now the middle Tab; the flashcard top-right keeps only
+        // Card Collection, rather than a duplicate global Notes action.
         XCTAssertEqual(Set(controller.navigationItem.rightBarButtonItems?
-            .compactMap(\.accessibilityLabel) ?? []), Set(["卡片集", "笔记"]))
-        XCTAssertEqual(controller.navigationItem.rightBarButtonItems?.count, 2)
+            .compactMap(\.accessibilityLabel) ?? []), Set([V3L("卡片集")]))
+        XCTAssertEqual(controller.navigationItem.rightBarButtonItems?.count, 1)
+        XCTAssertEqual(controller.navigationItem.rightBarButtonItems?.first?
+            .accessibilityIdentifier, "impress.review.card-collection")
+        // The primary '+' directly opens the three-type native card editor.
         XCTAssertEqual(controller.navigationItem.leftBarButtonItem?.accessibilityLabel,
-                       "添加内容")
+                       V3L("新增卡片"))
+        // The full weekly chart surface provides a second route to the same
+        // calibration controller without replacing the active review root.
+        XCTAssertNotNil(controller.view.subviews.first {
+            $0.accessibilityIdentifier == "impress.review.calibration-week"
+        })
         XCTAssertFalse(buttons.contains { $0.title(for: .normal) == "困难" })
         XCTAssertFalse(buttons.contains { $0.title(for: .normal) == "简单" })
     }
@@ -1451,4 +1732,407 @@ final class ImpressV3BatchPreviewIntegrationTests: XCTestCase {
         alert?.dismiss(animated: false)
     }
 
+}
+
+
+// New API surfaces may be reached without calling a live provider. UI tests
+// must not create API keys, send network requests or alter the real Vault.
+@MainActor
+final class ImpressAICustomAPIUITests: XCTestCase {
+    func testNativeChatHasPrivacyDisclosureAndSendIsInitiallyDisabled() {
+        let conversation = ImpressAINativeChatViewController()
+        conversation.loadViewIfNeeded()
+        XCTAssertEqual(conversation.title, V3L("AI 讨论"))
+        let sendButton = conversation.view.subviews
+            .flatMap { $0.subviews }
+            .compactMap { $0 as? UIButton }
+            .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.send" })
+        XCTAssertNotNil(sendButton)
+        XCTAssertFalse(sendButton?.isEnabled ?? true)
+        let prompt = conversation.view.subviews
+            .compactMap { $0 as? UILabel }
+            .first { $0.text == V3L("讨论记录仅在本页面保留，不会自动写入 Obsidian。") }
+        XCTAssertNotNil(prompt)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    func testV3RatingOverlayUsesCompactSemanticFeedback() {
+        for direction in [SwipeDirection.left, .up, .right, .down] {
+            let overlay = ImpressV3RatingOverlay(direction: direction)
+            overlay.frame = CGRect(x: 0, y: 0, width: 300, height: 420)
+            overlay.layoutIfNeeded()
+            XCTAssertFalse(overlay.isUserInteractionEnabled)
+            XCTAssertEqual(overlay.subviews.count, 1)
+            XCTAssertEqual(overlay.subviews.first?.layer.borderWidth, 0)
+            XCTAssertEqual(overlay.subviews.first?.layer.shadowOpacity, 0)
+        }
+    }
+
+
+    func testAISettingsHasProviderAndTaskRoutingWithoutNewPrimaryTab() {
+        let ai = ImpressAISettingsViewController()
+        ai.loadViewIfNeeded()
+        XCTAssertEqual(ai.tableView.numberOfSections, 3)
+        XCTAssertEqual(ai.tableView(ai.tableView, numberOfRowsInSection: 1), 3)
+        XCTAssertEqual(ai.navigationItem.rightBarButtonItem?.accessibilityLabel,
+                       V3L("添加 API 连接"))
+        let generation = ai.tableView(ai.tableView,
+                         cellForRowAt: IndexPath(row: 0, section: 1))
+        XCTAssertEqual((generation.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("指定笔记出题"))
+        let privacy = ai.tableView(ai.tableView,
+                         cellForRowAt: IndexPath(row: 0, section: 2))
+        XCTAssertEqual((privacy.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("数据上传规则"))
+    }
+
+    func testSelectedNoteQuestionRouteNeverWritesSourceOnOpening() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ImpressAI-Vault-" + UUID().uuidString)
+        let folder = root.appendingPathComponent("Study")
+        try FileManager.default.createDirectory(at: folder,
+                                                 withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceURL = folder.appendingPathComponent("Knowledge.md")
+        let original = Data("# 知识整理\n一个段落。\n\n## 应用\n已有原则。\n".utf8)
+        try original.write(to: sourceURL)
+        let identity = try ImVaultFileIdentity(vaultID: "fixture-" + UUID().uuidString,
+                                                relativePath: "Study/Knowledge.md")
+        let source = try ImVaultReadSync.load(root: root, identity: identity)
+        let generator = ImpressAIQuestionGenerationViewController(document: source)
+        generator.loadViewIfNeeded()
+        XCTAssertEqual(generator.tableView.numberOfSections, 2)
+        XCTAssertEqual(generator.tableView(generator.tableView, numberOfRowsInSection: 0), 1)
+        XCTAssertGreaterThan(generator.tableView(generator.tableView,
+                              numberOfRowsInSection: 1), 0)
+        XCTAssertEqual(generator.navigationItem.rightBarButtonItem?.title, V3L("生成"))
+        XCTAssertEqual(try Data(contentsOf: sourceURL), original)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    func testPendingAIQuestionPoolRoundtripAndVaultIsolation() throws {
+        let vault = "qa-pool-" + UUID().uuidString
+        let identity = try ImVaultFileIdentity(vaultID: vault,
+                                                relativePath: "Study/Knowledge.md")
+        let source = ImpressAISource(vaultID: vault,
+             relativePath: identity.relativePath,
+             documentSHA256: String(repeating: "a", count: 64),
+             heading: "Knowledge")
+        let excerpt = ImpressAIExcerpt(id: "section-0", source: source,
+                                        text: "Reasoning is testable.")
+        let candidate = ImpressAIQuestionCandidate(
+            question: "Why test?", answer: "To verify behavior.",
+            dimension: .mechanism, evidenceIDs: ["section-0"], selected: false)
+        let pending = ImpressAIQuestionPool(source: source,
+            excerpts: [excerpt], requestedCount: 5, modelProfileID: UUID(),
+            candidates: [candidate])
+        defer { try? ImVaultPrivateStore.deleteQuestionPool(identity: identity) }
+        try ImVaultPrivateStore.saveQuestionPool(pending)
+        let restored = try XCTUnwrap(ImVaultPrivateStore.loadQuestionPool(identity: identity))
+        XCTAssertEqual(restored.id, pending.id)
+        XCTAssertEqual(restored.source.documentSHA256, source.documentSHA256)
+        XCTAssertEqual(restored.candidates.first?.question, candidate.question)
+        XCTAssertEqual(restored.candidates.first?.selected, false)
+        let other = try ImVaultFileIdentity(vaultID: "separate-" + UUID().uuidString,
+                                            relativePath: identity.relativePath)
+        XCTAssertNil(try ImVaultPrivateStore.loadQuestionPool(identity: other))
+        try ImVaultPrivateStore.deleteQuestionPool(identity: identity)
+        XCTAssertNil(try ImVaultPrivateStore.loadQuestionPool(identity: identity))
+    }
+}
+
+
+// In-process transport fixture: no OpenCode request, account credit or
+// privately authored Markdown is sent while exercising these native paths.
+private final class ImpressAIMockURLProtocol: URLProtocol {
+    private static let fixtureLock = NSLock()
+    private static var fixtureCode: Int = 200
+    private static var fixtureBody: Data =
+        Data(#"{"choices":[{"message":{"role":"assistant","content":"OK"}}]}"#.utf8)
+    // Only path and boolean match are stored. Test request credentials and
+    // bodies are never printed, returned to the UI, or sent over the network.
+    private static var seenAuthenticatedPaths: [(path: String, valid: Bool)] = []
+
+    static func resetAuthCapture() {
+        fixtureLock.lock()
+        defer { fixtureLock.unlock() }
+        seenAuthenticatedPaths.removeAll()
+    }
+
+    static func authenticatedPaths() -> [(path: String, valid: Bool)] {
+        fixtureLock.lock()
+        defer { fixtureLock.unlock() }
+        return seenAuthenticatedPaths
+    }
+
+    static func respond(status: Int, json: String) {
+        fixtureLock.lock()
+        defer { fixtureLock.unlock() }
+        fixtureCode = status
+        fixtureBody = Data(json.utf8)
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        ["opencode.ai", "open.bigmodel.cn", "api.z.ai"].contains(request.url?.host ?? "")
+    }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.fixtureLock.lock()
+        let status = Self.fixtureCode
+        let data = Self.fixtureBody
+        let passed = request.value(forHTTPHeaderField: "Authorization") ==
+            "Bearer synthetic-keychain-fixture"
+        Self.seenAuthenticatedPaths.append(
+            (path: request.url?.path ?? "", valid: passed))
+        Self.fixtureLock.unlock()
+        guard let url = request.url,
+              let http = HTTPURLResponse(url: url, statusCode: status,
+                                         httpVersion: "HTTP/1.1",
+                                         headerFields: ["Content-Type": "application/json"])
+        else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        client?.urlProtocol(self, didReceive: http, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+@MainActor
+final class ImpressAITransportAndCredentialTests: XCTestCase {
+    private func mockClient() -> ImpressAIHTTPClient {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ImpressAIMockURLProtocol.self]
+        return ImpressAIHTTPClient(session: URLSession(configuration: config))
+    }
+
+    private func freeRoute() -> ImpressAIResolvedRoute {
+        let connection = ImpressAIOpenCodeFreeQA.connection()
+        let model = ImpressAIOpenCodeFreeQA.models(for: connection.id)[0]
+        return ImpressAIResolvedRoute(connection: connection, model: model)
+    }
+
+    func testFreeMultiTurnTextResponseWithoutLiveNetwork() async throws {
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"choices":[{"message":{"content":"Model reply","role":"assistant"}}]}"#)
+        let result = try await mockClient().converseDetailed(
+            route: freeRoute(), system: "Test fixture only.",
+            turns: [
+                ImpressAIChatTurn(role: .user, text: "ping"),
+                ImpressAIChatTurn(role: .assistant, text: "OK"),
+                ImpressAIChatTurn(role: .user, text: "second ping")
+            ])
+        XCTAssertEqual(result.statusCode, 200)
+        XCTAssertEqual(result.text, "Model reply")
+    }
+
+    func testProviderHTTPFailuresRemainDistinctWithoutLiveNetwork() async {
+        let client = mockClient()
+        for status in [401, 403, 404, 429] {
+            ImpressAIMockURLProtocol.respond(status: status, json:
+                #"{"error":{"message":"mock refusal"}}"#)
+            do {
+                _ = try await client.converse(route: freeRoute(), system: "Fixture.",
+                    turns: [ImpressAIChatTurn(role: .user, text: "ping")])
+                XCTFail("HTTP \(status) should not become a successful response")
+            } catch ImpressAIServiceError.unauthorized where status == 401 {
+            } catch ImpressAIServiceError.forbidden where status == 403 {
+            } catch ImpressAIServiceError.status(let code) where status == 404 && code == 404 {
+            } catch ImpressAIServiceError.rateLimited where status == 429 {
+            } catch {
+                XCTFail("Unexpected error for HTTP \(status): \(type(of: error))")
+            }
+        }
+    }
+
+    func testHTTP200WithoutVisibleReplyFailsClosed() async {
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"choices":[{"message":{"reasoning_content":"private","content":null}}]}"#)
+        do {
+            _ = try await mockClient().converse(route: freeRoute(), system: "Fixture.",
+                turns: [ImpressAIChatTurn(role: .user, text: "ping")])
+            XCTFail("Reasoning-only reply must not be accepted")
+        } catch ImpressAIServiceError.response {
+        } catch {
+            XCTFail("Unexpected empty-reply error: \(type(of: error))")
+        }
+    }
+
+    func testSyntheticGenerationCallsRealJSONRequestParserAndEvidenceValidator() async throws {
+        let connection = ImpressAIOpenCodeFreeQA.connection()
+        let model = ImpressAIOpenCodeFreeQA.models(for: connection.id)[0]
+        let route = ImpressAIResolvedRoute(connection: connection, model: model)
+        let source = ImpressAISource(vaultID: "qa-only",
+            relativePath: "Synthetic_QA.md",
+            documentSHA256: String(repeating: "a", count: 64),
+            heading: "Synthetic")
+        let excerpt = ImpressAIExcerpt(id: "qa-evidence-1",
+            source: source,
+            text: "Active recall retrieves knowledge without looking at the answer.")
+        let envelope: [String: Any] = [
+            "questions": [[
+                "question": "How does active recall differ from rereading?",
+                "answer": "It tests retrieval without showing the answer first.",
+                "dimension": "comparison",
+                "evidenceIDs": ["qa-evidence-1"]
+            ]]
+        ]
+        let encoded = try JSONSerialization.data(withJSONObject: envelope)
+        let answer = try XCTUnwrap(String(data: encoded, encoding: .utf8))
+        let body: [String: Any] = [
+            "choices": [["message": ["role": "assistant", "content": answer]]]
+        ]
+        let serialized = try JSONSerialization.data(withJSONObject: body)
+        ImpressAIMockURLProtocol.respond(status: 200,
+            json: try XCTUnwrap(String(data: serialized, encoding: .utf8)))
+        let completion = try await mockClient().completeDetailed(
+            route: route, system: ImpressAIQuestionPrompt.system(count: 1),
+            user: try ImpressAIQuestionPrompt.input([excerpt]))
+        XCTAssertEqual(completion.statusCode, 200)
+        let candidates = try ImpressAIQuestionPrompt.decode(completion.text)
+        let pool = ImpressAIQuestionPool(source: source, excerpts: [excerpt],
+            requestedCount: 1, modelProfileID: model.id,
+            candidates: candidates.map {
+                ImpressAIQuestionCandidate(question: $0.question,
+                    answer: $0.answer, dimension: $0.dimension,
+                    evidenceIDs: $0.evidenceIDs)
+            })
+        XCTAssertEqual(try ImpressAIQuestionValidator.validatedSelection(pool).count, 1)
+    }
+
+    func testGLMBearerUsesCorrectChatJSONAndModelsEndpointWithoutNetwork() async throws {
+        let keyID = UUID()
+        defer { ImpressAIKeychain.delete(id: keyID) }
+        try ImpressAIKeychain.write("synthetic-keychain-fixture", id: keyID)
+        let c = ImpressAIConnection(title: "GLM China", provider: .zhipu,
+            apiProtocol: .chatCompletions,
+            baseURL: URL(string: "https://open.bigmodel.cn/api/paas/v4")!,
+            credentialID: keyID)
+        let m = ImpressAIModel(connectionID: c.id, identifier: "glm-4.5-flash",
+                                jsonMode: .promptOnly)
+        let route = ImpressAIResolvedRoute(connection: c, model: m)
+        let client = mockClient()
+        ImpressAIMockURLProtocol.resetAuthCapture()
+
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"choices":[{"message":{"role":"assistant","content":"GLM reply"}}]}"#)
+        let chat = try await client.converseDetailed(route: route,
+            system: "Fixture only.", turns: [ImpressAIChatTurn(role: .user, text: "hello")])
+        XCTAssertEqual(chat.statusCode, 200)
+        XCTAssertEqual(chat.text, "GLM reply")
+
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"choices":[{"message":{"role":"assistant","content":"{\"ok\":true}"}}]}"#)
+        let json = try await client.completeDetailed(route: route,
+            system: "Return JSON.", user: "Fixture only.")
+        XCTAssertEqual(json.statusCode, 200)
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: Data(json.text.utf8))
+                       as? [String: Bool], ["ok": true])
+
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"data":[{"id":"glm-4.5-flash"}]}"#)
+        let catalog = try await client.listModels(connection: c)
+        XCTAssertEqual(catalog, ["glm-4.5-flash"])
+        let captures = ImpressAIMockURLProtocol.authenticatedPaths()
+        XCTAssertEqual(captures.map { $0.path }, [
+            "/api/paas/v4/chat/completions",
+            "/api/paas/v4/chat/completions",
+            "/api/paas/v4/models"
+        ])
+        XCTAssertTrue(captures.allSatisfy { $0.valid },
+                      "GLM must receive Bearer from the matching Keychain credential")
+    }
+
+    func testModelChooserShowsGLMAndDoesNotClaimFreeQAOnly() throws {
+        let store = ImpressAIConfigStore.shared
+        let previous = store.registry
+        defer { try? store.replace(previous) }
+        let glm = ImpressAIConnection(title: "GLM China", provider: .zhipu,
+            apiProtocol: .chatCompletions,
+            baseURL: URL(string: "https://open.bigmodel.cn/api/paas/v4")!, credentialID: UUID())
+        let model = ImpressAIModel(connectionID: glm.id, identifier: "glm-4.5-flash")
+        try store.update { registry in
+            registry.connections.append(glm)
+            registry.models.append(model)
+        }
+        let picker = ImpressAIModelChooser(task: .conversation)
+        picker.loadViewIfNeeded()
+        let rows = picker.tableView(picker.tableView, numberOfRowsInSection: 0)
+        XCTAssertGreaterThan(rows, 0)
+        var foundGLM = false
+        for index in 0..<rows {
+            let cell = picker.tableView(picker.tableView,
+                cellForRowAt: IndexPath(row: index, section: 0))
+            if (cell.contentConfiguration as? UIListContentConfiguration)?.text == "glm-4.5-flash" {
+                foundGLM = true
+            }
+        }
+        XCTAssertTrue(foundGLM, "GLM must be a selectable business model")
+    }
+
+
+    func testCredentialStoreSupportsRotationAndDeletionWithoutLoggingSecrets() throws {
+        let id = UUID()
+        defer { ImpressAIKeychain.delete(id: id) }
+        XCTAssertThrowsError(try ImpressAIKeychain.read(id: id))
+        try ImpressAIKeychain.write("fixture-only-key-one", id: id)
+        XCTAssertEqual(try ImpressAIKeychain.read(id: id), "fixture-only-key-one")
+        try ImpressAIKeychain.write("fixture-only-key-two", id: id)
+        XCTAssertEqual(try ImpressAIKeychain.read(id: id), "fixture-only-key-two")
+        ImpressAIKeychain.delete(id: id)
+        XCTAssertThrowsError(try ImpressAIKeychain.read(id: id))
+    }
+
+    func testSavedKeychainBearerReachesConsoleChatJSONAndFreeCatalog() async throws {
+        // Signed-simulator Keychain + in-process URLProtocol. No real API key,
+        // no network access, no paid model, no personal Vault bytes.
+        let credentialID = UUID()
+        defer { ImpressAIKeychain.delete(id: credentialID) }
+        try ImpressAIKeychain.write("synthetic-keychain-fixture", id: credentialID)
+        var connection = ImpressAIOpenCodeFreeQA.connection()
+        connection.authentication = .bearer
+        connection.credentialID = credentialID
+        let model = ImpressAIOpenCodeFreeQA.models(for: connection.id)[0]
+        let route = ImpressAIResolvedRoute(connection: connection, model: model)
+        let client = mockClient()
+        ImpressAIMockURLProtocol.resetAuthCapture()
+
+        ImpressAIMockURLProtocol.respond(status: 200, json: "{}")
+        let keyProbeStatus = try await client.probeOpenCodeServiceAccount(
+            connection: connection)
+        XCTAssertEqual(keyProbeStatus, 200)
+
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"choices":[{"message":{"role":"assistant","content":"OK"}}]}"#)
+        let first = try await client.converseDetailed(
+            route: route, system: "Synthetic fixture only.",
+            turns: [ImpressAIChatTurn(role: .user, text: "ping")])
+        XCTAssertEqual(first.statusCode, 200)
+        XCTAssertEqual(first.text, "OK")
+
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"choices":[{"message":{"role":"assistant","content":"{\"ok\":true}"}}]}"#)
+        let json = try await client.completeDetailed(
+            route: route, system: "Return JSON.", user: "Synthetic fixture.")
+        XCTAssertEqual(json.statusCode, 200)
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: Data(json.text.utf8)) as? [String: Bool],
+                       ["ok": true])
+
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"data":[{"id":"mimo-v2.6-flash-free"}]}"#)
+        let available = try await client.listModels(connection: connection)
+        XCTAssertEqual(available, ["mimo-v2.6-flash-free"])
+
+        let captures = ImpressAIMockURLProtocol.authenticatedPaths()
+        XCTAssertEqual(captures.map { $0.path }, [
+            "/console/api/v2/config",
+            "/inference/openai/v1/chat/completions",
+            "/inference/openai/v1/chat/completions",
+            "/inference/v1/models"
+        ])
+        XCTAssertTrue(captures.allSatisfy { $0.valid },
+                      "Every explicit Free API request must attach the Keychain Bearer")
+    }
 }

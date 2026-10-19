@@ -61,10 +61,13 @@ final class ImpressCalibrationNotificationRouteInbox {
         guard pending, let tabs = root as? UITabBarController,
               tabs.presentedViewController == nil,
               let nav = tabs.viewControllers?.compactMap({ $0 as? UINavigationController })
-                .first(where: { $0.viewControllers.first is ImpressCalibrationViewController }),
+                .first(where: { $0.viewControllers.first is ImpressV3SettingsHubViewController }),
               nav.presentedViewController == nil else { return false }
         tabs.selectedViewController = nav
-        nav.popToRootViewController(animated: false)
+        if !(nav.topViewController is ImpressCalibrationViewController) {
+            nav.popToRootViewController(animated: false)
+            nav.pushViewController(ImpressCalibrationViewController(), animated: false)
+        }
         pending = false
         return true
     }

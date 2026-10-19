@@ -145,6 +145,50 @@ enum ImpressV3NativeButtonAppearance {
         prepare(button, minimumHeight: ImpressV3Appearance.Metrics.primaryActionHeight)
     }
 
+    /// Quiet, monochromatic review primary action. Reserve brand accent for
+    /// navigation and selection; no full-width saturated colored pill.
+    static func reviewPrimary(_ button: UIButton, title: String) {
+        var config = UIButton.Configuration.filled()
+        config.title = title
+        config.cornerStyle = .capsule
+        config.buttonSize = .large
+        config.contentInsets = NSDirectionalEdgeInsets(
+            top: 12, leading: 20, bottom: 12, trailing: 20)
+        config.baseBackgroundColor = ImpressV3Appearance.reviewPrimarySurface
+        config.baseForegroundColor = ImpressV3Appearance.reviewPrimaryInk
+        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer {
+            value in
+            var output = value
+            output.font = ImpressV3Appearance.Typography.body
+            return output
+        }
+        button.configuration = config
+        prepare(button, minimumHeight: ImpressV3Appearance.Metrics.primaryActionHeight)
+    }
+
+    /// Two compact native controls shown only after answer reveal.
+    /// No stroke, shadow, gradients, custom bitmap icons or extra footer rows.
+    static func reviewSecondary(_ button: UIButton, title: String, symbol: String) {
+        var config = UIButton.Configuration.gray()
+        config.title = title
+        config.image = UIImage(systemName: symbol)
+        config.imagePadding = ImpressV3Appearance.Metrics.symbolGap
+        config.cornerStyle = .capsule
+        config.buttonSize = .large
+        config.contentInsets = NSDirectionalEdgeInsets(
+            top: 10, leading: 13, bottom: 10, trailing: 13)
+        config.baseBackgroundColor = ImpressV3Appearance.reviewActionSurface
+        config.baseForegroundColor = ImpressV3Appearance.primaryText
+        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer {
+            value in
+            var output = value
+            output.font = ImpressV3Appearance.Typography.supporting
+            return output
+        }
+        button.configuration = config
+        prepare(button, minimumHeight: ImpressV3Appearance.Metrics.tapTarget)
+    }
+
     /// Lightweight tertiary actions in the compact review toolbar.
     static func secondary(_ button: UIButton, title: String) {
         button.configuration = secondaryConfiguration(title: title)
@@ -258,6 +302,14 @@ enum ImpressV3Appearance {
     static let secondarySegmentSelection = UIColor.tertiarySystemGroupedBackground
     static let mutedAction = UIColor.systemGray
     static let quietControlSurface = UIColor.secondarySystemFill
+    static let reviewActionSurface = UIColor.tertiarySystemGroupedBackground
+    static let reviewPrimarySurface = UIColor.label
+    static let reviewPrimaryInk = UIColor.systemBackground
+    static let reviewOverlaySurface = UIColor { traits in
+        UIColor.secondarySystemGroupedBackground.resolvedColor(with: traits)
+            .withAlphaComponent(traits.userInterfaceStyle == .dark ? 0.97 : 0.95)
+    }
+    static let reviewOverlaySymbol = UIColor.secondaryLabel
     static let optionSurface = UIColor.tertiarySystemGroupedBackground
     // Semantic colors already track the system theme. Feedback fills must
     // also resolve their alpha in the active trait (not cache light RGB).
@@ -448,6 +500,15 @@ enum ImpressV3Appearance {
         static let controlHeight: CGFloat = 48
         static let segmentHeight: CGFloat = 50
         static let primaryActionHeight: CGFloat = 52
+        static let calibrationWeekHeight: CGFloat = 118
+        static let contentVersionImageHeight: CGFloat = 155
+        static let calibrationWeekChartInset: CGFloat = 36
+        static let reviewOverlayBadgeHeight: CGFloat = 44
+        static let reviewOverlaySymbolSize: CGFloat = 17
+        static let reviewOverlayEdgeInset: CGFloat = 16
+        static let reviewOverlayTopInset: CGFloat = 24
+        static let reviewOverlayContentHInset: CGFloat = 18
+        static let reviewOverlayContentVInset: CGFloat = 10
         static let answerOptionHeight: CGFloat = 52
         static let maximumSegmentWidth: CGFloat = 440
         static let compactSegmentWidth: CGFloat = 320
@@ -658,6 +719,37 @@ enum ImpressV3Language: String, CaseIterable {
 
     private static let translations: [String: (traditional: String, english: String)] = [
         "闪卡": ("閃卡", "Flashcards"),
+        "本周校准": ("本週校準", "This Week"),
+        "切换模型": ("切換模型", "Choose Model"),
+        "使用业务默认模型": ("使用業務預設模型", "Use Default Model"),
+        "来源内容有更新；下次发送前请重新确认引用范围。": ("來源內容已有更新；下次傳送前請重新確認引用範圍。", "The source changed. Review the context before sending again."),
+
+        "发送未完成 · 可重新尝试": ("傳送未完成 · 可重新嘗試", "Send interrupted · Retry"),
+        "切换 AI 服务商": ("切換 AI 服務商", "Switch AI Provider"),
+        "此次请求会把近期对话材料发送给新服务商，是否同意？": ("此請求會將近期對話資料傳送至新的服務商，是否同意？", "Send recent conversation context to a different provider?"),
+        "同意并发送": ("同意並傳送", "Approve & Send"),
+        "本地聊天保存失败，未向模型发送。": ("本機對話儲存失敗，未傳送至模型。", "Local save failed. Nothing was sent."),
+        "卡片内容已更新。请返回卡片后重新进入讨论，避免使用过期答案。": ("卡片內容已更新。請返回卡片再重新討論，以免使用過期答案。", "This card changed. Reopen Chat from the card to use its current version."),
+        "对话已保存至本机；更新内容仍需预览确认。": ("對話已儲存於本機；更新內容仍需預覽確認。", "Conversation saved locally. Changes still require preview and approval."),
+        "本地聊天恢复失败。请保留当前页面，不要覆盖历史。": ("本機對話復原失敗。請保留此頁面，勿覆寫歷史。", "Could not restore conversation. Keep this screen open and do not overwrite history."),
+        "本地聊天保存失败。未能确认草稿或对话已保存。": ("本機對話儲存失敗。無法確認草稿或歷史已儲存。", "Local save failed; draft and history persistence are unverified."),
+        "全部选项：": ("全部選項：", "All options: "),
+        "正确项索引：": ("正確項索引：", "Correct option indices: "),
+        "这是一张图片卡，本次纯文字对话不包含图片像素。": ("這是一張圖片卡，本次純文字討論未傳送圖片像素。", "This is an image card. No image pixels were sent in this text-only chat."),
+        "讨论会在本机保存，未确认的内容不会写入原笔记。": ("對話會儲存在本機；未經確認不會修改原筆記。", "Chat is saved locally. Unapproved changes cannot modify the note."),
+        "查看历史版本": ("查看歷史版本", "View Version History"),
+        "恢复历史版本": ("還原歷史版本", "Restore Version"),
+        "恢复将产生新版本，保留现有历史；不会修改 FSRS 评分。": ("還原會建立新版本，保留既有歷史；不會修改 FSRS 評分。", "Restoring creates a new version without changing FSRS history."),
+
+        "每日校准": ("每日校準", "Daily Calibration"),
+        "五项评估、历史走势与提醒": ("五項評估、歷史走勢與提醒", "Five checks, trends, and reminders"),
+        "周一": ("週一", "Mon"), "周二": ("週二", "Tue"),
+        "周三": ("週三", "Wed"), "周四": ("週四", "Thu"),
+        "周五": ("週五", "Fri"), "周六": ("週六", "Sat"),
+        "周日": ("週日", "Sun"),
+        "未评估": ("未評估", "Not scored"),
+        "点击打开每日校准": ("點選開啟每日校準", "Open daily calibration"),
+
         "校准": ("校準", "Calibration"),
         "设置": ("設定", "Settings"),
         "笔记": ("筆記", "Notes"),
@@ -1084,6 +1176,191 @@ enum ImpressV3Language: String, CaseIterable {
         "音频隐私": ("音訊隱私", "Audio Privacy"),
         "录音只在设备端识别，取消后不会保存音频或文字。": ("錄音只在裝置端辨識；取消不會保存音訊或文字。", "On-device recognition only. Cancel saves neither audio nor transcript."),
         "下载": ("下載", "Download"),
+        "AI 服务": ("AI 服務", "AI Services"),
+        "API 连接": ("API 連線", "API Connections"),
+        "添加 API 连接": ("新增 API 連線", "Add API Connection"),
+        "连接名称": ("連線名稱", "Connection Name"),
+        "服务商 / 协议": ("服務商／協定", "Provider / Protocol"),
+        "协议类型": ("協定類型", "API Protocol"),
+        "选择服务商": ("選擇服務商", "Choose Provider"),
+        "模型列表": ("模型清單", "Available Models"),
+        "个模型": (" 個模型", " models"),
+        "业务默认模型": ("業務預設模型", "Default Models by Task"),
+        "指定笔记出题": ("指定筆記出題", "Generate Questions from Note"),
+        "知识重构（尚未启用）": ("知識重構（尚未啟用）", "Knowledge Synthesis (Not Enabled)"),
+        "原生对话（尚未启用）": ("原生對話（尚未啟用）", "Native Chat (Not Enabled)"),
+        "隐私与数据边界": ("隱私與資料邊界", "Privacy & Data Scope"),
+        "数据上传规则": ("資料上傳規則", "Data Sharing Rules"),
+        "按需授权、仅上传选定文档、不会修改原始 Vault": ("按需授權，僅上傳選定文件，不會修改原始 Vault", "Explicit access; selected notes only; no Vault edits"),
+        "仅在你明确确认生成时发送选定的笔记内容；API Key 留在本机 Keychain。": ("僅在你明確確認產生題目時傳送所選筆記；API Key 留在裝置的 Keychain。", "Selected notes are sent only after confirmation. API keys remain in device Keychain."),
+        "每个连接独立保存 API Key，可添加多个服务商和模型。": ("每個連線分別保存 API Key，可新增多個服務商與模型。", "Each connection has its own API key. Add multiple providers and models."),
+        "指定笔记出题需要先测试模型 JSON 能力。不会自动跨服务商发送笔记。": ("指定筆記出題需先測試模型 JSON 能力；不會自動跨服務商傳送筆記。", "Test JSON support before generating questions. Notes never switch providers automatically."),
+        "云端模型会接收你明确选择的笔记片段。服务商可能根据各自政策处理请求；不会默认上传整个 Obsidian Vault。所有自动写回仍被生产安全门禁关闭。": ("雲端模型會接收你明確選擇的筆記片段。服務商可能依其政策處理資料；不會預設上傳整個 Vault。自動寫回仍受安全限制。", "Cloud models receive only selected note excerpts. Providers apply their own data policies. The full Vault is never uploaded by default and automated writes remain disabled."),
+        "未配置": ("尚未設定", "Not Configured"),
+        "未保存": ("尚未儲存", "Not Saved"),
+        "已保存": ("已儲存", "Saved"),
+        "未测试": ("尚未測試", "Not Tested"),
+        "JSON 已验证": ("JSON 已驗證", "JSON Verified"),
+        "JSON 测试已通过": ("JSON 測試已通過", "JSON Test Passed"),
+        "尚未验证 JSON 输出": ("尚未驗證 JSON 輸出", "JSON Output Not Verified"),
+        "测试 JSON 输出": ("測試 JSON 輸出", "Test JSON Output"),
+        "作为出题模型": ("設為出題模型", "Use for Question Generation"),
+        "作为对话模型": ("設為對話模型", "Use for Chat"),
+        "已选择默认模型": ("已選擇預設模型", "Default Model Selected"),
+        "选择业务模型": ("選擇業務模型", "Choose Task Model"),
+        "删除模型": ("刪除模型", "Delete Model"),
+        "添加模型 ID": ("新增模型 ID", "Add Model ID"),
+        "删除连接": ("刪除連線", "Delete Connection"),
+        "删除 API 连接？": ("刪除 API 連線？", "Delete API Connection?"),
+        "连接、其模型和业务路由将被移除；Keychain 密钥也会删除。": ("連線、模型與業務路由將被移除；Keychain 密鑰也會刪除。", "This removes the connection, its models and routes, and its Keychain credential."),
+        "操作失败": ("操作失敗", "Operation Failed"),
+        "添加": ("新增", "Add"),
+        "选择失败": ("選擇失敗", "Selection Failed"),
+        "该功能尚未开放": ("此功能尚未開放", "Not Available Yet"),
+        "知识重构需要单独的工具调用及 Vault 写回安全验收。": ("知識重構需先通過工具呼叫與 Vault 寫回安全驗收。", "Knowledge synthesis requires separate tool and Vault write-safety verification."),
+        "模型响应不符合格式要求，未生成卡片。": ("模型回應格式不符，未產生卡片。", "The model response is invalid. No cards were generated."),
+        "服务商未返回模型列表，请手动输入模型 ID。": ("服務商未回傳模型清單，請手動輸入模型 ID。", "No model list was returned. Enter a model ID manually."),
+        "请求或响应超出安全长度限制。": ("請求或回應超出安全長度限制。", "The request or response exceeds the size limit."),
+        "API Key 不可用，请重新保存密钥。": ("API Key 不可用，請重新儲存密鑰。", "API key unavailable. Save it again."),
+        "API 地址不安全或不正确。": ("API 位址不安全或不正確。", "API endpoint is unsafe or invalid."),
+        "API 授权失败，请检查密钥。": ("API 授權失敗，請檢查密鑰。", "API authorization failed. Check your key."),
+        "请先在设置中配置并测试 AI 出题模型。": ("請先在設定中配置並測試 AI 出題模型。", "Configure and test a question-generation model in Settings first."),
+        "快速记录": ("快速記錄", "Quick Capture"),
+        "补充理解": ("補充理解", "Add Understanding"),
+        "查看理解与复习历史": ("查看理解與複習紀錄", "View Understanding & Review History"),
+        "卡片管理": ("卡片管理", "Manage Cards"),
+        "根据笔记生成综合问题": ("根據筆記產生綜合問題", "Generate Comprehensive Questions"),
+        "生成综合问题": ("產生綜合問題", "Generate Questions"),
+        "出题数量": ("出題數量", "Number of Questions"),
+        "道综合题": (" 道綜合題", " comprehensive questions"),
+        "生成": ("產生", "Generate"),
+        "生成中…": ("產生中…", "Generating…"),
+        "选择要分析的笔记章节": ("選擇要分析的筆記章節", "Choose Note Sections"),
+        "字符": ("字元", "characters"),
+        "未命名章节": ("未命名章節", "Untitled Section"),
+        "默认5道综合理解与应用题，不要求AI为凑数量编造内容。": ("預設五道理解與應用綜合題，不要求 AI 為湊數而捏造內容。", "Default: 5 comprehensive questions. The AI must not fabricate extra questions."),
+        "只上传勾选章节及其文本，原始 Obsidian 文件保持只读。": ("僅上傳勾選的章節文字，Obsidian 原始檔案維持唯讀。", "Only selected section text is sent. Source Obsidian notes remain read-only."),
+        "只发送已勾选章节给该云端 API 服务商，不会上传整个 Vault；原文不会被修改。": ("僅將勾選章節送至所選 API 服務商；不會上傳整個 Vault，亦不修改原文。", "Only checked sections go to this provider. The full Vault is not uploaded and originals are untouched."),
+        "确认发送所选笔记？": ("確認傳送所選筆記？", "Send Selected Note Sections?"),
+        "无法生成问题": ("無法產生問題", "Could Not Generate Questions"),
+        "问题候选池": ("問題候選池", "Question Candidates"),
+        "道候选 · 点选勾选，点信息按钮编辑": (" 道候選 · 點選勾選，資訊鍵編輯", " candidates · Tap to select, info to edit"),
+        "参考答案": ("參考答案", "Reference Answer"),
+        "编辑候选题": ("編輯候選題", "Edit Candidate"),
+        "加入": ("加入", "Add"),
+        "张": (" 張", " cards"),
+        "加入卡片集": ("加入卡片集", "Add to Card Collection"),
+        "加入卡片集？": ("加入卡片集？", "Add to Card Collection?"),
+        "确认加入": ("確認加入", "Confirm Add"),
+        "卡片已添加": ("卡片已新增", "Cards Added"),
+        "张卡片已保存到 V3 卡片集。": (" 張卡片已儲存至 V3 卡片集。", " cards have been saved to the V3 card collection."),
+        "张问答卡片将进入 FSRS 复习。Obsidian 原文不会修改。": (" 張問答卡片將加入 FSRS 複習；Obsidian 原文不會修改。", " Q&A cards will enter FSRS review. Source Obsidian notes remain unchanged."),
+        "无法保存卡片": ("無法儲存卡片", "Could Not Save Cards"),
+        "来源依据（只读）": ("來源依據（唯讀）", "Source Evidence (Read Only)"),
+        "来源引用仅供核对，不能单独证明答案正确。加入前请确认内容。": ("來源引用僅供查核，不能單獨證明答案正確。加入前請確認內容。", "Citations aid verification but do not guarantee correctness. Review answers before adding."),
+        "自定义 API": ("自訂 API", "Custom API"),
+        "认证方式": ("驗證方式", "Authentication"),
+        "自定义 Header 名称": ("自訂 Header 名稱", "Custom Header Name"),
+        "API 接口路径": ("API 介面路徑", "API Endpoint Paths"),
+        "模型协议": ("模型協定", "Model Protocol"),
+        "JSON 输出模式": ("JSON 輸出模式", "JSON Output Mode"),
+        "沿用连接协议": ("沿用連線協定", "Use Connection Protocol"),
+        "真机 QA 仅支持独立的测试 Vault 副本": ("真機 QA 僅支援獨立的測試 Vault 副本", "Device QA is limited to a separate test Vault copy"),
+        "测试副本写回": ("測試副本寫回", "Write Test Copy"),
+        "仅限测试副本；原始 Vault 仍保持只读": ("僅限測試副本；原始 Vault 仍維持唯讀", "Test copy only; original Vault remains read-only"),
+        "请在「文件」App 选择 Impress-Write-Test-Vault 测试副本": ("請在「檔案」App 選取 Impress-Write-Test-Vault 測試副本", "Choose the Impress-Write-Test-Vault copy in Files"),
+        "确认修改独立测试副本？": ("確認修改獨立測試副本？", "Modify the Separate Test Copy?"),
+        "仅操作「文件」中名称为 Impress-Write-Test-Vault 的独立副本。正式 Vault 不可写入。将重新核对原文 SHA-256，保存恢复副本后再尝试写入；请先自行复制重要笔记。": ("僅操作「檔案」中名稱為 Impress-Write-Test-Vault 的獨立副本。正式 Vault 不可寫入。將重新驗證原始 SHA-256，建立復原副本後再嘗試寫入；請先另外備份重要筆記。", "Only the independent folder named Impress-Write-Test-Vault in Files can be modified. The real Vault remains read-only. The original SHA-256 is rechecked and a recovery copy saved before writing. Back up important notes first."),
+        "确认测试副本写回": ("確認測試副本寫回", "Confirm Test Copy Write"),
+        "AI 讨论": ("AI 討論", "AI Discussion"),
+        "使用对话模型进行原生多轮讨论": ("使用對話模型進行原生多輪討論", "Native multi-turn conversation with your selected model"),
+        "讨论记录仅在本页面保留，不会自动写入 Obsidian。": ("討論紀錄僅留存在此頁，不會自動寫入 Obsidian。", "Chat stays on this screen and is not written to Obsidian."),
+        "消息内容": ("訊息內容", "Message"),
+        "发送消息": ("傳送訊息", "Send Message"),
+        "我": ("我", "You"),
+        "尚未配置对话模型": ("尚未設定對話模型", "No Chat Model Selected"),
+        "请先在「设置 → AI 服务」选择对话使用的连接与模型。": ("請先在「設定 → AI 服務」選擇對話連線與模型。", "Select a Chat connection and model in Settings > AI Services."),
+        "打开 AI 服务": ("開啟 AI 服務", "Open AI Services"),
+        "是否附带当前卡片？": ("是否附帶目前卡片？", "Include This Card?"),
+        "只有你确认后，本次讨论才会将卡片问题与参考答案一起发送给所选的 API 服务商。": ("只有確認後，本次討論才會將卡片問題及參考答案傳送給所選 API 服務商。", "Your current card and reference answer are shared with this provider only if you consent."),
+        "仅发送输入内容": ("僅傳送輸入內容", "Send Message Only"),
+        "附带当前卡片": ("附帶目前卡片", "Include Card Context"),
+        "正在请求模型…": ("正在請求模型…", "Contacting Model…"),
+        "以第一性原理和奥卡姆剃刀分析问题，明确假设、证据与边界。不编造笔记内容。": ("以第一性原理及奧卡姆剃刀分析問題，清楚說明假設、證據與限制。不捏造筆記內容。", "Analyze using first principles and Occam's razor. State assumptions, evidence and boundaries. Do not fabricate notes."),
+        "当前卡片的问题：": ("目前卡片的問題：", "Current card question: "),
+        "当前卡片的参考答案：": ("目前卡片的參考答案：", "Card reference answer: "),
+        "请求失败，输入内容已保留。": ("請求失敗，輸入內容已保留。", "Request failed. Your draft is preserved."),
+        "AI 对话失败": ("AI 對話失敗", "AI Chat Failed"),
+        "← 困难   ↑ 良好   → 容易   ↓ 重来": ("← 困難   ↑ 良好   → 容易   ↓ 重來", "← Hard   ↑ Good   → Easy   ↓ Again"),
+        "OpenCode 免费模型（测试）": ("OpenCode 免費模型（測試）", "OpenCode Free Models (QA)"),
+        "本 QA 版只允许 OpenCode 官方免费模型；推荐添加「OpenCode 免费模型（测试）」，不需要密钥。使用 Keychain 密钥时也只允许相同的免费型号。": ("此 QA 版本僅允許 OpenCode 官方免費模型。建議新增「OpenCode 免費模型（測試）」，無需密鑰；使用 Keychain 密鑰時也只能使用相同的免費型號。", "This QA build permits only OpenCode's documented free models. Add OpenCode Free Models (QA) without a key; Keychain-based requests remain restricted to those free IDs."),
+        "仅限免费模型测试": ("僅限免費模型測試", "Free Models Only"),
+        "当前 QA 只允许 OpenCode 官方免费型号，推荐选择免费连接进行测试。": ("目前 QA 僅允許 OpenCode 官方免費型號，建議使用免費連線測試。", "This QA build accepts only OpenCode's official free model IDs. Select a free connection for testing."),
+        "测试免费对话": ("測試免費對話", "Test Free Chat"),
+        "免费模型连接成功": ("免費模型連線成功", "Free Model Connected"),
+        "已收到模型响应；没有发送私人笔记。": ("已收到模型回應；未傳送私人筆記。", "The model responded. No private notes were sent."),
+        "API 授权失败（401），请检查密钥。": ("API 授權失敗（401），請檢查密鑰。", "API authorization failed (401). Check the key."),
+        "免费 API 请求被拒绝（403）；可能是账号认证、地区或网络限制，请尝试在设置中保存新的 OpenCode API Key 后重测。": ("免費 API 請求遭拒（403）；可能是帳戶認證、地區或網路限制。請嘗試在設定中儲存新的 OpenCode API Key 後重測。", "Free API request blocked (403). This may be an account, regional or network restriction. Try saving a fresh OpenCode API key in Settings and test again."),
+        "个免费模型": (" 個免費模型", " free models"),
+        "无需密钥": ("無需密鑰", "No Key Needed"),
+        "请先选择免费对话模型": ("請先選擇免費對話模型", "Select a Free Chat Model"),
+        "原生对话": ("原生對話", "Native Chat"),
+        "默认对话提示词": ("預設對話提示詞", "Default Chat Prompt"),
+        "第一性原理 + 奥卡姆剃刀": ("第一性原理 + 奧卡姆剃刀", "First Principles + Occam's Razor"),
+        "默认使用第一性原理与奥卡姆剃刀，也可选用「提示词」中编辑过的模板。仅在你点击发送时传给当前模型。": ("預設使用第一性原理與奧卡姆剃刀，也可選擇在「提示詞」中編輯的範本。只有點擊傳送時才會傳給模型。", "Defaults to first principles and Occam's razor. You can select an edited prompt from your library. It is shared with the model only when you send."),
+        "打开提示词库编辑": ("開啟提示詞庫編輯", "Edit Prompt Library"),
+        "测试成功：已收到模型回复，没有发送私人笔记。": ("測試成功：已收到模型回覆，未傳送私人筆記。", "Probe passed: model replied. No private notes were sent."),
+        "免费模型连接失败": ("免費模型連線失敗", "Free Model Connection Failed"),
+        "源笔记已发生变化": ("來源筆記已變更", "Source Note Changed"),
+        "旧候选池已保留，但来源版本不一致，禁止直接导入。请重新生成问题。": ("舊候選題已保留，但來源版本不一致，無法直接匯入。請重新產生問題。", "Previous candidates are preserved, but the source version has changed. Regenerate before importing."),
+        "恢复未完成的候选池？": ("要還原未完成的候選題嗎？", "Restore Pending Questions?"),
+        "道候选题已在本机安全保存；恢复不会修改 Obsidian 或 FSRS。": ("道候選題已安全儲存在本機；還原不會修改 Obsidian 或 FSRS。", "questions were saved securely on this device. Restoring will not change Obsidian or FSRS."),
+        "重新生成": ("重新產生", "Regenerate"),
+        "恢复候选池": ("還原候選題", "Restore Questions"),
+        "OpenCode 返回 HTTP 403：可能是当前网络、账户权限或访问限制。确认免费定价后，再使用设备 Keychain 中的新 Key 重试。": ("OpenCode 回傳 HTTP 403：可能是網路、帳戶權限或存取限制。確認免費定價後，再使用裝置 Keychain 中的新密鑰重試。", "OpenCode HTTP 403: network, account or access restrictions may apply. Confirm free pricing before retrying with a new Keychain key."),
+        "OpenCode 返回 HTTP 429：免费模型暂时受限，请稍后重试；不会自动切换收费模型。": ("OpenCode 回傳 HTTP 429：免費模型暫時受到限制，請稍後再試；不會自動切換付費模型。", "OpenCode HTTP 429: free-model requests are rate limited. Try again later. No paid-model fallback is used."),
+        "免费 API 全链路验收": ("免費 API 全鏈路驗收", "Free API End-to-End Verification"),
+        "将向当前 OpenCode 免费模型发送四个不含私人信息的测试请求：首次 Chat、连续追问、JSON 与综合出题。不会上传真实笔记或保存卡片，也不会调用付费模型。": ("將向目前的 OpenCode 免費模型傳送四個不含私人資料的測試請求：首次對話、連續追問、JSON 和綜合出題。不會上傳真實筆記、儲存卡片或呼叫付費模型。", "Four synthetic requests will verify Chat, follow-up, JSON, and question generation. No private notes, saved cards, or paid models."),
+        "开始测试": ("開始測試", "Start Test"),
+        "正在验证免费 API…": ("正在驗證免費 API…", "Verifying Free API…"),
+        "凭据可读取": ("憑證可讀取", "Credential Readable"),
+        "对话与出题模型已启用；未修改真实 Vault 或卡片库。": ("已啟用對話及出題模型；未修改真實 Vault 或卡片資料庫。", "Chat and question models enabled. No actual Vault or card database changes."),
+        "免费 API 验收通过": ("免費 API 驗收通過", "Free API Verification Passed"),
+        "免费 API 验收未通过": ("免費 API 驗收未通過", "Free API Verification Failed"),
+        "Keychain 无法访问，OSStatus": ("Keychain 無法存取，OSStatus", "Keychain unavailable, OSStatus"),
+        "删除全部 API 连接": ("刪除全部 API 連線", "Delete All API Connections"),
+        "同时删除对应模型、业务选择及本机密钥": ("同時刪除關聯模型、業務選擇與裝置密鑰", "Also remove models, task selections, and local credentials"),
+        "这将删除当前连接、关联模型、业务选择及未被其他连接使用的 Keychain 密钥。": ("這將刪除連線、模型、業務設定及未被其他連線使用的 Keychain 密鑰。", "Deletes this connection, its models, task selections and unshared Keychain credential."),
+        "删除全部 API 连接？": ("刪除全部 API 連線？", "Delete All API Connections?"),
+        "个连接及其模型、业务默认选择和凭据将被清除，不会删除已有卡片与笔记。": ("個連線及其模型、預設業務設定與憑據將被清除。現有卡片及筆記不會刪除。", " connections and their models, default task selections and credentials will be removed. Cards and notes remain unchanged."),
+        "确认全部删除": ("確認全部刪除", "Delete Everything"),
+        "尚无模型。点击右上角 + 手动输入模型 ID，或点击刷新尝试获取目录。": ("尚無模型。點擊右上角 + 輸入模型 ID，或重新整理模型目錄。", "No models yet. Tap + to enter a model ID, or refresh to load the provider catalog."),
+        "测试对话连接": ("測試對話連線", "Test Chat Connection"),
+        "仅发送无私人数据的测试文本，限 OpenCode Free QA 模型。": ("只會傳送不含私人資料的測試文字，僅限 OpenCode Free QA 模型。", "Sends a harmless test message using an OpenCode Free QA model."),
+        "本次将向选定厂商发送一条测试消息，可能产生该厂商的 API 费用。": ("此次測試會向所選供應商傳送訊息，可能產生 API 費用。", "This sends a test request to the selected provider and may incur API charges."),
+        "发送一条无私人内容的 JSON 测试请求，可能产生该服务商的调用费用。成功后才能用于私人笔记出题。": ("傳送不含私人資料的 JSON 測試，可能產生費用。通過後才可傳送私人筆記以產生問題。", "Sends a harmless JSON probe that may incur charges. This must pass before sending private notes for question generation."),
+        "对话模型连接成功": ("對話模型連線成功", "Chat Model Connected"),
+        "对话模型连接失败": ("對話模型連線失敗", "Chat Connection Failed"),
+        "知识重构功能尚未启用": ("知識重構功能尚未啟用", "Knowledge Synthesis Not Yet Available"),
+        "该业务需独立完成安全验收": ("此業務須獨立完成安全驗收", "This feature requires a separate safety review."),
+        "暂无可选择的业务模型": ("尚無可選的業務模型", "No Models Available"),
+        "返回 AI 服务，先添加连接和模型，然后重新选择。": ("返回 AI 服務，先新增連線與模型後再選擇。", "Return to AI Services, add a connection and a model, then choose again."),
+        "对话可选，建议先测试连接": ("可選作對話模型，建議先測試連線", "Available for Chat; test the connection first"),
+        "JSON 尚未验证，不能上传笔记": ("JSON 尚未驗證，無法上傳筆記", "JSON not verified; note upload is blocked"),
+        "模型没有返回可用文本，或回复格式不兼容。请检查模型及协议。": ("模型未返回可用文字，或回應格式不相容。請檢查模型與協定。", "The model returned no usable text or an incompatible response. Check the model and protocol."),
+        "更新 API Key": ("更新 API Key", "Update API Key"),
+        "删除已保存 API Key": ("刪除已儲存的 API Key", "Remove Saved API Key"),
+        "删除已保存 API Key？": ("刪除已儲存的 API Key？", "Remove Saved API Key?"),
+        "只移除当前连接的本机密钥并撤销模型验证状态，不会删除现有卡片或笔记。": ("只移除此連線的裝置密鑰並撤銷模型驗證狀態，不會刪除卡片或筆記。", "Removes this connection's local key and resets model verification; cards and notes are unchanged."),
+        "所选对话模型尚未保存 API Key，请打开该连接填写密钥。": ("所選對話模型尚未儲存 API Key，請打開該連線填入密鑰。", "The selected Chat model has no API key. Open the connection and save one."),
+        "所选模型或连接已停用，请重新选择有效模型。": ("所選模型或連線已停用，請重新選擇。", "The selected connection or model is disabled. Choose an enabled model."),
+        "当前连接属于 OpenCode 免费 QA，请选择此连接允许的模型。": ("此連線屬於 OpenCode 免費 QA，請選擇允許的模型。", "This is an OpenCode Free QA connection. Choose one of its allowed models."),
+        "请先在「设置 → AI 服务 → 业务默认模型」选择可用的对话模型。": ("請至「設定 → AI 服務 → 業務預設模型」選擇可用的對話模型。", "Select a Chat model in Settings → AI Services → Default Models."),
+        "无法使用当前对话模型": ("無法使用目前的對話模型", "Selected Chat Model Unavailable"),
+        "出题模型尚未通过 JSON 验证，请在 AI 服务中测试该模型后重试。": ("出題模型尚未通過 JSON 驗證，請先在 AI 服務中測試。", "The question model has not passed its JSON test. Verify it in AI Services first."),
+        "出题模型未保存 API Key，请先在 AI 服务中配置凭据。": ("出題模型未儲存 API Key，請在 AI 服務中設定憑據。", "The question model has no saved API key. Configure credentials in AI Services."),
+        "请先在 AI 服务 → 业务默认模型中选择出题模型。": ("請先至 AI 服務 → 業務預設模型選擇出題模型。", "Choose a question-generation model in AI Services → Default Models."),
+        "当前出题模型或连接已停用，请重新选择。": ("目前出題模型或連線已停用，請重新選擇。", "The question model or its connection is disabled. Choose another model."),
         "模型下载失败": ("模型下載失敗", "Model Download Failed")
     ]
 

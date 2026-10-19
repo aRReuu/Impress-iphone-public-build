@@ -1,0 +1,564 @@
+import UIKit
+import ImpressReviewCore
+
+/// Reuse the editable Settings → Prompt Library as the single authoring
+/// authority. Only a template UUID (never its private text) is kept as a local
+/// preference; the live template body is read when the user explicitly Sends.
+enum ImpressAIChatPromptSelection {
+    static let storageKey = "ImpressV1NativeChatPromptTemplateID"
+
+    static func selectedTemplate() -> ImpressV3PromptTemplate? {
+        guard let raw = UserDefaults.standard.string(forKey: storageKey),
+              let id = UUID(uuidString: raw) else { return nil }
+        return ImpressV3PromptLibrary.load().first(where: { $0.id == id })
+    }
+
+    static func choose(_ templateID: UUID?) {
+        if let templateID {
+            UserDefaults.standard.set(templateID.uuidString, forKey: storageKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: storageKey)
+        }
+        ImpressV3BackupCoordinator.markDataChanged()
+    }
+
+    static func systemText() -> String {
+        selectedTemplate()?.content ??
+            V3L("以第一性原理和奥卡姆剃刀分析问题，明确假设、证据与边界。不编造笔记内容。")
+    }
+}
+
+/// Source-scoped native API chat. A cardID (not a mutable title) binds the
+/// conversation to the existing V3 SQLite/backup authority. Local history is
+/// complete; the remote request window is bounded and independently consented.
+/// Ordinary Chat produces no FSRS events or Markdown writes.
+@MainActor
+final class ImpressAINativeChatViewController: UIViewController,
+                                                UITableViewDataSource, UITextViewDelegate {
+    private let sourceQuestion: String?
+    private let sourceAnswer: String?
+    private let sourceCardID: UUID?
+    private let sourceContentRevision: Int?
+    private let injectedRepository: ReviewWCDBRepository?
+    private var chatRepository: ReviewWCDBRepository?
+    private var storedSession: WCDBV3ChatSession?
+    private var contextReferences: [WCDBV3ChatContextReference] = []
+    private var history: [WCDBV3ChatMessage] = []
+    private var requestFailure: String?
+    private var activeProviderID: UUID?
+    /// An override belongs only to this Chat; global task defaults remain intact.
+    private var selectedModelID: UUID?
+    private var contextChoiceMade = false
+    private var includeCardContext = false
+    private var restoring = false
+    private var sending = false
+    private var saveChain: Task<Void, Never>?
+    private var draftDebounce: Task<Void, Never>?
+
+    private var sourceIdentity: String? {
+        sourceCardID.map { "card:" + $0.uuidString }
+    }
+
+    private let tableView = UITableView(frame: .zero, style: .plain)
+    private let messageInput = UITextView()
+    private let sendButton = UIButton(type: .system)
+    private let inputBar = UIView()
+    private let privacyLabel = UILabel()
+
+    init(question: String? = nil, answer: String? = nil,
+         cardID: UUID? = nil, contentRevision: Int? = nil,
+         repository: ReviewWCDBRepository? = nil) {
+        self.sourceQuestion = question
+        self.sourceAnswer = answer
+        self.sourceCardID = cardID
+        self.sourceContentRevision = contentRevision
+        self.injectedRepository = repository
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        draftDebounce?.cancel()
+        enqueuePersistence()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        refreshModelPicker()
+    }
+
+    private func liveRoute() throws -> ImpressAIResolvedRoute {
+        let registry = ImpressAIConfigStore.shared.registry
+        if let selectedModelID {
+            guard let model = registry.models.first(where: { $0.id == selectedModelID }),
+                  let connection = registry.connections.first(where: {
+                      $0.id == model.connectionID
+                  }) else { throw ImpressAIContractError.invalidRoute }
+            let route = ImpressAIResolvedRoute(connection: connection, model: model)
+            try ImpressAIRequestPolicy.validate(route)
+            return route
+        }
+        return try registry.resolve(.conversation)
+    }
+
+    private func refreshModelPicker() {
+        let registry = ImpressAIConfigStore.shared.registry
+        let current = try? liveRoute()
+        navigationItem.prompt = current.map {
+            $0.connection.title + " · " + $0.model.identifier
+        } ?? V3L("请先选择免费对话模型")
+        let reset = UIAction(title: V3L("使用业务默认模型"),
+                             image: UIImage(systemName: "arrow.uturn.backward"),
+                             state: selectedModelID == nil ? .on : .off) {
+            [weak self] _ in
+            self?.selectedModelID = nil
+            self?.refreshModelPicker()
+        }
+        let available = registry.models.compactMap { model
+            -> (ImpressAIConnection, ImpressAIModel)? in
+            guard let connection = registry.connections.first(where: {
+                $0.id == model.connectionID
+            }), (try? ImpressAIRequestPolicy.validate(
+                ImpressAIResolvedRoute(connection: connection, model: model))) != nil else {
+                return nil
+            }
+            return (connection, model)
+        }.sorted { left, right in
+            (left.0.title, left.1.identifier) < (right.0.title, right.1.identifier)
+        }
+        let actions = available.map { connection, model in
+            UIAction(title: connection.title + " · " + model.identifier,
+                     state: selectedModelID == model.id ? .on : .off) {
+                [weak self] _ in
+                self?.selectedModelID = model.id
+                self?.refreshModelPicker()
+            }
+        }
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: V3L("切换模型"),
+            menu: UIMenu(children: [reset] + actions))
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = V3L("AI 讨论")
+        view.backgroundColor = ImpressV3Appearance.page
+        navigationItem.largeTitleDisplayMode = .never
+
+        tableView.dataSource = self
+        tableView.backgroundColor = .clear
+        tableView.separatorStyle = .none
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 90
+        tableView.keyboardDismissMode = .interactive
+        tableView.accessibilityIdentifier = "impress.ai.chat.transcript"
+
+        privacyLabel.font = ImpressV3Appearance.Typography.caption
+        privacyLabel.adjustsFontForContentSizeCategory = true
+        privacyLabel.numberOfLines = 2
+        privacyLabel.textColor = ImpressV3Appearance.secondaryText
+        privacyLabel.textAlignment = .center
+        privacyLabel.text = V3L("讨论记录仅在本页面保留，不会自动写入 Obsidian。")
+
+        messageInput.font = ImpressV3Appearance.Typography.body
+        messageInput.adjustsFontForContentSizeCategory = true
+        messageInput.textColor = ImpressV3Appearance.primaryText
+        messageInput.backgroundColor = ImpressV3Appearance.surface
+        messageInput.layer.cornerRadius = ImpressV3Appearance.Radius.field
+        messageInput.textContainerInset = UIEdgeInsets(
+            top: ImpressV3Appearance.Metrics.fieldPadding,
+            left: ImpressV3Appearance.Metrics.fieldPadding,
+            bottom: ImpressV3Appearance.Metrics.fieldPadding,
+            right: ImpressV3Appearance.Metrics.fieldPadding)
+        messageInput.delegate = self
+        messageInput.accessibilityLabel = V3L("消息内容")
+        messageInput.accessibilityIdentifier = "impress.ai.chat.input"
+        ImpressSpeechAccessory.install(on: messageInput)
+
+        if #available(iOS 15.0, *) {
+            var config = UIButton.Configuration.filled()
+            config.image = UIImage(systemName: "arrow.up")
+            config.cornerStyle = .capsule
+            config.buttonSize = .large
+            config.baseBackgroundColor = ImpressV3Appearance.accent
+            config.baseForegroundColor = ImpressV3Appearance.primaryButtonText
+            sendButton.configuration = config
+        } else {
+            sendButton.setImage(UIImage(systemName: "arrow.up"), for: .normal)
+        }
+        sendButton.addTarget(self, action: #selector(submitMessage), for: .touchUpInside)
+        sendButton.accessibilityLabel = V3L("发送消息")
+        sendButton.accessibilityIdentifier = "impress.ai.chat.send"
+        sendButton.isEnabled = false
+
+        inputBar.backgroundColor = .clear
+        for element in [tableView, inputBar, privacyLabel] {
+            element.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(element)
+        }
+        for element in [messageInput, sendButton] {
+            element.translatesAutoresizingMaskIntoConstraints = false
+            inputBar.addSubview(element)
+        }
+        NSLayoutConstraint.activate([
+            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            tableView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            tableView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
+            tableView.bottomAnchor.constraint(equalTo: privacyLabel.topAnchor, constant: -6),
+
+            privacyLabel.leadingAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
+            privacyLabel.trailingAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+            privacyLabel.bottomAnchor.constraint(equalTo: inputBar.topAnchor, constant: -6),
+
+            inputBar.leadingAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.leadingAnchor,
+                constant: ImpressV3Appearance.Metrics.screenInset),
+            inputBar.trailingAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.trailingAnchor,
+                constant: -ImpressV3Appearance.Metrics.screenInset),
+            inputBar.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -8),
+            inputBar.heightAnchor.constraint(greaterThanOrEqualToConstant: 52),
+            inputBar.heightAnchor.constraint(lessThanOrEqualToConstant: 110),
+
+            messageInput.leadingAnchor.constraint(equalTo: inputBar.leadingAnchor),
+            messageInput.topAnchor.constraint(equalTo: inputBar.topAnchor),
+            messageInput.bottomAnchor.constraint(equalTo: inputBar.bottomAnchor),
+            sendButton.leadingAnchor.constraint(equalTo: messageInput.trailingAnchor, constant: 8),
+            sendButton.trailingAnchor.constraint(equalTo: inputBar.trailingAnchor),
+            sendButton.centerYAnchor.constraint(equalTo: messageInput.centerYAnchor),
+            sendButton.widthAnchor.constraint(equalToConstant: 48),
+            sendButton.heightAnchor.constraint(equalToConstant: 48),
+            messageInput.heightAnchor.constraint(greaterThanOrEqualToConstant: 52)
+        ])
+        Task { await restoreLocalSession() }
+    }
+
+    func textViewDidChange(_ textView: UITextView) {
+        let content = textView.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        sendButton.isEnabled = !sending && !restoring && !content.isEmpty &&
+            content.utf8.count <= 12_000
+        guard !restoring else { return }
+        draftDebounce?.cancel()
+        draftDebounce = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(750))
+            guard !Task.isCancelled else { return }
+            self?.enqueuePersistence()
+        }
+    }
+
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        history.count
+    }
+
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath)
+        -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "turn")
+            ?? UITableViewCell(style: .subtitle, reuseIdentifier: "turn")
+        let turn = history[indexPath.row]
+        var content = UIListContentConfiguration.subtitleCell()
+        content.text = turn.role == .user ? V3L("我") : V3L("AI")
+        content.secondaryText = turn.status == .failed
+            ? turn.text + "\n" + V3L("发送未完成 · 可重新尝试")
+            : turn.text
+        content.textProperties.font = ImpressV3Appearance.Typography.caption
+        content.textProperties.color = ImpressV3Appearance.secondaryText
+        content.secondaryTextProperties.font = ImpressV3Appearance.Typography.body
+        content.secondaryTextProperties.color = ImpressV3Appearance.primaryText
+        content.secondaryTextProperties.numberOfLines = 0
+        cell.contentConfiguration = content
+        cell.backgroundColor = turn.role == .user
+            ? ImpressV3Appearance.reviewActionSurface : ImpressV3Appearance.surface
+        cell.selectionStyle = .none
+        return cell
+    }
+
+    private enum ChatFlowError: LocalizedError {
+        case localSaveFailed, sourceChanged
+        var errorDescription: String? {
+            switch self {
+            case .localSaveFailed:
+                return V3L("本地聊天保存失败，未向模型发送。")
+            case .sourceChanged:
+                return V3L("卡片内容已更新。请返回卡片后重新进入讨论，避免使用过期答案。")
+            }
+        }
+    }
+
+    @objc private func submitMessage() {
+        let text = messageInput.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, text.utf8.count <= 12_000,
+              !sending, !restoring else { return }
+        let route: ImpressAIResolvedRoute
+        do { route = try liveRoute() }
+        catch {
+            let explanation: String
+            switch error as? ImpressAIContractError {
+            case .missingCredential:
+                explanation = V3L("所选对话模型尚未保存 API Key，请打开该连接填写密钥。")
+            case .disabled:
+                explanation = V3L("所选模型或连接已停用，请重新选择有效模型。")
+            case .freeModelQAOnly:
+                explanation = V3L("当前连接属于 OpenCode 免费 QA，请选择此连接允许的模型。")
+            default:
+                explanation = V3L("请先在「设置 → AI 服务 → 业务默认模型」选择可用的对话模型。")
+            }
+            let alert = UIAlertController(title: V3L("无法使用当前对话模型"),
+                message: explanation, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            alert.addAction(UIAlertAction(title: V3L("打开 AI 服务"),
+                style: .default) { [weak self] _ in
+                    self?.navigationController?.pushViewController(
+                        ImpressAISettingsViewController(), animated: true)
+                })
+            present(alert, animated: true)
+            return
+        }
+
+        if let previous = activeProviderID, previous != route.connection.id,
+           history.contains(where: { $0.status == .completed }) {
+            let warning = UIAlertController(
+                title: V3L("切换 AI 服务商"),
+                message: V3L("此次请求会把近期对话材料发送给新服务商，是否同意？"),
+                preferredStyle: .alert)
+            warning.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            warning.addAction(UIAlertAction(title: V3L("同意并发送"),
+                                            style: .default) { [weak self] _ in
+                self?.chooseSourceContext(text, route: route)
+            })
+            present(warning, animated: true)
+            return
+        }
+        chooseSourceContext(text, route: route)
+    }
+
+    private func chooseSourceContext(_ text: String,
+                                     route: ImpressAIResolvedRoute) {
+        if !contextChoiceMade, let question = sourceQuestion, !question.isEmpty {
+            let confirm = UIAlertController(title: V3L("是否附带当前卡片？"),
+                message: V3L("只有你确认后，本次讨论才会将卡片问题与参考答案一起发送给所选的 API 服务商。"),
+                preferredStyle: .alert)
+            confirm.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            confirm.addAction(UIAlertAction(title: V3L("仅发送输入内容"),
+                                            style: .default) { [weak self] _ in
+                guard let self else { return }
+                contextChoiceMade = true
+                includeCardContext = false
+                contextReferences = []
+                performSend(text, route: route)
+            })
+            confirm.addAction(UIAlertAction(title: V3L("附带当前卡片"),
+                                            style: .default) { [weak self] _ in
+                guard let self else { return }
+                contextChoiceMade = true
+                includeCardContext = true
+                if let identity = sourceIdentity {
+                    contextReferences = [WCDBV3ChatContextReference(
+                        stableIdentity: identity,
+                        sourceRevision: String(sourceContentRevision ?? -1),
+                        excerpt: question + "\n" + (sourceAnswer ?? ""))]
+                }
+                performSend(text, route: route)
+            })
+            present(confirm, animated: true)
+        } else {
+            performSend(text, route: route)
+        }
+    }
+
+    private func performSend(_ message: String, route: ImpressAIResolvedRoute) {
+        guard !sending, !restoring else { return }
+        draftDebounce?.cancel()
+        sending = true
+        let prompt = ImpressAIChatPromptSelection.systemText()
+        let providerID = route.connection.id
+        let modelName = route.model.identifier
+        var system = prompt
+        if includeCardContext, let question = sourceQuestion, !question.isEmpty {
+            system += "\n" + V3L("当前卡片的问题：") + question
+            if let answer = sourceAnswer, !answer.isEmpty {
+                system += "\n" + V3L("当前卡片的参考答案：") + answer
+            }
+        }
+        let messageID = UUID()
+        history.append(WCDBV3ChatMessage(
+            messageID: messageID, role: .user, text: message,
+            status: .pending, providerID: providerID,
+            modelIdentifier: modelName, promptSnapshot: prompt))
+        messageInput.text = ""
+        privacyLabel.text = V3L("正在请求模型…")
+        sendButton.isEnabled = false
+        reloadAndScroll()
+
+        let priorSave = saveChain
+        Task {
+            await priorSave?.value
+            do {
+                // The current card can change while this controller is open.
+                // Never transmit or grade using a stale identity/revision.
+                if let id = sourceCardID, let revision = sourceContentRevision {
+                    let store = try chatRepository ?? injectedRepository ??
+                        ImpressV3ReviewEnvironment.repository()
+                    guard let card = try await store.content(for: id),
+                          card.contentRevision == revision else {
+                        throw ChatFlowError.sourceChanged
+                    }
+                }
+                guard await persistLocal() else { throw ChatFlowError.localSaveFailed }
+                let earlier = history.filter {
+                    $0.messageID != messageID && $0.status == .completed
+                }.suffix(16)
+                let safeWindow = earlier.drop(while: { $0.role != .user })
+                var turns = safeWindow.map { saved in
+                    ImpressAIChatTurn(
+                        role: saved.role == .user ? .user : .assistant,
+                        text: saved.text)
+                }
+                turns.append(ImpressAIChatTurn(role: .user, text: message))
+                let reply = try await ImpressAIHTTPClient.shared.converse(
+                    route: route, system: system, turns: turns)
+                if let index = history.firstIndex(where: { $0.messageID == messageID }) {
+                    history[index].status = .completed
+                }
+                history.append(WCDBV3ChatMessage(
+                    role: .assistant, text: reply, status: .completed,
+                    providerID: providerID, modelIdentifier: modelName,
+                    promptSnapshot: prompt))
+                activeProviderID = providerID
+                requestFailure = nil
+                privacyLabel.text = V3L("对话已保存至本机；更新内容仍需预览确认。")
+            } catch {
+                if let index = history.firstIndex(where: { $0.messageID == messageID }) {
+                    history[index].status = .failed
+                }
+                requestFailure = error.localizedDescription
+                if messageInput.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    messageInput.text = message
+                }
+                privacyLabel.text = V3L("请求失败，输入内容已保留。")
+                showProblem(error)
+            }
+            enqueuePersistence()
+            await saveChain?.value
+            sending = false
+            textViewDidChange(messageInput)
+            reloadAndScroll()
+        }
+    }
+
+    private func restoreLocalSession() async {
+        guard let identity = sourceIdentity else {
+            textViewDidChange(messageInput)
+            return
+        }
+        restoring = true
+        defer {
+            restoring = false
+            textViewDidChange(messageInput)
+        }
+        do {
+            let repo = try injectedRepository ?? ImpressV3ReviewEnvironment.repository()
+            chatRepository = repo
+            let sessions = try await repo.chatSessions(for: identity)
+            if let latest = sessions.first {
+                storedSession = latest
+                history = latest.messages
+                for index in history.indices where history[index].status == .pending {
+                    // A killed/interrupted network request is not replayed.
+                    history[index].status = .failed
+                }
+                messageInput.text = latest.inputDraft
+                contextReferences = latest.contextReferences
+                requestFailure = latest.requestError
+                // Consent to source revision X must not silently authorize
+                // revision X+1 after the card was edited in another screen.
+                let approved = contextReferences.first(where: {
+                    $0.stableIdentity == identity
+                })
+                let stillCurrent = approved?.sourceRevision ==
+                    String(sourceContentRevision ?? -1)
+                includeCardContext = approved != nil && stillCurrent
+                contextChoiceMade = includeCardContext
+                if approved != nil && !stillCurrent {
+                    privacyLabel.text = V3L("来源内容有更新；下次发送前请重新确认引用范围。")
+                }
+                activeProviderID = history.reversed().compactMap(\.providerID).first
+                // Retain the session's last model choice when still configured,
+                // without rewriting the global conversation default.
+                if let latestModel = history.reversed().first(where: {
+                    $0.modelIdentifier != nil && $0.providerID != nil
+                }), let provider = latestModel.providerID,
+                   let name = latestModel.modelIdentifier {
+                    let registry = ImpressAIConfigStore.shared.registry
+                    selectedModelID = registry.models.first(where: { model in
+                        model.identifier == name &&
+                        registry.connections.contains(where: {
+                            $0.id == model.connectionID && $0.id == provider
+                        })
+                    })?.id
+                    refreshModelPicker()
+                }
+                reloadAndScroll()
+                if history != latest.messages { enqueuePersistence() }
+            }
+        } catch {
+            privacyLabel.text = V3L("本地聊天恢复失败。请保留当前页面，不要覆盖历史。")
+        }
+    }
+
+    private func enqueuePersistence() {
+        guard sourceIdentity != nil, chatRepository != nil else { return }
+        let previous = saveChain
+        saveChain = Task { [self] in
+            await previous?.value
+            _ = await persistLocal()
+        }
+    }
+
+    /// Serial actor-backed CAS. This persists all local turns, not just the
+    /// bounded suffix supplied to the remote model.
+    private func persistLocal() async -> Bool {
+        guard let identity = sourceIdentity, let repository = chatRepository else {
+            return sourceIdentity == nil
+        }
+        let base = storedSession ?? WCDBV3ChatSession(sourceIdentity: identity)
+        if storedSession != nil && base.messages == history &&
+           base.inputDraft == messageInput.text &&
+           base.contextReferences == contextReferences &&
+           base.requestError == requestFailure { return true }
+        var next = base
+        next.messages = history
+        next.inputDraft = messageInput.text ?? ""
+        next.contextReferences = contextReferences
+        next.requestError = requestFailure
+        next.updatedAt = Date()
+        next.revision = storedSession == nil ? 0 : base.revision + 1
+        do {
+            try await repository.saveChatSession(
+                next, expectedRevision: storedSession?.revision)
+            storedSession = next
+            return true
+        } catch {
+            privacyLabel.text = V3L("本地聊天保存失败。未能确认草稿或对话已保存。")
+            return false
+        }
+    }
+
+    private func showProblem(_ error: Error) {
+        let alert = UIAlertController(title: V3L("AI 对话失败"),
+            message: error.localizedDescription, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+        if presentedViewController == nil { present(alert, animated: true) }
+    }
+
+    private func reloadAndScroll() {
+        tableView.reloadData()
+        if !history.isEmpty {
+            tableView.scrollToRow(at: IndexPath(row: history.count - 1, section: 0),
+                                  at: .bottom, animated: false)
+        }
+    }
+}

@@ -1,0 +1,141 @@
+name: Impress AI API and Question Pool CI
+
+on:
+  push:
+    branches:
+      - feature/impress-vault-device-write-qa
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: impress-ai-v1-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ai-swift-core:
+    name: AI contracts and V3 regression (Swift)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Existing public privacy guards
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check_git_history_secrets.py
+          python3 .github/scripts/verify_retired_native_chat.py
+          python3 .github/scripts/verify_ios26_floor.py
+          python3 .github/scripts/verify_apple_stt_contract.py
+      - name: Execute all portable Swift tests
+        run: swift test --package-path Packages/ImpressReviewCore --parallel
+
+  ai-ios-build:
+    name: iOS 26 native UI build and XCTest
+    runs-on: xcode-27
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare QA-only missing-icon workaround
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          xcodebuild -version | tee out/xcode-version.txt
+          python3 .github/scripts/verify_retired_native_chat.py
+          python3 .github/scripts/verify_apple_stt_contract.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path("aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json")
+          spec=json.loads(p.read_text())
+          master=Path("aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/icon_1024.png")
+          if not master.exists():
+              spec["images"]=[x for x in spec["images"] if x.get("idiom") != "ios-marketing"]
+              p.write_text(json.dumps(spec, indent=2) + "\n")
+              print("QA_ONLY_MISSING_ICON: final release still blocked")
+          PY
+          python3 .github/scripts/generate_neutral_assets.py > out/qa-assets.json
+      - name: Install pinned pods
+        run: pod install --repo-update
+      - name: Compile UIKit iOS simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace \
+            -scheme aReuImpress-iPhone -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/ImpressAIV1" \
+            IPHONEOS_DEPLOYMENT_TARGET=26.0 CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee out/ai-simulator-build.log
+      - name: Run native XCTest
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available -j > out/simulators.json
+          SIM_ID="$(python3 - <<'PY'
+          import json
+          devices=json.load(open("out/simulators.json"))["devices"]
+          ids=[d["udid"] for k,ds in devices.items() for d in ds if "iOS" in k
+               and d.get("isAvailable") and d.get("name", "").startswith("iPhone")]
+          assert ids
+          print(ids[0])
+          PY
+          )"
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace \
+            -scheme aReuImpress-iPhone -configuration Debug \
+            -destination "platform=iOS Simulator,id=$SIM_ID" \
+            -derivedDataPath "$RUNNER_TEMP/ImpressAIV1" \
+            -resultBundlePath "$GITHUB_WORKSPACE/out/AIv1.xcresult" \
+            -parallel-testing-enabled NO IPHONEOS_DEPLOYMENT_TARGET=26.0 \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" \
+            CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            CODE_SIGN_ENTITLEMENTS="$GITHUB_WORKSPACE/.github/ci/ImpressSimulatorKeychainQA.entitlements" \
+            test 2>&1 | tee out/ai-xctest.log
+      - name: Compile unsigned ARM64 iPhoneOS QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace \
+            -scheme aReuImpress-iPhone-AltStore -configuration Debug \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/ImpressAIPhone" \
+            IPHONEOS_DEPLOYMENT_TARGET=26.0 CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_ENTITLEMENTS= ENABLE_DEBUG_DYLIB=NO \
+            build 2>&1 | tee out/ai-iphoneos-arm64-build.log
+      - name: Package verified QA-only unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/ImpressAIPhone/Build/Products/Debug-iphoneos/aReuImpress-iPhone.app"
+          test -s "$APP/aReuImpress-iPhone"
+          test -s "$APP/Info.plist"
+          lipo -info "$APP/aReuImpress-iPhone" | tee out/architecture.txt
+          grep -q arm64 out/architecture.txt
+          /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Info.plist" > out/min-ios.txt
+          test "$(cat out/min-ios.txt)" = "26.0"
+          test ! -e "$APP/embedded.mobileprovision"
+          if codesign --verify "$APP" >/dev/null 2>&1; then
+            echo 'QA binary unexpectedly signed'; exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/ImpressAIQA/Payload"
+          ditto "$APP" "$RUNNER_TEMP/ImpressAIQA/Payload/aReuImpress-iPhone.app"
+          SHORT="$(git rev-parse --short=12 HEAD)"
+          IPA="Impress-AI-V1-$SHORT-icon-INCOMPLETE-unsigned-QA.ipa"
+          (cd "$RUNNER_TEMP/ImpressAIQA" && zip -qry "$GITHUB_WORKSPACE/out/$IPA" Payload)
+          unzip -tq "out/$IPA" | tee out/qa-ipa-integrity.txt
+          shasum -a 256 "out/$IPA" | tee out/qa-ipa-sha256.txt
+          echo 'QA ONLY: unsigned, original icon absent; not a final signed release.' > out/QA_ONLY_NOT_FINAL.txt
+      - name: Upload QA IPA and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: impress-ai-v1-qa-not-final
+          path: |
+            out/*.txt
+            out/*.json
+            out/*.log
+            out/*.ipa
+          retention-days: 14

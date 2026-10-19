@@ -1,5 +1,36 @@
 # SMOKE_TEST_MATRIX — Impress V3.2 acceptance evidence
 
+## 2026-10-19 redesign A01–A20 evidence
+
+**G2/G3 native verification request:** compile and run the complete iOS 26 native suite for the exact commit that includes the new weekly chart click test, stable-source Chat restore test and localization-key startup guard. Keep original Vault writes disabled; publish a QA IPA only after all required CI stages succeed.
+
+For exact-SHA validation, CI must compile the iOS 26 Simulator target, execute native XCTest, and build an unsigned iPhoneOS ARM64 QA IPA. Separately record pure Swift tests, UIKit tests, real inference, iPhone Keychain, File Provider and production Vault consent. Never mark a device or real API gate from a build alone.
+
+This section is the current navigation/knowledge acceptance contract. **Status is BLOCKED/NOT RUN unless backed by a CI run on the exact code SHA or a recorded device test.** The historical V3.2 results below are regressions only, not current pass evidence. Single authority: [KNOWLEDGE_LIFECYCLE_V1.md](KNOWLEDGE_LIFECYCLE_V1.md). No paid AI calls, real personal Vault tests, merge, or production-write bypass.
+
+| ID | Required current scenario | Evidence target / current state |
+| --- | --- | --- |
+| A01 | Flashcards / Notes / Settings; calibration under Settings, correct tap router | Code + native XCTest submitted; current CI pending |
+| A02 | Current local Monday–Sunday, missing/unfinished/excused/future gap, accessible net-only fixed Y | Core tests submitted; native/iPhone13 layout unverified |
+| A03 | Home + adds 3 card types without restarting queue | Code submitted; native UI unverified |
+| A04 | Edit QA/choices/image, no-op save, independent explanation | Existing editor partly reused; full semantics pending |
+| A05 | Genuine content revision history and restore as new version | Atomic WCDB + native XCTest submitted; CI pending |
+| A06 | Old LearningEntry archive compatibility/migration | Existing journal preserved; migration audit pending |
+| A07 | Edits and rating interleaving, no stale display and no FSRS reset | Partial UI code; concurrency regression pending |
+| A08 | Note search/selection/reader/draft and Markdown fidelity | Existing reader; new workflow pending |
+| A09 | Chat model/prompt selection, provider scope | G3 native model chooser + provider consent code submitted; session prompt editing/native XCTest pending |
+| A10 | Durable context, local Chat history and resume | G3 cardID/revision-bound UI, full local history/draft resume and native test submitted; Notes/selection contexts pending |
+| A11 | Failure, cancel, retries and no-cost fallback | Failed message and unsent draft preserved; no silent paid fallback; native/retry/device verification pending |
+| A12 | Distinguish summarize vs explicit update | Proposal schema; executor pending |
+| A13 | Card → Chat → explicit test note safe diff/write/readback | BLOCKED until fixture executor/device |
+| A14 | Preview cancel/conflict/idempotence | BLOCKED |
+| A15 | Multi-card targets/new-note name conflicts | Not implemented |
+| A16 | Notes/Chat common candidate pool | Existing note flow; Chat integration pending |
+| A17 | Source revision stale prompts | Not implemented |
+| A18 | Added history/Chat/proposals in ZIP and safe restore | Same V3 SQLite + unit tests submitted; full archive test pending |
+| A19 | iPhone 13 / Dynamic Type / light-dark / 3 languages / STT | Simulator/device unverified |
+| A20 | No key leak, no production Vault tests/write, truthful status | Production gate unchanged; independent review required |
+
 ## Current evidence boundary
 The last verified V3.2 baseline is `58987edfe550f9ccd4f7b7168b12c1f83c98b920`, [CI #39093765853](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39093765853): 90/90 native UIKit XCTest, 17/17 portable Swift tests, Simulator and unsigned ARM64 candidate. The new theme, three-language UI, editable understanding and Notes redesign **require fresh CI on their own final HEAD**; no prior run is proof of these new edits. Simulator does not certify iPhone 13.
 
@@ -8,7 +39,7 @@ The last verified V3.2 baseline is `58987edfe550f9ccd4f7b7168b12c1f83c98b920`, [
 | --- | --- |
 | Branch / privacy | Public feature HEAD, no private/main changes, credential and source privacy checks |
 | Core | All `ImpressReviewCore` tests including five-indicator scoring, calendar, mood skip, extras, trends and reminder plan |
-| Navigation | Exactly three tabs ordered 闪卡 / 校准 / 设置, with localized labels and distinct visible 笔记 and 卡片集 right-header actions; Notes pushes the existing read-only Vault list without changing the review session |
+| Navigation | Exactly three tabs ordered 闪卡 / 笔记 / 设置, with Card Collection right header only, + opening the V3 card editor; Daily Calibration is a Settings detail and notification target |
 | Appearance & locale | System/Light/Dark persistent window overrides, System fallback; three independent language modes (zh-Hans, zh-Hant, en), immediate native navigation refresh, no mutation of personal content or persisted reviews |
 | Understanding edit | Detail exposes explicit editor; successful CAS updates answer and appends previous revision to learning journal; invalid/blank/stale edits fail without changing data; ID, question, original AI feedback and FSRS remain stable |
 | Flashcards | Show Answer, four swipes, exactly-one FSRS event, card CRUD/pagination/content CAS and V3 schema upgrade |
