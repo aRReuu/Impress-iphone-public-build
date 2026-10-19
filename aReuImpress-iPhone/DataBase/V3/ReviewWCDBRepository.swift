@@ -344,7 +344,7 @@ public struct WCDBV3ChatSession: Codable, Equatable, Sendable {
     }
 }
 
-public enum WCDBV3ChatStorageError: Error, Equatable {
+public enum WCDBV3ChatStorageError: Swift.Error, Equatable {
     case conflict, invalidRecord, tooLarge
 }
 
