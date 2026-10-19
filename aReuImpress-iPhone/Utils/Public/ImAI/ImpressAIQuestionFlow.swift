@@ -56,6 +56,7 @@ final class ImpressAIQuestionGenerationViewController: UITableViewController {
     private let quantityLabel = UILabel()
     private let stepper = UIStepper()
     private var running = false
+    private var checkedSavedPool = false
 
     init(document: ImVaultRawDocument) {
         self.document = document
@@ -80,6 +81,36 @@ final class ImpressAIQuestionGenerationViewController: UITableViewController {
         quantityLabel.font = ImpressV3Appearance.Typography.body
         quantityLabel.textColor = ImpressV3Appearance.primaryText
         updateCount()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !checkedSavedPool else { return }
+        checkedSavedPool = true
+        do {
+            guard let saved = try ImVaultPrivateStore.loadQuestionPool(
+                identity: document.identity) else { return }
+            guard saved.source.documentSHA256 == document.digest else {
+                let alert = UIAlertController(title: V3L("源笔记已发生变化"),
+                    message: V3L("旧候选池已保留，但来源版本不一致，禁止直接导入。请重新生成问题。"),
+                    preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+                present(alert, animated: true)
+                return
+            }
+            let alert = UIAlertController(title: V3L("恢复未完成的候选池？"),
+                message: "\(saved.candidates.count) \(V3L("道候选题已在本机安全保存；恢复不会修改 Obsidian 或 FSRS。"))",
+                preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: V3L("重新生成"), style: .cancel))
+            alert.addAction(UIAlertAction(title: V3L("恢复候选池"), style: .default) { [weak self] _ in
+                guard let self else { return }
+                let audited = ImpressAIQuestionValidator.audit(saved)
+                self.navigationController?.pushViewController(
+                    ImpressAIQuestionPoolViewController(document: self.document, pool: audited),
+                    animated: true)
+            })
+            present(alert, animated: true)
+        } catch { showFailure(error) }
     }
 
     @objc private func updateCount() {
@@ -191,6 +222,7 @@ final class ImpressAIQuestionGenerationViewController: UITableViewController {
                     requestedCount: Int(stepper.value), modelProfileID: route.model.id,
                     candidates: candidates)
                 let audited = ImpressAIQuestionValidator.audit(pool)
+                try ImVaultPrivateStore.saveQuestionPool(audited)
                 let next = ImpressAIQuestionPoolViewController(document: document, pool: audited)
                 navigationController?.pushViewController(next, animated: true)
             } catch { showFailure(error) }
@@ -224,6 +256,11 @@ final class ImpressAIQuestionPoolViewController: UITableViewController {
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             title: V3L("加入卡片集"), style: .done, target: self, action: #selector(confirmImport))
         updateImportButton()
+    }
+
+    private func persistCandidateEdits() {
+        do { try ImVaultPrivateStore.saveQuestionPool(pool) }
+        catch { showFailure(error) }
     }
 
     private func updateImportButton() {
@@ -273,6 +310,7 @@ final class ImpressAIQuestionPoolViewController: UITableViewController {
                             didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         pool.candidates[indexPath.row].selected.toggle()
+        persistCandidateEdits()
         tableView.reloadRows(at: [indexPath], with: .none)
         updateImportButton()
     }
@@ -290,6 +328,7 @@ final class ImpressAIQuestionPoolViewController: UITableViewController {
             self.pool.candidates[indexPath.row].question = question
             self.pool.candidates[indexPath.row].answer = answer
             self.pool = ImpressAIQuestionValidator.audit(self.pool)
+            self.persistCandidateEdits()
             self.tableView.reloadRows(at: [indexPath], with: .none)
             self.updateImportButton()
         }
@@ -302,6 +341,7 @@ final class ImpressAIQuestionPoolViewController: UITableViewController {
             guard let self else { finish(false); return }
             self.pool.candidates.remove(at: indexPath.row)
             self.pool = ImpressAIQuestionValidator.audit(self.pool)
+            self.persistCandidateEdits()
             self.tableView.deleteRows(at: [indexPath], with: .automatic)
             self.updateImportButton()
             finish(true)
@@ -367,6 +407,9 @@ final class ImpressAIQuestionPoolViewController: UITableViewController {
                     return (input: input, initial: try calc.newCardSnapshot(id: input.cardID, now: now))
                 }
                 try await repo.insertBatchCards(entries, now: now)
+                // WCDB is already committed; cleanup failure must not misreport
+                // the cards as unsaved. Any retained draft is still local only.
+                try? ImVaultPrivateStore.deleteQuestionPool(identity: document.identity)
                 let alert = UIAlertController(title: V3L("卡片已添加"),
                    message: "\(selected.count) \(V3L("张卡片已保存到 V3 卡片集。"))",
                    preferredStyle: .alert)
