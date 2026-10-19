@@ -720,6 +720,8 @@ enum ImpressV3Language: String, CaseIterable {
     private static let translations: [String: (traditional: String, english: String)] = [
         "闪卡": ("閃卡", "Flashcards"),
         "本周校准": ("本週校準", "This Week"),
+        "切换模型": ("切換模型", "Choose Model"),
+        "使用业务默认模型": ("使用業務預設模型", "Use Default Model"),
         "来源内容有更新；下次发送前请重新确认引用范围。": ("來源內容已有更新；下次傳送前請重新確認引用範圍。", "The source changed. Review the context before sending again."),
 
         "发送未完成 · 可重新尝试": ("傳送未完成 · 可重新嘗試", "Send interrupted · Retry"),
