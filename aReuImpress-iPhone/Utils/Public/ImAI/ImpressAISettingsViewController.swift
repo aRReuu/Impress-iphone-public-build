@@ -401,39 +401,7 @@ final class ImpressAIConnectionEditor: UITableViewController {
             guard let url = URL(string: value) else { self?.showError(ImpressAIServiceError.invalidURL); return }
             self?.edit { $0.baseURL = url }
         }
-        case 3: editText(title: "API Key", secure: true, value: "") { [weak self] value in
-            guard let self else { return }
-            do {
-                guard let current = self.connection else { throw ImpressAIServiceError.configuration }
-                let id = current.credentialID ?? UUID()
-                try ImpressAIKeychain.write(value, id: id)
-                do { try ImpressAIConfigStore.shared.update { reg in
-                    guard let index = reg.connections.firstIndex(where: { $0.id == self.connectionID }) else {
-                        throw ImpressAIServiceError.configuration
-                    }
-                    reg.connections[index].credentialID = id
-                    // An explicit Keychain key on the previously anonymous
-                    // free QA preset switches auth to Bearer, without ever
-                    // enabling paid model IDs or changing the API endpoint.
-                    if reg.connections[index].provider == .openCode &&
-                       reg.connections[index].baseURL == ImpressAIOpenCodeFreeQA.baseURL &&
-                       reg.connections[index].effectiveAuthentication == .noAuthentication {
-                        reg.connections[index].authentication = .bearer
-                    }
-                    // Rotating or replacing a key requires another safe
-                    // model capability probe before private document upload.
-                    for i in reg.models.indices
-                        where reg.models[i].connectionID == self.connectionID {
-                        reg.models[i].jsonVerified = false
-                        reg.models[i].toolsVerified = false
-                    }
-                } } catch {
-                    if current.credentialID == nil { ImpressAIKeychain.delete(id: id) }
-                    throw error
-                }
-                self.tableView.reloadData()
-            } catch { self.showError(error) }
-        }
+        case 3: editKeychainCredential()
         case 4: chooseAuthentication()
         case 5: editText(title: V3L("自定义 Header 名称"), secure: false,
                          value: connection?.customHeaderName ?? "") { [weak self] value in
@@ -446,6 +414,77 @@ final class ImpressAIConnectionEditor: UITableViewController {
         default: break
         }
     }
+    private func editKeychainCredential() {
+        guard let current = connection else { return }
+        guard current.credentialID != nil else {
+            promptForNewKey()
+            return
+        }
+        let sheet = UIAlertController(title: "API Key", message: nil, preferredStyle: .actionSheet)
+        sheet.addAction(UIAlertAction(title: V3L("更新 API Key"), style: .default) {
+            [weak self] _ in self?.promptForNewKey()
+        })
+        sheet.addAction(UIAlertAction(title: V3L("删除已保存 API Key"), style: .destructive) {
+            [weak self] _ in self?.confirmRemoveKey()
+        })
+        sheet.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        sheet.popoverPresentationController?.sourceView = tableView
+        sheet.popoverPresentationController?.sourceRect = tableView.bounds
+        present(sheet, animated: true)
+    }
+
+    private func confirmRemoveKey() {
+        let alert = UIAlertController(title: V3L("删除已保存 API Key？"),
+            message: V3L("只移除当前连接的本机密钥并撤销模型验证状态，不会删除现有卡片或笔记。"),
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("删除"), style: .destructive) { [weak self] _ in
+            guard let self else { return }
+            do {
+                try ImpressAIConfigStore.shared.clearCredential(connectionID: self.connectionID)
+                self.tableView.reloadData()
+            } catch { self.showError(error) }
+        })
+        present(alert, animated: true)
+    }
+
+    private func promptForNewKey() {
+        editText(title: "API Key", secure: true, value: "") { [weak self] value in
+            guard let self else { return }
+            do {
+                guard let current = self.connection else { throw ImpressAIServiceError.configuration }
+                let id = current.credentialID ?? UUID()
+                // Roll back the previous Keychain value if persisting the
+                // connection metadata fails. Never log or serialize raw tokens.
+                let oldValue = try? ImpressAIKeychain.read(id: current.credentialID)
+                try ImpressAIKeychain.write(value, id: id)
+                do {
+                    try ImpressAIConfigStore.shared.update { reg in
+                        guard let index = reg.connections.firstIndex(where: { $0.id == self.connectionID })
+                        else { throw ImpressAIServiceError.configuration }
+                        reg.connections[index].credentialID = id
+                        if ImpressAIOpenCodeFreeQA.isQAProfile(reg.connections[index]) {
+                            reg.connections[index].freeQAOnly = true
+                            reg.connections[index].authentication = .bearer
+                        }
+                        for i in reg.models.indices where reg.models[i].connectionID == self.connectionID {
+                            reg.models[i].jsonVerified = false
+                            reg.models[i].toolsVerified = false
+                        }
+                    }
+                } catch {
+                    if let oldValue {
+                        try? ImpressAIKeychain.write(oldValue, id: id)
+                    } else {
+                        ImpressAIKeychain.delete(id: id)
+                    }
+                    throw error
+                }
+                self.tableView.reloadData()
+            } catch { self.showError(error) }
+        }
+    }
+
     private func edit(_ modify: (inout ImpressAIConnection) -> Void) {
         do {
             try ImpressAIConfigStore.shared.update { reg in
