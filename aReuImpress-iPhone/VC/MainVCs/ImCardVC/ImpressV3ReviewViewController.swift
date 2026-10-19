@@ -29,7 +29,6 @@ final class ImpressV3ReviewViewController: UIViewController {
     private let answerTools = UIStackView()
     private let contentHistoryAction = UIButton(type: .system)
     private let statusLabel = UILabel()
-    private let calibrationWeek = ImpressV3WeeklyCalibrationOverview()
     private let completionLabel = UILabel()
     private let repeatButton = UIButton(type: .system)
     private let busyIndicator = UIActivityIndicatorView(style: .medium)
@@ -49,17 +48,6 @@ final class ImpressV3ReviewViewController: UIViewController {
         view.backgroundColor = ImpressV3Appearance.page
         setupNativeLayout()
         setupNavigation()
-        // The entire weekly coordinate surface is a hit target, not only dots.
-        calibrationWeek.accessibilityIdentifier = "impress.review.calibration-week"
-        calibrationWeek.addTarget(self, action: #selector(openCalibrationDetail),
-                                  for: .touchUpInside)
-        for name in [ImpressCalibrationLocalStore.didChange,
-                     .NSCalendarDayChanged,
-                     UIApplication.significantTimeChangeNotification] {
-            NotificationCenter.default.addObserver(self, selector: #selector(updateCalibrationWeek),
-                                                   name: name, object: nil)
-        }
-        updateCalibrationWeek()
         cardStack.numberOfVisibleCards = 3
         cardStack.protectsVerticalContentScroll = true
         // V3 tap is inert. Only explicit controls can create/edit a card.
@@ -72,36 +60,12 @@ final class ImpressV3ReviewViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         refreshLocalizedReview()
-        updateCalibrationWeek()
         if needsReloadAfterCollection && pending == nil {
             needsReloadAfterCollection = false
             reloadSession()
         } else if hasLoaded && pending == nil {
             setRatingGesturesEnabled(canRateCurrentCard)
         }
-    }
-
-    deinit { NotificationCenter.default.removeObserver(self) }
-
-    /// Refreshes only the tiny overview, NEVER the review queue.
-    @objc private func updateCalibrationWeek() {
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                let records = try await ImpressCalibrationLocalStore.shared.trendRecords()
-                let week = try CalibrationScoreCore.mondayWeekTrend(
-                    records, now: Date(), calendar: Calendar.current)
-                self.calibrationWeek.configure(week)
-            } catch {
-                self.calibrationWeek.configure([])
-            }
-        }
-    }
-
-    @objc private func openCalibrationDetail() {
-        guard navigationController?.topViewController === self else { return }
-        navigationController?.pushViewController(
-            ImpressCalibrationViewController(), animated: true)
     }
 
     /// Re-label the existing controls without recreating a live FSRS session.
@@ -146,7 +110,6 @@ final class ImpressV3ReviewViewController: UIViewController {
         answerTools.translatesAutoresizingMaskIntoConstraints = false
         contentHistoryAction.translatesAutoresizingMaskIntoConstraints = false
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        calibrationWeek.translatesAutoresizingMaskIntoConstraints = false
         answerTools.axis = .horizontal
         answerTools.distribution = .fillEqually
         answerTools.spacing = ImpressV3Appearance.Metrics.rowSpacing
@@ -216,7 +179,6 @@ final class ImpressV3ReviewViewController: UIViewController {
         repeatButton.isHidden = true
 
         view.addSubview(statusLabel)
-        view.addSubview(calibrationWeek)
         view.addSubview(cardStack)
         view.addSubview(revealButton)
         view.addSubview(answerTools)
@@ -228,13 +190,7 @@ final class ImpressV3ReviewViewController: UIViewController {
             statusLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
             statusLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             statusLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            calibrationWeek.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 2),
-            calibrationWeek.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor,
-                                                      constant: ImpressV3Appearance.Metrics.compactInset),
-            calibrationWeek.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor,
-                                                       constant: -ImpressV3Appearance.Metrics.compactInset),
-            calibrationWeek.heightAnchor.constraint(equalToConstant: ImpressV3Appearance.Metrics.calibrationWeekHeight),
-            cardStack.topAnchor.constraint(equalTo: calibrationWeek.bottomAnchor, constant: 8),
+            cardStack.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 8),
             cardStack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
             cardStack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
             cardStack.bottomAnchor.constraint(equalTo: contentHistoryAction.topAnchor, constant: -4),
@@ -493,7 +449,9 @@ final class ImpressV3ReviewViewController: UIViewController {
                     guard let newValue = try await repo.content(for: item.cardID) else {
                         throw ReviewWCDBError.missingCard
                     }
-                    try await self.refreshEditedCard(newValue, reviewItem: item)
+                    if newValue.contentRevision != stored.contentRevision {
+                        try await self.refreshEditedCard(newValue, reviewItem: item)
+                    } // No-op saves retain answer reveal and the live FSRS phase.
                 }
                 let navigation = ImNavigationViewController(rootViewController: editor)
                 navigation.modalPresentationStyle = .pageSheet

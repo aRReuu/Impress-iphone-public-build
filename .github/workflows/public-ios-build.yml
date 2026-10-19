@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature/impress-duplex-loop-v1
     paths-ignore:
       - '**/*.md'
   workflow_dispatch:
@@ -12,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: impress-public-build-main
+  group: impress-public-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -36,7 +37,8 @@ jobs:
               if f.startswith(("Docs/", "docs/", "Pods/"))
               or "/xcuserdata/" in f or f.endswith((".xcuserstate", ".p12", ".mobileprovision", ".pem", ".p8"))
               or f.endswith("grandmother.jpg")
-              or (f.endswith((".png", ".jpg")) and "/Resources/" in f)
+              or (f.endswith((".png", ".jpg")) and "/Resources/" in f
+                  and not f.startswith("aReuImpress-iPhone/Resources/Assets.xcassets/AppIcon.appiconset/"))
           ]
           if disallowed:
               raise SystemExit("Forbidden published paths: " + repr(disallowed))
@@ -65,7 +67,7 @@ jobs:
 
   ios-native:
     name: macOS Xcode iOS XCTest and unsigned IPA
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4

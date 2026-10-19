@@ -1,3 +1,17 @@
+// A local-only filter shared by model catalogs and task selection.
+private enum ImpressAIModelSearchFilter {
+    static func apply(_ models: [ImpressAIModel], query: String) -> [ImpressAIModel] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return models }
+        let connections = ImpressAIConfigStore.shared.registry.connections
+        return models.filter { model in
+            model.identifier.localizedStandardContains(needle) ||
+            connections.first(where: { $0.id == model.connectionID })?
+                .title.localizedStandardContains(needle) == true
+        }
+    }
+}
+
 import UIKit
 import ImpressReviewCore
 
@@ -225,96 +239,18 @@ final class ImpressAISettingsViewController: UITableViewController {
         // Presets are convenience only. "Custom API" always accepts arbitrary
         // HTTPS providers and manual model IDs. Gateways may offer mixed wire
         // protocols and retain independent user API keys.
-        // Explicit one-tap free setup, no API key and no billable models.
-        // Users may separately configure paid profiles for a future release,
-        // but this QA build refuses inference through them.
-        sheet.addAction(UIAlertAction(
-            title: V3L("OpenCode 免费模型（测试）"), style: .default
-        ) { [weak self] _ in
-            guard let self else { return }
-            let preset = ImpressAIOpenCodeFreeQA.connection()
-            var selectedID = preset.id
-            do {
-                try ImpressAIConfigStore.shared.update { registry in
-                    // Reuse an existing free-QA profile and its device Keychain ID.
-                    // A second tap must not create duplicate providers or erase a key.
-                    if let old = registry.connections.first(where: {
-                        $0.title == preset.title && $0.provider == .openCode &&
-                        $0.baseURL == preset.baseURL
-                    }) {
-                        selectedID = old.id
-                        if let index = registry.connections.firstIndex(where: { $0.id == old.id }) {
-                            registry.connections[index].apiProtocol = .chatCompletions
-                            registry.connections[index].endpoints = ImpressAIOpenCodeFreeQA.endpoints
-                            registry.connections[index].freeQAOnly = true
-                        }
-                    } else {
-                        registry.connections.append(preset)
-                    }
-                    // Keep only the currently approved Free model IDs in this
-                    // QA profile. Do not touch any custom/other-provider profile.
-                    let retiredIDs = Set(registry.models.filter {
-                        $0.connectionID == selectedID &&
-                        !ImpressAIOpenCodeFreeQA.allowedForCatalog($0.identifier)
-                    }.map(\.id))
-                    registry.models.removeAll { retiredIDs.contains($0.id) }
-                    registry.routes.removeAll {
-                        retiredIDs.contains($0.primaryModelID) ||
-                        ($0.fallbackModelID.map(retiredIDs.contains) ?? false)
-                    }
-                    for fresh in ImpressAIOpenCodeFreeQA.models(for: selectedID) {
-                        if let index = registry.models.firstIndex(where: {
-                            $0.connectionID == selectedID &&
-                            $0.identifier == fresh.identifier
-                        }) {
-                            if registry.models[index].jsonMode != .promptOnly ||
-                               registry.models[index].protocolOverride != nil {
-                                registry.models[index].jsonVerified = false
-                                registry.models[index].toolsVerified = false
-                            }
-                            registry.models[index].jsonMode = .promptOnly
-                            registry.models[index].protocolOverride = nil
-                        } else {
-                            registry.models.append(fresh)
-                        }
-                    }
-                    guard let primary = registry.models.first(where: {
-                        $0.connectionID == selectedID &&
-                        $0.identifier == ImpressAIOpenCodeFreeQA.preferredModelID
-                    }) else { throw ImpressAIServiceError.configuration }
-                    // Adding a QA profile must NEVER replace a user-selected
-                    // GLM / custom default. Only seed a missing task selection.
-                    for task in [ImpressAITask.questionGeneration, .conversation]
-                        where !registry.routes.contains(where: { $0.task == task }) {
-                        registry.routes.append(ImpressAIRoute(
-                            task: task, primaryModelID: primary.id))
-                    }
-                }
-                self.navigationController?.pushViewController(
-                    ImpressAIModelsViewController(connectionID: selectedID),
-                    animated: true)
-            } catch { self.showFailure(error) }
-        })
-
         let presets: [(String, ImpressAIProvider, ImpressAIProtocol, String)] = [
-            ("OpenAI (GPT)", .openAI, .responses, "https://api.openai.com/v1"),
-            ("DeepSeek", .deepSeek, .chatCompletions, "https://api.deepseek.com"),
             ("Claude", .anthropic, .anthropicMessages, "https://api.anthropic.com/v1"),
+            ("OpenAI", .openAI, .responses, "https://api.openai.com/v1"),
             ("Gemini", .gemini, .geminiGenerateContent, "https://generativelanguage.googleapis.com/v1beta"),
-            ("智谱 GLM (国内)", .zhipu, .chatCompletions, "https://open.bigmodel.cn/api/paas/v4"),
-            ("GLM / Z.AI (国际)", .zhipu, .chatCompletions, "https://api.z.ai/api/paas/v4"),
-            ("Command Code", .commandCode, .chatCompletions, "https://api.commandcode.ai/provider/v1"),
-            ("OpenCode Console", .openCode, .chatCompletions, "https://opencode.ai/inference"),
-            ("OpenCode Go", .openCode, .chatCompletions, "https://opencode.ai/zen/go/v1"),
+            ("DeepSeek", .deepSeek, .chatCompletions, "https://api.deepseek.com"),
             (V3L("自定义 API"), .custom, .chatCompletions, "https://api.example.com/v1")
         ]
         for (label, provider, wire, url) in presets {
             sheet.addAction(UIAlertAction(title: label, style: .default) { [weak self] _ in
                 guard let self, let endpoint = URL(string: url) else { return }
                 let profile = ImpressAIConnection(title: label, provider: provider,
-                    apiProtocol: wire, baseURL: endpoint,
-                    endpoints: provider == .openCode && label == "OpenCode Console"
-                        ? ImpressAIOpenCodeFreeQA.endpoints : nil)
+                    apiProtocol: wire, baseURL: endpoint)
                 do {
                     try ImpressAIConfigStore.shared.update { $0.connections.append(profile) }
                     self.navigationController?.pushViewController(
@@ -622,7 +558,8 @@ final class ImpressAIConnectionEditor: UITableViewController {
 }
 
 @MainActor
-final class ImpressAIModelsViewController: UITableViewController {
+final class ImpressAIModelsViewController: UITableViewController, UISearchResultsUpdating {
+    private let modelSearch = UISearchController(searchResultsController: nil)
     private let connectionID: UUID
     init(connectionID: UUID) { self.connectionID = connectionID; super.init(style: .insetGrouped) }
     required init?(coder: NSCoder) { fatalError("init(coder:)") }
@@ -632,10 +569,22 @@ final class ImpressAIModelsViewController: UITableViewController {
     private var models: [ImpressAIModel] {
         ImpressAIConfigStore.shared.registry.models.filter { $0.connectionID == connectionID }
     }
+    private var visibleModels: [ImpressAIModel] {
+        ImpressAIModelSearchFilter.apply(models, query: modelSearch.searchBar.text ?? "")
+    }
+    func updateSearchResults(for searchController: UISearchController) {
+        refreshEmptyState()
+        tableView.reloadData()
+    }
     override func viewDidLoad() {
         super.viewDidLoad()
         title = V3L("模型列表")
         tableView.backgroundColor = ImpressV3Appearance.page
+        modelSearch.searchResultsUpdater = self
+        modelSearch.searchBar.placeholder = V3L("搜索模型 ID 或服务商")
+        modelSearch.obscuresBackgroundDuringPresentation = false
+        navigationItem.searchController = modelSearch
+        definesPresentationContext = true
         navigationItem.rightBarButtonItems = [
             UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addManual)),
             UIBarButtonItem(image: UIImage(systemName: "arrow.clockwise"), style: .plain,
@@ -650,19 +599,21 @@ final class ImpressAIModelsViewController: UITableViewController {
 
     private func refreshEmptyState() {
         let empty = UILabel()
-        empty.text = V3L("尚无模型。点击右上角 + 手动输入模型 ID，或点击刷新尝试获取目录。")
+        empty.text = models.isEmpty
+            ? V3L("尚无模型。点击右上角 + 手动输入模型 ID，或点击刷新尝试获取目录。")
+            : V3L("没有匹配的模型（仅搜索已取得的列表）。")
         empty.textColor = ImpressV3Appearance.secondaryText
         empty.font = ImpressV3Appearance.Typography.body
         empty.textAlignment = .center
         empty.numberOfLines = 0
-        tableView.backgroundView = models.isEmpty ? empty : nil
+        tableView.backgroundView = visibleModels.isEmpty ? empty : nil
     }
 
     override func numberOfSections(in tableView: UITableView) -> Int { 1 }
-    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { models.count }
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { visibleModels.count }
     override func tableView(_ tableView: UITableView,
                             cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let m = models[indexPath.row]
+        let m = visibleModels[indexPath.row]
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
         var ui = UIListContentConfiguration.subtitleCell()
         ui.text = m.identifier
@@ -678,7 +629,7 @@ final class ImpressAIModelsViewController: UITableViewController {
     }
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        let model = models[indexPath.row]
+        let model = visibleModels[indexPath.row]
         let qaOnly = connection.map(ImpressAIOpenCodeFreeQA.isQAProfile) ?? false
         let a = UIAlertController(title: model.identifier, message: nil, preferredStyle: .actionSheet)
         a.addAction(UIAlertAction(title: qaOnly ? V3L("测试免费对话") : V3L("测试对话连接"),
@@ -1036,17 +987,28 @@ final class ImpressAIModelsViewController: UITableViewController {
 }
 
 @MainActor
-final class ImpressAIModelChooser: UITableViewController {
+final class ImpressAIModelChooser: UITableViewController, UISearchResultsUpdating {
+    private let modelSearch = UISearchController(searchResultsController: nil)
     private let task: ImpressAITask
     init(task: ImpressAITask) { self.task = task; super.init(style: .insetGrouped) }
     required init?(coder: NSCoder) { fatalError("init(coder:)") }
     private var models: [ImpressAIModel] {
-        ImpressAIConfigStore.shared.registry.selectableModels(for: task)
+        ImpressAIModelSearchFilter.apply(
+            ImpressAIConfigStore.shared.registry.selectableModels(for: task),
+            query: modelSearch.searchBar.text ?? "")
+    }
+    func updateSearchResults(for searchController: UISearchController) {
+        tableView.reloadData()
     }
     override func viewDidLoad() {
         super.viewDidLoad()
         title = V3L("选择业务模型")
         tableView.backgroundColor = ImpressV3Appearance.page
+        modelSearch.searchResultsUpdater = self
+        modelSearch.searchBar.placeholder = V3L("搜索模型 ID 或服务商")
+        modelSearch.obscuresBackgroundDuringPresentation = false
+        navigationItem.searchController = modelSearch
+        definesPresentationContext = true
     }
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
@@ -1061,9 +1023,11 @@ final class ImpressAIModelChooser: UITableViewController {
         if models.isEmpty {
             let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
             var empty = UIListContentConfiguration.subtitleCell()
-            empty.text = task == .knowledgeSynthesis
-                ? V3L("知识重构功能尚未启用")
-                : V3L("暂无可选择的业务模型")
+            empty.text = !(modelSearch.searchBar.text ?? "").isEmpty
+                ? V3L("没有匹配的业务模型")
+                : (task == .knowledgeSynthesis
+                    ? V3L("知识重构功能尚未启用")
+                    : V3L("暂无可选择的业务模型"))
             empty.secondaryText = task == .knowledgeSynthesis
                 ? V3L("该业务需独立完成安全验收")
                 : V3L("返回 AI 服务，先添加连接和模型，然后重新选择。")
