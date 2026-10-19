@@ -1385,7 +1385,7 @@ final class ImpressV3TimelineNodeCell: UITableViewCell {
 @MainActor
 final class ImpressV3SettingsHubViewController: UITableViewController {
     private enum Destination {
-        case aiService, promptLibrary, reminders, appearance, language, speech, backup
+        case aiService, promptLibrary, reminders, calibration, appearance, language, speech, backup
     }
     private struct Item {
         let title: String
@@ -1401,6 +1401,8 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
                  symbol: "text.book.closed", destination: .promptLibrary)
         ]),
         ("学习节奏", [
+            Item(title: "每日校准", detail: "五项评估、历史走势与提醒",
+                 symbol: "chart.xyaxis.line", destination: .calibration),
             Item(title: "复习通知", detail: "关闭、到期提醒或每日习惯提醒",
                  symbol: "bell", destination: .reminders)
         ]),
@@ -1498,6 +1500,9 @@ final class ImpressV3SettingsHubViewController: UITableViewController {
         case .reminders:
             navigationController?.pushViewController(
                 ImpressV3ReminderSettingsController(), animated: true)
+        case .calibration:
+            navigationController?.pushViewController(
+                ImpressCalibrationViewController(), animated: true)
         case .appearance:
             navigationController?.pushViewController(
                 ImpressV3AppearanceSettingsViewController(), animated: true)
