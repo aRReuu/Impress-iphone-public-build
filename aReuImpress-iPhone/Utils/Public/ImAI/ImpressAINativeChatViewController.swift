@@ -28,6 +28,15 @@ final class ImpressAINativeChatViewController: UIViewController,
 
     required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        if let selected = try? ImpressAIConfigStore.shared.registry.resolve(.conversation) {
+            navigationItem.prompt = selected.connection.title + " · " + selected.model.identifier
+        } else {
+            navigationItem.prompt = V3L("请先选择免费对话模型")
+        }
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         title = V3L("AI 讨论")
@@ -195,7 +204,10 @@ final class ImpressAINativeChatViewController: UIViewController,
     private func performSend(_ message: String, route: ImpressAIResolvedRoute) {
         guard !sending else { return }
         let snapshot = history
-        let newHistory = Array((history + [ImpressAIChatTurn(role: .user, text: message)]).suffix(18))
+        // Preserve complete user/assistant pairs when the context window fills.
+        // An arbitrary suffix could start with an assistant turn.
+        var newHistory = history.count >= 18 ? Array(history.suffix(16)) : history
+        newHistory.append(ImpressAIChatTurn(role: .user, text: message))
         sending = true
         messageInput.text = ""
         sendButton.isEnabled = false
