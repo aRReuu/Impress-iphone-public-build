@@ -137,6 +137,50 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertTrue(history.isEmpty)
     }
 
+    func testChatSessionReopensDraftAndPreservesHistoryInV3Backup() async throws {
+        let path = temporaryPath()
+        let calculator = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(databasePath: path, calculator: calculator)
+        let source = "card:" + UUID().uuidString
+        let created = Date(timeIntervalSince1970: 1_720_000_000)
+        var session = WCDBV3ChatSession(sourceIdentity: source, createdAt: created)
+        session.messages = [
+            WCDBV3ChatMessage(role: .user, text: "What are the boundaries?",
+                              status: .completed, createdAt: created),
+            WCDBV3ChatMessage(role: .assistant, text: "Here is a draft...",
+                              status: .completed, createdAt: created)
+        ]
+        try await repo.saveChatSession(session, expectedRevision: nil)
+        let initial = try await repo.chatSessions(for: source)
+        XCTAssertEqual(initial, [session])
+        session.inputDraft = "Please shorten the example"
+        session.revision += 1
+        session.updatedAt = created.addingTimeInterval(10)
+        try await repo.saveChatSession(session, expectedRevision: 0)
+        try await repo.saveChatSession(session, expectedRevision: 0) // exact retry
+        let stored = try await repo.chatSessions(for: source)
+        XCTAssertEqual(stored.count, 1)
+        XCTAssertEqual(stored.first?.inputDraft, "Please shorten the example")
+        XCTAssertEqual(stored.first?.messages.count, 2)
+        var outdated = session
+        outdated.inputDraft = "stale overwrite"
+        outdated.revision += 1
+        do {
+            try await repo.saveChatSession(outdated, expectedRevision: 0)
+            XCTFail("A stale chat editor must not overwrite a newer saved draft")
+        } catch WCDBV3ChatStorageError.conflict { }
+
+        let archive = URL(fileURLWithPath: path).deletingLastPathComponent()
+            .appendingPathComponent("chat-backup.sqlite")
+        try await repo.createConsistentBackup(to: archive)
+        let restored = try ReviewWCDBRepository(databasePath: archive.path,
+                                                calculator: calculator)
+        let recovered = try await restored.chatSessions(for: source)
+        XCTAssertEqual(recovered, [session])
+        let other = try await restored.chatSessions(for: "card:" + UUID().uuidString)
+        XCTAssertTrue(other.isEmpty)
+    }
+
     func testCardContentHistoryIsAtomicNoOpAndRestoresWithoutRescoring() async throws {
         let path = temporaryPath()
         let calculator = FSRS6ReviewCalculator()
