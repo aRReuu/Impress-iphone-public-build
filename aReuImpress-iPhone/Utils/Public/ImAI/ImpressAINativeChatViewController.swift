@@ -225,98 +225,257 @@ final class ImpressAINativeChatViewController: UIViewController,
         return cell
     }
 
+    private enum ChatFlowError: LocalizedError {
+        case localSaveFailed, sourceChanged
+        var errorDescription: String? {
+            switch self {
+            case .localSaveFailed:
+                return V3L("本地聊天保存失败，未向模型发送。")
+            case .sourceChanged:
+                return V3L("卡片内容已更新。请返回卡片后重新进入讨论，避免使用过期答案。")
+            }
+        }
+    }
+
     @objc private func submitMessage() {
         let text = messageInput.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, text.utf8.count <= 12_000, !sending else { return }
-
+        guard !text.isEmpty, text.utf8.count <= 12_000,
+              !sending, !restoring else { return }
         let route: ImpressAIResolvedRoute
         do { route = try ImpressAIConfigStore.shared.registry.resolve(.conversation) }
         catch {
-            let message: String
+            let explanation: String
             switch error as? ImpressAIContractError {
             case .missingCredential:
-                message = V3L("所选对话模型尚未保存 API Key，请打开该连接填写密钥。")
+                explanation = V3L("所选对话模型尚未保存 API Key，请打开该连接填写密钥。")
             case .disabled:
-                message = V3L("所选模型或连接已停用，请重新选择有效模型。")
+                explanation = V3L("所选模型或连接已停用，请重新选择有效模型。")
             case .freeModelQAOnly:
-                message = V3L("当前连接属于 OpenCode 免费 QA，请选择此连接允许的模型。")
+                explanation = V3L("当前连接属于 OpenCode 免费 QA，请选择此连接允许的模型。")
             default:
-                message = V3L("请先在「设置 → AI 服务 → 业务默认模型」选择可用的对话模型。")
+                explanation = V3L("请先在「设置 → AI 服务 → 业务默认模型」选择可用的对话模型。")
             }
             let alert = UIAlertController(title: V3L("无法使用当前对话模型"),
-                message: message,
-                preferredStyle: .alert)
+                message: explanation, preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
-            alert.addAction(UIAlertAction(title: V3L("打开 AI 服务"), style: .default) { [weak self] _ in
-                self?.navigationController?.pushViewController(
-                    ImpressAISettingsViewController(), animated: true)
-            })
+            alert.addAction(UIAlertAction(title: V3L("打开 AI 服务"),
+                style: .default) { [weak self] _ in
+                    self?.navigationController?.pushViewController(
+                        ImpressAISettingsViewController(), animated: true)
+                })
             present(alert, animated: true)
             return
         }
 
-        if !contextChoiceMade, let question = sourceQuestion, !question.isEmpty {
-            let alert = UIAlertController(title: V3L("是否附带当前卡片？"),
-                message: V3L("只有你确认后，本次讨论才会将卡片问题与参考答案一起发送给所选的 API 服务商。"),
+        if let previous = activeProviderID, previous != route.connection.id,
+           history.contains(where: { $0.status == .completed }) {
+            let warning = UIAlertController(
+                title: V3L("切换 AI 服务商"),
+                message: V3L("此次请求会把近期对话材料发送给新服务商，是否同意？"),
                 preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
-            alert.addAction(UIAlertAction(title: V3L("仅发送输入内容"), style: .default) { [weak self] _ in
-                self?.contextChoiceMade = true
-                self?.includeCardContext = false
-                self?.performSend(text, route: route)
+            warning.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            warning.addAction(UIAlertAction(title: V3L("同意并发送"),
+                                            style: .default) { [weak self] _ in
+                self?.chooseSourceContext(text, route: route)
             })
-            alert.addAction(UIAlertAction(title: V3L("附带当前卡片"), style: .default) { [weak self] _ in
-                self?.contextChoiceMade = true
-                self?.includeCardContext = true
-                self?.performSend(text, route: route)
-            })
-            present(alert, animated: true)
+            present(warning, animated: true)
             return
         }
-        performSend(text, route: route)
+        chooseSourceContext(text, route: route)
+    }
+
+    private func chooseSourceContext(_ text: String,
+                                     route: ImpressAIResolvedRoute) {
+        if !contextChoiceMade, let question = sourceQuestion, !question.isEmpty {
+            let confirm = UIAlertController(title: V3L("是否附带当前卡片？"),
+                message: V3L("只有你确认后，本次讨论才会将卡片问题与参考答案一起发送给所选的 API 服务商。"),
+                preferredStyle: .alert)
+            confirm.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            confirm.addAction(UIAlertAction(title: V3L("仅发送输入内容"),
+                                            style: .default) { [weak self] _ in
+                guard let self else { return }
+                contextChoiceMade = true
+                includeCardContext = false
+                contextReferences = []
+                performSend(text, route: route)
+            })
+            confirm.addAction(UIAlertAction(title: V3L("附带当前卡片"),
+                                            style: .default) { [weak self] _ in
+                guard let self else { return }
+                contextChoiceMade = true
+                includeCardContext = true
+                if let identity = sourceIdentity {
+                    contextReferences = [WCDBV3ChatContextReference(
+                        stableIdentity: identity,
+                        sourceRevision: String(sourceContentRevision ?? -1),
+                        excerpt: question + "\n" + (sourceAnswer ?? ""))]
+                }
+                performSend(text, route: route)
+            })
+            present(confirm, animated: true)
+        } else {
+            performSend(text, route: route)
+        }
     }
 
     private func performSend(_ message: String, route: ImpressAIResolvedRoute) {
-        guard !sending else { return }
-        let snapshot = history
-        // Preserve complete user/assistant pairs when the context window fills.
-        // An arbitrary suffix could start with an assistant turn.
-        var newHistory = history.count >= 18 ? Array(history.suffix(16)) : history
-        newHistory.append(ImpressAIChatTurn(role: .user, text: message))
+        guard !sending, !restoring else { return }
+        draftDebounce?.cancel()
         sending = true
-        messageInput.text = ""
-        sendButton.isEnabled = false
-        privacyLabel.text = V3L("正在请求模型…")
-        history = newHistory
-        reloadAndScroll()
-
-        var system = ImpressAIChatPromptSelection.systemText()
+        let prompt = ImpressAIChatPromptSelection.systemText()
+        let providerID = route.connection.id
+        let modelName = route.model.identifier
+        var system = prompt
         if includeCardContext, let question = sourceQuestion, !question.isEmpty {
             system += "\n" + V3L("当前卡片的问题：") + question
             if let answer = sourceAnswer, !answer.isEmpty {
                 system += "\n" + V3L("当前卡片的参考答案：") + answer
             }
         }
+        let messageID = UUID()
+        history.append(WCDBV3ChatMessage(
+            messageID: messageID, role: .user, text: message,
+            status: .pending, providerID: providerID,
+            modelIdentifier: modelName, promptSnapshot: prompt))
+        messageInput.text = ""
+        privacyLabel.text = V3L("正在请求模型…")
+        sendButton.isEnabled = false
+        reloadAndScroll()
+
+        let priorSave = saveChain
         Task {
+            await priorSave?.value
             do {
+                // The current card can change while this controller is open.
+                // Never transmit or grade using a stale identity/revision.
+                if let id = sourceCardID, let revision = sourceContentRevision {
+                    let store = try chatRepository ?? injectedRepository ??
+                        ImpressV3ReviewEnvironment.repository()
+                    guard let card = try await store.content(for: id),
+                          card.contentRevision == revision else {
+                        throw ChatFlowError.sourceChanged
+                    }
+                }
+                guard await persistLocal() else { throw ChatFlowError.localSaveFailed }
+                let earlier = history.filter {
+                    $0.messageID != messageID && $0.status == .completed
+                }.suffix(16)
+                let safeWindow = earlier.drop(while: { $0.role != .user })
+                var turns = safeWindow.map { saved in
+                    ImpressAIChatTurn(
+                        role: saved.role == .user ? .user : .assistant,
+                        text: saved.text)
+                }
+                turns.append(ImpressAIChatTurn(role: .user, text: message))
                 let reply = try await ImpressAIHTTPClient.shared.converse(
-                    route: route, system: system, turns: newHistory)
-                history.append(ImpressAIChatTurn(role: .assistant, text: reply))
-                if history.count > 18 { history = Array(history.suffix(18)) }
-                privacyLabel.text = V3L("讨论记录仅在本页面保留，不会自动写入 Obsidian。")
+                    route: route, system: system, turns: turns)
+                if let index = history.firstIndex(where: { $0.messageID == messageID }) {
+                    history[index].status = .completed
+                }
+                history.append(WCDBV3ChatMessage(
+                    role: .assistant, text: reply, status: .completed,
+                    providerID: providerID, modelIdentifier: modelName,
+                    promptSnapshot: prompt))
+                activeProviderID = providerID
+                requestFailure = nil
+                privacyLabel.text = V3L("对话已保存至本机；更新内容仍需预览确认。")
             } catch {
-                history = snapshot
-                messageInput.text = message
+                if let index = history.firstIndex(where: { $0.messageID == messageID }) {
+                    history[index].status = .failed
+                }
+                requestFailure = error.localizedDescription
+                if messageInput.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    messageInput.text = message
+                }
                 privacyLabel.text = V3L("请求失败，输入内容已保留。")
-                let alert = UIAlertController(title: V3L("AI 对话失败"),
-                    message: error.localizedDescription, preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
-                present(alert, animated: true)
+                showProblem(error)
             }
+            enqueuePersistence()
+            await saveChain?.value
             sending = false
             textViewDidChange(messageInput)
             reloadAndScroll()
         }
+    }
+
+    private func restoreLocalSession() async {
+        guard let identity = sourceIdentity else {
+            textViewDidChange(messageInput)
+            return
+        }
+        restoring = true
+        defer {
+            restoring = false
+            textViewDidChange(messageInput)
+        }
+        do {
+            let repo = try injectedRepository ?? ImpressV3ReviewEnvironment.repository()
+            chatRepository = repo
+            let sessions = try await repo.chatSessions(for: identity)
+            if let latest = sessions.first {
+                storedSession = latest
+                history = latest.messages
+                for index in history.indices where history[index].status == .pending {
+                    // A killed/interrupted network request is not replayed.
+                    history[index].status = .failed
+                }
+                messageInput.text = latest.inputDraft
+                contextReferences = latest.contextReferences
+                requestFailure = latest.requestError
+                includeCardContext = !contextReferences.isEmpty
+                contextChoiceMade = includeCardContext
+                activeProviderID = history.reversed().compactMap(\.providerID).first
+                reloadAndScroll()
+                if history != latest.messages { enqueuePersistence() }
+            }
+        } catch {
+            privacyLabel.text = V3L("本地聊天恢复失败。请保留当前页面，不要覆盖历史。")
+        }
+    }
+
+    private func enqueuePersistence() {
+        guard sourceIdentity != nil, chatRepository != nil else { return }
+        let previous = saveChain
+        saveChain = Task { [self] in
+            await previous?.value
+            _ = await persistLocal()
+        }
+    }
+
+    /// Serial actor-backed CAS. This persists all local turns, not just the
+    /// bounded suffix supplied to the remote model.
+    private func persistLocal() async -> Bool {
+        guard let identity = sourceIdentity, let repository = chatRepository else {
+            return sourceIdentity == nil
+        }
+        let base = storedSession ?? WCDBV3ChatSession(sourceIdentity: identity)
+        if storedSession != nil && base.messages == history &&
+           base.inputDraft == messageInput.text &&
+           base.contextReferences == contextReferences &&
+           base.requestError == requestFailure { return true }
+        var next = base
+        next.messages = history
+        next.inputDraft = messageInput.text ?? ""
+        next.contextReferences = contextReferences
+        next.requestError = requestFailure
+        next.updatedAt = Date()
+        next.revision = storedSession == nil ? 0 : base.revision + 1
+        do {
+            try await repository.saveChatSession(
+                next, expectedRevision: storedSession?.revision)
+            storedSession = next
+            return true
+        } catch {
+            privacyLabel.text = V3L("本地聊天保存失败。未能确认草稿或对话已保存。")
+            return false
+        }
+    }
+
+    private func showProblem(_ error: Error) {
+        let alert = UIAlertController(title: V3L("AI 对话失败"),
+            message: error.localizedDescription, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+        if presentedViewController == nil { present(alert, animated: true) }
     }
 
     private func reloadAndScroll() {
