@@ -1673,3 +1673,116 @@ final class ImpressAICustomAPIUITests: XCTestCase {
         XCTAssertNil(try ImVaultPrivateStore.loadQuestionPool(identity: identity))
     }
 }
+
+
+// In-process transport fixture: no OpenCode request, account credit or
+// privately authored Markdown is sent while exercising these native paths.
+private final class ImpressAIMockURLProtocol: URLProtocol {
+    private static let fixtureLock = NSLock()
+    private static var fixtureCode: Int = 200
+    private static var fixtureBody: Data =
+        Data(#"{"choices":[{"message":{"role":"assistant","content":"OK"}}]}"#.utf8)
+
+    static func respond(status: Int, json: String) {
+        fixtureLock.lock()
+        defer { fixtureLock.unlock() }
+        fixtureCode = status
+        fixtureBody = Data(json.utf8)
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == "opencode.ai"
+    }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.fixtureLock.lock()
+        let status = Self.fixtureCode
+        let data = Self.fixtureBody
+        Self.fixtureLock.unlock()
+        guard let url = request.url,
+              let http = HTTPURLResponse(url: url, statusCode: status,
+                                         httpVersion: "HTTP/1.1",
+                                         headerFields: ["Content-Type": "application/json"])
+        else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        client?.urlProtocol(self, didReceive: http, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+@MainActor
+final class ImpressAITransportAndCredentialTests: XCTestCase {
+    private func mockClient() -> ImpressAIHTTPClient {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ImpressAIMockURLProtocol.self]
+        return ImpressAIHTTPClient(session: URLSession(configuration: config))
+    }
+
+    private func freeRoute() -> ImpressAIResolvedRoute {
+        let connection = ImpressAIOpenCodeFreeQA.connection()
+        let model = ImpressAIOpenCodeFreeQA.models(for: connection.id)[0]
+        return ImpressAIResolvedRoute(connection: connection, model: model)
+    }
+
+    func testFreeMultiTurnTextResponseWithoutLiveNetwork() async throws {
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"choices":[{"message":{"content":"Model reply","role":"assistant"}}]}"#)
+        let result = try await mockClient().converseDetailed(
+            route: freeRoute(), system: "Test fixture only.",
+            turns: [
+                ImpressAIChatTurn(role: .user, text: "ping"),
+                ImpressAIChatTurn(role: .assistant, text: "OK"),
+                ImpressAIChatTurn(role: .user, text: "second ping")
+            ])
+        XCTAssertEqual(result.statusCode, 200)
+        XCTAssertEqual(result.text, "Model reply")
+    }
+
+    func testProviderHTTPFailuresRemainDistinctWithoutLiveNetwork() async {
+        let client = mockClient()
+        for status in [401, 403, 404, 429] {
+            ImpressAIMockURLProtocol.respond(status: status, json:
+                #"{"error":{"message":"mock refusal"}}"#)
+            do {
+                _ = try await client.converse(route: freeRoute(), system: "Fixture.",
+                    turns: [ImpressAIChatTurn(role: .user, text: "ping")])
+                XCTFail("HTTP \(status) should not become a successful response")
+            } catch ImpressAIServiceError.unauthorized where status == 401 {
+            } catch ImpressAIServiceError.forbidden where status == 403 {
+            } catch ImpressAIServiceError.status(let code) where status == 404 && code == 404 {
+            } catch ImpressAIServiceError.rateLimited where status == 429 {
+            } catch {
+                XCTFail("Unexpected error for HTTP \(status): \(type(of: error))")
+            }
+        }
+    }
+
+    func testHTTP200WithoutVisibleReplyFailsClosed() async {
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"choices":[{"message":{"reasoning_content":"private","content":null}}]}"#)
+        do {
+            _ = try await mockClient().converse(route: freeRoute(), system: "Fixture.",
+                turns: [ImpressAIChatTurn(role: .user, text: "ping")])
+            XCTFail("Reasoning-only reply must not be accepted")
+        } catch ImpressAIServiceError.response {
+        } catch {
+            XCTFail("Unexpected empty-reply error: \(type(of: error))")
+        }
+    }
+
+    func testCredentialStoreSupportsRotationAndDeletionWithoutLoggingSecrets() throws {
+        let id = UUID()
+        defer { ImpressAIKeychain.delete(id: id) }
+        XCTAssertThrowsError(try ImpressAIKeychain.read(id: id))
+        try ImpressAIKeychain.write("fixture-only-key-one", id: id)
+        XCTAssertEqual(try ImpressAIKeychain.read(id: id), "fixture-only-key-one")
+        try ImpressAIKeychain.write("fixture-only-key-two", id: id)
+        XCTAssertEqual(try ImpressAIKeychain.read(id: id), "fixture-only-key-two")
+        ImpressAIKeychain.delete(id: id)
+        XCTAssertThrowsError(try ImpressAIKeychain.read(id: id))
+    }
+}
