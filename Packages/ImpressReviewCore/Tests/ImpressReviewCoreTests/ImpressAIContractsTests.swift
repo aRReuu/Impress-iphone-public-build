@@ -415,3 +415,113 @@ extension ImpressAIContractsTests {
         XCTAssertNoThrow(try verifiedRegistry.resolve(.questionGeneration))
     }
 }
+
+extension ImpressAIContractsTests {
+    func testGLMNormalProviderRoutesChatAndVerifiedQuestionGeneration() throws {
+        let connection = ImpressAIConnection(title: "GLM China", provider: .zhipu,
+            apiProtocol: .chatCompletions,
+            baseURL: URL(string: "https://open.bigmodel.cn/api/paas/v4")!,
+            credentialID: UUID())
+        let model = ImpressAIModel(connectionID: connection.id, identifier: "glm-4.5-flash",
+                                   jsonVerified: true)
+        var reg = try ImpressAIRegistry(connections: [connection], models: [model])
+        XCTAssertEqual(reg.selectableModels(for: .conversation).map(\.id), [model.id])
+        try reg.setDefaultModel(model.id, for: .conversation)
+        try reg.setDefaultModel(model.id, for: .questionGeneration)
+        XCTAssertEqual(try reg.resolve(.conversation).connection.provider, .zhipu)
+        XCTAssertEqual(try reg.resolve(.questionGeneration).model.identifier, "glm-4.5-flash")
+        XCTAssertNoThrow(try ImpressAIRequestPolicy.validate(
+            ImpressAIResolvedRoute(connection: connection, model: model)))
+    }
+
+    func testQAIsExplicitAndNeverBlocksGenericOpenCodeOrZAI() throws {
+        let qa = ImpressAIOpenCodeFreeQA.connection()
+        XCTAssertEqual(qa.freeQAOnly, true)
+        let unauthorized = ImpressAIModel(connectionID: qa.id, identifier: "arbitrary-paid-model")
+        XCTAssertThrowsError(try ImpressAIRequestPolicy.validate(
+            ImpressAIResolvedRoute(connection: qa, model: unauthorized)))
+
+        let independent = ImpressAIConnection(title: "OpenCode Console",
+            provider: .openCode, apiProtocol: .chatCompletions,
+            baseURL: ImpressAIOpenCodeFreeQA.baseURL, credentialID: UUID(),
+            endpoints: ImpressAIOpenCodeFreeQA.endpoints)
+        XCTAssertFalse(ImpressAIOpenCodeFreeQA.isQAProfile(independent))
+        XCTAssertNoThrow(try ImpressAIRequestPolicy.validate(
+            ImpressAIResolvedRoute(connection: independent,
+                model: ImpressAIModel(connectionID: independent.id, identifier: "custom-user-model"))))
+
+        let international = ImpressAIConnection(title: "Z.AI", provider: .zhipu,
+            apiProtocol: .chatCompletions,
+            baseURL: URL(string: "https://api.z.ai/api/paas/v4")!, credentialID: UUID())
+        XCTAssertNoThrow(try ImpressAIRequestPolicy.validate(
+            ImpressAIResolvedRoute(connection: international,
+                model: ImpressAIModel(connectionID: international.id, identifier: "glm-4.7"))))
+    }
+
+    func testLegacyFreeQAProfileDecodesWithoutExplicitFlagAndCannotEscapeViaRename() throws {
+        let qa = ImpressAIOpenCodeFreeQA.connection()
+        let encoded = try JSONEncoder().encode(qa)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        object.removeValue(forKey: "freeQAOnly")
+        let previous = try JSONDecoder().decode(ImpressAIConnection.self,
+            from: JSONSerialization.data(withJSONObject: object))
+        XCTAssertTrue(ImpressAIOpenCodeFreeQA.isQAProfile(previous))
+        var renamed = qa
+        renamed.title = "My QA alias"
+        XCTAssertTrue(ImpressAIOpenCodeFreeQA.isQAProfile(renamed))
+        XCTAssertThrowsError(try ImpressAIRequestPolicy.validate(
+            ImpressAIResolvedRoute(connection: renamed,
+                model: ImpressAIModel(connectionID: renamed.id, identifier: "not-on-free-list"))))
+    }
+
+    func testDeleteAllProvidersAndCascadeOrphansWhileRetainingValidPrimary() throws {
+        let a = ImpressAIConnection(title: "GLM", provider: .zhipu,
+            apiProtocol: .chatCompletions, baseURL: safeURL, credentialID: UUID())
+        let b = ImpressAIConnection(title: "Another provider", provider: .custom,
+            apiProtocol: .chatCompletions, baseURL: safeURL, credentialID: UUID())
+        let m1 = ImpressAIModel(connectionID: a.id, identifier: "glm")
+        let m2 = ImpressAIModel(connectionID: b.id, identifier: "another")
+        var reg = try ImpressAIRegistry(connections: [a,b], models: [m1,m2],
+            routes: [
+                ImpressAIRoute(task: .conversation, primaryModelID: m1.id,
+                    fallbackModelID: m2.id, crossProviderAuthorized: true),
+                ImpressAIRoute(task: .questionGeneration, primaryModelID: m2.id)
+            ])
+        try reg.removeConnection(b.id)
+        XCTAssertEqual(reg.routes.count, 1)
+        XCTAssertEqual(reg.routes.first?.primaryModelID, m1.id)
+        XCTAssertNil(reg.routes.first?.fallbackModelID)
+        try reg.removeConnection(a.id)
+        XCTAssertTrue(reg.connections.isEmpty)
+        XCTAssertTrue(reg.models.isEmpty)
+        XCTAssertTrue(reg.routes.isEmpty)
+        try reg.removeAllConnections()
+        XCTAssertNoThrow(try reg.validate())
+    }
+
+    func testRemovingModelRemovesOnlyItsDependentRoute() throws {
+        let c = ImpressAIConnection(title: "GLM", provider: .zhipu,
+            apiProtocol: .chatCompletions, baseURL: safeURL, credentialID: UUID())
+        let a = ImpressAIModel(connectionID: c.id, identifier: "glm-A")
+        let b = ImpressAIModel(connectionID: c.id, identifier: "glm-B")
+        var reg = try ImpressAIRegistry(connections: [c], models: [a,b],
+            routes: [.init(task: .conversation, primaryModelID: a.id),
+                     .init(task: .questionGeneration, primaryModelID: b.id)])
+        try reg.removeModel(a.id)
+        XCTAssertEqual(reg.routes.map(\.task), [.questionGeneration])
+        XCTAssertNoThrow(try reg.validate())
+    }
+
+    func testUnverifiedGLMIsVisibleButPrivateNoteGenerationStillBlocked() throws {
+        let c = ImpressAIConnection(title: "GLM", provider: .zhipu,
+            apiProtocol: .chatCompletions, baseURL: safeURL, credentialID: UUID())
+        let model = ImpressAIModel(connectionID: c.id, identifier: "glm-4.5-flash")
+        var reg = try ImpressAIRegistry(connections: [c], models: [model])
+        XCTAssertEqual(reg.selectableModels(for: .questionGeneration).count, 1)
+        try reg.setDefaultModel(model.id, for: .questionGeneration)
+        XCTAssertThrowsError(try reg.resolve(.questionGeneration)) {
+            XCTAssertEqual($0 as? ImpressAIContractError, .unverifiedModel)
+        }
+        XCTAssertNoThrow(try reg.setDefaultModel(model.id, for: .conversation))
+    }
+}
