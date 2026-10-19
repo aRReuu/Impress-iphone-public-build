@@ -116,6 +116,27 @@ final class ImpressAIConfigStore {
         try operation(&next)
         try replace(next)
     }
+
+    /// Persist the referential cleanup before deleting the credential. A key
+    /// still referenced by another connection is never removed.
+    func deleteConnection(id: UUID) throws {
+        guard let connection = registry.connections.first(where: { $0.id == id }) else {
+            throw ImpressAIServiceError.configuration
+        }
+        try update { try $0.removeConnection(id) }
+        if let key = connection.credentialID,
+           !registry.connections.contains(where: { $0.credentialID == key }) {
+            ImpressAIKeychain.delete(id: key)
+        }
+    }
+
+    func deleteAllConnections() throws {
+        let keys = Set(registry.connections.compactMap(\.credentialID))
+        try update { try $0.removeAllConnections() }
+        for key in keys {
+            ImpressAIKeychain.delete(id: key)
+        }
+    }
 }
 
 // Disable automatic redirection, which could otherwise forward an Authorization
