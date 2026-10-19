@@ -81,7 +81,7 @@ jobs:
           two_ok=two_code==200 and bool(visible(two_body))
           print("LIVE_MULTITURN model="+model+" HTTP="+str(two_code)+" ok="+str(two_ok))
           question=[{"role":"system","content":"Return only a JSON object with a boolean ok=true."},
-                    {"role":"user","content":"Return exactly: {\\"ok\\":true}"}]
+                    {"role":"user","content":"Return a JSON object with ok equal to true and no other text."}]
           json_code,json_body=post(model,question)
           json_output=visible(json_body)
           try:
