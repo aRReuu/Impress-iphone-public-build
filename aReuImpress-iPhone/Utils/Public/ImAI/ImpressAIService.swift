@@ -18,7 +18,7 @@ enum ImpressAIServiceError: LocalizedError {
         case .forbidden: return V3L("OpenCode 返回 HTTP 403：可能是当前网络、账户权限或访问限制。确认免费定价后，再使用设备 Keychain 中的新 Key 重试。")
         case .rateLimited: return V3L("OpenCode 返回 HTTP 429：免费模型暂时受限，请稍后重试；不会自动切换收费模型。")
         case .status(let code): return "AI API 请求失败（HTTP \(code)），原始数据未改变。"
-        case .response: return V3L("模型响应不符合格式要求，未生成卡片。")
+        case .response: return V3L("模型没有返回可用文本，或回复格式不兼容。请检查模型及协议。")
         case .tooLarge: return V3L("请求或响应超出安全长度限制。")
         case .emptyModelList: return V3L("服务商未返回模型列表，请手动输入模型 ID。")
         }
@@ -283,7 +283,7 @@ actor ImpressAIHTTPClient {
         let cleaned = Array(Set(values)).sorted()
         // OpenCode's model catalog includes paid models. Neither a
         // Keychain-backed nor anonymous QA connection may present them.
-        let filtered = connection.provider == .openCode
+        let filtered = ImpressAIOpenCodeFreeQA.isQAProfile(connection)
             ? cleaned.filter(ImpressAIOpenCodeFreeQA.allowedForCatalog)
             : cleaned
         guard !filtered.isEmpty else { throw ImpressAIServiceError.emptyModelList }
@@ -300,9 +300,9 @@ actor ImpressAIHTTPClient {
                           user: String) async throws -> (text: String, statusCode: Int) {
         // Reject paid model IDs before sending any request, whether anonymous
         // or explicitly authenticated from device Keychain.
-        guard (try? ImpressAIOpenCodeFreeQA.validate(route)) != nil else {
-            throw ImpressAIServiceError.freeModelOnly
-        }
+        // The QA allowlist belongs only to the opt-in QA profile.
+        // GLM, DeepSeek, custom and user-owned providers use their real protocol.
+        try ImpressAIRequestPolicy.validate(route)
         let c = route.connection
         let model = route.model.identifier
         guard system.utf8.count + user.utf8.count <= 65_000 else { throw ImpressAIServiceError.tooLarge }
@@ -389,9 +389,9 @@ actor ImpressAIHTTPClient {
               turns.reduce(0, { $0 + $1.text.utf8.count }) <= 55_000 else {
             throw ImpressAIServiceError.tooLarge
         }
-        guard (try? ImpressAIOpenCodeFreeQA.validate(route)) != nil else {
-            throw ImpressAIServiceError.freeModelOnly
-        }
+        // The QA allowlist belongs only to the opt-in QA profile.
+        // GLM, DeepSeek, custom and user-owned providers use their real protocol.
+        try ImpressAIRequestPolicy.validate(route)
         let connection = route.connection
         let model = route.model.identifier
         let wire = route.effectiveProtocol
