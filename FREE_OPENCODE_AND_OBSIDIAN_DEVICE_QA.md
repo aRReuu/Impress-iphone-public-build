@@ -6,6 +6,8 @@
 > 免费 Chat Completions Endpoint：`https://opencode.ai/inference/openai/v1/chat/completions`。
 > 本 QA 仅允许 OpenCode 官方价格表明确列为 Free、且公开目录可查询的四个型号：`mimo-v2.6-flash-free`、`longcat-2.5-preview-free`、`nemotron-3.5-lightning-free`、`space-bunny-free`。不接受自行输入未知 `-free` ID 来绕过白名单。
 
+**2026-10-19 入口更新：**笔记已成为一级 Tab，测试材料入口为「笔记 → 连接 Obsidian Vault」。完整每日校准在设置内。当前 Free 模型列表只是一份历史 QA 快照；每次真实调用前必须重新核验官方计价与账户费用。新 Chat→测试笔记受控写回仍未通过真实端到端设备验收，**生产门禁保持关闭**。统一规则见 [KNOWLEDGE_LIFECYCLE_V1.md](KNOWLEDGE_LIFECYCLE_V1.md)。
+
 ## A. 连通性与 API Key（无私人笔记）
 
 1. 打开 `设置 → AI 服务 → + → OpenCode 免费模型（测试）`。该入口创建或更新现有免费 QA 连接，不会清除已经授权保存的 Keychain 密钥；默认模型为 `mimo-v2.6-flash-free`，可选其余三个 Free 型号。
@@ -20,7 +22,7 @@
 
 1. 在 iPhone 的「文件」App 中新建 `Impress-Write-Test-Vault`（**必须是独立的可丢弃测试副本**）。
 2. 从本仓库下载 [Impress QA 知识样本](Tests/Fixtures/Obsidian/Impress_QA_Knowledge.md)，复制进该文件夹。不要授权正在使用的私人 Vault，也不要将日常 Vault 改名成测试目录。
-3. 打开 `闪卡 → 笔记 → 连接 Obsidian Vault`，在系统文件选择器中选取测试文件夹，确认可以读取样本且未修改原件。
+3. 打开 `笔记 → 连接 Obsidian Vault`，在系统文件选择器中选取测试文件夹，确认可以读取样本且未修改原件。
 4. 进入样本详情，选择「生成综合问题」、勾选目标章节并将题数设为 5；明确确认 **仅上传该测试资料** 到当前免费模型。出题结果只进入候选池，不会自动入库。
 5. 候选池核对题干、参考答案及证据，编辑或删除无效项。候选池会以原子快照保存到现有 Vault 私有数据目录；关闭应用后，重新打开相同笔记的「生成综合问题」入口可选择恢复。若原笔记 SHA-256 已变化，禁止直接恢复导入，只能重新生成。主动确认后才写入 V3 WCDB 并启动 FSRS；取消或 API 失败不得改变数据库。
 6. 即使免费 Chat 测试成功，仍需另行确认 JSON 探针与出题 Schema。有引用 ID 并不自动证明生成答案的语义正确。
