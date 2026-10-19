@@ -137,6 +137,72 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertTrue(history.isEmpty)
     }
 
+    func testCardContentHistoryIsAtomicNoOpAndRestoresWithoutRescoring() async throws {
+        let path = temporaryPath()
+        let calculator = FSRS6ReviewCalculator()
+        let repository = try ReviewWCDBRepository(databasePath: path, calculator: calculator)
+        let id = UUID()
+        let now = Date(timeIntervalSince1970: 1_720_010_000)
+        let initial = WCDBV3CardInput(cardID: id, question: "What is a boundary?",
+                                       answerText: "A limit", sourceNotePath: "notes/a.md")
+        try await repository.insertNewCard(
+            initial, initial: try calculator.newCardSnapshot(id: id, now: now), now: now)
+        let created = try await repository.contentHistory(for: id)
+        XCTAssertEqual(created.map(\.contentRevision), [0])
+        XCTAssertEqual(created.first?.origin, .manual)
+        _ = try await repository.commit(ReviewSubmission(
+            eventID: UUID(), cardID: id, expectedRevision: 0,
+            rating: .good, reviewedAt: now.addingTimeInterval(1)))
+        let edited = WCDBV3CardInput(cardID: id, question: "What is a boundary?",
+                                      answerText: "A limit with examples",
+                                      sourceNotePath: "notes/a.md")
+        try await repository.updateManagedCard(
+            edited, expectedRevision: 1, expectedContentRevision: 0,
+            now: now.addingTimeInterval(2))
+        // Submitting unchanged content MUST NOT increment content revision.
+        try await repository.updateManagedCard(
+            edited, expectedRevision: 1, expectedContentRevision: 1,
+            now: now.addingTimeInterval(3))
+        XCTAssertEqual(try await repository.content(for: id)?.contentRevision, 1)
+        let versions = try await repository.contentHistory(for: id)
+        XCTAssertEqual(versions.map(\.contentRevision), [0, 1])
+        XCTAssertEqual(versions.map(\.answerText), ["A limit", "A limit with examples"])
+        try await repository.restoreContentVersion(
+            cardID: id, savedRevision: 0, expectedContentRevision: 1,
+            expectedReviewRevision: 1, now: now.addingTimeInterval(4))
+        XCTAssertEqual(try await repository.content(for: id)?.answerText, "A limit")
+        let complete = try await repository.contentHistory(for: id)
+        XCTAssertEqual(complete.map(\.contentRevision), [0, 1, 2])
+        XCTAssertEqual(complete.last?.origin, .restored)
+        XCTAssertEqual(try await repository.reviewHistory(for: id).count, 1)
+        XCTAssertEqual(try await repository.fetchQueueCandidates().first?.revision, 1)
+
+        // The existing SQLite V3 backup automatically captures content history.
+        let archive = URL(fileURLWithPath: path).deletingLastPathComponent()
+            .appendingPathComponent("backup-snapshot.sqlite")
+        try await repository.createConsistentBackup(to: archive)
+        let reopened = try ReviewWCDBRepository(databasePath: archive.path,
+                                                calculator: calculator)
+        XCTAssertEqual(try await reopened.contentHistory(for: id), complete)
+    }
+
+    func testObservedLegacyContentHistoryNeverInventsEarlierAnswers() async throws {
+        let path = temporaryPath()
+        let id = UUID()
+        try ReviewWCDBRepository.seedPreR042FixtureForTesting(at: path, cardID: id)
+        let repository = try ReviewWCDBRepository(
+            databasePath: path, calculator: FSRS6ReviewCalculator())
+        XCTAssertTrue(try await repository.contentHistory(for: id).isEmpty)
+        try await repository.updateManagedCard(
+            WCDBV3CardInput(cardID: id, question: "Observed edit", answerText: "Changed"),
+            expectedRevision: 0, expectedContentRevision: 0)
+        let versions = try await repository.contentHistory(for: id)
+        XCTAssertEqual(versions.map(\.contentRevision), [0, 1])
+        XCTAssertEqual(versions.first?.origin, .observedBaseline)
+        XCTAssertEqual(versions.first?.answerText, "Do not discard")
+        XCTAssertEqual(versions.last?.answerText, "Changed")
+    }
+
     func testConcurrentContentEditorsRejectStaleSaveWithoutChangingFSRS() async throws {
         let calculator = FSRS6ReviewCalculator()
         let repo = try ReviewWCDBRepository(databasePath: temporaryPath(), calculator: calculator)
