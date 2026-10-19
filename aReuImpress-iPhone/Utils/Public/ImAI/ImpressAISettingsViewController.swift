@@ -622,12 +622,15 @@ final class ImpressAIModelsViewController: UITableViewController {
         Task {
             do {
                 // Zero Vault bytes; the only content is this harmless probe.
-                let reply = try await ImpressAIHTTPClient.shared.converse(
+                let result = try await ImpressAIHTTPClient.shared.converseDetailed(
                     route: selected, system: "Respond with only OK.",
                     turns: [ImpressAIChatTurn(role: .user, text: "ping")])
-                guard !reply.isEmpty else { throw ImpressAIServiceError.response }
+                guard !result.text.isEmpty else { throw ImpressAIServiceError.response }
+                let report = connection.title + "\n" + model.identifier +
+                    "\nChat Completions · HTTP " + String(result.statusCode) + "\n" +
+                    V3L("测试成功：已收到模型回复，没有发送私人笔记。")
                 let alert = UIAlertController(title: V3L("免费模型连接成功"),
-                    message: V3L("已收到模型响应；没有发送私人笔记。"),
+                    message: report,
                     preferredStyle: .alert)
                 alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
                 present(alert, animated: true)
