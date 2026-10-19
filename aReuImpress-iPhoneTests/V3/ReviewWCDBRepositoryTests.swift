@@ -38,8 +38,8 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 1_726_000_000)
         var ids: [UUID] = []
         for (index, key) in [oldKey, newKey, foreignKey].enumerated() {
-            let card = WCDBV3CardInput(question: "Unique question \\(index)",
-                answerText: "Answer \\(index)", sourceNotePath: key)
+            let card = WCDBV3CardInput(question: "Unique question \(index)",
+                answerText: "Answer \(index)", sourceNotePath: key)
             ids.append(card.cardID)
             try await repo.insertNewCard(card,
                 initial: try calc.newCardSnapshot(id: card.cardID, now: now),
@@ -47,8 +47,8 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         }
         let related = try await repo.listRelatedCards(for: source)
         let unrelated = try await repo.listRelatedCards(for: other)
-        XCTAssertEqual(Set(related.map(\\.cardID)), Set(ids.prefix(2)))
-        XCTAssertEqual(unrelated.map(\\.cardID), [ids[2]])
+        XCTAssertEqual(Set(related.map(\.cardID)), Set(ids.prefix(2)))
+        XCTAssertEqual(unrelated.map(\.cardID), [ids[2]])
         XCTAssertEqual(try ImpressBatchSourceKey.documentDigest(for: newKey), digest)
         XCTAssertNil(try ImpressBatchSourceKey.documentDigest(for: oldKey))
     }
