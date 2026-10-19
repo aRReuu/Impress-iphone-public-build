@@ -137,6 +137,43 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertTrue(history.isEmpty)
     }
 
+    @MainActor
+    func testNativeChatRestoresStableCardTranscriptAndUnsentDraft() async throws {
+        let repository = try ReviewWCDBRepository(
+            databasePath: temporaryPath(), calculator: FSRS6ReviewCalculator())
+        let cardID = UUID()
+        let identity = "card:" + cardID.uuidString
+        var saved = WCDBV3ChatSession(sourceIdentity: identity)
+        saved.inputDraft = "Unsent boundary question"
+        saved.messages = [
+            WCDBV3ChatMessage(role: .user, text: "First question",
+                              status: .completed),
+            WCDBV3ChatMessage(role: .assistant, text: "First answer",
+                              status: .completed)
+        ]
+        try await repository.saveChatSession(saved, expectedRevision: nil)
+        let chat = ImpressAINativeChatViewController(
+            question: "Q", answer: "A", cardID: cardID,
+            contentRevision: 0, repository: repository)
+        chat.loadViewIfNeeded()
+        let input = try XCTUnwrap(chat.view.subviews.flatMap { [$0] + $0.subviews }
+            .compactMap { $0 as? UITextView }
+            .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.input" }))
+        let transcript = try XCTUnwrap(chat.view.subviews
+            .compactMap { $0 as? UITableView }.first)
+        for _ in 0..<50 where input.text != saved.inputDraft {
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        XCTAssertEqual(input.text, "Unsent boundary question")
+        XCTAssertEqual(transcript.numberOfRows(inSection: 0), 2)
+        // Load is read-only; opening Chat does not trigger model requests
+        // or modify the saved source content / FSRS database.
+        let durable = try await repository.chatSessions(for: identity)
+        XCTAssertEqual(durable.count, 1)
+        XCTAssertEqual(durable.first?.messages.count, 2)
+        XCTAssertEqual(durable.first?.inputDraft, saved.inputDraft)
+    }
+
     func testChatSessionReopensDraftAndPreservesHistoryInV3Backup() async throws {
         let path = temporaryPath()
         let calculator = FSRS6ReviewCalculator()
