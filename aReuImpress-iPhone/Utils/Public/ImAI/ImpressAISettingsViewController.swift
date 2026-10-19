@@ -1002,31 +1002,47 @@ final class ImpressAIModelChooser: UITableViewController {
     init(task: ImpressAITask) { self.task = task; super.init(style: .insetGrouped) }
     required init?(coder: NSCoder) { fatalError("init(coder:)") }
     private var models: [ImpressAIModel] {
-        let registry = ImpressAIConfigStore.shared.registry
-        return registry.models.filter { model in
-            guard let connection = registry.connections.first(where: { $0.id == model.connectionID })
-            else { return false }
-            return (try? ImpressAIOpenCodeFreeQA.validate(
-                ImpressAIResolvedRoute(connection: connection, model: model))) != nil
-        }
+        ImpressAIConfigStore.shared.registry.selectableModels(for: task)
     }
     override func viewDidLoad() {
         super.viewDidLoad()
         title = V3L("选择业务模型")
         tableView.backgroundColor = ImpressV3Appearance.page
     }
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        tableView.reloadData()
+    }
     override func numberOfSections(in tableView: UITableView) -> Int { 1 }
-    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { models.count }
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        max(1, models.count)
+    }
     override func tableView(_ tableView: UITableView,
                             cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        if models.isEmpty {
+            let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+            var empty = UIListContentConfiguration.subtitleCell()
+            empty.text = task == .knowledgeSynthesis
+                ? V3L("知识重构功能尚未启用")
+                : V3L("暂无可选择的业务模型")
+            empty.secondaryText = task == .knowledgeSynthesis
+                ? V3L("该业务需独立完成安全验收")
+                : V3L("返回 AI 服务，先添加连接和模型，然后重新选择。")
+            cell.contentConfiguration = empty
+            cell.accessoryType = .none
+            ImpressV3Appearance.styleGroupedCell(cell)
+            return cell
+        }
         let m = models[indexPath.row]
         let registry = ImpressAIConfigStore.shared.registry
         let c = registry.connections.first { $0.id == m.connectionID }
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
         var ui = UIListContentConfiguration.subtitleCell()
         ui.text = m.identifier
-        ui.secondaryText = (c?.title ?? "") + " · " +
-            (m.jsonVerified ? V3L("JSON 已验证") : V3L("未测试"))
+        let state = task == .conversation
+            ? V3L("对话可选，建议先测试连接")
+            : (m.jsonVerified ? V3L("JSON 已验证") : V3L("JSON 尚未验证，不能上传笔记"))
+        ui.secondaryText = (c?.title ?? "") + " · " + state
         cell.contentConfiguration = ui
         cell.accessoryType = registry.routes.first { $0.task == task }?.primaryModelID == m.id
             ? .checkmark : .none
@@ -1035,19 +1051,11 @@ final class ImpressAIModelChooser: UITableViewController {
     }
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        let m = models[indexPath.row]
-        let registry = ImpressAIConfigStore.shared.registry
-        guard let connection = registry.connections.first(where: { $0.id == m.connectionID }),
-              (try? ImpressAIOpenCodeFreeQA.validate(
-                 ImpressAIResolvedRoute(connection: connection, model: m))) != nil
-        else {
-            let alert = UIAlertController(title: V3L("仅限免费模型测试"),
-                message: V3L("当前 QA 只允许 OpenCode 官方免费型号，推荐选择免费连接进行测试。"),
-                preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
-            present(alert, animated: true)
+        guard !models.isEmpty else {
+            navigationController?.popViewController(animated: true)
             return
         }
+        let m = models[indexPath.row]
         if task == .knowledgeSynthesis && !m.toolsVerified {
             let alert = UIAlertController(title: V3L("该功能尚未开放"),
                    message: V3L("知识重构需要单独的工具调用及 Vault 写回安全验收。"),
@@ -1057,9 +1065,8 @@ final class ImpressAIModelChooser: UITableViewController {
             return
         }
         do {
-            try ImpressAIConfigStore.shared.update { reg in
-                reg.routes.removeAll { $0.task == self.task }
-                reg.routes.append(ImpressAIRoute(task: self.task, primaryModelID: m.id))
+            try ImpressAIConfigStore.shared.update {
+                try $0.setDefaultModel(m.id, for: self.task)
             }
             navigationController?.popViewController(animated: true)
         } catch {
