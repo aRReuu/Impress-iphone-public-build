@@ -1938,6 +1938,7 @@ final class ImpressV3CardVersionHistoryViewController: UITableViewController {
     private let expectedReviewRevision: Int
     private let repository: ReviewWCDBRepository
     private var versions: [WCDBV3ContentVersion] = []
+    private var openedContentRevision: Int?
 
     init(cardID: UUID, expectedReviewRevision: Int, repository: ReviewWCDBRepository) {
         self.cardID = cardID
@@ -1956,7 +1957,11 @@ final class ImpressV3CardVersionHistoryViewController: UITableViewController {
     private func load() {
         Task {
             do {
-                versions = try await repository.contentHistory(for: cardID).reversed()
+                let loaded = try await repository.contentHistory(for: cardID)
+                versions = Array(loaded.reversed())
+                if openedContentRevision == nil {
+                    openedContentRevision = try await repository.content(for: cardID)?.contentRevision
+                }
                 tableView.reloadData()
             } catch { showProblem(error) }
         }
@@ -1996,17 +2001,18 @@ final class ImpressV3CardVersionHistoryViewController: UITableViewController {
             guard let self else { return }
             Task {
                 do {
-                    guard let current = try await self.repository.content(for: self.cardID) else {
+                    guard let expected = self.openedContentRevision else {
                         throw ReviewWCDBError.missingCard
                     }
                     try await self.repository.restoreContentVersion(
                         cardID: self.cardID, savedRevision: version.contentRevision,
-                        expectedContentRevision: current.contentRevision,
+                        expectedContentRevision: expected,
                         expectedReviewRevision: self.expectedReviewRevision)
                     guard let latest = try await self.repository.content(for: self.cardID) else {
                         throw ReviewWCDBError.missingCard
                     }
                     try await self.onRestored?(latest)
+                    self.openedContentRevision = latest.contentRevision
                     self.load()
                     self.navigationController?.popViewController(animated: true)
                 } catch { self.showProblem(error) }
@@ -2056,7 +2062,7 @@ final class ImpressV3CardVersionDetailViewController: UIViewController {
         textView.text = body
         textView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(textView)
-        let image = UIImageView(image: version.imageData.flatMap(UIImage.init(data:)))
+        let image = UIImageView(image: version.imageData.flatMap { UIImage(data: $0) })
         image.contentMode = .scaleAspectFit
         image.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(image)
@@ -2072,7 +2078,8 @@ final class ImpressV3CardVersionDetailViewController: UIViewController {
             image.leadingAnchor.constraint(equalTo: textView.leadingAnchor),
             image.trailingAnchor.constraint(equalTo: textView.trailingAnchor),
             image.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            image.heightAnchor.constraint(equalToConstant: version.imageData == nil ? 0 : 155),
+            image.heightAnchor.constraint(equalToConstant: version.imageData == nil ? 0 :
+                ImpressV3Appearance.Metrics.contentVersionImageHeight),
             textView.heightAnchor.constraint(greaterThanOrEqualTo: view.heightAnchor,
                                               multiplier: version.imageData == nil ? 0.6 : 0.4)
         ])
