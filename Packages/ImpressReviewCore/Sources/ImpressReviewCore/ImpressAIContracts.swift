@@ -251,6 +251,34 @@ public struct ImpressAIResolvedRoute: Sendable {
     }
 }
 
+/// Validate an explicit user-owned provider separately from OpenCode Free QA.
+/// Every actual request and route resolution uses this single policy.
+public enum ImpressAIRequestPolicy {
+    public static func validate(_ route: ImpressAIResolvedRoute) throws {
+        let c = route.connection
+        guard c.enabled && route.model.enabled else { throw ImpressAIContractError.disabled }
+        guard ImpressAIRegistry.supported(route.effectiveProtocol, for: c.provider)
+        else { throw ImpressAIContractError.invalidProtocol }
+        guard c.baseURL.scheme?.lowercased() == "https", c.baseURL.host != nil,
+              c.baseURL.user == nil, c.baseURL.password == nil,
+              c.baseURL.query == nil, c.baseURL.fragment == nil,
+              (c.baseURL.port == nil || c.baseURL.port == 443) else {
+            throw ImpressAIContractError.invalidEndpoint
+        }
+        try c.effectiveEndpoints.validate()
+        if c.effectiveAuthentication == .customHeader &&
+            !ImpressAIRegistry.safeCustomHeader(c.customHeaderName ?? "") {
+            throw ImpressAIContractError.invalidAuthentication
+        }
+        if c.effectiveAuthentication != .noAuthentication && c.credentialID == nil {
+            throw ImpressAIContractError.missingCredential
+        }
+        if ImpressAIOpenCodeFreeQA.isQAProfile(c) {
+            try ImpressAIOpenCodeFreeQA.validate(route)
+        }
+    }
+}
+
 public enum ImpressAIContractError: Error, Equatable, Sendable {
     case duplicateID, duplicateModelIdentifier, invalidName, invalidEndpoint
     case invalidProtocol, invalidModel, invalidRoute, missingCredential
@@ -351,6 +379,70 @@ public struct ImpressAIRegistry: Codable, Sendable {
         }
     }
 
+    /// Every configured provider may be selected. Content-upload capability
+    /// is separately gated by jsonVerified when the task actually runs.
+    public func selectableModels(for task: ImpressAITask) -> [ImpressAIModel] {
+        if task == .knowledgeSynthesis { return [] } // Not released.
+        return models.filter { model in
+            guard model.enabled,
+                  let c = connections.first(where: { $0.id == model.connectionID }),
+                  c.enabled else { return false }
+            if ImpressAIOpenCodeFreeQA.isQAProfile(c) {
+                return (try? ImpressAIOpenCodeFreeQA.validate(
+                    ImpressAIResolvedRoute(connection: c, model: model))) != nil
+            }
+            return Self.supported(model.protocolOverride ?? c.apiProtocol, for: c.provider)
+        }
+    }
+
+    public mutating func setDefaultModel(_ modelID: UUID, for task: ImpressAITask) throws {
+        guard task != .knowledgeSynthesis,
+              selectableModels(for: task).contains(where: { $0.id == modelID }) else {
+            throw ImpressAIContractError.invalidRoute
+        }
+        routes.removeAll { $0.task == task }
+        routes.append(ImpressAIRoute(task: task, primaryModelID: modelID))
+        try validate()
+    }
+
+    /// Referential integrity: a removed fallback never erases its primary.
+    public mutating func removeModel(_ modelID: UUID) throws {
+        guard models.contains(where: { $0.id == modelID }) else {
+            throw ImpressAIContractError.invalidModel
+        }
+        models.removeAll { $0.id == modelID }
+        routes.removeAll { $0.primaryModelID == modelID }
+        for i in routes.indices where routes[i].fallbackModelID == modelID {
+            routes[i].fallbackModelID = nil
+            routes[i].crossProviderAuthorized = false
+        }
+        try validate()
+    }
+
+    public mutating func removeConnection(_ connectionID: UUID) throws {
+        guard connections.contains(where: { $0.id == connectionID }) else {
+            throw ImpressAIContractError.invalidRoute
+        }
+        let removedIDs = Set(models.filter { $0.connectionID == connectionID }.map(\.id))
+        models.removeAll { removedIDs.contains($0.id) }
+        connections.removeAll { $0.id == connectionID }
+        routes.removeAll { removedIDs.contains($0.primaryModelID) }
+        for i in routes.indices {
+            if let fallback = routes[i].fallbackModelID, removedIDs.contains(fallback) {
+                routes[i].fallbackModelID = nil
+                routes[i].crossProviderAuthorized = false
+            }
+        }
+        try validate()
+    }
+
+    public mutating func removeAllConnections() throws {
+        connections.removeAll()
+        models.removeAll()
+        routes.removeAll()
+        try validate()
+    }
+
     /// No automatic fallback. Every switch to a secondary provider requires
     /// an explicit user-selected route and authorization.
     public func resolve(_ task: ImpressAITask, useFallback: Bool = false) throws -> ImpressAIResolvedRoute {
@@ -362,10 +454,8 @@ public struct ImpressAIRegistry: Codable, Sendable {
               let connection = connections.first(where: { $0.id == model.connectionID }) else {
             throw ImpressAIContractError.invalidRoute
         }
-        guard connection.enabled && model.enabled else { throw ImpressAIContractError.disabled }
-        guard connection.effectiveAuthentication == .noAuthentication || connection.credentialID != nil else {
-            throw ImpressAIContractError.missingCredential
-        }
+        try ImpressAIRequestPolicy.validate(
+            ImpressAIResolvedRoute(connection: connection, model: model))
         // A model test is required before sending private Markdown for AI generation.
         if task != .conversation && !model.jsonVerified {
             throw ImpressAIContractError.unverifiedModel
