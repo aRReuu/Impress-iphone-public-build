@@ -108,6 +108,19 @@ def assert_clean() -> None:
     # Safeguards below still reject retired chat code, secrets and production writes.
     config = (APP / "Utils/Constansts/ImColorConstants.swift").read_text()
     assert 'enum ImpressV3Language: String, CaseIterable' in config
+    # A duplicate Swift dictionary literal crashes at launch, even when its
+    # values are identical. Fail this inexpensive contract before XCTest.
+    dictionary = config.split("private static let translations:", 1)[1]
+    dictionary = dictionary.split("\n    ]", 1)[0]
+    seen_keys: set[str] = set()
+    for line in dictionary.splitlines():
+        match = re.match(r'^\s*"([^"]+)"\s*:', line)
+        if not match:
+            continue
+        key = match.group(1)
+        assert key not in seen_keys, ("DUPLICATE_V3_LOCALIZATION_KEY", key)
+        seen_keys.add(key)
+    assert len(seen_keys) > 100, "MISSING_V3_LOCALIZATION_DICTIONARY"
     for language in ('"zh-Hans"', '"zh-Hant"', '"en"'):
         assert language in config, ("MISSING_INTERFACE_LANGUAGE", language)
     assert 'case system, light, dark' in config
