@@ -1511,10 +1511,10 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         let settings = ImpressV3SettingsHubViewController()
         settings.loadViewIfNeeded()
         XCTAssertEqual(settings.tableView.numberOfSections, 5)
-        // AI Services and local prompts share Content Tools. Appearance,
-        // reminder, backup and calibration routes remain unchanged.
+        // AI Services/prompts share Content Tools. Learning Rhythm contains
+        // Daily Calibration and Review Notifications (neither is a fourth Tab).
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 0), 2)
-        XCTAssertEqual(settings.tableView.numberOfRows(inSection: 1), 1)
+        XCTAssertEqual(settings.tableView.numberOfRows(inSection: 1), 2)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 2), 2)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 3), 1)
         XCTAssertEqual(settings.tableView.numberOfRows(inSection: 4), 1)
@@ -1526,6 +1526,14 @@ final class ImpressV3NativeFlowTests: XCTestCase {
             cellForRowAt: IndexPath(row: 1, section: 0))
         XCTAssertEqual((promptCell.contentConfiguration as? UIListContentConfiguration)?.text,
                        V3L("提示词"))
+        let calibration = settings.tableView(settings.tableView,
+            cellForRowAt: IndexPath(row: 0, section: 1))
+        let reminders = settings.tableView(settings.tableView,
+            cellForRowAt: IndexPath(row: 1, section: 1))
+        XCTAssertEqual((calibration.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("每日校准"))
+        XCTAssertEqual((reminders.contentConfiguration as? UIListContentConfiguration)?.text,
+                       V3L("复习通知"))
         let legacy = SettingsConfiguration.default
         XCTAssertEqual(legacy.displaySections.count, 1)
     }
@@ -1557,15 +1565,21 @@ final class ImpressV3NativeFlowTests: XCTestCase {
         let stacks = controller.view.subviews.compactMap { $0 as? SwipeCardStack }
         XCTAssertEqual(stacks.count, 1)
         XCTAssertTrue(stacks[0].protectsVerticalContentScroll)
-        // The collection and Notes have two visible, independent right
-        // navigation buttons; neither is a legacy Chat/LLM overflow menu.
+        // Notes is now the middle Tab; the flashcard top-right keeps only
+        // Card Collection, rather than a duplicate global Notes action.
         XCTAssertEqual(Set(controller.navigationItem.rightBarButtonItems?
-            .compactMap(\.accessibilityLabel) ?? []), Set(["卡片集", "笔记"]))
-        XCTAssertEqual(controller.navigationItem.rightBarButtonItems?.count, 2)
-        // The primary '+' has become low-friction Quick Capture; manual card
-        // CRUD and batch import are accessible from the Card Collection.
+            .compactMap(\.accessibilityLabel) ?? []), Set([V3L("卡片集")]))
+        XCTAssertEqual(controller.navigationItem.rightBarButtonItems?.count, 1)
+        XCTAssertEqual(controller.navigationItem.rightBarButtonItems?.first?
+            .accessibilityIdentifier, "impress.review.card-collection")
+        // The primary '+' directly opens the three-type native card editor.
         XCTAssertEqual(controller.navigationItem.leftBarButtonItem?.accessibilityLabel,
-                       V3L("快速记录"))
+                       V3L("新增卡片"))
+        // The full weekly chart surface provides a second route to the same
+        // calibration controller without replacing the active review root.
+        XCTAssertNotNil(controller.view.subviews.first {
+            $0.accessibilityIdentifier == "impress.review.calibration-week"
+        })
         XCTAssertFalse(buttons.contains { $0.title(for: .normal) == "困难" })
         XCTAssertFalse(buttons.contains { $0.title(for: .normal) == "简单" })
     }
