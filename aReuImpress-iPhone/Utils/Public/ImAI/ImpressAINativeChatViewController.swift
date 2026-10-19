@@ -422,8 +422,18 @@ final class ImpressAINativeChatViewController: UIViewController,
                 messageInput.text = latest.inputDraft
                 contextReferences = latest.contextReferences
                 requestFailure = latest.requestError
-                includeCardContext = !contextReferences.isEmpty
+                // Consent to source revision X must not silently authorize
+                // revision X+1 after the card was edited in another screen.
+                let approved = contextReferences.first(where: {
+                    $0.stableIdentity == identity
+                })
+                let stillCurrent = approved?.sourceRevision ==
+                    String(sourceContentRevision ?? -1)
+                includeCardContext = approved != nil && stillCurrent
                 contextChoiceMade = includeCardContext
+                if approved != nil && !stillCurrent {
+                    privacyLabel.text = V3L("来源内容有更新；下次发送前请重新确认引用范围。")
+                }
                 activeProviderID = history.reversed().compactMap(\.providerID).first
                 reloadAndScroll()
                 if history != latest.messages { enqueuePersistence() }
