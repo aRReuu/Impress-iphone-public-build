@@ -195,8 +195,19 @@ final class ImpressAINativeChatViewController: UIViewController,
         let route: ImpressAIResolvedRoute
         do { route = try ImpressAIConfigStore.shared.registry.resolve(.conversation) }
         catch {
-            let alert = UIAlertController(title: V3L("尚未配置对话模型"),
-                message: V3L("请先在「设置 → AI 服务」选择对话使用的连接与模型。"),
+            let message: String
+            switch error as? ImpressAIContractError {
+            case .missingCredential:
+                message = V3L("所选对话模型尚未保存 API Key，请打开该连接填写密钥。")
+            case .disabled:
+                message = V3L("所选模型或连接已停用，请重新选择有效模型。")
+            case .freeModelQAOnly:
+                message = V3L("当前连接属于 OpenCode 免费 QA，请选择此连接允许的模型。")
+            default:
+                message = V3L("请先在「设置 → AI 服务 → 业务默认模型」选择可用的对话模型。")
+            }
+            let alert = UIAlertController(title: V3L("无法使用当前对话模型"),
+                message: message,
                 preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
             alert.addAction(UIAlertAction(title: V3L("打开 AI 服务"), style: .default) { [weak self] _ in
