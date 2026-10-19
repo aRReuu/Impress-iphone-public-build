@@ -137,14 +137,20 @@ actor ImpressAIHTTPClient {
     static let shared = ImpressAIHTTPClient()
     private let session: URLSession
 
-    init() {
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 50
-        config.timeoutIntervalForResource = 90
-        config.httpMaximumConnectionsPerHost = 2
-        config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        session = URLSession(configuration: config, delegate: ImpressAINoRedirect(),
-                             delegateQueue: nil)
+    init(session: URLSession? = nil) {
+        // Dependency injection is available only to native XCTest. Production
+        // uses a fresh ephemeral session with redirects always disabled.
+        if let session {
+            self.session = session
+        } else {
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = 50
+            config.timeoutIntervalForResource = 90
+            config.httpMaximumConnectionsPerHost = 2
+            config.requestCachePolicy = .reloadIgnoringLocalCacheData
+            self.session = URLSession(configuration: config,
+                                      delegate: ImpressAINoRedirect(), delegateQueue: nil)
+        }
     }
 
     private func endpoint(_ connection: ImpressAIConnection, route: String) throws -> URL {
