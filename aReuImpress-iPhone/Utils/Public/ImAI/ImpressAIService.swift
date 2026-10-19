@@ -6,12 +6,13 @@ import ImpressReviewCore
 // The UI manages provider-owned credentials; no API key value is Codable or logged.
 enum ImpressAIServiceError: LocalizedError {
     case configuration, credential, invalidURL, unauthorized, forbidden, status(Int), response, tooLarge, emptyModelList
-    case freeModelOnly, rateLimited
+    case freeModelOnly, rateLimited, keychainOSStatus(Int)
     var errorDescription: String? {
         switch self {
         case .configuration: return V3L("请先在设置中配置并测试 AI 出题模型。")
         case .freeModelOnly: return V3L("本 QA 版只允许 OpenCode 官方免费模型；推荐添加「OpenCode 免费模型（测试）」，不需要密钥。使用 Keychain 密钥时也只允许相同的免费型号。")
         case .credential: return V3L("API Key 不可用，请重新保存密钥。")
+        case .keychainOSStatus(let code): return V3L("Keychain 无法访问，OSStatus") + " \(code)"
         case .invalidURL: return V3L("API 地址不安全或不正确。")
         case .unauthorized: return V3L("API 授权失败（401），请检查密钥。")
         case .forbidden: return V3L("OpenCode 返回 HTTP 403：可能是当前网络、账户权限或访问限制。确认免费定价后，再使用设备 Keychain 中的新 Key 重试。")
@@ -39,12 +40,15 @@ enum ImpressAIKeychain {
         let status = SecItemUpdate(query as CFDictionary,
                                    [kSecValueData as String: data] as CFDictionary)
         if status == errSecSuccess { return }
-        guard status == errSecItemNotFound else { throw ImpressAIServiceError.credential }
+        guard status == errSecItemNotFound else {
+            throw ImpressAIServiceError.keychainOSStatus(Int(status))
+        }
         var attributes = query
         attributes[kSecValueData as String] = data
         attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        guard SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess else {
-            throw ImpressAIServiceError.credential
+        let added = SecItemAdd(attributes as CFDictionary, nil)
+        guard added == errSecSuccess else {
+            throw ImpressAIServiceError.keychainOSStatus(Int(added))
         }
     }
 
@@ -58,8 +62,11 @@ enum ImpressAIKeychain {
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let bytes = item as? Data,
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess else {
+            throw ImpressAIServiceError.keychainOSStatus(Int(status))
+        }
+        guard let bytes = item as? Data,
               let secret = String(data: bytes, encoding: .utf8), !secret.isEmpty else {
             throw ImpressAIServiceError.credential
         }
