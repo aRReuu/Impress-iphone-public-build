@@ -291,6 +291,38 @@ extension ImpressAIContractsTests {
 }
 
 
+extension ImpressAIContractsTests {
+    func testChatCompletionAcceptsTextAndMultiblockContent() throws {
+        let standard: [String: Any] = [
+            "choices": [["message": ["role": "assistant", "content": "  Hello.  "]]]
+        ]
+        XCTAssertEqual(try ImpressAIChatResponseParser.chatCompletionText(standard), "Hello.")
+        let parts: [String: Any] = [
+            "choices": [["message": ["content": [
+                ["type": "text", "text": "First "],
+                ["type": "text", "text": ["value": "second"]],
+                ["type": "refusal", "refusal": "unrelated"]
+            ]]]]
+        ]
+        XCTAssertEqual(try ImpressAIChatResponseParser.chatCompletionText(parts),
+                       "First second")
+    }
+
+    func testChatCompletionRejectsReasoningWithoutVisibleAnswer() throws {
+        let noVisible: [String: Any] = [
+            "choices": [["message": ["content": NSNull(),
+                                      "reasoning_content": "private thinking"]]]
+        ]
+        XCTAssertThrowsError(try ImpressAIChatResponseParser.chatCompletionText(noVisible))
+        XCTAssertThrowsError(try ImpressAIChatResponseParser.chatCompletionText([
+            "choices": [["message": ["content": "   "]]]
+        ]))
+        XCTAssertThrowsError(try ImpressAIChatResponseParser.chatCompletionText([
+            "choices": []
+        ]))
+    }
+}
+
 // Free-only means exact documented OpenCode model IDs and endpoints; no
 // paid model can be substituted by changing a label or using another gateway.
 extension ImpressAIContractsTests {
