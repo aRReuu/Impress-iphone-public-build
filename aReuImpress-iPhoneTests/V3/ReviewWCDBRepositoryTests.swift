@@ -1682,6 +1682,21 @@ private final class ImpressAIMockURLProtocol: URLProtocol {
     private static var fixtureCode: Int = 200
     private static var fixtureBody: Data =
         Data(#"{"choices":[{"message":{"role":"assistant","content":"OK"}}]}"#.utf8)
+    // Only path and boolean match are stored. Test request credentials and
+    // bodies are never printed, returned to the UI, or sent over the network.
+    private static var seenAuthenticatedPaths: [(path: String, valid: Bool)] = []
+
+    static func resetAuthCapture() {
+        fixtureLock.lock()
+        defer { fixtureLock.unlock() }
+        seenAuthenticatedPaths.removeAll()
+    }
+
+    static func authenticatedPaths() -> [(path: String, valid: Bool)] {
+        fixtureLock.lock()
+        defer { fixtureLock.unlock() }
+        return seenAuthenticatedPaths
+    }
 
     static func respond(status: Int, json: String) {
         fixtureLock.lock()
@@ -1698,6 +1713,10 @@ private final class ImpressAIMockURLProtocol: URLProtocol {
         Self.fixtureLock.lock()
         let status = Self.fixtureCode
         let data = Self.fixtureBody
+        let passed = request.value(forHTTPHeaderField: "Authorization") ==
+            "Bearer synthetic-keychain-fixture"
+        Self.seenAuthenticatedPaths.append(
+            (path: request.url?.path ?? "", valid: passed))
         Self.fixtureLock.unlock()
         guard let url = request.url,
               let http = HTTPURLResponse(url: url, statusCode: status,
@@ -1826,5 +1845,55 @@ final class ImpressAITransportAndCredentialTests: XCTestCase {
         XCTAssertEqual(try ImpressAIKeychain.read(id: id), "fixture-only-key-two")
         ImpressAIKeychain.delete(id: id)
         XCTAssertThrowsError(try ImpressAIKeychain.read(id: id))
+    }
+
+    func testSavedKeychainBearerReachesConsoleChatJSONAndFreeCatalog() async throws {
+        // Signed-simulator Keychain + in-process URLProtocol. No real API key,
+        // no network access, no paid model, no personal Vault bytes.
+        let credentialID = UUID()
+        defer { ImpressAIKeychain.delete(id: credentialID) }
+        try ImpressAIKeychain.write("synthetic-keychain-fixture", id: credentialID)
+        var connection = ImpressAIOpenCodeFreeQA.connection()
+        connection.authentication = .bearer
+        connection.credentialID = credentialID
+        let model = ImpressAIOpenCodeFreeQA.models(for: connection.id)[0]
+        let route = ImpressAIResolvedRoute(connection: connection, model: model)
+        let client = mockClient()
+        ImpressAIMockURLProtocol.resetAuthCapture()
+
+        ImpressAIMockURLProtocol.respond(status: 200, json: "{}")
+        XCTAssertEqual(try await client.probeOpenCodeServiceAccount(
+            connection: connection), 200)
+
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"choices":[{"message":{"role":"assistant","content":"OK"}}]}"#)
+        let first = try await client.converseDetailed(
+            route: route, system: "Synthetic fixture only.",
+            turns: [ImpressAIChatTurn(role: .user, text: "ping")])
+        XCTAssertEqual(first.statusCode, 200)
+        XCTAssertEqual(first.text, "OK")
+
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"choices":[{"message":{"role":"assistant","content":"{\"ok\":true}"}}]}"#)
+        let json = try await client.completeDetailed(
+            route: route, system: "Return JSON.", user: "Synthetic fixture.")
+        XCTAssertEqual(json.statusCode, 200)
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: Data(json.text.utf8)) as? [String: Bool],
+                       ["ok": true])
+
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"data":[{"id":"mimo-v2.6-flash-free"}]}"#)
+        let available = try await client.listModels(connection: connection)
+        XCTAssertEqual(available, ["mimo-v2.6-flash-free"])
+
+        let captures = ImpressAIMockURLProtocol.authenticatedPaths()
+        XCTAssertEqual(captures.map(\.path), [
+            "/console/api/v2/config",
+            "/inference/openai/v1/chat/completions",
+            "/inference/openai/v1/chat/completions",
+            "/inference/v1/models"
+        ])
+        XCTAssertTrue(captures.allSatisfy(\.valid),
+                      "Every explicit Free API request must attach the Keychain Bearer")
     }
 }
