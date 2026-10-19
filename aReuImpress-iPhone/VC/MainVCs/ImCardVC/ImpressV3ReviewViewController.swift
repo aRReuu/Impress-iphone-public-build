@@ -547,11 +547,32 @@ final class ImpressV3ReviewViewController: UIViewController {
 
     @objc private func openAIDiscussion() {
         guard pending == nil, !isLoading,
-              let item = items[safe: currentIndex],
-              let model = models[item.cardID] else { return }
-        let discussion = ImpressAINativeChatViewController(
-            question: model.question, answer: model.answer)
-        navigationController?.pushViewController(discussion, animated: true)
+              let item = items[safe: currentIndex] else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let repo = try repository ?? ImpressV3ReviewEnvironment.repository()
+                guard let latest = try await repo.content(for: item.cardID),
+                      pending == nil, items[safe: currentIndex]?.cardID == item.cardID else {
+                    return
+                }
+                // Explicitly prepare only THIS card's effective content;
+                // never read/upload the entire linked Obsidian document.
+                var context = latest.answerText ?? ""
+                if latest.cardType == CardType.multipleChoice.rawValue {
+                    context += "\n" + V3L("全部选项：") + (latest.choices ?? "")
+                    context += "\n" + V3L("正确项索引：") + (latest.correctIndices ?? "")
+                }
+                if latest.cardType == CardType.image.rawValue {
+                    context += "\n" + V3L("这是一张图片卡，本次纯文字对话不包含图片像素。")
+                }
+                let discussion = ImpressAINativeChatViewController(
+                    question: latest.question, answer: context,
+                    cardID: item.cardID, contentRevision: latest.contentRevision,
+                    repository: repo)
+                navigationController?.pushViewController(discussion, animated: true)
+            } catch { displayFailure(error) }
+        }
     }
 
     @objc private func exploreFromAnswer() {
