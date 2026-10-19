@@ -458,6 +458,35 @@ public struct ImpressAIQuestionPool: Codable, Sendable {
     }
 }
 
+/// Extract only user-visible assistant text, never private reasoning or tools.
+public enum ImpressAIChatResponseParser {
+    public static func chatCompletionText(_ body: [String: Any]) throws -> String {
+        guard let choices = body["choices"] as? [[String: Any]],
+              let message = choices.first?["message"] as? [String: Any] else {
+            throw ImpressAIContractError.invalidResponse
+        }
+        let extracted: String
+        if let plain = message["content"] as? String {
+            extracted = plain
+        } else if let parts = message["content"] as? [[String: Any]] {
+            extracted = parts.compactMap { part -> String? in
+                if let text = part["text"] as? String { return text }
+                if let payload = part["text"] as? [String: Any] {
+                    return payload["value"] as? String
+                }
+                return nil
+            }.joined()
+        } else {
+            throw ImpressAIContractError.invalidResponse
+        }
+        let trimmed = extracted.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.utf8.count <= 65_000 else {
+            throw ImpressAIContractError.invalidResponse
+        }
+        return trimmed
+    }
+}
+
 /// Portable semantic boundary. Source support still needs human/model checks:
 /// verifying an excerpt ID only proves provenance, not correctness of reasoning.
 public enum ImpressAIQuestionValidator {
