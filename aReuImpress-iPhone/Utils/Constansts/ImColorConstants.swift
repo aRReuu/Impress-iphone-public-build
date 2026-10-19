@@ -1285,6 +1285,15 @@ enum ImpressV3Language: String, CaseIterable {
         "恢复候选池": ("還原候選題", "Restore Questions"),
         "OpenCode 返回 HTTP 403：可能是当前网络、账户权限或访问限制。确认免费定价后，再使用设备 Keychain 中的新 Key 重试。": ("OpenCode 回傳 HTTP 403：可能是網路、帳戶權限或存取限制。確認免費定價後，再使用裝置 Keychain 中的新密鑰重試。", "OpenCode HTTP 403: network, account or access restrictions may apply. Confirm free pricing before retrying with a new Keychain key."),
         "OpenCode 返回 HTTP 429：免费模型暂时受限，请稍后重试；不会自动切换收费模型。": ("OpenCode 回傳 HTTP 429：免費模型暫時受到限制，請稍後再試；不會自動切換付費模型。", "OpenCode HTTP 429: free-model requests are rate limited. Try again later. No paid-model fallback is used."),
+        "免费 API 全链路验收": ("免費 API 全鏈路驗收", "Free API End-to-End Verification"),
+        "将向当前 OpenCode 免费模型发送四个不含私人信息的测试请求：首次 Chat、连续追问、JSON 与综合出题。不会上传真实笔记或保存卡片，也不会调用付费模型。": ("將向目前的 OpenCode 免費模型傳送四個不含私人資料的測試請求：首次對話、連續追問、JSON 和綜合出題。不會上傳真實筆記、儲存卡片或呼叫付費模型。", "Four synthetic requests will verify Chat, follow-up, JSON, and question generation. No private notes, saved cards, or paid models."),
+        "开始测试": ("開始測試", "Start Test"),
+        "正在验证免费 API…": ("正在驗證免費 API…", "Verifying Free API…"),
+        "凭据可读取": ("憑證可讀取", "Credential Readable"),
+        "对话与出题模型已启用；未修改真实 Vault 或卡片库。": ("已啟用對話及出題模型；未修改真實 Vault 或卡片資料庫。", "Chat and question models enabled. No actual Vault or card database changes."),
+        "免费 API 验收通过": ("免費 API 驗收通過", "Free API Verification Passed"),
+        "免费 API 验收未通过": ("免費 API 驗收未通過", "Free API Verification Failed"),
+        "Keychain 无法访问，OSStatus": ("Keychain 無法存取，OSStatus", "Keychain unavailable, OSStatus"),
         "模型下载失败": ("模型下載失敗", "Model Download Failed")
     ]
 
