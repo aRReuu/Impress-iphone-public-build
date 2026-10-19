@@ -1706,7 +1706,7 @@ private final class ImpressAIMockURLProtocol: URLProtocol {
     }
 
     override class func canInit(with request: URLRequest) -> Bool {
-        request.url?.host == "opencode.ai"
+        ["opencode.ai", "open.bigmodel.cn", "api.z.ai"].contains(request.url?.host ?? "")
     }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -1834,6 +1834,76 @@ final class ImpressAITransportAndCredentialTests: XCTestCase {
             })
         XCTAssertEqual(try ImpressAIQuestionValidator.validatedSelection(pool).count, 1)
     }
+
+    func testGLMBearerUsesCorrectChatJSONAndModelsEndpointWithoutNetwork() async throws {
+        let keyID = UUID()
+        defer { ImpressAIKeychain.delete(id: keyID) }
+        try ImpressAIKeychain.write("synthetic-keychain-fixture", id: keyID)
+        let c = ImpressAIConnection(title: "GLM China", provider: .zhipu,
+            apiProtocol: .chatCompletions,
+            baseURL: URL(string: "https://open.bigmodel.cn/api/paas/v4")!,
+            credentialID: keyID)
+        let m = ImpressAIModel(connectionID: c.id, identifier: "glm-4.5-flash",
+                                jsonMode: .promptOnly)
+        let route = ImpressAIResolvedRoute(connection: c, model: m)
+        let client = mockClient()
+        ImpressAIMockURLProtocol.resetAuthCapture()
+
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"choices":[{"message":{"role":"assistant","content":"GLM reply"}}]}"#)
+        let chat = try await client.converseDetailed(route: route,
+            system: "Fixture only.", turns: [ImpressAIChatTurn(role: .user, text: "hello")])
+        XCTAssertEqual(chat.statusCode, 200)
+        XCTAssertEqual(chat.text, "GLM reply")
+
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"choices":[{"message":{"role":"assistant","content":"{\"ok\":true}"}}]}"#)
+        let json = try await client.completeDetailed(route: route,
+            system: "Return JSON.", user: "Fixture only.")
+        XCTAssertEqual(json.statusCode, 200)
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: Data(json.text.utf8))
+                       as? [String: Bool], ["ok": true])
+
+        ImpressAIMockURLProtocol.respond(status: 200, json:
+            #"{"data":[{"id":"glm-4.5-flash"}]}"#)
+        XCTAssertEqual(try await client.listModels(connection: c), ["glm-4.5-flash"])
+        let captures = ImpressAIMockURLProtocol.authenticatedPaths()
+        XCTAssertEqual(captures.map { $0.path }, [
+            "/api/paas/v4/chat/completions",
+            "/api/paas/v4/chat/completions",
+            "/api/paas/v4/models"
+        ])
+        XCTAssertTrue(captures.allSatisfy { $0.valid },
+                      "GLM must receive Bearer from the matching Keychain credential")
+    }
+
+    func testModelChooserShowsGLMAndDoesNotClaimFreeQAOnly() throws {
+        let store = ImpressAIConfigStore.shared
+        let previous = store.registry
+        defer { try? store.replace(previous) }
+        let glm = ImpressAIConnection(title: "GLM China", provider: .zhipu,
+            apiProtocol: .chatCompletions,
+            baseURL: URL(string: "https://open.bigmodel.cn/api/paas/v4")!, credentialID: UUID())
+        let model = ImpressAIModel(connectionID: glm.id, identifier: "glm-4.5-flash")
+        try store.update { registry in
+            registry.connections.append(glm)
+            registry.models.append(model)
+        }
+        let picker = ImpressAIModelChooser(task: .conversation)
+        picker.loadViewIfNeeded()
+        let rows = picker.tableView(picker.tableView, numberOfRowsInSection: 0)
+        XCTAssertGreaterThan(rows, 0)
+        var foundGLM = false
+        for index in 0..<rows {
+            let cell = picker.tableView(picker.tableView,
+                cellForRowAt: IndexPath(row: index, section: 0))
+            if (cell.contentConfiguration as? UIListContentConfiguration)?.text == "glm-4.5-flash" {
+                foundGLM = true
+            }
+        }
+        XCTAssertTrue(foundGLM, "GLM must be a selectable business model")
+    }
+
 
     func testCredentialStoreSupportsRotationAndDeletionWithoutLoggingSecrets() throws {
         let id = UUID()
