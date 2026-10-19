@@ -46,6 +46,8 @@ final class ImpressAINativeChatViewController: UIViewController,
     private var history: [WCDBV3ChatMessage] = []
     private var requestFailure: String?
     private var activeProviderID: UUID?
+    /// An override belongs only to this Chat; global task defaults remain intact.
+    private var selectedModelID: UUID?
     private var contextChoiceMade = false
     private var includeCardContext = false
     private var restoring = false
@@ -84,11 +86,59 @@ final class ImpressAINativeChatViewController: UIViewController,
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        if let selected = try? ImpressAIConfigStore.shared.registry.resolve(.conversation) {
-            navigationItem.prompt = selected.connection.title + " · " + selected.model.identifier
-        } else {
-            navigationItem.prompt = V3L("请先选择免费对话模型")
+        refreshModelPicker()
+    }
+
+    private func liveRoute() throws -> ImpressAIResolvedRoute {
+        let registry = ImpressAIConfigStore.shared.registry
+        if let selectedModelID {
+            guard let model = registry.models.first(where: { $0.id == selectedModelID }),
+                  let connection = registry.connections.first(where: {
+                      $0.id == model.connectionID
+                  }) else { throw ImpressAIContractError.invalidRoute }
+            let route = ImpressAIResolvedRoute(connection: connection, model: model)
+            try ImpressAIRequestPolicy.validate(route)
+            return route
         }
+        return try registry.resolve(.conversation)
+    }
+
+    private func refreshModelPicker() {
+        let registry = ImpressAIConfigStore.shared.registry
+        let current = try? liveRoute()
+        navigationItem.prompt = current.map {
+            $0.connection.title + " · " + $0.model.identifier
+        } ?? V3L("请先选择免费对话模型")
+        let reset = UIAction(title: V3L("使用业务默认模型"),
+                             image: UIImage(systemName: "arrow.uturn.backward"),
+                             state: selectedModelID == nil ? .on : .off) {
+            [weak self] _ in
+            self?.selectedModelID = nil
+            self?.refreshModelPicker()
+        }
+        let available = registry.models.compactMap { model
+            -> (ImpressAIConnection, ImpressAIModel)? in
+            guard let connection = registry.connections.first(where: {
+                $0.id == model.connectionID
+            }), (try? ImpressAIRequestPolicy.validate(
+                ImpressAIResolvedRoute(connection: connection, model: model))) != nil else {
+                return nil
+            }
+            return (connection, model)
+        }.sorted { left, right in
+            (left.0.title, left.1.identifier) < (right.0.title, right.1.identifier)
+        }
+        let actions = available.map { connection, model in
+            UIAction(title: connection.title + " · " + model.identifier,
+                     state: selectedModelID == model.id ? .on : .off) {
+                [weak self] _ in
+                self?.selectedModelID = model.id
+                self?.refreshModelPicker()
+            }
+        }
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: V3L("切换模型"),
+            menu: UIMenu(children: [reset] + actions))
     }
 
     override func viewDidLoad() {
@@ -243,7 +293,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         guard !text.isEmpty, text.utf8.count <= 12_000,
               !sending, !restoring else { return }
         let route: ImpressAIResolvedRoute
-        do { route = try ImpressAIConfigStore.shared.registry.resolve(.conversation) }
+        do { route = try liveRoute() }
         catch {
             let explanation: String
             switch error as? ImpressAIContractError {
@@ -436,6 +486,21 @@ final class ImpressAINativeChatViewController: UIViewController,
                     privacyLabel.text = V3L("来源内容有更新；下次发送前请重新确认引用范围。")
                 }
                 activeProviderID = history.reversed().compactMap(\.providerID).first
+                // Retain the session's last model choice when still configured,
+                // without rewriting the global conversation default.
+                if let latestModel = history.reversed().first(where: {
+                    $0.modelIdentifier != nil && $0.providerID != nil
+                }), let provider = latestModel.providerID,
+                   let name = latestModel.modelIdentifier {
+                    let registry = ImpressAIConfigStore.shared.registry
+                    selectedModelID = registry.models.first(where: { model in
+                        model.identifier == name &&
+                        registry.connections.contains(where: {
+                            $0.id == model.connectionID && $0.id == provider
+                        })
+                    })?.id
+                    refreshModelPicker()
+                }
                 reloadAndScroll()
                 if history != latest.messages { enqueuePersistence() }
             }
