@@ -92,7 +92,7 @@ jobs:
             -parallel-testing-enabled NO IPHONEOS_DEPLOYMENT_TARGET=26.0 \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" \
             CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
-            CODE_SIGN_ENTITLEMENTS=.github/ci/ImpressSimulatorKeychainQA.entitlements \
+            CODE_SIGN_ENTITLEMENTS="$GITHUB_WORKSPACE/.github/ci/ImpressSimulatorKeychainQA.entitlements" \
             test 2>&1 | tee out/ai-xctest.log
       - name: Compile unsigned ARM64 iPhoneOS QA
         shell: bash
