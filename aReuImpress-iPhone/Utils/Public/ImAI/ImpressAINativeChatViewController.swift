@@ -36,10 +36,25 @@ final class ImpressAINativeChatViewController: UIViewController,
                                                 UITableViewDataSource, UITextViewDelegate {
     private let sourceQuestion: String?
     private let sourceAnswer: String?
+    private let sourceCardID: UUID?
+    private let sourceContentRevision: Int?
+    private let injectedRepository: ReviewWCDBRepository?
+    private var chatRepository: ReviewWCDBRepository?
+    private var storedSession: WCDBV3ChatSession?
+    private var contextReferences: [WCDBV3ChatContextReference] = []
+    private var history: [WCDBV3ChatMessage] = []
+    private var requestFailure: String?
+    private var activeProviderID: UUID?
     private var contextChoiceMade = false
     private var includeCardContext = false
-    private var history: [ImpressAIChatTurn] = []
+    private var restoring = false
     private var sending = false
+    private var saveChain: Task<Void, Never>?
+    private var draftDebounce: Task<Void, Never>?
+
+    private var sourceIdentity: String? {
+        sourceCardID.map { "card:" + $0.uuidString }
+    }
 
     private let tableView = UITableView(frame: .zero, style: .plain)
     private let messageInput = UITextView()
@@ -47,13 +62,24 @@ final class ImpressAINativeChatViewController: UIViewController,
     private let inputBar = UIView()
     private let privacyLabel = UILabel()
 
-    init(question: String? = nil, answer: String? = nil) {
+    init(question: String? = nil, answer: String? = nil,
+         cardID: UUID? = nil, contentRevision: Int? = nil,
+         repository: ReviewWCDBRepository? = nil) {
         self.sourceQuestion = question
         self.sourceAnswer = answer
+        self.sourceCardID = cardID
+        self.sourceContentRevision = contentRevision
+        self.injectedRepository = repository
         super.init(nibName: nil, bundle: nil)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        draftDebounce?.cancel()
+        enqueuePersistence()
+    }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
@@ -157,11 +183,20 @@ final class ImpressAINativeChatViewController: UIViewController,
             sendButton.heightAnchor.constraint(equalToConstant: 48),
             messageInput.heightAnchor.constraint(greaterThanOrEqualToConstant: 52)
         ])
+        Task { await restoreLocalSession() }
     }
 
     func textViewDidChange(_ textView: UITextView) {
         let content = textView.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        sendButton.isEnabled = !sending && !content.isEmpty && content.utf8.count <= 12_000
+        sendButton.isEnabled = !sending && !restoring && !content.isEmpty &&
+            content.utf8.count <= 12_000
+        guard !restoring else { return }
+        draftDebounce?.cancel()
+        draftDebounce = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(750))
+            guard !Task.isCancelled else { return }
+            self?.enqueuePersistence()
+        }
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -175,7 +210,9 @@ final class ImpressAINativeChatViewController: UIViewController,
         let turn = history[indexPath.row]
         var content = UIListContentConfiguration.subtitleCell()
         content.text = turn.role == .user ? V3L("我") : V3L("AI")
-        content.secondaryText = turn.text
+        content.secondaryText = turn.status == .failed
+            ? turn.text + "\n" + V3L("发送未完成 · 可重新尝试")
+            : turn.text
         content.textProperties.font = ImpressV3Appearance.Typography.caption
         content.textProperties.color = ImpressV3Appearance.secondaryText
         content.secondaryTextProperties.font = ImpressV3Appearance.Typography.body
