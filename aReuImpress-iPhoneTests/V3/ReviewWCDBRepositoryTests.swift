@@ -26,6 +26,61 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         return folder.appendingPathComponent("v3.sqlite").path
     }
 
+    func testBidirectionalVaultLinksUseExactIdentityAndPreserveOriginalCard() async throws {
+        let calculator = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(), calculator: calculator)
+        let a = try ImVaultFileIdentity(vaultID: "vault-alpha", relativePath: "Notes/Same.md")
+        let b = try ImVaultFileIdentity(vaultID: "vault-beta", relativePath: "Notes/Same.md")
+        let moved = try ImVaultFileIdentity(vaultID: "vault-alpha", relativePath: "Moved/Same.md")
+        let id = UUID(), otherID = UUID()
+        let aKey = try ImpressBatchSourceKey.encode(a)
+        let bKey = try ImpressBatchSourceKey.encode(b)
+        let date = Date(timeIntervalSince1970: 1_726_000_000)
+        try await repo.insertNewCard(WCDBV3CardInput(cardID: id,
+            question: "Same-title note in Alpha?", answerText: "Yes",
+            sourceNotePath: aKey),
+            initial: try calculator.newCardSnapshot(id: id, now: date), now: date)
+        try await repo.insertNewCard(WCDBV3CardInput(cardID: otherID,
+            question: "Same-title note in Beta?", answerText: "Yes",
+            sourceNotePath: bKey),
+            initial: try calculator.newCardSnapshot(id: otherID, now: date), now: date)
+
+        XCTAssertEqual(try await repo.listRelatedCards(for: a).map(\.cardID), [id])
+        XCTAssertEqual(try await repo.listRelatedCards(for: b).map(\.cardID), [otherID])
+        XCTAssertTrue(try await repo.listRelatedCards(for: moved).isEmpty,
+                      "Moving a file must not silently relink by title")
+
+        try await repo.updateManagedCard(WCDBV3CardInput(cardID: id,
+            question: "Corrected Alpha note?", answerText: "Correct",
+            sourceNotePath: aKey),
+            expectedRevision: 0, expectedContentRevision: 0)
+        XCTAssertEqual(try await repo.listRelatedCards(for: a).first?.cardID, id)
+        XCTAssertEqual(try await repo.content(for: id)?.contentRevision, 1)
+        XCTAssertTrue(try await repo.reviewHistory(for: id).isEmpty,
+                      "Changing content must not create a review event")
+        XCTAssertEqual(try await repo.contentHistory(for: id).count, 2)
+    }
+
+    func testLinkedCardSearchIsLiteralAndPaginatesWithinSource() async throws {
+        let calculator = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(), calculator: calculator)
+        let source = try ImVaultFileIdentity(vaultID: "a", relativePath: "Proof.md")
+        let key = try ImpressBatchSourceKey.encode(source)
+        let now = Date(timeIntervalSince1970: 1_726_000_000)
+        for (index, question) in ["100% verified", "hello_underbar", "other"].enumerated() {
+            let card = WCDBV3CardInput(question: question, answerText: "Answer",
+                sourceNotePath: key)
+            try await repo.insertNewCard(card,
+                initial: try calculator.newCardSnapshot(id: card.cardID, now: now),
+                now: now.addingTimeInterval(Double(index)))
+        }
+        XCTAssertEqual(try await repo.listRelatedCards(for: source, matching: "%").count, 1)
+        XCTAssertEqual(try await repo.listRelatedCards(for: source, matching: "_").count, 1)
+        let first = try await repo.listRelatedCards(for: source, offset: 0, limit: 2)
+        let second = try await repo.listRelatedCards(for: source, offset: 2, limit: 2)
+        XCTAssertEqual(Set((first + second).map(\.cardID)).count, 3)
+    }
+
     func testManagedCardCRUDPreservesIdentityAndFSRSReviewEvents() async throws {
         let calculator = FSRS6ReviewCalculator()
         let repo = try ReviewWCDBRepository(

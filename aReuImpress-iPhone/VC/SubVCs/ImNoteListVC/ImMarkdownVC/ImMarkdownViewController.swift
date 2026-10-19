@@ -738,7 +738,11 @@ final class ImVaultDocumentController: UIViewController {
             target: self, action: #selector(generateAIQuestions))
         generate.accessibilityLabel = V3L("根据笔记生成综合问题")
         generate.accessibilityIdentifier = "impress.notes.generate-questions"
-        navigationItem.rightBarButtonItems = [draft, source, generate]
+        let links = UIBarButtonItem(image: UIImage(systemName: "rectangle.stack"),
+            style: .plain, target: self, action: #selector(openLinkedCards))
+        links.accessibilityLabel = V3L("关联卡片")
+        links.accessibilityIdentifier = "impress.notes.linked-cards"
+        navigationItem.rightBarButtonItems = [draft, source, generate, links]
         renderBody()
         // Replaces only explicitly referenced local image embeds with bounded
         // in-memory data URIs. Never reads outside this authorized Vault.
@@ -839,6 +843,23 @@ final class ImVaultDocumentController: UIViewController {
     @objc private func generateAIQuestions() {
         navigationController?.pushViewController(
             ImpressAIQuestionGenerationViewController(document: document), animated: true)
+    }
+
+    @objc private func openLinkedCards() {
+        guard ImVaultReadOnlyProbe.shared.authorizedVaultID ==
+                document.identity.vaultID else {
+            showVaultError(V3L("Vault 授权已失效"),
+                error: ImVaultCoreError.invalidVaultIdentity)
+            return
+        }
+        do {
+            let repository = try ImpressV3ReviewEnvironment.repository()
+            let collection = ImpressV3CardCollectionViewController(
+                repository: repository, sourceIdentity: document.identity)
+            navigationController?.pushViewController(collection, animated: true)
+        } catch {
+            showVaultError(V3L("无法查询关联卡片"), error: error)
+        }
     }
 
     @objc private func editDraft() {

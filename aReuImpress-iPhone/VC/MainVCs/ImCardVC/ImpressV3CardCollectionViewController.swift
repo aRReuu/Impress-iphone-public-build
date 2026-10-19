@@ -1,4 +1,5 @@
 import UIKit
+import ImpressReviewCore
 
 /// V3-only management surface. Reviews still use SwipeCardStack/FSRS;
 /// this page owns explicit CRUD actions on the same WCDB actor.
@@ -7,6 +8,7 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
     var onMutation: (() -> Void)?
 
     private let repository: ReviewWCDBRepository
+    private let sourceIdentity: ImVaultFileIdentity?
     private let searchController = UISearchController(searchResultsController: nil)
     private var cards: [WCDBV3ManagedCard] = []
     private var generation = 0
@@ -14,15 +16,16 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
     private var hasMore = true
     private let pageSize = 80
 
-    init(repository: ReviewWCDBRepository) {
+    init(repository: ReviewWCDBRepository, sourceIdentity: ImVaultFileIdentity? = nil) {
         self.repository = repository
+        self.sourceIdentity = sourceIdentity
         super.init(style: .insetGrouped)
     }
     required init?(coder: NSCoder) { fatalError("init(repository:) required") }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = V3L("卡片集")
+        title = sourceIdentity == nil ? V3L("卡片集") : V3L("关联卡片")
         navigationItem.largeTitleDisplayMode = .always
         tableView.backgroundColor = ImpressV3Appearance.page
         tableView.rowHeight = UITableView.automaticDimension
@@ -83,8 +86,14 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
         Task { [weak self] in
             guard let self else { return }
             do {
-                let next = try await self.repository.listManagedCards(
-                    matching: query, offset: offset, limit: pageSize)
+                let next: [WCDBV3ManagedCard]
+                if let source = self.sourceIdentity {
+                    next = try await self.repository.listRelatedCards(
+                        for: source, matching: query, offset: offset, limit: pageSize)
+                } else {
+                    next = try await self.repository.listManagedCards(
+                        matching: query, offset: offset, limit: pageSize)
+                }
                 guard ticket == generation else { return }
                 loading = false
                 hasMore = next.count == pageSize
@@ -109,7 +118,9 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
         let label = UILabel()
         label.text = searchController.searchBar.text?.isEmpty == false
             ? V3L("没有找到匹配的卡片")
-            : V3L("暂无卡片，点击右上角新建")
+            : (sourceIdentity == nil
+                ? V3L("暂无卡片，点击右上角新建")
+                : V3L("这篇笔记暂时没有已确认关联的卡片"))
         label.textColor = ImpressV3Appearance.secondaryText
         label.textAlignment = .center
         label.font = ImpressV3Appearance.Typography.supporting
@@ -140,7 +151,8 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
             kind = V3L("问答"); symbol = "text.book.closed"
         }
         let status = item.isSuspended ? V3L("已暂停") : V3L("参与复习")
-        content.secondaryText = [kind, status, item.sourceNotePath]
+        let source = item.sourceNotePath.flatMap { try? ImpressBatchSourceKey.decode($0) }
+        content.secondaryText = [kind, status, source?.relativePath ?? item.sourceNotePath]
             .compactMap { $0 }.joined(separator: " · ")
         content.textProperties.numberOfLines = 2
         content.secondaryTextProperties.numberOfLines = 2
@@ -182,8 +194,45 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
                          image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
                 self?.editCard(card)
             }
-            return UIMenu(children: [timeline, edit])
+            var actions = [timeline, edit]
+            if let raw = card.sourceNotePath,
+               let source = try? ImpressBatchSourceKey.decode(raw) {
+                actions.append(UIAction(title: V3L("打开来源笔记"),
+                    image: UIImage(systemName: "doc.text")) { [weak self] _ in
+                    self?.openLinkedNote(source)
+                })
+            }
+            return UIMenu(children: actions)
         }
+    }
+
+    private func openLinkedNote(_ identity: ImVaultFileIdentity) {
+        // Do not infer a Vault from a title or cross an expired permission.
+        guard ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID else {
+            showLinkedNoteProblem(V3L("来源 Vault 未授权，无法打开原笔记。"))
+            return
+        }
+        ImVaultReadSync.shared.read(identity) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let source):
+                guard source.identity == identity else {
+                    self.showLinkedNoteProblem(V3L("来源身份不匹配，请刷新 Vault 授权。"))
+                    return
+                }
+                self.navigationController?.pushViewController(
+                    ImVaultDocumentController(document: source), animated: true)
+            case .failure(let error):
+                self.showLinkedNoteProblem(error.localizedDescription)
+            }
+        }
+    }
+
+    private func showLinkedNoteProblem(_ detail: String) {
+        let alert = UIAlertController(title: V3L("来源笔记不可用"),
+            message: detail, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+        present(alert, animated: true)
     }
 
     private func startBatchImport() {

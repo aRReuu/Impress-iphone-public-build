@@ -677,6 +677,71 @@ public actor ReviewWCDBRepository: ReviewRepository {
         }
     }
 
+    /// Exact Vault ID + full relative path. An unrelated or same-title file
+    /// cannot enter this result; legacy path-only cards are deliberately excluded.
+    /// Searches are literal, not SQL LIKE patterns, and do not touch FSRS.
+    public func listRelatedCards(for source: ImVaultFileIdentity,
+                                 matching search: String = "",
+                                 offset: Int = 0, limit: Int = 100) throws -> [WCDBV3ManagedCard] {
+        guard offset >= 0, (1...200).contains(limit) else {
+            throw ReviewWCDBError.invalidSchedulerOutput
+        }
+        let encoded = try ImpressBatchSourceKey.encode(source)
+        let selected = [
+            WCDBV3CardRow.Properties.cardID,
+            WCDBV3CardRow.Properties.question,
+            WCDBV3CardRow.Properties.answerText,
+            WCDBV3CardRow.Properties.cardType,
+            WCDBV3CardRow.Properties.sourceNotePath,
+            WCDBV3CardRow.Properties.isSuspended,
+            WCDBV3CardRow.Properties.revision,
+            WCDBV3CardRow.Properties.updatedAt
+        ]
+        let ordering = [
+            WCDBV3CardRow.Properties.updatedAt.asOrder(by: .descending),
+            WCDBV3CardRow.Properties.cardID.asOrder(by: .ascending)
+        ]
+        let sourceFilter = WCDBV3CardRow.Properties.sourceNotePath == encoded
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rows: [WCDBV3CardRow]
+        if query.isEmpty {
+            rows = try database.getObjects(on: selected, fromTable: Self.cardsTable,
+                where: sourceFilter, orderBy: ordering, limit: limit, offset: offset)
+        } else {
+            // Scan only this exact file's linked rows in bounded batches.
+            // A literal '%' or '_' must never widen SQLite LIKE matching.
+            var matches: [WCDBV3CardRow] = []
+            var scanned = 0
+            var skipped = 0
+            while matches.count < limit {
+                let block: [WCDBV3CardRow] = try database.getObjects(
+                    on: selected, fromTable: Self.cardsTable, where: sourceFilter,
+                    orderBy: ordering, limit: 200, offset: scanned)
+                if block.isEmpty { break }
+                scanned += block.count
+                for row in block where [row.question, row.answerText]
+                    .compactMap({ $0 }).contains(where: { $0.localizedStandardContains(query) }) {
+                    if skipped < offset { skipped += 1 }
+                    else if matches.count < limit { matches.append(row) }
+                }
+                if block.count < 200 { break }
+            }
+            rows = matches
+        }
+        return try rows.map { row in
+            guard let rawID = row.cardID, let id = UUID(uuidString: rawID),
+                  let question = row.question, let type = row.cardType,
+                  let suspended = row.isSuspended, let revision = row.revision else {
+                throw ReviewWCDBError.corruptRecord
+            }
+            return WCDBV3ManagedCard(cardID: id, question: question,
+                answerText: row.answerText, cardType: type,
+                sourceNotePath: row.sourceNotePath,
+                isSuspended: suspended != 0, revision: revision,
+                updatedAt: row.updatedAt ?? .distantPast)
+        }
+    }
+
     /// Update only content fields. Card identity, FSRS revision/schedule and
     /// immutable review events remain intact. Two independent CAS tokens stop
     /// a stale editor after either an FSRS commit or another content edit.

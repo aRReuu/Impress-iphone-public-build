@@ -1,3 +1,6 @@
+import UIKit
+import ImpressReviewCore
+
 // A local-only filter shared by model catalogs and task selection.
 private enum ImpressAIModelSearchFilter {
     static func apply(_ models: [ImpressAIModel], query: String) -> [ImpressAIModel] {
@@ -12,8 +15,6 @@ private enum ImpressAIModelSearchFilter {
     }
 }
 
-import UIKit
-import ImpressReviewCore
 
 // Native settings: one provider may have many independent connections/keys and
 // each connection may have several models. No API secret goes into a cell subtitle.
