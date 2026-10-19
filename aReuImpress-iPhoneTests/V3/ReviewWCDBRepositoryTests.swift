@@ -45,20 +45,27 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             sourceNotePath: bKey),
             initial: try calculator.newCardSnapshot(id: otherID, now: date), now: date)
 
-        XCTAssertEqual(try await repo.listRelatedCards(for: a).map(\.cardID), [id])
-        XCTAssertEqual(try await repo.listRelatedCards(for: b).map(\.cardID), [otherID])
-        XCTAssertTrue(try await repo.listRelatedCards(for: moved).isEmpty,
+        let alphaCards = try await repo.listRelatedCards(for: a)
+        XCTAssertEqual(alphaCards.map(\.cardID), [id])
+        let betaCards = try await repo.listRelatedCards(for: b)
+        XCTAssertEqual(betaCards.map(\.cardID), [otherID])
+        let movedCards = try await repo.listRelatedCards(for: moved)
+        XCTAssertTrue(movedCards.isEmpty,
                       "Moving a file must not silently relink by title")
 
         try await repo.updateManagedCard(WCDBV3CardInput(cardID: id,
             question: "Corrected Alpha note?", answerText: "Correct",
             sourceNotePath: aKey),
             expectedRevision: 0, expectedContentRevision: 0)
-        XCTAssertEqual(try await repo.listRelatedCards(for: a).first?.cardID, id)
-        XCTAssertEqual(try await repo.content(for: id)?.contentRevision, 1)
-        XCTAssertTrue(try await repo.reviewHistory(for: id).isEmpty,
+        let relatedAfterEdit = try await repo.listRelatedCards(for: a)
+        XCTAssertEqual(relatedAfterEdit.first?.cardID, id)
+        let contentAfterEdit = try await repo.content(for: id)
+        XCTAssertEqual(contentAfterEdit?.contentRevision, 1)
+        let historyAfterEdit = try await repo.reviewHistory(for: id)
+        XCTAssertTrue(historyAfterEdit.isEmpty,
                       "Changing content must not create a review event")
-        XCTAssertEqual(try await repo.contentHistory(for: id).count, 2)
+        let revisionsAfterEdit = try await repo.contentHistory(for: id)
+        XCTAssertEqual(revisionsAfterEdit.count, 2)
     }
 
     func testLinkedCardSearchIsLiteralAndPaginatesWithinSource() async throws {
@@ -74,11 +81,33 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
                 initial: try calculator.newCardSnapshot(id: card.cardID, now: now),
                 now: now.addingTimeInterval(Double(index)))
         }
-        XCTAssertEqual(try await repo.listRelatedCards(for: source, matching: "%").count, 1)
-        XCTAssertEqual(try await repo.listRelatedCards(for: source, matching: "_").count, 1)
+        let percentMatches = try await repo.listRelatedCards(for: source, matching: "%")
+        XCTAssertEqual(percentMatches.count, 1)
+        let underscoreMatches = try await repo.listRelatedCards(for: source, matching: "_")
+        XCTAssertEqual(underscoreMatches.count, 1)
         let first = try await repo.listRelatedCards(for: source, offset: 0, limit: 2)
         let second = try await repo.listRelatedCards(for: source, offset: 2, limit: 2)
         XCTAssertEqual(Set((first + second).map(\.cardID)).count, 3)
+    }
+
+    func testOneSourceSupportsTwoIndependentChatSessionsWithoutOverwritingHistory() async throws {
+        let repo = try ReviewWCDBRepository(
+            databasePath: temporaryPath(), calculator: FSRS6ReviewCalculator())
+        let source = "card:" + UUID().uuidString
+        var original = WCDBV3ChatSession(sourceIdentity: source)
+        original.messages = [WCDBV3ChatMessage(role: .user,
+            text: "First discussion", status: .completed)]
+        var second = WCDBV3ChatSession(sourceIdentity: source)
+        second.inputDraft = "Unsent second discussion"
+        try await repo.saveChatSession(original, expectedRevision: nil)
+        try await repo.saveChatSession(second, expectedRevision: nil)
+        let sessions = try await repo.chatSessions(for: source)
+        XCTAssertEqual(sessions.count, 2)
+        XCTAssertEqual(Set(sessions.map(\.sessionID)).count, 2)
+        XCTAssertTrue(sessions.contains(where: { $0.sessionID == original.sessionID &&
+            $0.messages == original.messages }))
+        XCTAssertTrue(sessions.contains(where: { $0.sessionID == second.sessionID &&
+            $0.inputDraft == second.inputDraft }))
     }
 
     func testManagedCardCRUDPreservesIdentityAndFSRSReviewEvents() async throws {

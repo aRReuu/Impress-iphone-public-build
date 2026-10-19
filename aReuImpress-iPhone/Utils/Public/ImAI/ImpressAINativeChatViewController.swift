@@ -104,41 +104,23 @@ final class ImpressAINativeChatViewController: UIViewController,
     }
 
     private func refreshModelPicker() {
-        let registry = ImpressAIConfigStore.shared.registry
         let current = try? liveRoute()
         navigationItem.prompt = current.map {
             $0.connection.title + " · " + $0.model.identifier
-        } ?? V3L("请先选择免费对话模型")
-        let reset = UIAction(title: V3L("使用业务默认模型"),
-                             image: UIImage(systemName: "arrow.uturn.backward"),
-                             state: selectedModelID == nil ? .on : .off) {
-            [weak self] _ in
-            self?.selectedModelID = nil
-            self?.refreshModelPicker()
-        }
-        let available = registry.models.compactMap { model
-            -> (ImpressAIConnection, ImpressAIModel)? in
-            guard let connection = registry.connections.first(where: {
-                $0.id == model.connectionID
-            }), (try? ImpressAIRequestPolicy.validate(
-                ImpressAIResolvedRoute(connection: connection, model: model))) != nil else {
-                return nil
-            }
-            return (connection, model)
-        }.sorted { left, right in
-            (left.0.title, left.1.identifier) < (right.0.title, right.1.identifier)
-        }
-        let actions = available.map { connection, model in
-            UIAction(title: connection.title + " · " + model.identifier,
-                     state: selectedModelID == model.id ? .on : .off) {
-                [weak self] _ in
-                self?.selectedModelID = model.id
+        } ?? V3L("请先配置可用的对话模型")
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: V3L("切换模型"), style: .plain,
+            target: self, action: #selector(chooseConversationModel))
+    }
+
+    @objc private func chooseConversationModel() {
+        // A session override must never change the global default route.
+        let picker = ImpressAIModelChooser(task: .conversation,
+            selectedOverrideID: selectedModelID) { [weak self] picked in
+                self?.selectedModelID = picked
                 self?.refreshModelPicker()
             }
-        }
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: V3L("切换模型"),
-            menu: UIMenu(children: [reset] + actions))
+        navigationController?.pushViewController(picker, animated: true)
     }
 
     override func viewDidLoad() {
@@ -160,7 +142,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         privacyLabel.numberOfLines = 2
         privacyLabel.textColor = ImpressV3Appearance.secondaryText
         privacyLabel.textAlignment = .center
-        privacyLabel.text = V3L("讨论记录仅在本页面保留，不会自动写入 Obsidian。")
+        privacyLabel.text = V3L("对话与草稿保存在本机；只有点击发送并确认材料后才会发送给服务商。不会自动写入 Obsidian。")
 
         messageInput.font = ImpressV3Appearance.Typography.body
         messageInput.adjustsFontForContentSizeCategory = true

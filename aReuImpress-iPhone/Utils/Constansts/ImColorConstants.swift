@@ -302,7 +302,7 @@ enum ImpressV3Appearance {
     static let secondarySegmentSelection = UIColor.tertiarySystemGroupedBackground
     static let mutedAction = UIColor.systemGray
     static let quietControlSurface = UIColor.secondarySystemFill
-    static let reviewActionSurface = UIColor.tertiarySystemGroupedBackground
+    static let reviewActionSurface = UIColor.label.withAlphaComponent(0.10)
     static let reviewPrimarySurface = UIColor.label
     static let reviewPrimaryInk = UIColor.systemBackground
     static let reviewOverlaySurface = UIColor { traits in
@@ -448,7 +448,7 @@ enum ImpressV3Appearance {
     static func styleSegmentedControl(_ control: UISegmentedControl,
                                       prominent: Bool) {
         control.backgroundColor = segmentTrack
-        control.selectedSegmentTintColor = prominent ? accent : secondarySegmentSelection
+        control.selectedSegmentTintColor = prominent ? reviewPrimarySurface : secondarySegmentSelection
         control.apportionsSegmentWidthsByContent = false
         control.setTitleTextAttributes([
             .font: Typography.supporting,
@@ -456,7 +456,7 @@ enum ImpressV3Appearance {
         ], for: .normal)
         control.setTitleTextAttributes([
             .font: Typography.heading,
-            .foregroundColor: prominent ? primaryButtonText : primaryText
+            .foregroundColor: prominent ? reviewPrimaryInk : primaryText
         ], for: .selected)
         control.layer.cornerRadius = Radius.segment
         // Keep Apple's intrinsic segment geometry and pressed-state behavior.

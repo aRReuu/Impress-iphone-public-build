@@ -991,7 +991,18 @@ final class ImpressAIModelsViewController: UITableViewController, UISearchResult
 final class ImpressAIModelChooser: UITableViewController, UISearchResultsUpdating {
     private let modelSearch = UISearchController(searchResultsController: nil)
     private let task: ImpressAITask
-    init(task: ImpressAITask) { self.task = task; super.init(style: .insetGrouped) }
+    private let onPick: ((UUID?) -> Void)?
+    private let selectedOverrideID: UUID?
+    init(task: ImpressAITask, selectedOverrideID: UUID? = nil,
+         onPick: ((UUID?) -> Void)? = nil) {
+        self.task = task
+        self.selectedOverrideID = selectedOverrideID
+        self.onPick = onPick
+        super.init(style: .insetGrouped)
+    }
+    private var hasDefaultRow: Bool {
+        onPick != nil && (modelSearch.searchBar.text ?? "").isEmpty
+    }
     required init?(coder: NSCoder) { fatalError("init(coder:)") }
     private var models: [ImpressAIModel] {
         ImpressAIModelSearchFilter.apply(
@@ -1017,10 +1028,20 @@ final class ImpressAIModelChooser: UITableViewController, UISearchResultsUpdatin
     }
     override func numberOfSections(in tableView: UITableView) -> Int { 1 }
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        max(1, models.count)
+        max(1, models.count + (hasDefaultRow ? 1 : 0))
     }
     override func tableView(_ tableView: UITableView,
                             cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        if hasDefaultRow && indexPath.row == 0 {
+            let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+            var ui = UIListContentConfiguration.cell()
+            ui.text = V3L("使用业务默认模型")
+            ui.image = UIImage(systemName: "arrow.uturn.backward")
+            cell.contentConfiguration = ui
+            cell.accessoryType = selectedOverrideID == nil ? .checkmark : .none
+            ImpressV3Appearance.styleGroupedCell(cell)
+            return cell
+        }
         if models.isEmpty {
             let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
             var empty = UIListContentConfiguration.subtitleCell()
@@ -1037,7 +1058,7 @@ final class ImpressAIModelChooser: UITableViewController, UISearchResultsUpdatin
             ImpressV3Appearance.styleGroupedCell(cell)
             return cell
         }
-        let m = models[indexPath.row]
+        let m = models[indexPath.row - (hasDefaultRow ? 1 : 0)]
         let registry = ImpressAIConfigStore.shared.registry
         let c = registry.connections.first { $0.id == m.connectionID }
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
@@ -1048,18 +1069,27 @@ final class ImpressAIModelChooser: UITableViewController, UISearchResultsUpdatin
             : (m.jsonVerified ? V3L("JSON 已验证") : V3L("JSON 尚未验证，不能上传笔记"))
         ui.secondaryText = (c?.title ?? "") + " · " + state
         cell.contentConfiguration = ui
-        cell.accessoryType = registry.routes.first { $0.task == task }?.primaryModelID == m.id
+        cell.accessoryType = (onPick != nil
+            ? selectedOverrideID == m.id
+            : registry.routes.first { $0.task == task }?.primaryModelID == m.id)
             ? .checkmark : .none
         ImpressV3Appearance.styleGroupedCell(cell)
         return cell
     }
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        guard !models.isEmpty else {
+        if hasDefaultRow && indexPath.row == 0 {
+            onPick?(nil)
             navigationController?.popViewController(animated: true)
             return
         }
-        let m = models[indexPath.row]
+        guard !models.isEmpty else { return }
+        let m = models[indexPath.row - (hasDefaultRow ? 1 : 0)]
+        if let onPick {
+            onPick(m.id)
+            navigationController?.popViewController(animated: true)
+            return
+        }
         if task == .knowledgeSynthesis && !m.toolsVerified {
             let alert = UIAlertController(title: V3L("该功能尚未开放"),
                    message: V3L("知识重构需要单独的工具调用及 Vault 写回安全验收。"),
