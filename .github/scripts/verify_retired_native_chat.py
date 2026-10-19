@@ -109,7 +109,7 @@ def assert_clean() -> None:
     # Its editor/draft persists only through the existing V3 source-ID database.
     native_chat = (APP / "Utils/Public/ImAI/ImpressAINativeChatViewController.swift").read_text()
     assert "private var history: [WCDBV3ChatMessage] = []" in native_chat
-    assert "private var sourceCardID: UUID?" in native_chat
+    assert "private let sourceCardID: UUID?" in native_chat
     assert "private func persistLocal() async -> Bool" in native_chat
     assert "sourceCardID.map" in native_chat
     assert "history = Array(history.suffix(" not in native_chat
