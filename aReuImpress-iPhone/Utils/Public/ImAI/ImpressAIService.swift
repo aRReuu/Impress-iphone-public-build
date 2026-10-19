@@ -256,6 +256,12 @@ actor ImpressAIHTTPClient {
 
     func complete(route: ImpressAIResolvedRoute, system: String,
                   user: String) async throws -> String {
+        try await completeDetailed(route: route, system: system, user: user).text
+    }
+
+    /// Expose a redacted HTTP status without persisting provider request or reply.
+    func completeDetailed(route: ImpressAIResolvedRoute, system: String,
+                          user: String) async throws -> (text: String, statusCode: Int) {
         // Reject paid model IDs before sending any request, whether anonymous
         // or explicitly authenticated from device Keychain.
         guard (try? ImpressAIOpenCodeFreeQA.validate(route)) != nil else {
@@ -298,8 +304,9 @@ actor ImpressAIHTTPClient {
                                     ["responseMimeType": "application/json"]
             ]
         }
-        let json = try await execute(request(c, path: path, method: "POST",
-                                             wireProtocol: wire, body: payload))
+        let detailed = try await executeDetailed(request(c, path: path,
+                               method: "POST", wireProtocol: wire, body: payload))
+        let json = detailed.body
         var answer: String?
         switch wire {
         case .responses:
@@ -324,7 +331,7 @@ actor ImpressAIHTTPClient {
         guard let text = answer, !text.isEmpty, text.utf8.count < 70_000 else {
             throw ImpressAIServiceError.response
         }
-        return text
+        return (text, detailed.statusCode)
     }
 
     /// Actual native text conversation, NOT the structured JSON question API.
