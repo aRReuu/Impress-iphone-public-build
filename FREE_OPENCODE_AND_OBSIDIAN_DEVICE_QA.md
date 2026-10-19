@@ -4,17 +4,17 @@
 >
 > 当前 OpenCode Console 官方模型目录：`https://opencode.ai/inference/v1/models`；
 > 免费 Chat Completions Endpoint：`https://opencode.ai/inference/openai/v1/chat/completions`。
-> 本 QA 仅允许 `glm-5.3-flash-free` 和 `deepseek-v4.1-flash-free`，禁止通过输入其他模型 ID 或修改 Gateway 地址绕过。
+> 本 QA 仅允许 OpenCode 官方价格表明确列为 Free、且公开目录可查询的四个型号：`mimo-v2.6-flash-free`、`longcat-2.5-preview-free`、`nemotron-3.5-lightning-free`、`space-bunny-free`。不接受自行输入未知 `-free` ID 来绕过白名单。
 
 ## A. 连通性与 API Key（无私人笔记）
 
-1. 打开 `设置 → AI 服务 → + → OpenCode 免费模型（测试）`。该连接自动创建两个免费模型，出题与原生对话均默认使用 `glm-5.3-flash-free`。
+1. 打开 `设置 → AI 服务 → + → OpenCode 免费模型（测试）`。该入口创建或更新现有免费 QA 连接，不会清除已经授权保存的 Keychain 密钥；默认模型为 `mimo-v2.6-flash-free`，可选其余三个 Free 型号。
 2. 优先在此连接保持 **noAuthentication**（不需要 API Key），从模型列表点 `测试免费对话`，只会发送一个不含用户数据的 `ping` 请求。
-3. 官方文档称免费聊天模型可以匿名请求，但 GitHub Hosted Runner 对这两个免费模型的匿名 POST 实测均返回 **HTTP 403**；公开模型列表请求为 **HTTP 200**。这不证明 Key 错误，也不证明 iPhone 所在网络一定被拒绝。
+3. 官方文档允许匿名免费聊天，但在 [GitHub Hosted Runner 测试 #39201745545](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39201745545) 中，新四个 Free 模型均在目录存在（GET 200），实际匿名 POST 全部 HTTP 403。这不代表有 Key 的 iPhone 请求一定失败，也不代表有 Key 就一定成功。
 4. 如果手机上也提示 403，点击该免费连接的 `API Key`，将你在 OpenCode Console **重新生成的**密钥保存进 iOS Keychain。原匿名免费连接随明确录入自动切换为 `bearer`。重新点击 `测试免费对话`；请求中的模型 ID、接口和数量限制仍保持免费策略。
-5. 免费对话通后，再点击 `测试 JSON 输出`，成功时才允许进入「指定笔记生成综合问题」；若模型无法严格遵循 JSON 格式，尝试另一免费模型。切勿回退付费型号。
+5. 推荐从模型操作菜单点击 `免费 API 全链路验收`。用户确认后，会使用**设备上当前保存的密钥（或明确使用匿名）**依次执行首次 Chat、第二轮带历史 Chat、JSON 解析、模拟章节综合出题 + 候选池证据校验。四项全部真实 HTTP 成功，才会标记该模型 `jsonVerified` 并启用 Chat / 出题默认路由。该按钮**不会上传个人笔记或写入正式卡片**。如果任一环节失败，必须查看服务商、模型 ID、协议、HTTP 状态和失败原因；换另一个仍属 Free 的型号即可，不回退收费模型。
    - 在 `设置 → AI 服务 → 默认对话提示词` 可选用现有「提示词」库中的自定义模板，默认仍为「第一性原理 + 奥卡姆剃刀」。提示词模板可以从入口跳转原有提示词编辑页面；只有显式点击发送才会与用户输入一起传给服务商。
-6. 注意：**只因名称带 free 不能保证永久免费。** 模型目录与定价由 OpenCode 修改。本 QA 代码只允许官方文档确认为免费的两个型号；实际用量是否最终计费取决于服务商。如要求完全不承担账号费用风险，请保持无认证方式；Keychain 带 Key 测试需要用户在 Console 核实免费定价。
+6. **`-free` 后缀不保证永久免费。** OpenCode 的 Free 定价属于当前状态，且一些是限时活动。测试前需在 Console 再次确认模型免费定价及当前账户计费设置。如要求完全零账单风险，可以优先尝试匿名请求；账号 Key 需由用户自行在设备 Keychain 中录入、撤销和更换，不在仓库或 CI 保存。
 
 ## B. Obsidian 只读、出题与候选池
 
