@@ -31,7 +31,7 @@ final class ImpressAISettingsViewController: UITableViewController {
         switch section {
         case 0: return ImpressAIConfigStore.shared.registry.connections.count
         case 1: return tasks.count
-        default: return 2
+        default: return 3
         }
     }
     override func tableView(_ tableView: UITableView,
@@ -83,10 +83,15 @@ final class ImpressAISettingsViewController: UITableViewController {
                 content.text = V3L("数据上传规则")
                 content.secondaryText = V3L("按需授权、仅上传选定文档、不会修改原始 Vault")
                 content.image = UIImage(systemName: "lock.shield")
-            } else {
+            } else if indexPath.row == 1 {
                 content.text = V3L("AI 讨论")
                 content.secondaryText = V3L("使用对话模型进行原生多轮讨论")
                 content.image = UIImage(systemName: "bubble.left.and.bubble.right")
+            } else {
+                content.text = V3L("默认对话提示词")
+                content.secondaryText = ImpressAIChatPromptSelection.selectedTemplate()?.title ??
+                    V3L("第一性原理 + 奥卡姆剃刀")
+                content.image = UIImage(systemName: "text.alignleft")
             }
         }
         content.textProperties.font = ImpressV3Appearance.Typography.body
@@ -114,12 +119,40 @@ final class ImpressAISettingsViewController: UITableViewController {
                     ImpressAINativeChatViewController(), animated: true)
                 return
             }
+            if indexPath.row == 2 {
+                chooseDefaultChatPrompt()
+                return
+            }
             let alert = UIAlertController(title: V3L("数据上传规则"),
                 message: V3L("云端模型会接收你明确选择的笔记片段。服务商可能根据各自政策处理请求；不会默认上传整个 Obsidian Vault。所有自动写回仍被生产安全门禁关闭。"),
                 preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: V3L("知道了"), style: .default))
             present(alert, animated: true)
         }
+    }
+
+    private func chooseDefaultChatPrompt() {
+        let alert = UIAlertController(title: V3L("默认对话提示词"),
+            message: V3L("默认使用第一性原理与奥卡姆剃刀，也可选用「提示词」中编辑过的模板。仅在你点击发送时传给当前模型。"),
+            preferredStyle: .actionSheet)
+        alert.addAction(UIAlertAction(title: V3L("第一性原理 + 奥卡姆剃刀"),
+            style: .default) { _ in
+                ImpressAIChatPromptSelection.choose(nil)
+                self.tableView.reloadData()
+            })
+        for template in ImpressV3PromptLibrary.load() {
+            alert.addAction(UIAlertAction(title: template.title, style: .default) { _ in
+                ImpressAIChatPromptSelection.choose(template.id)
+                self.tableView.reloadData()
+            })
+        }
+        alert.addAction(UIAlertAction(title: V3L("打开提示词库编辑"),
+            style: .default) { _ in
+                self.navigationController?.pushViewController(
+                    ImpressV3PromptLibraryViewController(), animated: true)
+            })
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        present(alert, animated: true)
     }
 
     @objc private func addConnection() {
