@@ -238,6 +238,35 @@ actor ImpressAIHTTPClient {
         return result.body
     }
 
+    /// Official Console service-account probe for the same Keychain credential
+    /// used by inference. Inference-only keys may GET /api/v2/config.
+    /// Never render, log, persist or print the private workspace JSON or key.
+    func probeOpenCodeServiceAccount(connection: ImpressAIConnection) async throws -> Int {
+        guard connection.provider == .openCode,
+              connection.baseURL == ImpressAIOpenCodeFreeQA.baseURL,
+              connection.effectiveAuthentication == .bearer,
+              connection.credentialID != nil,
+              let url = URL(string: "https://opencode.ai/console/api/v2/config") else {
+            throw ImpressAIServiceError.configuration
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let secret = try ImpressAIKeychain.read(id: connection.credentialID)
+        request.setValue("Bearer " + secret, forHTTPHeaderField: "Authorization")
+        let (_, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw ImpressAIServiceError.response
+        }
+        if http.statusCode == 401 { throw ImpressAIServiceError.unauthorized }
+        if http.statusCode == 403 { throw ImpressAIServiceError.forbidden }
+        if http.statusCode == 429 { throw ImpressAIServiceError.rateLimited }
+        guard (200...299).contains(http.statusCode) else {
+            throw ImpressAIServiceError.status(http.statusCode)
+        }
+        return http.statusCode
+    }
+
     // No inference of models' structured-output capability from this listing.
     func listModels(connection: ImpressAIConnection) async throws -> [String] {
         let path = connection.effectiveEndpoints.modelsPath
