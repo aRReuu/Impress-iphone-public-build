@@ -1,6 +1,33 @@
 import UIKit
 import ImpressReviewCore
 
+/// Reuse the editable Settings → Prompt Library as the single authoring
+/// authority. Only a template UUID (never its private text) is kept as a local
+/// preference; the live template body is read when the user explicitly Sends.
+enum ImpressAIChatPromptSelection {
+    static let storageKey = "ImpressV1NativeChatPromptTemplateID"
+
+    static func selectedTemplate() -> ImpressV3PromptTemplate? {
+        guard let raw = UserDefaults.standard.string(forKey: storageKey),
+              let id = UUID(uuidString: raw) else { return nil }
+        return ImpressV3PromptLibrary.load().first(where: { $0.id == id })
+    }
+
+    static func choose(_ templateID: UUID?) {
+        if let templateID {
+            UserDefaults.standard.set(templateID.uuidString, forKey: storageKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: storageKey)
+        }
+        ImpressV3BackupCoordinator.markDataChanged()
+    }
+
+    static func systemText() -> String {
+        selectedTemplate()?.content ??
+            V3L("以第一性原理和奥卡姆剃刀分析问题，明确假设、证据与边界。不编造笔记内容。")
+    }
+}
+
 /// V1 native API chat. Uses the same per-business AI registry as question
 /// generation, but its request/response is ordinary text, NOT question JSON.
 /// Nothing is automatically appended to learning history or source Markdown.
@@ -215,7 +242,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         history = newHistory
         reloadAndScroll()
 
-        var system = V3L("以第一性原理和奥卡姆剃刀分析问题，明确假设、证据与边界。不编造笔记内容。")
+        var system = ImpressAIChatPromptSelection.systemText()
         if includeCardContext, let question = sourceQuestion, !question.isEmpty {
             system += "\n" + V3L("当前卡片的问题：") + question
             if let answer = sourceAnswer, !answer.isEmpty {
