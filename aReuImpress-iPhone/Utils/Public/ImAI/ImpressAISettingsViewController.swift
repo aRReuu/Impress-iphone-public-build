@@ -557,6 +557,9 @@ final class ImpressAIModelsViewController: UITableViewController {
         a.addAction(UIAlertAction(title: V3L("测试免费对话"), style: .default) { [weak self] _ in
             self?.testFreeConversation(model)
         })
+        a.addAction(UIAlertAction(title: V3L("免费 API 全链路验收"), style: .default) { [weak self] _ in
+            self?.confirmFreeWorkflow(model)
+        })
         a.addAction(UIAlertAction(title: V3L("测试 JSON 输出"), style: .default) { [weak self] _ in
             self?.testModel(model)
         })
@@ -687,6 +690,124 @@ final class ImpressAIModelsViewController: UITableViewController {
             navigationItem.rightBarButtonItems?.forEach { $0.isEnabled = true }
         }
     }
+    /// All requests use the actual configured Keychain credential, if any,
+    /// and the exact same inference service as production Chat and AI question
+    /// generation. The test input is synthetic: no user card or Vault bytes.
+    private func confirmFreeWorkflow(_ model: ImpressAIModel) {
+        guard let connection else { return }
+        let selected = ImpressAIResolvedRoute(connection: connection, model: model)
+        do { try ImpressAIOpenCodeFreeQA.validate(selected) }
+        catch { showError(error); return }
+        let alert = UIAlertController(title: V3L("免费 API 全链路验收"),
+            message: V3L("将向当前 OpenCode 免费模型发送四个不含私人信息的测试请求：首次 Chat、连续追问、JSON 与综合出题。不会上传真实笔记或保存卡片，也不会调用付费模型。"),
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("开始测试"), style: .default) { [weak self] _ in
+            self?.runFreeWorkflow(model: model, connection: connection)
+        })
+        present(alert, animated: true)
+    }
+
+    private func runFreeWorkflow(model: ImpressAIModel, connection: ImpressAIConnection) {
+        let route = ImpressAIResolvedRoute(connection: connection, model: model)
+        let identity = connection.title + "\n" + model.identifier +
+            "\nChat Completions · " +
+            (connection.effectiveAuthentication == .bearer ? "Bearer / Keychain" : "Anonymous")
+        tableView.isUserInteractionEnabled = false
+        navigationItem.prompt = V3L("正在验证免费 API…")
+        Task {
+            var lines: [String] = [identity]
+            do {
+                try ImpressAIOpenCodeFreeQA.validate(route)
+                if connection.effectiveAuthentication == .bearer {
+                    // Read-check only. Never log, display or cache the secret.
+                    _ = try ImpressAIKeychain.read(id: connection.credentialID)
+                    lines.append("Keychain: " + V3L("凭据可读取"))
+                }
+                let firstTurn = ImpressAIChatTurn(role: .user, text: "Reply only with OK.")
+                let first = try await ImpressAIHTTPClient.shared.converseDetailed(
+                    route: route, system: "Brief neutral test, no user data.",
+                    turns: [firstTurn])
+                lines.append("Chat 1: HTTP \(first.statusCode) · PASS")
+                let followup = try await ImpressAIHTTPClient.shared.converseDetailed(
+                    route: route, system: "Brief neutral test, no user data.",
+                    turns: [
+                        firstTurn,
+                        ImpressAIChatTurn(role: .assistant, text: first.text),
+                        ImpressAIChatTurn(role: .user, text: "Second turn: reply only with TWO.")
+                    ])
+                lines.append("Chat 2: HTTP \(followup.statusCode) · PASS")
+                let jsonProbe = try await ImpressAIHTTPClient.shared.completeDetailed(
+                    route: route,
+                    system: "Return a single JSON object with boolean ok true and nothing else.",
+                    user: "Respond with exactly the JSON object {\"ok\":true}.")
+                guard let parsed = try? JSONSerialization.jsonObject(
+                    with: Data(jsonProbe.text.utf8)) as? [String: Any],
+                    parsed.count == 1, parsed["ok"] as? Bool == true else {
+                    throw ImpressAIServiceError.response
+                }
+                lines.append("JSON: HTTP \(jsonProbe.statusCode) · PASS")
+                let source = ImpressAISource(
+                    vaultID: "qa-synthetic-only",
+                    relativePath: "Impress_QA_Synthetic.md",
+                    documentSHA256: String(repeating: "a", count: 64),
+                    heading: "Synthetic test")
+                let excerpt = ImpressAIExcerpt(id: "qa-evidence-1",
+                    source: source,
+                    text: "Active recall means trying to retrieve information without " +
+                          "looking at the answer. Rereading exposes the answer before retrieval.",
+                    sectionHeading: "Retrieval practice")
+                let generated = try await ImpressAIHTTPClient.shared.completeDetailed(
+                    route: route, system: ImpressAIQuestionPrompt.system(count: 1),
+                    user: try ImpressAIQuestionPrompt.input([excerpt]))
+                let questions = try ImpressAIQuestionPrompt.decode(generated.text)
+                let pool = ImpressAIQuestionPool(source: source, excerpts: [excerpt],
+                    requestedCount: 1, modelProfileID: model.id,
+                    candidates: questions.map {
+                        ImpressAIQuestionCandidate(question: $0.question,
+                            answer: $0.answer, dimension: $0.dimension,
+                            evidenceIDs: $0.evidenceIDs)
+                    })
+                let valid = try ImpressAIQuestionValidator.validatedSelection(pool)
+                guard valid.count == 1 else { throw ImpressAIServiceError.response }
+                lines.append("AI Question: HTTP \(generated.statusCode) · PASS")
+                // Write only capability/route metadata after all *real* API
+                // requests and local validators pass. No synthetic card is saved.
+                try ImpressAIConfigStore.shared.update { reg in
+                    guard reg.connections.contains(connection),
+                          let index = reg.models.firstIndex(where: { $0.id == model.id }),
+                          reg.models[index].identifier == model.identifier,
+                          reg.models[index].connectionID == connection.id,
+                          reg.models[index].jsonMode == model.jsonMode,
+                          reg.models[index].protocolOverride == model.protocolOverride else {
+                        throw ImpressAIServiceError.configuration
+                    }
+                    reg.models[index].jsonVerified = true
+                    for task in [ImpressAITask.conversation, .questionGeneration] {
+                        reg.routes.removeAll { $0.task == task }
+                        reg.routes.append(ImpressAIRoute(task: task, primaryModelID: model.id))
+                    }
+                }
+                lines.append(V3L("对话与出题模型已启用；未修改真实 Vault 或卡片库。"))
+                showFreeWorkflowReport(title: V3L("免费 API 验收通过"),
+                                       message: lines.joined(separator: "\n"))
+            } catch {
+                lines.append("FAILED: " + error.localizedDescription)
+                showFreeWorkflowReport(title: V3L("免费 API 验收未通过"),
+                                       message: lines.joined(separator: "\n"))
+            }
+            tableView.isUserInteractionEnabled = true
+            navigationItem.prompt = nil
+            tableView.reloadData()
+        }
+    }
+
+    private func showFreeWorkflowReport(title: String, message: String) {
+        let report = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        report.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+        present(report, animated: true)
+    }
+
     private func testFreeConversation(_ model: ImpressAIModel) {
         guard let connection else { return }
         let selected = ImpressAIResolvedRoute(connection: connection, model: model)
