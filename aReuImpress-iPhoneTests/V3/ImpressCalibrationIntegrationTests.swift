@@ -62,6 +62,47 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testTapWeeklyChartOpensFullCalibrationWithoutReplacingReviewController() throws {
+        let tabs = ImTabBarViewController()
+        tabs.loadViewIfNeeded()
+        let flashcardNav = try XCTUnwrap(tabs.viewControllers?[0] as? UINavigationController)
+        let review = try XCTUnwrap(flashcardNav.viewControllers.first
+                                   as? ImpressV3ReviewViewController)
+        review.loadViewIfNeeded()
+        // A real UIControl covers the chart area; do not rely on a tiny
+        // title or an invisible navigation button to open the detail.
+        let overview = try XCTUnwrap(review.view.subviews.first {
+            $0.accessibilityIdentifier == "impress.review.calibration-week"
+        } as? UIControl)
+        XCTAssertTrue(overview.isUserInteractionEnabled)
+        XCTAssertTrue(overview.accessibilityTraits.contains(.button))
+        XCTAssertTrue(overview.actions(forTarget: review, forControlEvent: .touchUpInside)?
+            .contains("openCalibrationDetail") ?? false)
+        overview.sendActions(for: .touchUpInside)
+        XCTAssertTrue(flashcardNav.topViewController is ImpressCalibrationViewController)
+        XCTAssertTrue(flashcardNav.viewControllers.first === review)
+        XCTAssertEqual(flashcardNav.viewControllers.count, 2)
+        XCTAssertEqual(tabs.selectedIndex, 0)
+        flashcardNav.popViewController(animated: false)
+        XCTAssertTrue(flashcardNav.topViewController === review)
+    }
+
+    @MainActor
+    func testSettingsDailyCalibrationUsesSameFullDetailClass() throws {
+        let tabs = ImTabBarViewController()
+        tabs.loadViewIfNeeded()
+        let settingsNav = try XCTUnwrap(tabs.viewControllers?[2] as? UINavigationController)
+        let hub = try XCTUnwrap(settingsNav.viewControllers.first
+                                as? ImpressV3SettingsHubViewController)
+        hub.loadViewIfNeeded()
+        hub.tableView(hub.tableView,
+                      didSelectRowAt: IndexPath(row: 0, section: 1))
+        XCTAssertTrue(settingsNav.topViewController is ImpressCalibrationViewController)
+        XCTAssertEqual(tabs.selectedIndex, 0) // no forced primary navigation
+        XCTAssertTrue(settingsNav.viewControllers.first === hub)
+    }
+
+    @MainActor
     func testCalibrationEntryIsAvailableUnderLearningRhythm() throws {
         let tabs = ImTabBarViewController()
         tabs.loadViewIfNeeded()
