@@ -68,15 +68,10 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
         let settings = try XCTUnwrap(tabs.viewControllers?[2] as? UINavigationController)
         let hub = try XCTUnwrap(settings.viewControllers.first as? ImpressV3SettingsHubViewController)
         hub.loadViewIfNeeded()
-        let labels = (0..<hub.numberOfSections(in: hub.tableView)).flatMap { section in
-            (0..<hub.tableView(hub.tableView, numberOfRowsInSection: section))
-                .compactMap { index -> String? in
-                    hub.tableView(hub.tableView,
-                                  cellForRowAt: IndexPath(row: index, section: section))
-                        .contentConfiguration as? UIListContentConfiguration
-                }.compactMap(\.text)
-        }
-        XCTAssertTrue(labels.contains("每日校准"))
+        let cell = hub.tableView(hub.tableView,
+                                 cellForRowAt: IndexPath(row: 0, section: 1))
+        let title = (cell.contentConfiguration as? UIListContentConfiguration)?.text
+        XCTAssertEqual(title, "每日校准")
     }
 
     func testStorePersistsDayGoalsAndNeverRewritesHistory() async throws {
