@@ -19,6 +19,7 @@ final class ImpressV3ReviewViewController: UIViewController {
     private var items: [ReviewQueueItem] = []
     private var models: [UUID: ImCardModel] = [:]
     private var sourceLinks: [UUID: ImVaultFileIdentity] = [:]
+    private var contentRevisions: [UUID: Int] = [:]
     private var currentIndex = 0
     private var pending: PendingSwipe?
     private var isLoading = false
@@ -67,7 +68,44 @@ final class ImpressV3ReviewViewController: UIViewController {
             needsReloadAfterCollection = false
             reloadSession()
         } else if hasLoaded && pending == nil {
-            setRatingGesturesEnabled(canRateCurrentCard)
+            verifyCurrentContentOnReturn()
+        }
+    }
+
+    /// Recheck the WCDB content token after leaving Chat or Notes. A changed
+    /// original card must invalidate a previously revealed answer and its swipe
+    /// gesture; current cardID, position and FSRS history are preserved.
+    private func verifyCurrentContentOnReturn() {
+        guard !isLoading, pending == nil,
+              let item = items[safe: currentIndex],
+              let repository = repository else { return }
+        let observedRevision = contentRevisions[item.cardID] ?? -1
+        cardStack.isUserInteractionEnabled = false
+        revealButton.isEnabled = false
+        setRatingGesturesEnabled(false)
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                guard let live = try await repository.content(for: item.cardID) else {
+                    throw ReviewWCDBError.missingCard
+                }
+                guard self.pending == nil,
+                      self.items[safe: self.currentIndex] == item else { return }
+                if live.contentRevision != observedRevision {
+                    try await self.refreshEditedCard(live, reviewItem: item)
+                }
+                guard self.pending == nil,
+                      self.items[safe: self.currentIndex] == item else { return }
+                self.cardStack.isUserInteractionEnabled = true
+                self.revealButton.isEnabled = true
+                self.setRatingGesturesEnabled(self.canRateCurrentCard)
+            } catch {
+                // Fail closed: never score an answer whose source cannot be verified.
+                self.cardStack.isUserInteractionEnabled = false
+                self.revealButton.isEnabled = false
+                self.setRatingGesturesEnabled(false)
+                self.displayFailure(error)
+            }
         }
     }
 
@@ -327,6 +365,7 @@ final class ImpressV3ReviewViewController: UIViewController {
                 let queue = ReviewQueueBuilder.makeQueue(from: candidates, now: Date())
                 var prepared: [UUID: ImCardModel] = [:]
                 var verifiedSources: [UUID: ImVaultFileIdentity] = [:]
+                var verifiedRevisions: [UUID: Int] = [:]
                 // At most six cards: read each image only when selected for THIS round.
                 for selected in queue {
                     guard let row = try await repo.content(for: selected.cardID) else {
@@ -344,11 +383,13 @@ final class ImpressV3ReviewViewController: UIViewController {
                         verifiedSources[selected.cardID] = identity
                     }
                     prepared[selected.cardID] = model
+                    verifiedRevisions[selected.cardID] = row.contentRevision
                 }
                 self.repository = repo
                 self.items = queue
                 self.models = prepared
                 self.sourceLinks = verifiedSources
+                self.contentRevisions = verifiedRevisions
                 self.currentIndex = 0
                 self.pending = nil
                 self.session = ReviewSessionCoordinator(items: queue, repository: repo)
@@ -511,6 +552,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         model.choices = value.choices
         model.correctAnswerIndices = value.correctIndices
         models[reviewItem.cardID] = model
+        contentRevisions[reviewItem.cardID] = value.contentRevision
         sourceLinks[reviewItem.cardID] = value.sourceNotePath.flatMap {
             try? ImpressBatchSourceKey.decode($0)
         }

@@ -165,3 +165,7 @@
 ## 交付判定
 
 只有 `ACCEPT-01～12` 各自完整通过、全量自动化在同一源码 SHA 成功，并在 iPhone 13 与 File Provider 完成要求的设备验收，才能宣称正式交付。签名、实际密钥和生产 Vault 授权未具备时，只能提供已验证源码、QA 包、明确外部阻塞；本地回读≠iCloud 已同步。
+
+## 2026-10-20：返回复习的内容版本防护
+
+新增 `contentRevision` 回读校验：从 Chat、笔记等页面返回当前复习卡时，先关闭评分与揭示按钮，重新读取 WCDB 权威内容；如果原卡已发生变更，则原位置替换卡片内容、收起旧答案后才允许继续。XCTest：`testReturningAfterExternalCardEditRequiresRevealingTheNewAnswer`（待新 CI）；不宣称 iPhone 13 已验收。

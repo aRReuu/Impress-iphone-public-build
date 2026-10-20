@@ -100,6 +100,52 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         return predicate()
     }
 
+    func testReturningAfterExternalCardEditRequiresRevealingTheNewAnswer() async throws {
+        let store = try makeRepository()
+        let id = UUID()
+        let now = Date()
+        try await store.insertNewCard(
+            WCDBV3CardInput(cardID: id, question: "Old question", answerText: "Old answer"),
+            initial: FSRS6ReviewCalculator().newCardSnapshot(id: id, now: now),
+            now: now)
+        let review = ImpressV3ReviewViewController(repository: store)
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        window.rootViewController = UINavigationController(rootViewController: review)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        review.loadViewIfNeeded()
+        let stack = try XCTUnwrap(review.view.subviews.compactMap {
+            $0 as? SwipeCardStack
+        }.first)
+        let hasCard = try await eventually { stack.topCard?.content is ImMemoryCardView }
+        XCTAssertTrue(hasCard)
+        let first = try XCTUnwrap(stack.topCard?.content as? ImMemoryCardView)
+        first.revealAnswerIfNeeded()
+        let canRate = try await eventually {
+            stack.topCard?.panGestureRecognizer.isEnabled == true
+        }
+        XCTAssertTrue(canRate)
+        try await store.updateManagedCard(
+            WCDBV3CardInput(cardID: id, question: "Updated question",
+                            answerText: "Updated answer"),
+            expectedRevision: 0, expectedContentRevision: 0)
+        review.viewWillAppear(false)
+        let reset = try await eventually {
+            let newContent = stack.topCard?.content as? ImMemoryCardView
+            return !(newContent?.answerIsRevealed ?? true) &&
+                   !(stack.topCard?.panGestureRecognizer.isEnabled ?? true) &&
+                   descendants(review.view, UILabel.self).contains {
+                       $0.text == V3L("先回忆，再查看答案")
+                   }
+        }
+        XCTAssertTrue(reset)
+        let refreshed = try await store.content(for: id)
+        let latest = try XCTUnwrap(refreshed)
+        XCTAssertEqual(latest.contentRevision, 1)
+        let events = try await store.reviewHistory(for: id)
+        XCTAssertTrue(events.isEmpty)
+    }
+
     func testQuickEditAndVerifiedSourceVisibleBeforeAnswerWithoutScoring() async throws {
         let store = try makeRepository()
         let id = UUID()
