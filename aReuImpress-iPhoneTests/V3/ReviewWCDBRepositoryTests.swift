@@ -24,6 +24,108 @@ private struct FailingReviewCalculator: WCDBReviewCalculating {
 final class ReviewWCDBRepositoryTests: XCTestCase {
 
     @MainActor
+    func testNoteQuestionGenerationAnchorsOnlyUniqueEvidenceAndSkipsUnrelatedChanges() throws {
+        let identity = try ImVaultFileIdentity(
+            vaultID: "signed-test-vault", relativePath: "Courses/Mechanics.md")
+        let original = "# Mechanics\nForce produces acceleration.\n\n" +
+            "# Practice\nSolve F = ma and verify units.\n"
+        let sections = ImpressAISectionExtractor.sections(in: original)
+        XCTAssertEqual(sections.count, 2)
+        let digest = ImVaultDigest.sha256(Data(original.utf8))
+        let source = ImpressAISource(vaultID: identity.vaultID,
+            relativePath: identity.relativePath,
+            documentSHA256: digest, heading: "Mechanics")
+        let excerpts = sections.map {
+            ImpressAIExcerpt(id: $0.id, source: source,
+                text: $0.text, sectionHeading: $0.heading)
+        }
+        let key = try ImpressAINoteCardLink.sourceKey(
+            identity: identity, documentDigest: digest,
+            candidateEvidenceIDs: [sections[0].id],
+            excerpts: excerpts, sourceMarkdown: original)
+        XCTAssertTrue(key.hasPrefix("obsidian+v3:"))
+        XCTAssertEqual(try ImpressBatchSourceKey.decode(key), identity)
+        XCTAssertEqual(try ImpressBatchSourceKey.documentDigest(for: key), digest)
+        XCTAssertEqual(try ImpressBatchSourceKey.sectionDigest(for: key),
+                       ImVaultDigest.sha256(Data(sections[0].text.utf8)))
+        XCTAssertTrue(ImpressAINoteCardLink.verifiedSectionUnchanged(
+            sourceKey: key, currentMarkdown: original))
+        let unrelated = original.replacingOccurrences(
+            of: "Solve F = ma and verify units.",
+            with: "Solve F = ma and explain unit dimensions.")
+        XCTAssertNotEqual(ImVaultDigest.sha256(Data(unrelated.utf8)), digest)
+        XCTAssertTrue(ImpressAINoteCardLink.verifiedSectionUnchanged(
+            sourceKey: key, currentMarkdown: unrelated),
+            "Another chapter's change must not create this card's review debt")
+        let changedRelated = original.replacingOccurrences(
+            of: "Force produces acceleration.",
+            with: "Net external force changes momentum.")
+        XCTAssertFalse(ImpressAINoteCardLink.verifiedSectionUnchanged(
+            sourceKey: key, currentMarkdown: changedRelated))
+
+        let multiple = try ImpressAINoteCardLink.sourceKey(
+            identity: identity, documentDigest: digest,
+            candidateEvidenceIDs: sections.map(\.id),
+            excerpts: excerpts, sourceMarkdown: original)
+        XCTAssertTrue(multiple.hasPrefix("obsidian+v2:"))
+        XCTAssertNil(try ImpressBatchSourceKey.sectionDigest(for: multiple))
+        let missing = try ImpressAINoteCardLink.sourceKey(
+            identity: identity, documentDigest: digest,
+            candidateEvidenceIDs: ["missing-section"],
+            excerpts: excerpts, sourceMarkdown: original)
+        XCTAssertNil(try ImpressBatchSourceKey.sectionDigest(for: missing))
+        let duplicates = "# Same\nRepeated note.\n\n# Same\nRepeated note.\n"
+        let duplicateParts = ImpressAISectionExtractor.sections(in: duplicates)
+        XCTAssertEqual(duplicateParts.count, 2)
+        let ambiguousSource = ImpressAISource(vaultID: identity.vaultID,
+            relativePath: identity.relativePath,
+            documentSHA256: ImVaultDigest.sha256(Data(duplicates.utf8)), heading: "Same")
+        let ambiguousExcerpts = duplicateParts.map {
+            ImpressAIExcerpt(id: $0.id, source: ambiguousSource,
+                text: $0.text, sectionHeading: $0.heading)
+        }
+        let fallback = try ImpressAINoteCardLink.sourceKey(
+            identity: identity, documentDigest: ambiguousSource.documentSHA256,
+            candidateEvidenceIDs: [duplicateParts[0].id],
+            excerpts: ambiguousExcerpts, sourceMarkdown: duplicates)
+        XCTAssertNil(try ImpressBatchSourceKey.sectionDigest(for: fallback),
+                     "Duplicate identical sections cannot be mapped by guesswork")
+    }
+
+    @MainActor
+    func testVaultSectionLinksRemainScopedToOriginalCardAndExactVault() async throws {
+        let id = UUID(), otherID = UUID()
+        let vault = try ImVaultFileIdentity(vaultID: "vault-A", relativePath: "Study.md")
+        let different = try ImVaultFileIdentity(vaultID: "vault-B", relativePath: "Study.md")
+        let markdown = "# Topic\nOriginal learning content\n"
+        let sha = ImVaultDigest.sha256(Data(markdown.utf8))
+        let annotated = try ImpressBatchSourceKey.encode(
+            vault, documentDigest: sha, anchoredSection: markdown.trimmingCharacters(in: .whitespacesAndNewlines))
+        let other = try ImpressBatchSourceKey.encode(
+            different, documentDigest: sha, anchoredSection: markdown.trimmingCharacters(in: .whitespacesAndNewlines))
+        let repo = try ReviewWCDBRepository(
+            databasePath: temporaryPath(), calculator: FSRS6ReviewCalculator())
+        let calc = FSRS6ReviewCalculator(), date = Date(timeIntervalSince1970: 1_726_000_000)
+        for card in [
+            WCDBV3CardInput(cardID: id, question: "Same heading in A?",
+                answerText: "Yes", sourceNotePath: annotated),
+            WCDBV3CardInput(cardID: otherID, question: "Same heading in B?",
+                answerText: "Yes", sourceNotePath: other)
+        ] {
+            try await repo.insertNewCard(card,
+                initial: try calc.newCardSnapshot(id: card.cardID, now: date), now: date)
+        }
+        let owned = try await repo.listRelatedCards(for: vault)
+        XCTAssertEqual(owned.map(\.cardID), [id])
+        let external = try await repo.listRelatedCards(for: different)
+        XCTAssertEqual(external.map(\.cardID), [otherID])
+        let versions = try await repo.reviewHistory(for: id)
+        XCTAssertTrue(versions.isEmpty)
+    }
+
+
+
+    @MainActor
     func testExplicitQAUndoRestoresExactBOMCRLFBytesAndBlocksLaterConflict() throws {
         let root = try createRoot()
         defer { try? FileManager.default.removeItem(at: root) }

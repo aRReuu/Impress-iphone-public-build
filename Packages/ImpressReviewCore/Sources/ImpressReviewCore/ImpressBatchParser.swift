@@ -270,6 +270,9 @@ public enum ImpressBatchParser {
 public enum ImpressBatchSourceKey {
     private static let legacyPrefix = "obsidian+v1:"
     private static let versionedPrefix = "obsidian+v2:"
+    /// Exact one-section anchors are opt-in. v1/v2 links remain readable and
+    /// intentionally have no trustworthy fine-grained locator.
+    private static let anchoredPrefix = "obsidian+v3:"
 
     private static func payload(for identity: ImVaultFileIdentity) throws -> String {
         let encoder = JSONEncoder()
@@ -291,10 +294,22 @@ public enum ImpressBatchSourceKey {
     /// also retain the exact SHA-256 digest observed when questions were made.
     /// Both encodings live in the existing source_note_path column.
     public static func encode(_ identity: ImVaultFileIdentity,
-                              documentDigest: String? = nil) throws -> String {
+                              documentDigest: String? = nil,
+                              anchoredSection: String? = nil) throws -> String {
         let value = try payload(for: identity)
-        guard let documentDigest else { return legacyPrefix + value }
-        return versionedPrefix + value + ":" + (try verifiedDigest(documentDigest))
+        guard let documentDigest else {
+            guard anchoredSection == nil else { throw ImVaultCoreError.invalidDraft }
+            return legacyPrefix + value
+        }
+        let digest = try verifiedDigest(documentDigest)
+        guard let anchoredSection else { return versionedPrefix + value + ":" + digest }
+        // Empty or implausibly large sections are not precise evidence.
+        guard !anchoredSection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              anchoredSection.utf8.count <= 80_000 else {
+            throw ImVaultCoreError.invalidDraft
+        }
+        return anchoredPrefix + value + ":" + digest + ":" +
+            ImVaultDigest.sha256(Data(anchoredSection.utf8))
     }
 
     /// Allows one scoped SQL prefix search for v2 links; callers MUST decode
@@ -303,21 +318,29 @@ public enum ImpressBatchSourceKey {
         versionedPrefix + (try payload(for: identity)) + ":"
     }
 
-    private static func components(_ value: String) throws -> (String, String?)? {
+    private static func components(_ value: String)
+        throws -> (payload: String, documentDigest: String?, sectionDigest: String?)? {
         if value.hasPrefix(legacyPrefix) {
-            return (String(value.dropFirst(legacyPrefix.count)), nil)
+            return (String(value.dropFirst(legacyPrefix.count)), nil, nil)
         }
         if value.hasPrefix(versionedPrefix) {
             let items = value.dropFirst(versionedPrefix.count)
                 .split(separator: ":", omittingEmptySubsequences: false)
             guard items.count == 2 else { throw ImVaultCoreError.invalidVaultIdentity }
-            return (String(items[0]), try verifiedDigest(String(items[1])))
+            return (String(items[0]), try verifiedDigest(String(items[1])), nil)
+        }
+        if value.hasPrefix(anchoredPrefix) {
+            let items = value.dropFirst(anchoredPrefix.count)
+                .split(separator: ":", omittingEmptySubsequences: false)
+            guard items.count == 3 else { throw ImVaultCoreError.invalidVaultIdentity }
+            return (String(items[0]), try verifiedDigest(String(items[1])),
+                    try verifiedDigest(String(items[2])))
         }
         return nil // Legacy unverified plain paths have no stable Vault ID.
     }
 
     public static func decode(_ value: String) throws -> ImVaultFileIdentity? {
-        guard let (payload, _) = try components(value) else { return nil }
+        guard let payload = try components(value)?.payload else { return nil }
         let raw = payload.replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
         let padded = raw + String(repeating: "=", count: (4 - raw.count % 4) % 4)
@@ -330,6 +353,12 @@ public enum ImpressBatchSourceKey {
     }
 
     public static func documentDigest(for value: String) throws -> String? {
-        try components(value)?.1
+        try components(value)?.documentDigest
+    }
+
+    /// Only non-nil for v3 links explicitly tied to one audited source
+    /// section. A hash is a locator hint, not proof that the card is correct.
+    public static func sectionDigest(for value: String) throws -> String? {
+        try components(value)?.sectionDigest
     }
 }

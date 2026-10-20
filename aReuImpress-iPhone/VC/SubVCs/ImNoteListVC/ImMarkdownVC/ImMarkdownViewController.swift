@@ -981,6 +981,14 @@ final class ImVaultDocumentController: UIViewController {
                             guard let key = card.sourceNotePath,
                                   let original = try? ImpressBatchSourceKey.documentDigest(for: key),
                                   original != source.digest else { return nil }
+                            // An unchanged, unique v3 section needs NO manual
+                            // review merely because a different chapter or
+                            // cosmetic file metadata changed. Legacy v1/v2 and
+                            // missing/ambiguous section anchors remain honest
+                            // file-level manual checks, never guessed matches.
+                            guard !ImpressAINoteCardLink.verifiedSectionUnchanged(
+                                sourceKey: key, currentMarkdown: source.markdown)
+                            else { return nil }
                             return (card, original)
                         }
                         if oldHashes.isEmpty {

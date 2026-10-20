@@ -110,3 +110,10 @@ Record final Git SHA, Actions run URL, each job conclusion, **total native XCTes
 - **UNDO-03（QA 笔记）**：在 Debug 显式授权独立测试副本写入含 BOM+CRLF／Frontmatter／WikiLink 的原始 Markdown，确认后通过完整反向 Diff 撤销。File Provider 回读须与第一版源字节完全一致，再次人工重试不产生重复写入。
 - **UNDO-04（锁定／冲突）**：Release 正式 Vault 永远不能绕过生产写门禁；独立 QA 授权丢失时不能进入 undoing；源文第三方修改、同名但其他 Vault 等情况必须拒绝写回。
 - **UNDO-05（崩溃恢复）**：写回后未记录成功收据即强杀，重启持久恢复 undoing 且零自动重放；用户再次手动确认并匹配目标已恢复的字节／内容版本，记为 reverted。归档旧提案的撤销不得覆盖后续提案与其他 Chat。
+
+## 来源章节定位专项（ACCEPT-01/02/11、LOOP-03/07/08）
+
+- **ANCHOR-01**：在可丢弃测试 Vault 的 Markdown 含两个不同章节时，从明确勾选的一处章节生成单证据卡片，保存后 `source_note_path` 具有相同 Vault+完整相对路径+文档 SHA+章节 SHA，返回笔记能找到原 cardID，任何同名其他 Vault 不匹配。
+- **ANCHOR-02**：Obsidian 在其他章节增加段落/修改排版，刷新当前原文，若被引用章节完整文本仍唯一且未变动，反向核查不为这张卡创建无意义提示；已核实同源其他卡仍可独立核查。
+- **ANCHOR-03**：被引用章节改变、被删、被拆分或重复导致无法唯一定位时，只报告来源定位置信度不足，保留人工核查和「不影响」/修订原卡入口；绝不根据同名标题自动覆盖。
+- **ANCHOR-04**：老 v1/v2 来源、独立无来源卡、多证据引用和来源章节重复的卡继续采用原有安全回退，不触碰 FSRS 到期和历史；iPhone 13 复核实际导航、长 Markdown 和手势体验。

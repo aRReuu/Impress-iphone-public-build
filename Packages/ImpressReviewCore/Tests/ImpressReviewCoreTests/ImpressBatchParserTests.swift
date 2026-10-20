@@ -33,6 +33,39 @@ final class ImpressBatchParserTests: XCTestCase {
         XCTAssertFalse(versioned.hasPrefix(try ImpressBatchSourceKey.versionedPrefix(for: other)))
     }
 
+    func testSectionAnchoredSourceKeysRoundTripAndRejectForgedValues() throws {
+        let source = try ImVaultFileIdentity(vaultID: "Vault-18",
+                                               relativePath: "A/Topic.md")
+        let other = try ImVaultFileIdentity(vaultID: "Another-Vault",
+                                              relativePath: "A/Topic.md")
+        let digest = String(repeating: "7", count: 64)
+        let first = "## Principle\nA claim and its explanation."
+        let second = "## Another\nDifferent evidence."
+        let key = try ImpressBatchSourceKey.encode(source,
+            documentDigest: digest, anchoredSection: first)
+        XCTAssertTrue(key.hasPrefix("obsidian+v3:"))
+        XCTAssertEqual(try ImpressBatchSourceKey.decode(key), source)
+        XCTAssertNotEqual(try ImpressBatchSourceKey.decode(key), other)
+        XCTAssertEqual(try ImpressBatchSourceKey.documentDigest(for: key), digest)
+        XCTAssertEqual(try ImpressBatchSourceKey.sectionDigest(for: key),
+                       ImVaultDigest.sha256(Data(first.utf8)))
+        XCTAssertNotEqual(try ImpressBatchSourceKey.sectionDigest(for: key),
+                          ImVaultDigest.sha256(Data(second.utf8)))
+        XCTAssertNil(try ImpressBatchSourceKey.sectionDigest(for:
+            ImpressBatchSourceKey.encode(source, documentDigest: digest)))
+        XCTAssertNil(try ImpressBatchSourceKey.sectionDigest(for:
+            ImpressBatchSourceKey.encode(source)))
+        XCTAssertThrowsError(try ImpressBatchSourceKey.decode(key + ":extra"))
+        XCTAssertThrowsError(try ImpressBatchSourceKey.decode(
+            key.replacingOccurrences(of: digest, with: "unverified", range: nil)))
+        XCTAssertThrowsError(try ImpressBatchSourceKey.encode(
+            source, anchoredSection: first))
+        XCTAssertThrowsError(try ImpressBatchSourceKey.encode(
+            source, documentDigest: digest, anchoredSection: " \n "))
+        XCTAssertEqual(try ImpressBatchSourceKey.encode(source,
+            documentDigest: digest, anchoredSection: first), key)
+    }
+
     func testUnicodeAndMultilineLabeledQuestions() {
         let rows = ImpressBatchParser.parse("Q: 光合作用的机理？\nA: 光能转化为\n化学能。\n\n问题：为什么回忆？\n答案：检索会巩固记忆。", as: .text)
         XCTAssertEqual(rows.count, 2)

@@ -12,7 +12,9 @@ struct ImpressAISectionItem {
 // because IDs derive from sequence position rather than heading strings.
 enum ImpressAISectionExtractor {
     static func sections(in markdown: String) -> [ImpressAISectionItem] {
-        let lines = markdown.components(separatedBy: .newlines)
+        let lines = markdown.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .components(separatedBy: "\n")
         var sections: [ImpressAISectionItem] = []
         var buffer: [String] = []
         var current = "全文"
@@ -45,6 +47,45 @@ enum ImpressAISectionExtractor {
         }
         flush()
         return sections
+    }
+}
+
+/// Small, deterministic source-linking adapter for the EXISTING question
+/// candidate pool and its original WCDB card. One unambiguous reviewed
+/// section receives a v3 content anchor; multi-section or ambiguous evidence
+/// deliberately retains the earlier file-level v2 identity.
+enum ImpressAINoteCardLink {
+    static func sourceKey(identity: ImVaultFileIdentity,
+                          documentDigest: String,
+                          candidateEvidenceIDs: [String],
+                          excerpts: [ImpressAIExcerpt],
+                          sourceMarkdown: String) throws -> String {
+        let fallback = try ImpressBatchSourceKey.encode(
+            identity, documentDigest: documentDigest)
+        guard candidateEvidenceIDs.count == 1,
+              let referenced = candidateEvidenceIDs.first else { return fallback }
+        let selected = excerpts.filter { $0.id == referenced }
+        guard selected.count == 1 else { return fallback }
+        let matching = ImpressAISectionExtractor.sections(in: sourceMarkdown).filter {
+            $0.text == selected[0].text
+        }
+        guard matching.count == 1 else { return fallback }
+        return try ImpressBatchSourceKey.encode(
+            identity, documentDigest: documentDigest,
+            anchoredSection: matching[0].text)
+    }
+
+    /// This means only that exactly one original source section still has
+    /// identical verified content. It does NOT certify the card's answer.
+    /// Legacy v1/v2 links have no section anchor and require manual review.
+    static func verifiedSectionUnchanged(sourceKey: String,
+                                         currentMarkdown: String) -> Bool {
+        guard let digest = try? ImpressBatchSourceKey.sectionDigest(for: sourceKey)
+        else { return false }
+        let matches = ImpressAISectionExtractor.sections(in: currentMarkdown).filter {
+            ImVaultDigest.sha256(Data($0.text.utf8)) == digest
+        }
+        return matches.count == 1
     }
 }
 
@@ -410,11 +451,13 @@ final class ImpressAIQuestionPoolViewController: UITableViewController {
                 // Database transaction remains the final duplicate authority.
                 let checked = ImpressAIQuestionValidator.audit(pool, existingQuestions: existing)
                 let selected = try ImpressAIQuestionValidator.validatedSelection(checked, existingQuestions: existing)
-                let sourceKey = try ImpressBatchSourceKey.encode(
-                    document.identity, documentDigest: document.digest)
                 let now = Date()
                 let calc = FSRS6ReviewCalculator()
                 let entries = try selected.map { candidate -> (input: WCDBV3CardInput, initial: ReviewScheduleSnapshot) in
+                    let sourceKey = try ImpressAINoteCardLink.sourceKey(
+                        identity: live.identity, documentDigest: live.digest,
+                        candidateEvidenceIDs: candidate.evidenceIDs,
+                        excerpts: pool.excerpts, sourceMarkdown: live.markdown)
                     let input = WCDBV3CardInput(question: candidate.question,
                          answerText: candidate.answer, cardType: CardType.standard.rawValue,
                          sourceNotePath: sourceKey)
