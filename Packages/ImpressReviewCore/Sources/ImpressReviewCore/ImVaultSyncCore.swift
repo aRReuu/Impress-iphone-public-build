@@ -194,6 +194,9 @@ public enum ImVaultDiff {
 /// an external File Provider write and a WCDB transaction are atomic.
 public enum ImDuplexTargetStatus: String, Codable, Equatable, Sendable {
     case pending, applying, applied, conflict, failed
+    /// A user-confirmed inverse edit is in progress. Must NOT be mistaken
+    /// for a forward retry after process death.
+    case undoing, reverted
 }
 public struct ImDuplexApprovalState: Codable, Equatable, Sendable {
     public var noteSelected: Bool
@@ -210,12 +213,24 @@ public struct ImDuplexApprovalState: Codable, Equatable, Sendable {
     }
     /// NEVER auto-run in-flight work after app restart. A later explicit
     /// confirmation may retry only the targets that were not applied.
-    public var needsNoteAction: Bool { noteSelected && noteStatus != .applied }
-    public var needsCardAction: Bool { cardSelected && cardStatus != .applied }
+    private static func needsForwardAction(_ status: ImDuplexTargetStatus) -> Bool {
+        switch status {
+        case .pending, .applying, .conflict, .failed: return true
+        case .applied, .undoing, .reverted: return false
+        }
+    }
+    public var needsNoteAction: Bool {
+        noteSelected && Self.needsForwardAction(noteStatus)
+    }
+    public var needsCardAction: Bool {
+        cardSelected && Self.needsForwardAction(cardStatus)
+    }
+    public var needsNoteUndo: Bool { noteSelected && noteStatus == .undoing }
+    public var needsCardUndo: Bool { cardSelected && cardStatus == .undoing }
     public var completed: Bool {
-        // Both choices may become false only after explicit discard. A newly
-        // created proposal is always required to select at least one target.
-        !needsNoteAction && !needsCardAction
+        // A crash between the reverse write and its receipt is never
+        // mistaken for an already-finished operation. Recover manually.
+        !needsNoteAction && !needsCardAction && !needsNoteUndo && !needsCardUndo
     }
 }
 

@@ -559,6 +559,10 @@ final class ImpressAINativeChatViewController: UIViewController,
         page.onSelect = { [weak self] record in
             self?.showDuplexReceipt(record)
         }
+        page.onRefresh = { [weak self] in
+            guard let self else { return [] }
+            return (self.pendingDuplex.map { [$0] } ?? []) + self.previousDuplex
+        }
         navigationController?.pushViewController(page, animated: true)
     }
 
@@ -596,6 +600,21 @@ final class ImpressAINativeChatViewController: UIViewController,
             text.leadingAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.leadingAnchor),
             text.trailingAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.trailingAnchor)
         ])
+        // Historical receipts are read-only unless their exact completed
+        // proposal has a reversible target. Undo is a separate explicit
+        // full-diff, CAS-protected operation, never a tap on old message text.
+        if [.applied, .undoing].contains(receipt.state.noteStatus) ||
+           [.applied, .undoing].contains(receipt.state.cardStatus) {
+            let action = UIAction(title: V3L("安全撤销"),
+                                  image: UIImage(systemName: "arrow.uturn.backward")) {
+                [weak self] _ in
+                guard let self, let repo = self.chatRepository else { return }
+                self.showDuplexEditor(repository: repo, cardID: receipt.cardID,
+                    contentRevision: nil, messageID: receipt.sourceMessageID,
+                    recovering: receipt)
+            }
+            page.navigationItem.rightBarButtonItem = UIBarButtonItem(primaryAction: action)
+        }
         navigationController?.pushViewController(page, animated: true)
     }
 
@@ -657,10 +676,21 @@ final class ImpressAINativeChatViewController: UIViewController,
         let editor = ImpressDuplexChangeController(
             repository: repository, cardID: cardID,
             sourceContentRevision: contentRevision,
-            noteIdentity: noteDraftTarget, sourceMessageID: messageID,
-            pending: recovering) { [weak self] changed in
+            noteIdentity: recovering?.noteIdentity ?? noteDraftTarget,
+            sourceMessageID: messageID, pending: recovering) { [weak self] changed in
                 guard let self else { return false }
                 await self.saveChain?.value
+                if let index = self.previousDuplex.firstIndex(where: {
+                    $0.proposalID == changed.proposalID
+                }) {
+                    // Undo an archived proposal IN PLACE; do not replace the
+                    // newer active proposal or erase unrelated receipts.
+                    let oldArchived = self.previousDuplex[index]
+                    self.previousDuplex[index] = changed
+                    let success = await self.persistLocal()
+                    if !success { self.previousDuplex[index] = oldArchived }
+                    return success
+                }
                 let original = self.pendingDuplex
                 let archived = self.previousDuplex
                 if let original, original.proposalID != changed.proposalID {
@@ -1401,8 +1431,9 @@ final class ImpressChatNoteSectionPicker: UITableViewController {
 
 @MainActor
 final class ImpressDuplexReceiptHistoryController: UITableViewController {
-    private let records: [WCDBV3DuplexProposal]
+    private var records: [WCDBV3DuplexProposal]
     var onSelect: ((WCDBV3DuplexProposal) -> Void)?
+    var onRefresh: (() -> [WCDBV3DuplexProposal])?
 
     init(records: [WCDBV3DuplexProposal]) {
         self.records = records
@@ -1414,6 +1445,11 @@ final class ImpressDuplexReceiptHistoryController: UITableViewController {
         super.viewDidLoad()
         title = V3L("修订回执历史")
         tableView.accessibilityIdentifier = "impress.duplex.receipt-history"
+    }
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        if let onRefresh { records = onRefresh() }
+        tableView.reloadData()
     }
     override func tableView(_ tableView: UITableView,
                             numberOfRowsInSection section: Int) -> Int {
@@ -1735,6 +1771,125 @@ final class ImpressDuplexChangeController: UIViewController {
     }
 }
 
+/// Only local, verified bytes form a reverse note edit. Reconstructing
+/// Markdown from rendered rich text or from an AI transcript is forbidden.
+@MainActor
+enum ImpressDuplexUndoGate {
+    static func inverseDraft(_ existing: ImVaultDraft,
+                             expectedBaseDigest: String?,
+                             expectedAppliedDigest: String?) throws -> ImVaultDraft {
+        try existing.validate()
+        guard existing.baseDigest == expectedBaseDigest,
+              ImVaultDigest.sha256(existing.proposedBytes) == expectedAppliedDigest,
+              let appliedText = String(data: existing.proposedBytes, encoding: .utf8) else {
+            throw ImVaultSyncFailure.conflict
+        }
+        let reversed = try ImVaultDraft(identity: existing.identity,
+            baseText: appliedText, baseRawData: existing.proposedBytes,
+            editedText: existing.baseText)
+        try reversed.validate()
+        guard reversed.proposedBytes == existing.baseRawData,
+              reversed.hasChanges else {
+            throw ImVaultSyncFailure.verificationFailed
+        }
+        return reversed
+    }
+}
+
+@MainActor
+final class ImpressDuplexUndoReviewController: UIViewController {
+    typealias UndoAction = @MainActor () async -> Result<String, Error>
+    private let content: String
+    private let onConfirm: UndoAction
+    private let button = UIButton(type: .system)
+    private var applying = false
+
+    init(content: String, onConfirm: @escaping UndoAction) {
+        self.content = content
+        self.onConfirm = onConfirm
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = V3L("核对撤销内容")
+        view.backgroundColor = ImpressV3Appearance.page
+        let body = UITextView()
+        body.translatesAutoresizingMaskIntoConstraints = false
+        body.text = content
+        body.font = ImpressV3Appearance.Typography.compactCode
+        body.adjustsFontForContentSizeCategory = true
+        body.textColor = ImpressV3Appearance.primaryText
+        body.backgroundColor = ImpressV3Appearance.surface
+        body.isEditable = false
+        body.isSelectable = true
+        body.accessibilityIdentifier = "impress.duplex.undo.full-diff"
+        ImpressV3Appearance.styleQuietButton(button,
+            title: V3L("确认按当前版本撤销"), symbol: "arrow.uturn.backward")
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.accessibilityIdentifier = "impress.duplex.undo.confirm"
+        button.addTarget(self, action: #selector(askUndo), for: .touchUpInside)
+        view.addSubview(body)
+        view.addSubview(button)
+        NSLayoutConstraint.activate([
+            body.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
+            body.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor,
+                                          constant: 12),
+            body.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor,
+                                           constant: -12),
+            body.bottomAnchor.constraint(equalTo: button.topAnchor, constant: -10),
+            button.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor,
+                                             constant: 16),
+            button.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor,
+                                              constant: -16),
+            button.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor,
+                                           constant: -8),
+            button.heightAnchor.constraint(greaterThanOrEqualToConstant: 48)
+        ])
+    }
+
+    @objc private func askUndo() {
+        guard !applying else { return }
+        let alert = UIAlertController(title: V3L("确认撤销这个目标？"),
+            message: V3L("撤销也会重新验证当前内容版本；若别人已合法修改，必须停止。不会删除 FSRS 历史或自动重放。"),
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("确认撤销"), style: .destructive) {
+            [weak self] _ in
+            guard let self else { return }
+            self.applying = true
+            self.button.isEnabled = false
+            Task {
+                let result = await self.onConfirm()
+                self.applying = false
+                if case .failure = result { self.button.isEnabled = true }
+                let succeeded: Bool
+                let message: String
+                switch result {
+                case .success(let detail):
+                    succeeded = true
+                    message = detail
+                case .failure(let error):
+                    succeeded = false
+                    message = error.localizedDescription
+                }
+                let response = UIAlertController(
+                    title: succeeded ? V3L("撤销结果已保存") : V3L("撤销未完成"),
+                    message: message, preferredStyle: .alert)
+                response.addAction(UIAlertAction(title: V3L("确定"), style: .default) {
+                    [weak self] _ in
+                    if succeeded {
+                        self?.navigationController?.popViewController(animated: true)
+                    }
+                })
+                self.present(response, animated: true)
+            }
+        })
+        present(alert, animated: true)
+    }
+}
+
 @MainActor
 final class ImpressDuplexApprovalController: UIViewController {
     private let repository: ReviewWCDBRepository
@@ -1744,6 +1899,7 @@ final class ImpressDuplexApprovalController: UIViewController {
     private let cardToggle = UISwitch()
     private let preview = UITextView()
     private let confirm = UIButton(type: .system)
+    private var undoBarItem: UIBarButtonItem?
     private var notePreviewValid = false
     private var committing = false
 
@@ -1783,9 +1939,9 @@ final class ImpressDuplexApprovalController: UIViewController {
         noteToggle.addTarget(self, action: #selector(updateConfirmation), for: .valueChanged)
         cardToggle.addTarget(self, action: #selector(updateConfirmation), for: .valueChanged)
         noteToggle.isEnabled = proposal.noteIdentity != nil &&
-            proposal.state.noteStatus != .applied
+            ![.applied, .undoing, .reverted].contains(proposal.state.noteStatus)
         cardToggle.isEnabled = proposal.cardID != nil &&
-            proposal.state.cardStatus != .applied
+            ![.applied, .undoing, .reverted].contains(proposal.state.cardStatus)
 
         ImpressV3Appearance.styleQuietButton(confirm,
             title: V3L("确认执行所选修改"), symbol: "checkmark.shield")
@@ -1808,9 +1964,14 @@ final class ImpressDuplexApprovalController: UIViewController {
             confirm.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
             confirm.heightAnchor.constraint(greaterThanOrEqualToConstant: 48)
         ])
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
+        let discard = UIBarButtonItem(
             title: V3L("放弃未完成项"), style: .plain,
             target: self, action: #selector(discardUnapplied))
+        let inverse = UIBarButtonItem(
+            title: V3L("安全撤销"), style: .plain,
+            target: self, action: #selector(openUndoOptions))
+        undoBarItem = inverse
+        navigationItem.rightBarButtonItems = [discard, inverse]
         refreshPreview()
     }
 
@@ -1897,11 +2058,19 @@ final class ImpressDuplexApprovalController: UIViewController {
             pieces.append("\n" + V3L("卡片回执：") + receipt)
         }
         preview.text = pieces.joined(separator: "\n")
+        noteToggle.isEnabled = proposal.noteIdentity != nil &&
+            ![.applied, .undoing, .reverted].contains(proposal.state.noteStatus)
+        cardToggle.isEnabled = proposal.cardID != nil &&
+            ![.applied, .undoing, .reverted].contains(proposal.state.cardStatus)
+        undoBarItem?.isEnabled = !committing && (
+            [.applied, .undoing].contains(proposal.state.noteStatus) ||
+            [.applied, .undoing].contains(proposal.state.cardStatus))
         updateConfirmation()
     }
 
     @objc private func updateConfirmation() {
         confirm.isEnabled = !committing &&
+            !proposal.state.needsNoteUndo && !proposal.state.needsCardUndo &&
             ((noteToggle.isOn && noteToggle.isEnabled && notePreviewValid) ||
              (cardToggle.isOn && cardToggle.isEnabled))
     }
@@ -2069,6 +2238,232 @@ final class ImpressDuplexApprovalController: UIViewController {
             (proposal.noteReceipt ?? V3L("笔记未选择")) + "\n\n" +
             (proposal.cardReceipt ?? V3L("原卡未选择")) + "\n\n" +
             V3L("所有回执存于原 Chat 会话；失败目标仅允许再次手动核查后重试。"))
+    }
+
+    private enum UndoTarget { case note, card }
+
+    @objc private func openUndoOptions() {
+        guard !committing else { return }
+        let actions = UIAlertController(title: V3L("撤销已执行的目标"),
+            message: V3L("每个目标单独预览、确认及记录回执。不会自动覆盖后续人工编辑。"),
+            preferredStyle: .actionSheet)
+        if [.applied, .undoing].contains(proposal.state.noteStatus),
+           proposal.noteIdentity != nil {
+            actions.addAction(UIAlertAction(title: V3L("撤销笔记改动"),
+                style: .default) { [weak self] _ in
+                Task { await self?.prepareUndo(.note) }
+            })
+        }
+        if [.applied, .undoing].contains(proposal.state.cardStatus),
+           proposal.cardID != nil {
+            actions.addAction(UIAlertAction(title: V3L("撤销原卡改动"),
+                style: .default) { [weak self] _ in
+                Task { await self?.prepareUndo(.card) }
+            })
+        }
+        actions.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        actions.popoverPresentationController?.barButtonItem = undoBarItem
+        present(actions, animated: true)
+    }
+
+    private func prepareUndo(_ target: UndoTarget) async {
+        guard !committing else { return }
+        do {
+            let details: String
+            switch target {
+            case .note:
+                guard let id = proposal.noteIdentity,
+                      let existing = try ImVaultPrivateStore.loadDraft(identity: id) else {
+                    throw ImVaultSyncFailure.conflict
+                }
+                let inverse = try ImpressDuplexUndoGate.inverseDraft(existing,
+                    expectedBaseDigest: proposal.noteBaseDigest,
+                    expectedAppliedDigest: proposal.noteEditedDigest)
+                let qaEnabled: Bool = await withCheckedContinuation { c in
+                    ImVaultGuardedWrite.checkQAVaultEligibility(for: id) { answer in
+                        c.resume(returning: (try? answer.get()) == true)
+                    }
+                }
+                guard ImVaultGuardedWrite.productionWriteEnabled || qaEnabled else {
+                    throw ImVaultSyncFailure.writesLocked
+                }
+                let current: ImVaultRawDocument = try await withCheckedThrowingContinuation {
+                    (continuation: CheckedContinuation<ImVaultRawDocument, Error>) in
+                    ImVaultReadSync.shared.read(id) { outcome in
+                        continuation.resume(with: outcome)
+                    }
+                }
+                guard current.identity == id else { throw ImVaultSyncFailure.wrongVault }
+                let decision = inverse.decision(against: current.sourceBytes)
+                guard decision == .safeToWrite || decision == .alreadyApplied else {
+                    throw ImVaultSyncFailure.conflict
+                }
+                let diff = ImVaultDiff.summary(
+                    base: inverse.baseText, edited: inverse.editedText, maximumLines: 200)
+                guard diff.complete else { throw ImVaultSyncFailure.previewTruncated }
+                details = V3L("撤销笔记改动") + "\n" + id.relativePath +
+                    "\nExpected SHA-256: " + (proposal.noteEditedDigest ?? "?") +
+                    "\n" + V3L("目标恢复 SHA-256：") + (proposal.noteBaseDigest ?? "?") +
+                    "\n\n" + diff.text
+            case .card:
+                guard let id = proposal.cardID,
+                      let oldRevision = proposal.cardContentRevision,
+                      let card = try await repository.content(for: id),
+                      let revised = proposal.cardEditedQuestion,
+                      let original = proposal.cardBaseQuestion else {
+                    throw ReviewWCDBError.missingCard
+                }
+                let decision = ImDuplexCardVersionGate.decide(
+                    expectedContentRevision: oldRevision + 1,
+                    currentContentRevision: card.contentRevision,
+                    baseQuestion: revised, baseAnswer: proposal.cardEditedAnswer,
+                    proposedQuestion: original, proposedAnswer: proposal.cardBaseAnswer,
+                    currentQuestion: card.question, currentAnswer: card.answerText)
+                guard decision == .safeToWrite || decision == .alreadyApplied else {
+                    throw ReviewWCDBError.contentConflict
+                }
+                details = V3L("撤销原卡改动") + "\ncardID: " + id.uuidString +
+                    "\nContent revision: " + String(oldRevision + 1) +
+                    "\n\n" + V3L("原题目：") + revised +
+                    "\n\n" + V3L("恢复题目：") + original +
+                    "\n\n" + V3L("原答案：") + (proposal.cardEditedAnswer ?? "") +
+                    "\n\n" + V3L("恢复答案：") + (proposal.cardBaseAnswer ?? "")
+            }
+            let page = ImpressDuplexUndoReviewController(content: details) { [weak self] in
+                guard let self else { return .failure(WCDBV3ChatStorageError.invalidRecord) }
+                do {
+                    return .success(try await self.executeUndo(target))
+                } catch { return .failure(error) }
+            }
+            navigationController?.pushViewController(page, animated: true)
+        } catch {
+            showResult(V3L("无法安全撤销"), error.localizedDescription)
+        }
+    }
+
+    private func executeUndo(_ target: UndoTarget) async throws -> String {
+        guard !committing else { throw WCDBV3ChatStorageError.conflict }
+        committing = true
+        updateConfirmation()
+        defer {
+            committing = false
+            refreshPreview()
+        }
+        switch target {
+        case .note:
+            guard [.applied, .undoing].contains(proposal.state.noteStatus),
+                  let id = proposal.noteIdentity,
+                  let existing = try ImVaultPrivateStore.loadDraft(identity: id) else {
+                throw ImVaultSyncFailure.conflict
+            }
+            let inverse = try ImpressDuplexUndoGate.inverseDraft(existing,
+                expectedBaseDigest: proposal.noteBaseDigest,
+                expectedAppliedDigest: proposal.noteEditedDigest)
+            let qaCopy: Bool = await withCheckedContinuation { c in
+                ImVaultGuardedWrite.checkQAVaultEligibility(for: id) { response in
+                    c.resume(returning: (try? response.get()) == true)
+                }
+            }
+            // Do not persist an undo intent when no authorized source
+            // target is available. Production Vault remains permanently gated.
+            guard ImVaultGuardedWrite.productionWriteEnabled || qaCopy else {
+                throw ImVaultSyncFailure.writesLocked
+            }
+            if proposal.state.noteStatus != .undoing {
+                var starting = proposal
+                starting.state.noteStatus = .undoing
+                guard await saveProposal(starting) else {
+                    throw WCDBV3ChatStorageError.conflict
+                }
+                proposal = starting
+            }
+            do {
+                let result: Result<ImVaultCommitOutcome, Error> =
+                    await withCheckedContinuation { c in
+                        ImVaultGuardedWrite.commitAuthorized(
+                            draft: inverse, userConfirmedDiff: true,
+                            deviceQATestCopyConfirmed: qaCopy) { result in
+                                c.resume(returning: result)
+                            }
+                    }
+                let outcome = try result.get()
+                guard case .unchanged = outcome else {
+                    var completed = proposal
+                    completed.state.noteStatus = .reverted
+                    completed.noteReceipt = (completed.noteReceipt ?? "") +
+                        "\n" + V3L("已按版本校验撤销笔记；本机字节回读，不代表 iCloud 远端同步。")
+                    guard await saveProposal(completed) else {
+                        throw WCDBV3ChatStorageError.conflict
+                    }
+                    proposal = completed
+                    return completed.noteReceipt ?? ""
+                }
+                throw ImVaultSyncFailure.verificationFailed
+            } catch {
+                // Undo intent is durable. Do not auto-replay it after restart.
+                var failed = proposal
+                failed.noteReceipt = (failed.noteReceipt ?? "") +
+                    "\n" + V3L("撤销待核查：") + error.localizedDescription
+                if await saveProposal(failed) { proposal = failed }
+                throw error
+            }
+        case .card:
+            guard [.applied, .undoing].contains(proposal.state.cardStatus),
+                  let id = proposal.cardID, let revision = proposal.cardContentRevision,
+                  let revised = proposal.cardEditedQuestion,
+                  let original = proposal.cardBaseQuestion else {
+                throw ReviewWCDBError.missingCard
+            }
+            if proposal.state.cardStatus != .undoing {
+                var starting = proposal
+                starting.state.cardStatus = .undoing
+                guard await saveProposal(starting) else { throw WCDBV3ChatStorageError.conflict }
+                proposal = starting
+            }
+            do {
+                guard let current = try await repository.content(for: id) else {
+                    throw ReviewWCDBError.missingCard
+                }
+                switch ImDuplexCardVersionGate.decide(
+                    expectedContentRevision: revision + 1,
+                    currentContentRevision: current.contentRevision,
+                    baseQuestion: revised, baseAnswer: proposal.cardEditedAnswer,
+                    proposedQuestion: original, proposedAnswer: proposal.cardBaseAnswer,
+                    currentQuestion: current.question, currentAnswer: current.answerText) {
+                case .conflict, .unchanged:
+                    throw ReviewWCDBError.contentConflict
+                case .alreadyApplied:
+                    break
+                case .safeToWrite:
+                    guard let queue = try await repository.fetchQueueCandidates()
+                        .first(where: { $0.cardID == id }) else {
+                        throw ReviewWCDBError.missingCard
+                    }
+                    // Use the CURRENT FSRS revision for CAS: a review between
+                    // original approval and undo must NOT reset the scheduler.
+                    try await repository.updateManagedCard(
+                        WCDBV3CardInput(cardID: id, question: original,
+                            answerText: proposal.cardBaseAnswer, choices: current.choices,
+                            correctIndices: current.correctIndices, cardType: current.cardType,
+                            imageData: current.imageData, sourceNotePath: current.sourceNotePath),
+                        expectedRevision: queue.revision,
+                        expectedContentRevision: revision + 1, origin: .restored)
+                }
+                var completed = proposal
+                completed.state.cardStatus = .reverted
+                completed.cardReceipt = (completed.cardReceipt ?? "") +
+                    "\n" + V3L("原卡已安全恢复旧内容；cardID、FSRS 评分和中间内容版本均保留。")
+                guard await saveProposal(completed) else { throw WCDBV3ChatStorageError.conflict }
+                proposal = completed
+                return completed.cardReceipt ?? ""
+            } catch {
+                var failed = proposal
+                failed.cardReceipt = (failed.cardReceipt ?? "") +
+                    "\n" + V3L("撤销待核查：") + error.localizedDescription
+                if await saveProposal(failed) { proposal = failed }
+                throw error
+            }
+        }
     }
 
     private func showResult(_ name: String, _ message: String) {

@@ -24,6 +24,118 @@ private struct FailingReviewCalculator: WCDBReviewCalculating {
 final class ReviewWCDBRepositoryTests: XCTestCase {
 
     @MainActor
+    func testExplicitQAUndoRestoresExactBOMCRLFBytesAndBlocksLaterConflict() throws {
+        let root = try createRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = Data([0xEF, 0xBB, 0xBF]) +
+            Data("# Original\r\n[[linked-note]]\r\n> [!NOTE] Keep\r\n".utf8)
+        let file = try put("# temporary", root: root)
+        try original.write(to: file, options: .atomic)
+        let identity = try ImVaultFileIdentity(vaultID: UUID().uuidString,
+            relativePath: "Notes/Topic.md")
+        let read = try ImVaultReadSync.load(root: root, identity: identity)
+        var draft = try ImVaultDraft(identity: identity, baseText: read.markdown,
+                                     baseRawData: read.sourceBytes)
+        try draft.update("# Revised\n[[linked-note]]\n> [!NOTE] Keep\n")
+        let expectedApplied = ImVaultDigest.sha256(draft.proposedBytes)
+        let forward = try ImVaultGuardedWrite.commitFixture(root: root,
+            draft: draft, userConfirmedDiff: true)
+        guard case .written = forward else {
+            XCTFail("Expected a coordinated fixture write")
+            return
+        }
+        XCTAssertNotEqual(try Data(contentsOf: file), original)
+        let inverse = try ImpressDuplexUndoGate.inverseDraft(draft,
+            expectedBaseDigest: draft.baseDigest,
+            expectedAppliedDigest: expectedApplied)
+        XCTAssertEqual(inverse.proposedBytes, original)
+        XCTAssertEqual(inverse.decision(against: try Data(contentsOf: file)), .safeToWrite)
+        let undone = try ImVaultGuardedWrite.commitFixture(root: root,
+            draft: inverse, userConfirmedDiff: true)
+        guard case .written = undone else {
+            XCTFail("Expected the user-confirmed inverse to write one time")
+            return
+        }
+        XCTAssertEqual(try Data(contentsOf: file), original)
+        let retry = try ImVaultGuardedWrite.commitFixture(root: root,
+            draft: inverse, userConfirmedDiff: true)
+        guard case .alreadyApplied = retry else {
+            XCTFail("A resumed inverse must be idempotent")
+            return
+        }
+        try Data("# Another editor modified the original".utf8).write(
+            to: file, options: .atomic)
+        XCTAssertThrowsError(try ImVaultGuardedWrite.commitFixture(
+            root: root, draft: inverse, userConfirmedDiff: true))
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8),
+                       "# Another editor modified the original")
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    @MainActor
+    func testManualCardUndoCreatesNewContentVersionWithoutRescoring() async throws {
+        let calculator = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
+                                             calculator: calculator)
+        let id = UUID(), now = Date(timeIntervalSince1970: 1_726_000_000)
+        let initial = WCDBV3CardInput(cardID: id, question: "Prior question",
+                                      answerText: "Prior answer")
+        try await repo.insertNewCard(initial,
+            initial: try calculator.newCardSnapshot(id: id, now: now), now: now)
+        let beforeItems = try await repo.fetchQueueCandidates()
+        let before = try XCTUnwrap(beforeItems.first(where: { $0.cardID == id }))
+        try await repo.updateManagedCard(WCDBV3CardInput(cardID: id,
+            question: "Revised question", answerText: "Revised answer"),
+            expectedRevision: before.revision, expectedContentRevision: 0,
+            origin: .approvedAI)
+        let revisedValue = try await repo.content(for: id)
+        let revised = try XCTUnwrap(revisedValue)
+        XCTAssertEqual(revised.contentRevision, 1)
+        XCTAssertEqual(ImDuplexCardVersionGate.decide(
+            expectedContentRevision: 1, currentContentRevision: revised.contentRevision,
+            baseQuestion: "Revised question", baseAnswer: "Revised answer",
+            proposedQuestion: "Prior question", proposedAnswer: "Prior answer",
+            currentQuestion: revised.question, currentAnswer: revised.answerText), .safeToWrite)
+        let queueItems = try await repo.fetchQueueCandidates()
+        let currentQueue = try XCTUnwrap(queueItems.first(where: { $0.cardID == id }))
+        try await repo.updateManagedCard(WCDBV3CardInput(cardID: id,
+            question: "Prior question", answerText: "Prior answer"),
+            expectedRevision: currentQueue.revision,
+            expectedContentRevision: revised.contentRevision, origin: .restored)
+        let finalValue = try await repo.content(for: id)
+        let restored = try XCTUnwrap(finalValue)
+        let afterCandidates = try await repo.fetchQueueCandidates()
+        let after = try XCTUnwrap(afterCandidates.first(where: { $0.cardID == id }))
+        XCTAssertEqual(restored.cardID, id)
+        XCTAssertEqual(restored.question, "Prior question")
+        XCTAssertEqual(restored.answerText, "Prior answer")
+        XCTAssertEqual(restored.contentRevision, 2)
+        XCTAssertEqual(after.revision, before.revision)
+        XCTAssertEqual(after.dueAt, before.dueAt)
+        let versions = try await repo.contentHistory(for: id)
+        XCTAssertEqual(versions.map(\.contentRevision), [0, 1, 2])
+        XCTAssertEqual(versions.last?.origin, .restored)
+        let reviewEvents = try await repo.reviewHistory(for: id)
+        XCTAssertTrue(reviewEvents.isEmpty)
+    }
+
+    @MainActor
+    func testSafeUndoReviewShowsFullScrollContentAndNeedsExplicitConfirmation() throws {
+        let long = Array(repeating: "Unmodified source remains readable", count: 200)
+            .joined(separator: "\n")
+        let page = ImpressDuplexUndoReviewController(content: long) {
+            .success("only after explicit confirmation")
+        }
+        page.loadViewIfNeeded()
+        let body = try XCTUnwrap(page.view.subviews.compactMap { $0 as? UITextView }.first)
+        XCTAssertTrue(body.text.hasSuffix("Unmodified source remains readable"))
+        XCTAssertFalse(body.isEditable)
+        XCTAssertTrue(body.isSelectable)
+        let button = try XCTUnwrap(page.view.subviews.compactMap { $0 as? UIButton }.first)
+        XCTAssertEqual(button.accessibilityIdentifier, "impress.duplex.undo.confirm")
+    }
+
+    @MainActor
     func testConfirmedDuplexHistoryRetainsReceiptsWhenNewerProposalIsSaved() async throws {
         let path = temporaryPath()
         let original = try ReviewWCDBRepository(databasePath: path,

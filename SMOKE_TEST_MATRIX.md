@@ -102,3 +102,11 @@ Record final Git SHA, Actions run URL, each job conclusion, **total native XCTes
 - **P0-BYTE-02**：原文为混合 LF/CRLF 时不得把纯换行归一化隐藏为「没有变更」。源文件被外部应用同时修改则冲突中止，不可覆盖、不可自动将建议覆盖已成功的原卡。
 - **P0-SOURCE-01**：笔记详情 → 私有草稿编辑 →（QA 副本经授权写回）→ 返回笔记详情，重读授权源文件并刷新最新 Markdown。关闭授权／文件移动／下载未完成后，不能从旧缓存建立有效写回提案、上传过期章节或者误发旧版本 Chat。
 - **P0-RECEIPT-01**：同一 Chat 顺序完成两次修改、首次只改原卡、第二次笔记冲突，强杀重启后历史回执仍逐项存在，可完整查看双方 cardID/Vault path/expected revision/部分结果；任何恢复行为都不得自动执行已保存修改。
+
+## 安全撤销完整业务冒烟（LOOP-13）
+
+- **UNDO-01（原卡）**：同一 cardID 人工批准修改问题／答案后，从 Chat 对应收据进入「安全撤销」。完整显示改前／改后字段、当前内容版本。二次确认后回原题／答案，卡片身份不变、FSRS dueAt/review events 不变、卡片内容历史保留批准版本与新 restored 版本。
+- **UNDO-02（原卡冲突）**：批准之后原卡又被用户合法修改，旧撤销必须拒绝覆盖，旧内容和 FSRS 都不丢。中间若仅发生 FSRS 评分则允许依据 **最新 FSRS revision** 在不改评分的前提下撤销卡片内容。
+- **UNDO-03（QA 笔记）**：在 Debug 显式授权独立测试副本写入含 BOM+CRLF／Frontmatter／WikiLink 的原始 Markdown，确认后通过完整反向 Diff 撤销。File Provider 回读须与第一版源字节完全一致，再次人工重试不产生重复写入。
+- **UNDO-04（锁定／冲突）**：Release 正式 Vault 永远不能绕过生产写门禁；独立 QA 授权丢失时不能进入 undoing；源文第三方修改、同名但其他 Vault 等情况必须拒绝写回。
+- **UNDO-05（崩溃恢复）**：写回后未记录成功收据即强杀，重启持久恢复 undoing 且零自动重放；用户再次手动确认并匹配目标已恢复的字节／内容版本，记为 reverted。归档旧提案的撤销不得覆盖后续提案与其他 Chat。

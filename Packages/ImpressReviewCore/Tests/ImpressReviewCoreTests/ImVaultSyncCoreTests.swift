@@ -239,6 +239,50 @@ struct ImVaultSyncCoreTests {
         #expect(!discarded.needsNoteAction && !discarded.needsCardAction)
     }
 
+    @Test func interruptedUndoNeverReplaysForwardWrite() throws {
+        var state = ImDuplexApprovalState(noteSelected: true, cardSelected: true,
+            noteStatus: .applied, cardStatus: .applied)
+        #expect(state.completed)
+        state.noteStatus = .undoing
+        #expect(!state.needsNoteAction)
+        #expect(state.needsNoteUndo)
+        #expect(!state.completed)
+        let data = try JSONEncoder().encode(state)
+        let reopened = try JSONDecoder().decode(ImDuplexApprovalState.self, from: data)
+        #expect(reopened.needsNoteUndo)
+        #expect(!reopened.needsNoteAction,
+            "A crashed inverse operation must not run the forward writer")
+        state.noteStatus = .reverted
+        #expect(!state.needsNoteAction)
+        #expect(!state.needsNoteUndo)
+        #expect(state.completed)
+        state.cardStatus = .undoing
+        #expect(state.needsCardUndo && !state.needsCardAction)
+        state.cardStatus = .reverted
+        #expect(state.completed)
+    }
+
+    @Test func reverseCardEditUsesFreshCASAndRejectsInterveningRevision() {
+        let originallyApplied = ImDuplexCardVersionGate.decide(
+            expectedContentRevision: 5, currentContentRevision: 5,
+            baseQuestion: "AI revised", baseAnswer: "Corrected",
+            proposedQuestion: "Original", proposedAnswer: "Initial",
+            currentQuestion: "AI revised", currentAnswer: "Corrected")
+        #expect(originallyApplied == .safeToWrite)
+        let undoneOnRetry = ImDuplexCardVersionGate.decide(
+            expectedContentRevision: 5, currentContentRevision: 6,
+            baseQuestion: "AI revised", baseAnswer: "Corrected",
+            proposedQuestion: "Original", proposedAnswer: "Initial",
+            currentQuestion: "Original", currentAnswer: "Initial")
+        #expect(undoneOnRetry == .alreadyApplied)
+        let userContinuedEditing = ImDuplexCardVersionGate.decide(
+            expectedContentRevision: 5, currentContentRevision: 6,
+            baseQuestion: "AI revised", baseAnswer: "Corrected",
+            proposedQuestion: "Original", proposedAnswer: "Initial",
+            currentQuestion: "Second valid human edit", currentAnswer: "Corrected")
+        #expect(userContinuedEditing == .conflict)
+    }
+
     @Test func duplexCardConflictAndRepeatNeverOverwriteAnotherVersion() {
         let safe = ImDuplexCardVersionGate.decide(expectedContentRevision: 3,
             currentContentRevision: 3, baseQuestion: "Original Q", baseAnswer: "Original A",
