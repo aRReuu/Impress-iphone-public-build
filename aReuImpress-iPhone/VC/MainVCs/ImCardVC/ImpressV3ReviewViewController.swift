@@ -28,10 +28,8 @@ final class ImpressV3ReviewViewController: UIViewController {
 
     private let cardStack = SwipeCardStack()
     private let revealButton = UIButton(type: .system)
-    private let answerTools = UIStackView()
     private let statusLabel = UILabel()
     private let currentCardActions = UIStackView()
-    private let quickEditButton = UIButton(type: .system)
     private let sourceNoteButton = UIButton(type: .system)
     private let completionLabel = UILabel()
     private let repeatButton = UIButton(type: .system)
@@ -113,17 +111,6 @@ final class ImpressV3ReviewViewController: UIViewController {
     private func refreshLocalizedReview() {
         title = V3L("闪卡")
         setupNavigation()
-        let titles = ["编辑卡片", "AI 讨论"]
-        for (i, view) in answerTools.arrangedSubviews.enumerated() {
-            guard let button = view as? UIButton, i < titles.count else { continue }
-            let text = V3L(titles[i])
-            if #available(iOS 15.0, *) {
-                ImpressV3NativeButtonAppearance.reviewSecondary(button, title: text,
-                    symbol: i == 0 ? "square.and.pencil" : "bubble.left")
-            } else {
-                button.setTitle(text, for: .normal)
-            }
-        }
         if #available(iOS 15.0, *) {
             ImpressV3NativeButtonAppearance.reviewPrimary(revealButton, title: V3L("查看答案"))
         } else {
@@ -148,7 +135,6 @@ final class ImpressV3ReviewViewController: UIViewController {
     private func setupNativeLayout() {
         cardStack.translatesAutoresizingMaskIntoConstraints = false
         revealButton.translatesAutoresizingMaskIntoConstraints = false
-        answerTools.translatesAutoresizingMaskIntoConstraints = false
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
         currentCardActions.translatesAutoresizingMaskIntoConstraints = false
         currentCardActions.axis = .horizontal
@@ -156,7 +142,6 @@ final class ImpressV3ReviewViewController: UIViewController {
         currentCardActions.spacing = ImpressV3Appearance.Metrics.rowSpacing
         currentCardActions.isHidden = true
         for (button, icon, label, action) in [
-            (quickEditButton, "square.and.pencil", V3L("编辑当前卡片"), #selector(editCurrentCard)),
             (sourceNoteButton, "doc.text", V3L("打开来源笔记"), #selector(openCurrentSourceNote))
         ] {
             var configuration = UIButton.Configuration.plain()
@@ -172,36 +157,8 @@ final class ImpressV3ReviewViewController: UIViewController {
             ])
             currentCardActions.addArrangedSubview(button)
         }
-        quickEditButton.accessibilityIdentifier = "impress.review.quick-edit"
         sourceNoteButton.accessibilityIdentifier = "impress.review.source-note"
         sourceNoteButton.isHidden = true
-        answerTools.axis = .horizontal
-        answerTools.distribution = .fillEqually
-        answerTools.spacing = ImpressV3Appearance.Metrics.rowSpacing
-        answerTools.isHidden = true
-        let reflect = UIButton(type: .system)
-        reflect.setTitle(V3L("编辑卡片"), for: .normal)
-        reflect.titleLabel?.font = ImpressV3Appearance.Typography.supporting
-        if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.reviewSecondary(
-                reflect, title: V3L("编辑卡片"), symbol: "square.and.pencil")
-        }
-        reflect.accessibilityIdentifier = "impress.review.edit-card"
-        reflect.addTarget(self, action: #selector(editCurrentCard), for: .touchUpInside)
-
-        let discuss = UIButton(type: .system)
-        if #available(iOS 15.0, *) {
-            ImpressV3NativeButtonAppearance.reviewSecondary(
-                discuss, title: V3L("AI 讨论"), symbol: "bubble.left")
-        } else {
-            discuss.setTitle(V3L("AI 讨论"), for: .normal)
-        }
-        discuss.accessibilityIdentifier = "impress.review.ai-discussion"
-        discuss.addTarget(self, action: #selector(openAIDiscussion), for: .touchUpInside)
-        // Keep a short native footer: review itself remains reveal → swipe.
-        // Both tertiary actions are optional; they do not submit FSRS ratings.
-        answerTools.addArrangedSubview(reflect)
-        answerTools.addArrangedSubview(discuss)
         revealButton.setTitle(V3L("查看答案"), for: .normal)
         revealButton.titleLabel?.font = ImpressV3Appearance.Typography.heading
         revealButton.titleLabel?.adjustsFontForContentSizeCategory = true
@@ -243,7 +200,6 @@ final class ImpressV3ReviewViewController: UIViewController {
         view.addSubview(currentCardActions)
         view.addSubview(cardStack)
         view.addSubview(revealButton)
-        view.addSubview(answerTools)
         view.addSubview(busyIndicator)
         view.addSubview(completionLabel)
         view.addSubview(repeatButton)
@@ -262,10 +218,6 @@ final class ImpressV3ReviewViewController: UIViewController {
             revealButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -ImpressV3Appearance.Metrics.screenInset),
             revealButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
             revealButton.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.primaryActionHeight),
-            answerTools.topAnchor.constraint(equalTo: revealButton.topAnchor),
-            answerTools.leadingAnchor.constraint(equalTo: revealButton.leadingAnchor),
-            answerTools.trailingAnchor.constraint(equalTo: revealButton.trailingAnchor),
-            answerTools.bottomAnchor.constraint(equalTo: revealButton.bottomAnchor),
             busyIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             busyIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
             completionLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -20),
@@ -354,7 +306,6 @@ final class ImpressV3ReviewViewController: UIViewController {
         completionLabel.isHidden = true
         repeatButton.isHidden = true
         revealButton.isHidden = true
-        answerTools.isHidden = true
         currentCardActions.isHidden = true
 
         Task { [weak self] in
@@ -416,8 +367,7 @@ final class ImpressV3ReviewViewController: UIViewController {
             completionLabel.isHidden = false
             repeatButton.isHidden = false
             revealButton.isHidden = true
-            answerTools.isHidden = true
-            completionLabel.text = items.isEmpty ? V3L("暂无到期卡片，可以稍后再来。") :
+                completionLabel.text = items.isEmpty ? V3L("暂无到期卡片，可以稍后再来。") :
                 "本轮复习完成：\(items.count) 张"
             statusLabel.text = V3L("本轮完成")
             return
@@ -429,7 +379,6 @@ final class ImpressV3ReviewViewController: UIViewController {
         repeatButton.isHidden = true
         statusLabel.text = "第 \(currentIndex + 1) / \(items.count) 张 · 先回忆，再揭示答案"
         revealButton.isHidden = false
-        answerTools.isHidden = true
         revealButton.isEnabled = true
         cardStack.isUserInteractionEnabled = true
         setRatingGesturesEnabled(false)
@@ -458,8 +407,7 @@ final class ImpressV3ReviewViewController: UIViewController {
                 }
                 self.setRatingGesturesEnabled(revealed)
                 self.revealButton.isHidden = revealed
-                self.answerTools.isHidden = !revealed
-                self.statusLabel.text = revealed
+                        self.statusLabel.text = revealed
                     ? V3L("← 困难   ↑ 良好   → 容易   ↓ 重来")
                     : V3L("先回忆，再查看答案")
                 self.updateNavigationActions()
@@ -562,7 +510,6 @@ final class ImpressV3ReviewViewController: UIViewController {
         let refreshed = cardStack(cardStack, cardForIndexAt: currentIndex)
         cardStack.topCard?.content = refreshed.content
         setRatingGesturesEnabled(false)
-        answerTools.isHidden = true
         revealButton.isHidden = false
         statusLabel.text = V3L("先回忆，再查看答案")
     }
@@ -632,6 +579,43 @@ final class ImpressV3ReviewViewController: UIViewController {
     }
 
 
+    private func showFullQuestion(_ question: String, cardID: UUID) {
+        guard pending == nil, !isLoading,
+              items[safe: currentIndex]?.cardID == cardID,
+              presentedViewController == nil else { return }
+        let detail = UIViewController()
+        detail.title = V3L("题干全文")
+        detail.view.backgroundColor = ImpressV3Appearance.page
+        let body = UITextView()
+        body.translatesAutoresizingMaskIntoConstraints = false
+        body.backgroundColor = .clear
+        body.isEditable = false
+        body.isSelectable = true
+        body.isScrollEnabled = true
+        body.adjustsFontForContentSizeCategory = true
+        body.font = ImpressV3Appearance.Typography.body
+        body.attributedText = MarkdownKitRenderer().parseMarkdown(question)
+            ?? NSAttributedString(string: question)
+        body.accessibilityIdentifier = "impress.review.full-question"
+        detail.view.addSubview(body)
+        NSLayoutConstraint.activate([
+            body.topAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.topAnchor),
+            body.bottomAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.bottomAnchor),
+            body.leadingAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.leadingAnchor,
+                                          constant: 16),
+            body.trailingAnchor.constraint(equalTo: detail.view.safeAreaLayoutGuide.trailingAnchor,
+                                           constant: -16)
+        ])
+        detail.navigationItem.rightBarButtonItem = UIBarButtonItem(
+            barButtonSystemItem: .done, target: self,
+            action: #selector(closeFullQuestion))
+        let nav = ImNavigationViewController(rootViewController: detail)
+        nav.modalPresentationStyle = .pageSheet
+        present(nav, animated: true)
+    }
+
+    @objc private func closeFullQuestion() { dismiss(animated: true) }
+
     @objc private func openAIDiscussion() {
         guard pending == nil, !isLoading,
               let item = items[safe: currentIndex] else { return }
@@ -645,8 +629,11 @@ final class ImpressV3ReviewViewController: UIViewController {
                 }
                 // Explicitly prepare only THIS card's effective content;
                 // never read/upload the entire linked Obsidian document.
-                var context = latest.answerText ?? ""
-                if latest.cardType == CardType.multipleChoice.rawValue {
+                // A not-yet-revealed answer may never be silently inherited
+                // by a Chat created from the current question.
+                let answerWasRevealed = self.canRateCurrentCard
+                var context = answerWasRevealed ? (latest.answerText ?? "") : ""
+                if answerWasRevealed && latest.cardType == CardType.multipleChoice.rawValue {
                     context += "\n" + V3L("全部选项：") + (latest.choices ?? "")
                     context += "\n" + V3L("正确项索引：") + (latest.correctIndices ?? "")
                 }
@@ -657,7 +644,7 @@ final class ImpressV3ReviewViewController: UIViewController {
                     try? ImpressBatchSourceKey.decode($0)
                 }
                 let discussion = ImpressAINativeChatViewController(
-                    question: latest.question, answer: context,
+                    question: latest.question, answer: answerWasRevealed ? context : nil,
                     cardID: item.cardID, contentRevision: latest.contentRevision,
                     repository: repo, linkedNoteIdentity: linkedNote)
                 navigationController?.pushViewController(discussion, animated: true)
@@ -870,12 +857,18 @@ extension ImpressV3ReviewViewController: SwipeCardStackDataSource, SwipeCardStac
         }
         if model.cardType == CardType.multipleChoice.rawValue {
             let multiple = ImMultipleChoiceCardView(model: model, usesNativeOptionButtons: true)
+            multiple.onFullQuestionRequested = { [weak self] in
+                self?.showFullQuestion(model.question ?? "", cardID: item.cardID)
+            }
             multiple.onAnswerRevealed = { [weak self] in
                 self?.answerChanged(cardID: item.cardID, revealed: true)
             }
             card.content = multiple
         } else {
             let content = ImMemoryCardView(model: model, v3Style: true)
+            content.onFullQuestionRequested = { [weak self] in
+                self?.showFullQuestion(model.question ?? "", cardID: item.cardID)
+            }
             content.onAnswerVisibilityChanged = { [weak self] revealed in
                 self?.answerChanged(cardID: item.cardID, revealed: revealed)
             }
@@ -891,6 +884,37 @@ extension ImpressV3ReviewViewController: SwipeCardStackDataSource, SwipeCardStac
             }
             card.content = content
         }
+        // Both actions belong to the card, not an external toolbar or menu.
+        let actions = UIStackView()
+        actions.axis = .horizontal
+        actions.spacing = 4
+        actions.translatesAutoresizingMaskIntoConstraints = false
+        actions.backgroundColor = ImpressV3Appearance.surface
+        actions.layer.cornerRadius = 14
+        let cardButtons: [(String, String, String, Selector)] = [
+            ("square.and.pencil", V3L("编辑当前卡片"),
+             "impress.review.quick-edit", #selector(editCurrentCard)),
+            ("bubble.left", V3L("AI 讨论"),
+             "impress.review.ai-discussion", #selector(openAIDiscussion))
+        ]
+        for (symbol, label, identifier, action) in cardButtons {
+            let button = UIButton(type: .system)
+            var configuration = UIButton.Configuration.plain()
+            configuration.image = UIImage(systemName: symbol)
+            configuration.baseForegroundColor = ImpressV3Appearance.accent
+            button.configuration = configuration
+            button.accessibilityLabel = label
+            button.accessibilityIdentifier = identifier
+            button.addTarget(self, action: action, for: .touchUpInside)
+            button.widthAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+            button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+            actions.addArrangedSubview(button)
+        }
+        card.addSubview(actions)
+        NSLayoutConstraint.activate([
+            actions.topAnchor.constraint(equalTo: card.topAnchor, constant: 8),
+            actions.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -8)
+        ])
         card.content?.backgroundColor = ImpressV3Appearance.surface
         card.backgroundColor = ImpressV3Appearance.surface
         card.layer.cornerRadius = ImpressV3Appearance.Radius.card

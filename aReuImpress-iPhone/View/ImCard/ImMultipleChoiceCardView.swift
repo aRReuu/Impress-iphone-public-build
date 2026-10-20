@@ -50,6 +50,17 @@ class ImMultipleChoiceCardView: UIView {
     private var selectedIndices: Set<Int> = []
     private var isAnswerShown = false
     var answerIsRevealed: Bool { isAnswerShown }
+    var onFullQuestionRequested: (() -> Void)?
+
+    var isQuestionTruncated: Bool {
+        ImpressV3QuestionLayout.isTruncated(questionLabel.attributedText,
+            width: questionLabel.bounds.width)
+    }
+
+    @objc private func openFullQuestionIfTruncated() {
+        guard usesNativeOptionButtons, isQuestionTruncated else { return }
+        onFullQuestionRequested?()
+    }
 
     /// The user must still make a separate Tinder swipe to rate FSRS.
     var onAnswerRevealed: (() -> Void)?
@@ -60,7 +71,13 @@ class ImMultipleChoiceCardView: UIView {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         if usesNativeOptionButtons {
-            questionLabel.numberOfLines = 0
+            questionLabel.numberOfLines = 3
+            questionLabel.lineBreakMode = .byTruncatingTail
+            questionLabel.isUserInteractionEnabled = true
+            questionLabel.addGestureRecognizer(
+                UITapGestureRecognizer(target: self,
+                    action: #selector(openFullQuestionIfTruncated)))
+            questionLabel.accessibilityHint = V3L("题干超过三行时，轻点阅读完整原文")
             questionLabel.textAlignment = .left
             optionsStackView.distribution = .fill
             optionsStackView.spacing = ImpressV3Appearance.Metrics.choiceSpacing
@@ -114,7 +131,7 @@ class ImMultipleChoiceCardView: UIView {
             addSubview(optionsScrollView)
             NSLayoutConstraint.activate([
                 optionsScrollView.topAnchor.constraint(
-                    equalTo: safeAreaLayoutGuide.topAnchor, constant: metrics.cardInset),
+                    equalTo: safeAreaLayoutGuide.topAnchor, constant: metrics.cardInset + 52),
                 optionsScrollView.leadingAnchor.constraint(
                     equalTo: safeAreaLayoutGuide.leadingAnchor, constant: metrics.cardInset),
                 optionsScrollView.trailingAnchor.constraint(

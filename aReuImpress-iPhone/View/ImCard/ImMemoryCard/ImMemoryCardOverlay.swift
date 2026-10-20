@@ -379,9 +379,9 @@ final class ImpressV3RatingOverlay: UIView {
         addSubview(badge)
         NSLayoutConstraint.activate([
             badge.centerXAnchor.constraint(equalTo: centerXAnchor),
-            // Keep the rating hint above content instead of hiding the main text.
-            badge.topAnchor.constraint(equalTo: topAnchor,
-                constant: ImpressV3Appearance.Metrics.reviewOverlayTopInset),
+            // A short-lived, non-interactive hint follows the visible card
+            // centre even when answer content scrolls underneath it.
+            badge.centerYAnchor.constraint(equalTo: centerYAnchor),
             badge.heightAnchor.constraint(greaterThanOrEqualToConstant:
                 ImpressV3Appearance.Metrics.reviewOverlayBadgeHeight),
             badge.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor,

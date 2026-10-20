@@ -83,6 +83,7 @@ class ImMemoryCardView: UIView
 
     private var cardModel: ImCardModel?
     var onImageTapped: (() -> Void)?
+    var onFullQuestionRequested: (() -> Void)?
     /// V3 observes answer visibility; legacy screens need not subscribe.
     var onAnswerVisibilityChanged: ((Bool) -> Void)?
     func revealAnswerIfNeeded() {
@@ -121,9 +122,11 @@ class ImMemoryCardView: UIView
             questionTextView.textColor = ImpressV3Appearance.primaryText
             questionTextView.font = ImpressV3Appearance.Typography.cardTitle
             answerTextView.font = ImpressV3Appearance.Typography.body
-            // Make long Markdown accessible without shrinking text or leaving this page.
-            questionTextView.isScrollEnabled = true
-            questionTextView.showsVerticalScrollIndicator = true
+            // Limit only the visual projection. Never truncate stored Markdown.
+            questionTextView.isScrollEnabled = false
+            questionTextView.textContainer.maximumNumberOfLines = 3
+            questionTextView.textContainer.lineBreakMode = .byTruncatingTail
+            questionTextView.showsVerticalScrollIndicator = false
             answerTextView.showsVerticalScrollIndicator = true
             questionTextView.isSelectable = true
             answerTextView.isSelectable = true
@@ -181,7 +184,7 @@ class ImMemoryCardView: UIView
 
 
         // questionTextView 约束
-        questionTextViewTopConstraint = questionTextView.topAnchor.constraint(equalTo: cardView.topAnchor, constant: usesCompactV3Style ? 16 : 32)
+        questionTextViewTopConstraint = questionTextView.topAnchor.constraint(equalTo: cardView.topAnchor, constant: usesCompactV3Style ? 64 : 32)
         questionTextViewCenterYConstraint = questionTextView.centerYAnchor.constraint(equalTo: cardView.centerYAnchor)
         questionTextViewCenterYConstraint.isActive = true
 
@@ -254,6 +257,15 @@ class ImMemoryCardView: UIView
 
         let size = CGSize(width: maxWidth, height: CGFloat.greatestFiniteMagnitude)
         let estimatedSize = questionTextView.sizeThatFits(size)
+        var largestLine = questionTextView.font?.lineHeight ?? 25
+        if let attributed = questionTextView.attributedText, attributed.length > 0 {
+            attributed.enumerateAttribute(.font,
+                in: NSRange(location: 0, length: attributed.length)) { value, _, _ in
+                if let font = value as? UIFont { largestLine = max(largestLine, font.lineHeight) }
+            }
+        }
+        let threeLines = largestLine * 3 +
+            questionTextView.textContainerInset.top + questionTextView.textContainerInset.bottom + 2
 
         // Cap only the viewport, not the original Markdown. After reveal,
         // reserve enough visible space for a separately scrollable answer.
@@ -261,7 +273,7 @@ class ImMemoryCardView: UIView
         let available = max(56, cardView.bounds.height -
             (usesCompactV3Style ? 32 : 64))
         let maximum = usesCompactV3Style
-            ? (split ? max(48, available * 0.42) : available)
+            ? min(threeLines, split ? max(48, available * 0.42) : available)
             : estimatedSize.height
         let target = min(estimatedSize.height, maximum)
         guard abs(questionTextViewHeightConstraint.constant - target) > 1.0 else { return }
@@ -281,7 +293,14 @@ class ImMemoryCardView: UIView
         // R03 requires the explicit external “查看答案” button. Tapping or
         // selecting text on the question must not unexpectedly reveal it.
         // Legacy cards retain their original tap-to-reveal contract.
-        if usesCompactV3Style { return }
+        if usesCompactV3Style {
+            let fullTextTap = UITapGestureRecognizer(target: self,
+                action: #selector(openFullQuestionIfTruncated))
+            fullTextTap.cancelsTouchesInView = false
+            questionTextView.addGestureRecognizer(fullTextTap)
+            questionTextView.accessibilityHint = V3L("题干超过三行时，轻点阅读完整原文")
+            return
+        }
         let tapGesture = UITapGestureRecognizer(target: self,
                                                 action: #selector(toggleAnswer))
         cardView.addGestureRecognizer(tapGesture)
@@ -290,6 +309,20 @@ class ImMemoryCardView: UIView
                                                         action: #selector(toggleAnswer))
         questionTextView.addGestureRecognizer(questionTapGesture)
         questionTextView.isUserInteractionEnabled = true
+    }
+
+    var isQuestionTruncated: Bool {
+        let width = questionTextView.bounds.width -
+            questionTextView.textContainerInset.left -
+            questionTextView.textContainerInset.right -
+            2 * questionTextView.textContainer.lineFragmentPadding
+        return ImpressV3QuestionLayout.isTruncated(
+            questionTextView.attributedText, width: width)
+    }
+
+    @objc private func openFullQuestionIfTruncated() {
+        guard usesCompactV3Style, isQuestionTruncated else { return }
+        onFullQuestionRequested?()
     }
 
     @objc private func handleImageTap() {
@@ -347,5 +380,29 @@ class ImMemoryCardView: UIView
             self.isAnswerShown = false
             self.onAnswerVisibilityChanged?(false)
         }
+    }
+}
+
+ 
+/// Use actual attributed-text line fragments, not string length, for the
+/// compact question projection shared by all V3 card types.
+enum ImpressV3QuestionLayout {
+    static func isTruncated(_ text: NSAttributedString?, width: CGFloat) -> Bool {
+        guard let text, text.length > 0, width > 0 else { return false }
+        let storage = NSTextStorage(attributedString: text)
+        let layout = NSLayoutManager()
+        let container = NSTextContainer(
+            size: CGSize(width: width, height: CGFloat.greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        container.maximumNumberOfLines = 0
+        storage.addLayoutManager(layout)
+        layout.addTextContainer(container)
+        let range = layout.glyphRange(for: container)
+        var count = 0
+        layout.enumerateLineFragments(forGlyphRange: range) { _, _, _, _, stop in
+            count += 1
+            if count > 3 { stop.pointee = true }
+        }
+        return count > 3
     }
 }

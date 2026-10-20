@@ -57,7 +57,13 @@ workflow = source(".github/workflows/public-ios-build.yml")
 assert "contentHistoryAction" not in review, "Superseded review footer history returned"
 assert "impress.composer.content-history" in composer, "Editor lost content history"
 assert "questionTextView.setMarkdownText" in memory
-assert "questionTextView.isScrollEnabled = true" in memory
+assert "questionTextView.textContainer.maximumNumberOfLines = 3" in memory
+assert "questionTextView.isScrollEnabled = false" in memory
+assert "onFullQuestionRequested" in memory
+assert "ImpressV3QuestionLayout.isTruncated" in memory
+assert "impress.review.full-question" in review
+assert "impress.review.quick-edit" in review and "impress.review.ai-discussion" in review
+assert "answerTools" not in review, "Old review footer actions were restored"
 assert "updateQuestionTextViewHeight(revealed: true)" in memory
 assert "impress.ai.chat.history" in chat and "impress.ai.chat.new-discussion" in chat
 assert "switchDiscussion(to" in chat and "flushBeforeSwitch()" in chat

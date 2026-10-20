@@ -48,7 +48,7 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testV3LongMarkdownQuestionAndAnswerHaveIndependentScrollRegions() async throws {
+    func testQuestionIsAtMostThreeLinesAndFullTextReturnsWithoutRating() async throws {
         var card = ImCardModel()
         card.cardType = CardType.standard.rawValue
         card.question = "# Heading\n\n" +
@@ -64,9 +64,11 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(150))
         review.layoutIfNeeded()
         let question = review.questionTextView
-        XCTAssertTrue(question.isScrollEnabled)
+        XCTAssertFalse(question.isScrollEnabled)
+        XCTAssertEqual(question.textContainer.maximumNumberOfLines, 3)
         XCTAssertTrue(question.isSelectable)
-        XCTAssertGreaterThan(question.contentSize.height, question.bounds.height)
+        XCTAssertTrue(review.isQuestionTruncated)
+        XCTAssertEqual(question.textContainer.lineBreakMode, .byTruncatingTail)
         review.revealAnswerIfNeeded()
         try await Task.sleep(for: .milliseconds(700))
         review.layoutIfNeeded()
