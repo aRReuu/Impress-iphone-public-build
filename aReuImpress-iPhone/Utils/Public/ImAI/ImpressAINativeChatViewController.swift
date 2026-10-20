@@ -34,7 +34,7 @@ enum ImpressAIChatPromptSelection {
 /// Ordinary Chat produces no FSRS events or Markdown writes.
 @MainActor
 final class ImpressAINativeChatViewController: UIViewController,
-                                                UITableViewDataSource, UITextViewDelegate {
+                                                UITableViewDataSource, UITableViewDelegate, UITextViewDelegate {
     private let sourceQuestion: String?
     private let sourceAnswer: String?
     private let sourceCardID: UUID?
@@ -43,6 +43,9 @@ final class ImpressAINativeChatViewController: UIViewController,
     private let explicitSourceKey: String?
     private let sourceVersionToken: String?
     private let noteIdentity: ImVaultFileIdentity?
+    /// Navigation-only target from a card's stable source identity.
+    /// Does not authorize uploading the note or writing to its Vault.
+    private let linkedNoteIdentity: ImVaultFileIdentity?
     private var chatRepository: ReviewWCDBRepository?
     private var storedSession: WCDBV3ChatSession?
     private var contextReferences: [WCDBV3ChatContextReference] = []
@@ -66,6 +69,9 @@ final class ImpressAINativeChatViewController: UIViewController,
     private var currentSourceVersion: String {
         sourceVersionToken ?? String(sourceContentRevision ?? -1)
     }
+    private var noteDraftTarget: ImVaultFileIdentity? {
+        noteIdentity ?? linkedNoteIdentity
+    }
 
     private let tableView = UITableView(frame: .zero, style: .plain)
     private let messageInput = UITextView()
@@ -81,7 +87,9 @@ final class ImpressAINativeChatViewController: UIViewController,
          cardID: UUID? = nil, contentRevision: Int? = nil,
          repository: ReviewWCDBRepository? = nil,
          sourceKey: String? = nil, sourceVersion: String? = nil,
-         noteIdentity: ImVaultFileIdentity? = nil) {
+         noteIdentity: ImVaultFileIdentity? = nil,
+         linkedNoteIdentity: ImVaultFileIdentity? = nil) {
+        self.linkedNoteIdentity = linkedNoteIdentity
         self.explicitSourceKey = sourceKey
         self.sourceVersionToken = sourceVersion
         self.noteIdentity = noteIdentity
@@ -156,6 +164,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         navigationItem.largeTitleDisplayMode = .never
 
         tableView.dataSource = self
+        tableView.delegate = self
         tableView.register(ImpressChatMessageCell.self, forCellReuseIdentifier: "chat.message")
         tableView.backgroundColor = .clear
         tableView.separatorStyle = .none
@@ -412,6 +421,68 @@ final class ImpressAINativeChatViewController: UIViewController,
                 }
                 self.navigationController?.pushViewController(selector, animated: true)
             case let .failure(error):
+                self.showProblem(error)
+            }
+        }
+    }
+
+    /// A deliberate message action, not a model-generated file command.
+    /// Pasting/revising selected text happens manually inside the existing
+    /// source-preserving draft editor. The formal Vault write gate is unchanged.
+    func messageMenu(for turn: WCDBV3ChatMessage) -> UIMenu {
+        var actions: [UIMenuElement] = [
+            UIAction(title: V3L("复制消息"),
+                     image: UIImage(systemName: "doc.on.doc")) { _ in
+                UIPasteboard.general.string = turn.text
+            }
+        ]
+        if turn.role == .assistant && turn.status == .completed &&
+           noteDraftTarget != nil {
+            actions.append(UIAction(
+                title: V3L("在关联笔记草稿中整理"),
+                image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
+                    self?.openAuthorizedNoteDraft()
+                })
+        }
+        return UIMenu(children: actions)
+    }
+
+    func tableView(_ tableView: UITableView,
+                   contextMenuConfigurationForRowAt indexPath: IndexPath,
+                   point: CGPoint) -> UIContextMenuConfiguration? {
+        guard history.indices.contains(indexPath.row) else { return nil }
+        let message = history[indexPath.row]
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) {
+            [weak self] _ in
+            self?.messageMenu(for: message) ?? UIMenu(children: [])
+        }
+    }
+
+    private func openAuthorizedNoteDraft() {
+        guard !sending && !restoring, let identity = noteDraftTarget else { return }
+        guard ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID else {
+            showProblem(ImVaultSyncFailure.wrongVault)
+            return
+        }
+        ImVaultReadSync.shared.read(identity) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let live):
+                do {
+                    let draft: ImVaultDraft
+                    if let existing = try ImVaultPrivateStore.loadDraft(identity: identity) {
+                        // Retain an older unsent draft even when Obsidian changed.
+                        // The existing Diff path detects a stale source and
+                        // refuses the write rather than silently discarding it.
+                        draft = existing
+                    } else {
+                        draft = try ImVaultDraft(identity: identity,
+                            baseText: live.markdown, baseRawData: live.sourceBytes)
+                    }
+                    self.navigationController?.pushViewController(
+                        ImVaultDraftEditorController(draft: draft), animated: true)
+                } catch { self.showProblem(error) }
+            case .failure(let error):
                 self.showProblem(error)
             }
         }

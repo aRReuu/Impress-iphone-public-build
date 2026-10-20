@@ -395,6 +395,39 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
     }
 
     @MainActor
+    func testChatMessageMenuSeparatesCopyAndExplicitNoteDraftWithoutProductionWrite() throws {
+        let identity = try ImVaultFileIdentity(
+            vaultID: "disposable-test-vault",
+            relativePath: "Notes/One.md")
+        let assistantTurn = WCDBV3ChatMessage(
+            role: .assistant, text: "A proposed interpretation",
+            status: .completed)
+        let pendingTurn = WCDBV3ChatMessage(
+            role: .assistant, text: "Incomplete reply",
+            status: .pending)
+        let linked = ImpressAINativeChatViewController(
+            question: "Q", answer: "A", linkedNoteIdentity: identity)
+        let unlinked = ImpressAINativeChatViewController(question: "Q", answer: "A")
+        let linkedActions = linked.messageMenu(for: assistantTurn).children
+            .compactMap { $0 as? UIAction }
+        XCTAssertTrue(linkedActions.contains(where: { $0.title == V3L("复制消息") }))
+        XCTAssertTrue(linkedActions.contains(where: {
+            $0.title == V3L("在关联笔记草稿中整理")
+        }))
+        let noSourceActions = unlinked.messageMenu(for: assistantTurn).children
+            .compactMap { $0 as? UIAction }
+        XCTAssertFalse(noSourceActions.contains(where: {
+            $0.title == V3L("在关联笔记草稿中整理")
+        }))
+        let pendingActions = linked.messageMenu(for: pendingTurn).children
+            .compactMap { $0 as? UIAction }
+        XCTAssertFalse(pendingActions.contains(where: {
+            $0.title == V3L("在关联笔记草稿中整理")
+        }))
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    @MainActor
     func testNativeChatRendersSelectableMarkdownAndVisibleContextControls() throws {
         let controller = ImpressAINativeChatViewController()
         controller.loadViewIfNeeded()
