@@ -284,6 +284,65 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
     }
 
     @MainActor
+    @MainActor
+    func testNativeChatUIListsAndPreservesMultipleSessions() async throws {
+        let repo = try ReviewWCDBRepository(
+            databasePath: temporaryPath(), calculator: FSRS6ReviewCalculator())
+        let id = UUID(), source = "card:" + id.uuidString
+        var first = WCDBV3ChatSession(sourceIdentity: source)
+        first.messages = [WCDBV3ChatMessage(role: .user,
+            text: "Old discussion", status: .completed)]
+        var second = WCDBV3ChatSession(sourceIdentity: source)
+        second.updatedAt = first.updatedAt.addingTimeInterval(3)
+        second.inputDraft = "Old draft"
+        try await repo.saveChatSession(first, expectedRevision: nil)
+        try await repo.saveChatSession(second, expectedRevision: nil)
+
+        let chat = ImpressAINativeChatViewController(
+            question: "Q", answer: "A", cardID: id,
+            contentRevision: 0, repository: repo)
+        let nav = UINavigationController(rootViewController: chat)
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        window.rootViewController = nav
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        chat.loadViewIfNeeded()
+        let input = try XCTUnwrap(chat.view.subviews.flatMap { [$0] + $0.subviews }
+            .compactMap { $0 as? UITextView }
+            .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.input" }))
+        for _ in 0..<100 where input.text != "Old draft" {
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        XCTAssertEqual(input.text, "Old draft")
+        let bars = try XCTUnwrap(chat.navigationItem.rightBarButtonItems)
+        let history = try XCTUnwrap(bars.first(where: {
+            $0.accessibilityIdentifier == "impress.ai.chat.history" }))
+        let add = try XCTUnwrap(bars.first(where: {
+            $0.accessibilityIdentifier == "impress.ai.chat.new-discussion" }))
+        _ = UIApplication.shared.sendAction(try XCTUnwrap(history.action),
+                                           to: history.target, from: history, for: nil)
+        for _ in 0..<100 where !(nav.topViewController is ImpressChatSessionHistoryViewController) {
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        let page = try XCTUnwrap(nav.topViewController as? ImpressChatSessionHistoryViewController)
+        XCTAssertEqual(page.tableView.numberOfRows(inSection: 0), 2)
+        nav.popViewController(animated: false)
+        _ = UIApplication.shared.sendAction(try XCTUnwrap(add.action),
+                                           to: add.target, from: add, for: nil)
+        for _ in 0..<100 {
+            let rows = try await repo.chatSessions(for: source)
+            if rows.count == 3 { break }
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        let saved = try await repo.chatSessions(for: source)
+        XCTAssertEqual(saved.count, 3)
+        XCTAssertTrue(saved.contains(where: { $0.sessionID == first.sessionID &&
+            $0.messages == first.messages }))
+        XCTAssertTrue(saved.contains(where: { $0.sessionID == second.sessionID &&
+            $0.inputDraft == second.inputDraft }))
+        XCTAssertEqual(input.text, "")
+    }
+
     func testNativeChatRestoresStableCardTranscriptAndUnsentDraft() async throws {
         let repository = try ReviewWCDBRepository(
             databasePath: temporaryPath(), calculator: FSRS6ReviewCalculator())

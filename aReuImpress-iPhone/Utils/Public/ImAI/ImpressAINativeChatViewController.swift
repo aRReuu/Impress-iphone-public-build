@@ -108,9 +108,18 @@ final class ImpressAINativeChatViewController: UIViewController,
         navigationItem.prompt = current.map {
             $0.connection.title + " · " + $0.model.identifier
         } ?? V3L("请先配置可用的对话模型")
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: V3L("切换模型"), style: .plain,
+        let model = UIBarButtonItem(title: V3L("模型"), style: .plain,
             target: self, action: #selector(chooseConversationModel))
+        model.accessibilityIdentifier = "impress.ai.chat.model-picker"
+        let old = UIBarButtonItem(image: UIImage(systemName: "clock.arrow.circlepath"),
+            style: .plain, target: self, action: #selector(openDiscussionHistory))
+        old.accessibilityIdentifier = "impress.ai.chat.history"
+        old.accessibilityLabel = V3L("历史讨论")
+        let fresh = UIBarButtonItem(image: UIImage(systemName: "square.and.pencil"),
+            style: .plain, target: self, action: #selector(startNewDiscussion))
+        fresh.accessibilityIdentifier = "impress.ai.chat.new-discussion"
+        fresh.accessibilityLabel = V3L("新建讨论")
+        navigationItem.rightBarButtonItems = [fresh, old, model]
     }
 
     @objc private func chooseConversationModel() {
@@ -446,48 +455,115 @@ final class ImpressAINativeChatViewController: UIViewController,
             chatRepository = repo
             let sessions = try await repo.chatSessions(for: identity)
             if let latest = sessions.first {
-                storedSession = latest
-                history = latest.messages
-                for index in history.indices where history[index].status == .pending {
-                    // A killed/interrupted network request is not replayed.
-                    history[index].status = .failed
-                }
-                messageInput.text = latest.inputDraft
-                contextReferences = latest.contextReferences
-                requestFailure = latest.requestError
-                // Consent to source revision X must not silently authorize
-                // revision X+1 after the card was edited in another screen.
-                let approved = contextReferences.first(where: {
-                    $0.stableIdentity == identity
-                })
-                let stillCurrent = approved?.sourceRevision ==
-                    String(sourceContentRevision ?? -1)
-                includeCardContext = approved != nil && stillCurrent
-                contextChoiceMade = includeCardContext
-                if approved != nil && !stillCurrent {
-                    privacyLabel.text = V3L("来源内容有更新；下次发送前请重新确认引用范围。")
-                }
-                activeProviderID = history.reversed().compactMap(\.providerID).first
-                // Retain the session's last model choice when still configured,
-                // without rewriting the global conversation default.
-                if let latestModel = history.reversed().first(where: {
-                    $0.modelIdentifier != nil && $0.providerID != nil
-                }), let provider = latestModel.providerID,
-                   let name = latestModel.modelIdentifier {
-                    let registry = ImpressAIConfigStore.shared.registry
-                    selectedModelID = registry.models.first(where: { model in
-                        model.identifier == name &&
-                        registry.connections.contains(where: {
-                            $0.id == model.connectionID && $0.id == provider
-                        })
-                    })?.id
-                    refreshModelPicker()
-                }
-                reloadAndScroll()
+                activateSession(latest)
                 if history != latest.messages { enqueuePersistence() }
             }
         } catch {
             privacyLabel.text = V3L("本地聊天恢复失败。请保留当前页面，不要覆盖历史。")
+        }
+    }
+
+    private func activateSession(_ session: WCDBV3ChatSession) {
+        storedSession = session
+        history = session.messages
+        for i in history.indices where history[i].status == .pending {
+            history[i].status = .failed // No auto-replay after interruption.
+        }
+        messageInput.text = session.inputDraft
+        contextReferences = session.contextReferences
+        requestFailure = session.requestError
+        let approved = contextReferences.first(where: { $0.stableIdentity == sourceIdentity })
+        let stillCurrent = approved?.sourceRevision == String(sourceContentRevision ?? -1)
+        includeCardContext = approved != nil && stillCurrent
+        contextChoiceMade = includeCardContext
+        if approved != nil && !stillCurrent {
+            privacyLabel.text = V3L("来源内容有更新；发送前请重新确认引用范围。")
+        }
+        activeProviderID = history.reversed().compactMap(\.providerID).first
+        selectedModelID = nil
+        if let prior = history.reversed().first(where: {
+            $0.providerID != nil && $0.modelIdentifier != nil
+        }), let connectionID = prior.providerID, let modelName = prior.modelIdentifier {
+            let registry = ImpressAIConfigStore.shared.registry
+            selectedModelID = registry.models.first(where: { item in
+                item.identifier == modelName && registry.connections.contains(where: {
+                    $0.id == connectionID && $0.id == item.connectionID
+                })
+            })?.id
+        }
+        refreshModelPicker()
+        reloadAndScroll()
+    }
+
+    // Flush draft/CAS before changing session IDs. Never overwrite an old row
+    // with a newly created empty transcript or a concurrently changed record.
+    private func flushBeforeSwitch() async -> Bool {
+        draftDebounce?.cancel()
+        await saveChain?.value
+        if storedSession == nil && history.isEmpty &&
+           messageInput.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return true
+        }
+        return await persistLocal()
+    }
+
+    @objc private func openDiscussionHistory() {
+        guard !restoring && !sending, let identity = sourceIdentity,
+              let repository = chatRepository else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let sessions = try await repository.chatSessions(for: identity)
+                let page = ImpressChatSessionHistoryViewController(
+                    sessions: sessions, currentSessionID: self.storedSession?.sessionID)
+                page.onSelect = { [weak self] id in self?.switchDiscussion(to: id) }
+                self.navigationController?.pushViewController(page, animated: true)
+            } catch { self.showProblem(error) }
+        }
+    }
+
+    @objc private func startNewDiscussion() {
+        guard !restoring && !sending, let identity = sourceIdentity,
+              let repository = chatRepository else { return }
+        restoring = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.restoring = false; self.textViewDidChange(self.messageInput) }
+            guard await self.flushBeforeSwitch() else {
+                self.privacyLabel.text = V3L("当前聊天保存失败；已阻止新建，避免丢失草稿。")
+                return
+            }
+            do {
+                let fresh = WCDBV3ChatSession(sourceIdentity: identity)
+                try await repository.saveChatSession(fresh, expectedRevision: nil)
+                self.activateSession(fresh)
+                self.privacyLabel.text = V3L("新讨论已创建。旧会话仍可从历史讨论打开。")
+            } catch { self.showProblem(error) }
+        }
+    }
+
+    private func switchDiscussion(to id: UUID) {
+        guard !restoring && !sending, let identity = sourceIdentity,
+              let repository = chatRepository else { return }
+        restoring = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.restoring = false; self.textViewDidChange(self.messageInput) }
+            guard await self.flushBeforeSwitch() else {
+                self.privacyLabel.text = V3L("当前聊天保存失败；已阻止切换，避免覆盖旧会话。")
+                return
+            }
+            do {
+                // Re-read authoritative row instead of using a possibly stale
+                // snapshot from the history list.
+                let all = try await repository.chatSessions(for: identity)
+                guard let chosen = all.first(where: { $0.sessionID == id }) else {
+                    throw WCDBV3ChatStorageError.invalidRecord
+                }
+                self.activateSession(chosen)
+                self.navigationController?.popViewController(animated: true)
+                if self.history != chosen.messages { self.enqueuePersistence() }
+            } catch { self.showProblem(error) }
         }
     }
 
@@ -542,5 +618,66 @@ final class ImpressAINativeChatViewController: UIViewController,
             tableView.scrollToRow(at: IndexPath(row: history.count - 1, section: 0),
                                   at: .bottom, animated: false)
         }
+    }
+}
+
+@MainActor
+final class ImpressChatSessionHistoryViewController: UITableViewController {
+    private let sessions: [WCDBV3ChatSession]
+    private let currentSessionID: UUID?
+    var onSelect: ((UUID) -> Void)?
+
+    init(sessions: [WCDBV3ChatSession], currentSessionID: UUID?) {
+        self.sessions = sessions
+        self.currentSessionID = currentSessionID
+        super.init(style: .insetGrouped)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = V3L("历史讨论")
+        tableView.backgroundColor = ImpressV3Appearance.page
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.accessibilityIdentifier = "impress.ai.chat.history-list"
+        if sessions.isEmpty {
+            let label = UILabel()
+            label.text = V3L("还没有历史讨论；创建新讨论不会删除旧会话。")
+            label.numberOfLines = 0
+            label.textAlignment = .center
+            label.font = ImpressV3Appearance.Typography.body
+            label.textColor = ImpressV3Appearance.secondaryText
+            tableView.backgroundView = label
+        }
+    }
+
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        sessions.count
+    }
+    override func tableView(_ tableView: UITableView,
+                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let session = sessions[indexPath.row]
+        let cell = tableView.dequeueReusableCell(withIdentifier: "chat.history")
+            ?? UITableViewCell(style: .subtitle, reuseIdentifier: "chat.history")
+        let first = session.messages.first(where: { $0.role == .user })?.text ??
+            (session.inputDraft.isEmpty ? V3L("空白讨论") : session.inputDraft)
+        var config = UIListContentConfiguration.subtitleCell()
+        config.text = String(first.prefix(100))
+        config.secondaryText = DateFormatter.localizedString(
+            from: session.updatedAt, dateStyle: .medium, timeStyle: .short) +
+            " · " + String(session.messages.count) + " " + V3L("条消息")
+        config.textProperties.numberOfLines = 2
+        config.textProperties.font = ImpressV3Appearance.Typography.body
+        config.secondaryTextProperties.font = ImpressV3Appearance.Typography.caption
+        cell.contentConfiguration = config
+        cell.backgroundColor = ImpressV3Appearance.surface
+        cell.accessoryType = session.sessionID == currentSessionID ? .checkmark : .disclosureIndicator
+        cell.accessibilityIdentifier = "impress.ai.chat.history-row"
+        return cell
+    }
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        guard sessions.indices.contains(indexPath.row) else { return }
+        onSelect?(sessions[indexPath.row].sessionID)
+        tableView.deselectRow(at: indexPath, animated: true)
     }
 }
