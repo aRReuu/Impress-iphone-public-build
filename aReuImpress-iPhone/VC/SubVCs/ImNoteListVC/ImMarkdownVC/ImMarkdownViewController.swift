@@ -1161,6 +1161,38 @@ enum ImVaultDraftEntry {
 /// decision for this original card. It does NOT modify Obsidian source, score
 /// a review, fabricate section-level linkage or silently mark other cards.
 @MainActor
+
+@MainActor
+enum ImpressSourceImpactCardRevisionGate {
+    /// A note's current content is evidence, not authority to silently edit
+    /// its original cards. Only the user-edited card input is applied, with
+    /// exact source identity/version and independent WCDB content CAS.
+    static func refreshedInput(approved: WCDBV3CardInput,
+                               original: WCDBV3CardContent,
+                               oldSourceKey: String,
+                               currentNote: ImVaultRawDocument,
+                               expectedCurrentDigest: String) throws -> WCDBV3CardInput {
+        guard approved.cardID == original.cardID,
+              approved.sourceNotePath == oldSourceKey,
+              original.sourceNotePath == oldSourceKey,
+              (try? ImpressBatchSourceKey.decode(oldSourceKey)) == currentNote.identity,
+              ImVaultDigest.sha256(currentNote.sourceBytes) == currentNote.digest,
+              currentNote.digest == expectedCurrentDigest else {
+            throw ImVaultSyncFailure.conflict
+        }
+        let linked = try ImpressBatchSourceKey.encode(
+            currentNote.identity, documentDigest: currentNote.digest)
+        // A once-trustworthy section anchor is deliberately downgraded to
+        // file-level after material change; never pretend a changed section
+        // still has the old hash.
+        return WCDBV3CardInput(cardID: approved.cardID,
+            question: approved.question, answerText: approved.answerText,
+            choices: approved.choices, correctIndices: approved.correctIndices,
+            cardType: approved.cardType, imageData: approved.imageData,
+            sourceNotePath: linked)
+    }
+}
+
 final class ImpressNoteSourceImpactController: UIViewController {
     private let document: ImVaultRawDocument
     private let cardID: UUID
@@ -1168,6 +1200,7 @@ final class ImpressNoteSourceImpactController: UIViewController {
     private let repository: ReviewWCDBRepository
     private let reading = UITextView()
     private let markUnaffected = UIButton(type: .system)
+    private let editOriginalCard = UIButton(type: .system)
     private var ready = false
     private var observedRevision: Int?
     private var originalSourceKey: String?
@@ -1196,12 +1229,20 @@ final class ImpressNoteSourceImpactController: UIViewController {
         reading.accessibilityIdentifier = "impress.notes.source-impact.full-text"
         ImpressV3Appearance.styleQuietButton(markUnaffected,
             title: V3L("已核对：修改不影响这张原卡"), symbol: "checkmark.shield")
+        ImpressV3Appearance.styleQuietButton(editOriginalCard,
+            title: V3L("核查后修订这张原卡"), symbol: "square.and.pencil")
+        editOriginalCard.translatesAutoresizingMaskIntoConstraints = false
+        editOriginalCard.accessibilityIdentifier = "impress.notes.source-impact.edit-original"
+        editOriginalCard.isEnabled = false
+        editOriginalCard.addTarget(self, action: #selector(openOriginalCardEditor),
+            for: .touchUpInside)
         markUnaffected.translatesAutoresizingMaskIntoConstraints = false
         markUnaffected.accessibilityIdentifier = "impress.notes.source-impact.unaffected"
         markUnaffected.isEnabled = false
         markUnaffected.addTarget(self, action: #selector(confirmUnaffected),
                                  for: .touchUpInside)
         view.addSubview(reading)
+        view.addSubview(editOriginalCard)
         view.addSubview(markUnaffected)
         NSLayoutConstraint.activate([
             reading.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor,
@@ -1210,8 +1251,15 @@ final class ImpressNoteSourceImpactController: UIViewController {
                                               constant: 12),
             reading.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor,
                                                constant: -12),
-            reading.bottomAnchor.constraint(equalTo: markUnaffected.topAnchor,
+            reading.bottomAnchor.constraint(equalTo: editOriginalCard.topAnchor,
                                              constant: -12),
+            editOriginalCard.leadingAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            editOriginalCard.trailingAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            editOriginalCard.bottomAnchor.constraint(equalTo: markUnaffected.topAnchor,
+                                                       constant: -6),
+            editOriginalCard.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
             markUnaffected.leadingAnchor.constraint(
                 equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
             markUnaffected.trailingAnchor.constraint(
@@ -1245,9 +1293,80 @@ final class ImpressNoteSourceImpactController: UIViewController {
                 "\n\n" + V3L("当前笔记完整 Markdown：") + "\n" + document.markdown
             ready = true
             markUnaffected.isEnabled = true
+            editOriginalCard.isEnabled = true
         } catch {
             reading.text = error.localizedDescription
             markUnaffected.isEnabled = false
+            editOriginalCard.isEnabled = false
+        }
+    }
+
+
+    @objc private func openOriginalCardEditor() {
+        guard ready, let observedRevision, let oldKey = originalSourceKey,
+              ImVaultReadOnlyProbe.shared.authorizedVaultID == document.identity.vaultID
+        else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                guard let content = try await repository.content(for: cardID),
+                      content.contentRevision == observedRevision,
+                      content.sourceNotePath == oldKey,
+                      (try? ImpressBatchSourceKey.decode(oldKey)) == document.identity
+                else { throw ImVaultSyncFailure.conflict }
+                let correct = Set((content.correctIndices ?? "")
+                    .split(separator: ",").compactMap { Int($0) })
+                let choices: [ImpressV3CardDraft.Choice] =
+                    (content.choices ?? "").isEmpty ? [.init(), .init()] :
+                    (content.choices ?? "").components(separatedBy: "\n")
+                        .enumerated().map { i, name in
+                            .init(text: name, isCorrect: correct.contains(i))
+                        }
+                let draft = ImpressV3CardDraft(
+                    kind: CardType(rawValue: content.cardType) ?? .standard,
+                    question: content.question, answer: content.answerText ?? "",
+                    choices: choices, allowsMultipleCorrect: correct.count > 1,
+                    imageData: content.imageData, sourceNotePath: oldKey)
+                let editor = ImpressV3CardComposerViewController(
+                    draft: draft, editingCardID: cardID)
+                editor.onSave = { [weak self] approved in
+                    guard let self, self.ready,
+                          ImVaultReadOnlyProbe.shared.authorizedVaultID ==
+                          self.document.identity.vaultID else {
+                        throw ImVaultSyncFailure.wrongVault
+                    }
+                    // Recheck the exact File Provider note AFTER editing and
+                    // BEFORE updating WCDB. No stale source acknowledgement.
+                    let current: ImVaultRawDocument = try await withCheckedThrowingContinuation {
+                        (continuation: CheckedContinuation<ImVaultRawDocument, Error>) in
+                        ImVaultReadSync.shared.read(self.document.identity) { value in
+                            continuation.resume(with: value)
+                        }
+                    }
+                    guard let actual = try await self.repository.content(for: self.cardID),
+                          actual.contentRevision == observedRevision,
+                          actual.sourceNotePath == oldKey,
+                          let queue = try await self.repository.fetchQueueCandidates()
+                            .first(where: { $0.cardID == self.cardID }) else {
+                        throw ImVaultSyncFailure.conflict
+                    }
+                    let authorized = try ImpressSourceImpactCardRevisionGate.refreshedInput(
+                        approved: approved, original: actual, oldSourceKey: oldKey,
+                        currentNote: current, expectedCurrentDigest: self.document.digest)
+                    try await self.repository.updateManagedCard(authorized,
+                        expectedRevision: queue.revision,
+                        expectedContentRevision: observedRevision, origin: .manual)
+                    self.ready = false
+                    self.editOriginalCard.isEnabled = false
+                    self.markUnaffected.isEnabled = false
+                    self.navigationItem.prompt = V3L(
+                        "原卡已按人工修订保存；cardID 和 FSRS 历史保留。返回可继续复习。")
+                }
+                let nav = ImNavigationViewController(rootViewController: editor)
+                nav.modalPresentationStyle = .pageSheet
+                nav.sheetPresentationController?.detents = [.large()]
+                present(nav, animated: true)
+            } catch { presentError(error) }
         }
     }
 

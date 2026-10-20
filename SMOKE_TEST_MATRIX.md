@@ -155,3 +155,9 @@ Record final Git SHA, Actions run URL, each job conclusion, **total native XCTes
 ## 2026-10-20 · P0 多处局部 Markdown 差异预览（需精确 SHA 测试）
 
 Portable Swift `distantSmallEditsPreviewOnlyActualChangedHunks` 验证在 1200 行笔记相距千行的两处必要修改，仅显示实际四条 +/- 变更，不将中间未变化的整千行误报为修改或导致预览上限阻塞；`separateInsertAndRemovalRemainVisible` 验证分离的插入和删除都可见。使用标准库有界 diff（中段合计不超过 4000 行）；超大输入保留保守完整性保护，不能伪称只看到全部变化后批准。仍须原生阅读交互和 iPhone13 验收；生产 Vault 写入门禁不变。
+
+## 2026-10-20 · 反向核查可直接修订同一原卡（当前提交后续 CI 待执行）
+
+- `testSourceImpactIncludesDirectOriginalCardEditorAndUnaffectedChoice`：笔记 SHA 变化后的人工核查页同时提供“修订这张原卡”和“确认不影响”，不要求退出到卡片集按标题搜索。
+- `testSourceImpactRevisesOriginalCardWithFreshFSRSAndExactSource`：从同一 Vault ID＋全相对路径匹配的旧 source key 出发，用户修订原 cardID；写前回读笔记 SHA 和 WCDB 内容 CAS，重新绑定最新文件级来源 digest。允许正常 FSRS 评分已前进，不删除复习事件；拒绝另一 Vault 或过期笔记来源。原先章节内容已变化时不冒用旧锚点的精确定位。
+- 原生 XCTest 成功仅说明 SQLite、UI 入口与来源门禁；仍需 iPhone13/Files Provider 真实源核查与导航现场测试。正式 Vault 写回保持 false。

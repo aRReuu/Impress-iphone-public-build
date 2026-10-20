@@ -877,6 +877,87 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 
+
+    @MainActor
+    func testSourceImpactIncludesDirectOriginalCardEditorAndUnaffectedChoice() throws {
+        let identity = try ImVaultFileIdentity(vaultID: UUID().uuidString,
+            relativePath: "Study/Impact.md")
+        let doc = ImVaultRawDocument(identity: identity,
+            sourceBytes: Data("# Current".utf8), markdown: "# Current",
+            digest: ImVaultDigest.sha256(Data("# Current".utf8)))
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
+            calculator: FSRS6ReviewCalculator())
+        let page = ImpressNoteSourceImpactController(document: doc, cardID: UUID(),
+            previousDigest: String(repeating: "a", count: 64),
+            repository: repo)
+        page.loadViewIfNeeded()
+        let identifiers = Set(page.view.subviews.compactMap {
+            ($0 as? UIButton)?.accessibilityIdentifier
+        })
+        XCTAssertTrue(identifiers.contains("impress.notes.source-impact.edit-original"))
+        XCTAssertTrue(identifiers.contains("impress.notes.source-impact.unaffected"))
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    @MainActor
+    func testSourceImpactRevisesOriginalCardWithFreshFSRSAndExactSource() async throws {
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
+            calculator: FSRS6ReviewCalculator())
+        let identity = try ImVaultFileIdentity(vaultID: UUID().uuidString,
+            relativePath: "Study/Impact.md")
+        let older = Data("# Law\nOld claim".utf8)
+        let changed = Data("# Law\nCorrected claim".utf8)
+        let originalKey = try ImpressBatchSourceKey.encode(identity,
+            documentDigest: ImVaultDigest.sha256(older))
+        let cardID = UUID(), now = Date(timeIntervalSince1970: 1_726_000_000)
+        let initial = WCDBV3CardInput(cardID: cardID, question: "What is the law?",
+            answerText: "Old", sourceNotePath: originalKey)
+        try await repo.insertNewCard(initial,
+            initial: try FSRS6ReviewCalculator().newCardSnapshot(id: cardID, now: now),
+            now: now)
+        let beforeRating = try await repo.fetchQueueCandidates()
+        let start = try XCTUnwrap(beforeRating.first(where: { $0.cardID == cardID }))
+        _ = try await repo.commit(ReviewSubmission(eventID: UUID(), cardID: cardID,
+            expectedRevision: start.revision, rating: .good,
+            reviewedAt: now.addingTimeInterval(2)))
+        let doc = ImVaultRawDocument(identity: identity, sourceBytes: changed,
+            markdown: "# Law\nCorrected claim", digest: ImVaultDigest.sha256(changed))
+        let initialContent = try await repo.content(for: cardID)
+        let content = try XCTUnwrap(initialContent)
+        let approved = WCDBV3CardInput(cardID: cardID,
+            question: "What is the law?", answerText: "Corrected",
+            sourceNotePath: originalKey)
+        let input = try ImpressSourceImpactCardRevisionGate.refreshedInput(
+            approved: approved, original: content, oldSourceKey: originalKey,
+            currentNote: doc, expectedCurrentDigest: doc.digest)
+        let afterRating = try await repo.fetchQueueCandidates()
+        let review = try XCTUnwrap(afterRating.first(where: { $0.cardID == cardID }))
+        try await repo.updateManagedCard(input, expectedRevision: review.revision,
+            expectedContentRevision: content.contentRevision, origin: .manual)
+        let persisted = try await repo.content(for: cardID)
+        XCTAssertEqual(persisted?.cardID, cardID)
+        XCTAssertEqual(persisted?.answerText, "Corrected")
+        XCTAssertEqual(persisted?.contentRevision, content.contentRevision + 1)
+        XCTAssertEqual(try ImpressBatchSourceKey.documentDigest(
+            for: try XCTUnwrap(persisted?.sourceNotePath)), doc.digest)
+        let finalQueue = try await repo.fetchQueueCandidates()
+        let fsrs = try XCTUnwrap(finalQueue.first(where: { $0.cardID == cardID }))
+        XCTAssertEqual(fsrs.revision, review.revision)
+        XCTAssertEqual(fsrs.dueAt, review.dueAt)
+        let events = try await repo.reviewHistory(for: cardID)
+        XCTAssertEqual(events.count, 1)
+        let wrongIdentity = try ImVaultFileIdentity(vaultID: "not-the-same-vault",
+            relativePath: identity.relativePath)
+        let fakeDoc = ImVaultRawDocument(identity: wrongIdentity,
+            sourceBytes: changed, markdown: doc.markdown, digest: doc.digest)
+        XCTAssertThrowsError(try ImpressSourceImpactCardRevisionGate.refreshedInput(
+            approved: approved, original: content, oldSourceKey: originalKey,
+            currentNote: fakeDoc, expectedCurrentDigest: doc.digest))
+        XCTAssertThrowsError(try ImpressSourceImpactCardRevisionGate.refreshedInput(
+            approved: approved, original: content, oldSourceKey: originalKey,
+            currentNote: doc, expectedCurrentDigest: "stale-digest"))
+    }
+
     /// Standalone disposable File Provider fixture for end-to-end Chat +
     /// original-card tests. Helpers in another XCTestCase are private and
     /// deliberately must not be referenced across class boundaries.

@@ -233,3 +233,7 @@
 ### 2026-10-20 · 长 Markdown 差异预览中的非连续真实修改
 
 发现旧 `ImVaultDiff.summary` 只裁剪公共前缀/后缀：两个很远的改动会把中间全部未修改行当作变更，超过 200 行门限就阻断有效小规模修订。改为行级有界 CollectionDifference 并分离每个非连续修改区，只计数真实 +/- 行；超过安全处理预算的输入维持旧式保守完整预览和截断禁止批准，不会在漏显示内容时授权写入。两个纯 Swift Test 覆盖非相邻局部改动和分离增删，验收仍以相应 exact SHA CI / 真机为准。
+
+### 2026-10-20 · LOOP-07～09/ACCEPT-11 反向核查直接编辑原卡
+
+新增笔记来源变化核查页上的原 cardID 编辑入口，调用现有 `ImpressV3CardComposerViewController`，与“确认不影响”并列；所有卡片类型仍使用同一个编辑器。提交时核对当前 File Provider 来源身份和实际字节 SHA、原 cardID/contentRevision/source key，WCDB 以当时最新 FSRS revision 更新内容，不改变评分历史。人工确认后的新链接以最新版完整文件摘要保存，绝不将已变化的章节误标为“原精确锚点仍有效”。新增原生测试 `testSourceImpactIncludesDirectOriginalCardEditorAndUnaffectedChoice` 和 `testSourceImpactRevisesOriginalCardWithFreshFSRSAndExactSource`；本代码/测试尚需对应 HEAD 的 CI 实际成功，真机和生产 Vault 仍外部阻塞。
