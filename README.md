@@ -1,64 +1,32 @@
-> **PRODUCT SOURCE NOTICE · 2026-10-20**：此前说明为历史内容，可能与当前已确认需求冲突。唯一产品要求与工作范围以 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md) 为准；执行差距与验收见 [IMPLEMENTATION_GAP_AUDIT_20261020.md](IMPLEMENTATION_GAP_AUDIT_20261020.md)。当前工作分支：`feature/impress-duplex-loop-v1`。完整校准周图必须移除，修改历史必须移入编辑器；旧文档中相反指示均已被替代。CI 成功≠产品完工。
-
 # Impress — Public iPhone Development Branch
 
-**Current 85-ID / 12-acceptance implementation status:** [REQUIREMENT_EXECUTION_MATRIX_20261020.md](REQUIREMENT_EXECUTION_MATRIX_20261020.md). Core user loop remains incomplete; no CI result or unsigned IPA is a final App acceptance.
+> **V1.1 开工前定稿，非功能交付。** 唯一产品权威：[PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md)。本轮只更新现有稿件，新界面/复杂格式尚未据此实施或验收。
 
-This **public repository** is the active source for Impress development on `feature/impress-duplex-loop-v1` (the only development branch alongside stable `main`). It originated as a sanitized independent-history build mirror; historical private upstream SHA references in `SOURCE_MANIFEST.json` remain provenance **only**, not an instruction to modify the private repository.
+唯一工作仓库为`aRReuu/Impress-iphone-public-build`，唯一开发分支`feature/impress-duplex-loop-v1`；不改main/私库，不创建分支，不同步私库、不替换原版AppIcon。`SOURCE_MANIFEST.json`中的历史上游只供追溯，不是修改私库的授权。
 
-## Knowledge lifecycle V1 — approved redesign (2026-10-19)
+## 当前定稿产品
 
-[KNOWLEDGE_LIFECYCLE_V1.md](KNOWLEDGE_LIFECYCLE_V1.md) is a **historical implementation plan (not the current authority)** for 闪卡 → Chat → 结构化笔记, G0–G6, A01–A20 and non-negotiable data, API and Vault safety. It supersedes the old quick-capture-first and separate Calibration Tab proposals. G0 documentation, G1 WCDB content-version/Chat persistence foundations, part of G2 native navigation/edit/weekly overview, and part of G3 card-source Chat persistence and model-override UI have code commits; **note/selection Chat contexts, prompt session editing, proposal execution, real device acceptance and production Vault writes are NOT delivered**. Actual evidence is recorded in [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md), not inferred from this design.
+一级Tab目标为**闪卡／笔记／校准器／设置**；默认闪卡，Chat次级。恢复已有校准器入口/数据不意味着实施新公式、迁移或提醒；不恢复首页周图。
+闪卡题干最多三行，截断题可点击读全文；答案完整滚动。编辑/讨论在卡片内部右上角；删除重复和底部大按钮，不加题答文字标签，以字重/细线区分。四向提示在可见卡片中央短暂显示，FSRS映射不变，阅读不评分。
+Chat常态无“AI讨论”标题、模型/隐私说明排；右侧功能列表和独立新建。模型/历史/提示词/材料进二级列表；底部紧凑输入、添加、原生STT、发送/停止。历史需本地搜索/定位/安全删除与跨源恢复；首次介绍不能代替实际发送许可。
+文档目标为接近Obsidian默认移动端阅读的统一排版及结构选材；Excalidraw、JSON Canvas、Mermaid/Markmap在本轮明确范围。复用成熟引擎，补格式/来源/权限适配，不复制闭源App、不重建全部插件平台；阅读扩展不授权复杂格式写回。
 
-## Product and navigation
-Impress combines low-friction structured recall with a deliberately small daily self-calibration instrument. UIKit has **three first-level tabs** in order: **闪卡 / 笔记 / 设置**. Notes is a primary destination with the existing Vault reader and folder/search capability; the flashcard header exposes only 卡片集 on the right, while + creates a V3 flashcard. Complete 每日校准 is under 设置 → 学习节奏 and the old compact Monday–Sunday calibration preview is no longer part of the flashcard home. The V3 WCDB/FSRS-6 review workflow is the only active flashcard data source; there is no legacy database migration. The calibration module uses five indicators (sleep, exercise, nutrition, non-scoring mood, custom), a separate atomic JSON ledger, and a single pure `CalibrationScoreCore` implementation.
+## 实现基线与下一施工
 
-The original four-direction flashcard gestures, card collection CRUD, protected Obsidian external Vault reading, and editable settings remain separate from calibration. Vault browsing uses the same native grouped-table design as Settings; note detail offers a restrained reading canvas with unified typography, color tokens and spacing, while keeping original documents read-only. Vault browsing adds hierarchical folder/path search, provisional local cache, background index batches and bounded UI list pages.
+定稿重新读取的代码HEAD：`b7f5101187e37cffca87091bfd665eeaa94b9f59`；历史完整成功[Run 39443303363](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39443303363)，工作流`.github/workflows/public-ios-build.yml`。它只认证旧测试范围，不证明上面V1.1已交付；开工必须再查实际HEAD。
+基线已有WCDB/FSRS、内容历史、Chat多会话/草稿、双目标Diff/状态/回执、ApprovedDraft、QA写/回读、撤销、来源核查及大量测试。不要把旧矩阵IN_PROGRESS当全部未开发。剩余P0是具体AI结论到建议、真正连续UI、异常恢复与反向最终证据。
+顺序：G0核对→G1 Chat/闪卡/四Tab/历史原生实现→G2结构选材/全部明确格式→G3 P0-A～D及完整知识闭环→G4同SHA CI/证据/QA。不能只完成普通Markdown或漂亮界面就交付。
 
-## Appearance, language and understanding edits
-The Settings tab adds **Appearance** (System / Light / Dark, System default) and **App Language** (Simplified Chinese / Traditional Chinese / English) under a native appearance group. Modes persist independently in UserDefaults. Light/Dark applies at UIWindow level; app-owned interface text uses centralized `ImpressV3Appearance` and `ImpressV3Language` configuration, not per-screen fonts, color hex values or automatic translation of private notes. Three first-level tabs (Flashcards/Notes/Settings) and the single flashcard-header Card Collection action remain fixed.
+## 工程与数据安全
 
-Understanding timeline records open a dedicated editable detail. Only the user's answer body may be edited; saves perform an original-answer compare-and-swap, retain the prior text and change time as an append-only version list in `LearningEntry-v1.json`, and preserve original question, AI evaluation, entry ID, creation time and FSRS event history. The existing V2 ZIP includes this journal; no new database tables or Vault writes are introduced.
+保留iOS26+、iPhone13、简繁英、App Light/Dark/System、DynamicType、集中ImpressV3Appearance/ImpressV3Language、Apple STT、通知、卡片三类型/独立解析/批量导入。只允许本任务必要内容依赖升级，先记录版本/许可/离线资源/设备性能，不顺带升级WCDB/FSRS。
+V3 WCDB为卡片/FSRS/Chat唯一权威；内容revision与调度revision独立，恢复旧内容生成新版本。LearningEntry理解记录不冒充卡片旧答案。校准沿用现有LocalStore/计分器，不新增副本。
+唯一V3 BackupCoordinator保留SQLite、理解记录、提示词与checkins的V1/V2兼容、校验/变更generation/恢复前镜像/冷启动恢复。普通ZIP**不加密**，可能包含已保存聊天/摘录；源Vault原件、私人ApprovedDraft/Recovery字节、书签、Key不入普通ZIP。缺快照不能假装可跨设备安全撤销，不能卸载/清库排查旧数据。
+`ImVaultGuardedWrite.productionWriteEnabled = false`。只允许临时fixture或明确授权独立Debug `Impress-Write-Test-Vault`；本机回读不等于iCloud同步。模型内容不执行命令/SQL/路径，未授权不上传、不自动收费、不自动切换提供商。
 
-## V3.2 data protection
-All flashcard, understanding-history, local prompts, and calibration check-ins use **one** V3 BackupCoordinator. Its V2 ZIP includes an additional `checkins-v1.json` and preserves legacy V1 archive readability. Recovery is explicitly confirmed and staged for cold launch. Durable pre-image recovery protects SQLite/WAL, learning history, prompts and calibration against process death, and blocks opening a half-restored WCDB. Opaque mutation generations reject mixed-era backup assemblies and preserve the Dirty marker. The existing iCloud Drive folder is used only after user selection. **These ZIP archives are not encrypted**, and Files-provider write acknowledgment does not prove remote iCloud upload completion. Obsidian originals, credentials, bookmarks and private source art are excluded.
+## 验收与资料入口
 
-## Build and release gates
-GitHub Actions workflow: [R04.2 native regression](.github/workflows/r04-2-privacy-retirement-validation.yml). A successful run must include Swift Core, public-credential checks, full UIKit XCTest, iPhone Simulator, unsigned ARM64 iPhoneOS build, ZIP integrity and SHA-256. The source branch is not a device-install attestation.
-
-The original `AppIcon.appiconset/icon_1024.png` is not available in the public source. The workflow's explicit **7icon-INCOMPLETE-unsigned** build is a test candidate only, not a final branded release. Do not invent or resize the original icon. Real iPhone 13 installation, free-signing entitlements, notification delivery and Files/iCloud authorization require physical testing.
-
-Read [PUBLIC_BUILD_CONTRACT.md](PUBLIC_BUILD_CONTRACT.md), [CALIBRATION_V3_2_INTEGRATION.md](CALIBRATION_V3_2_INTEGRATION.md), [BUILD_AND_SIGN.md](BUILD_AND_SIGN.md), [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md), and [SOURCE_MANIFEST.json](SOURCE_MANIFEST.json). Never add personal notes, app user databases, certificates, API keys, screenshots, private Docs, or non-approved raster artwork to this public repository.
-
-## iOS deployment baseline · 2026-10-18
-The feature-branch app and test targets now require **iOS 26.0**; the Podfile platform, generated Pods post-install floor, and GitHub Actions build overrides are aligned. Earlier iOS 13–25 installation is intentionally unsupported. This configuration migration enables future Apple SpeechAnalyzer/SpeechTranscriber work; **STT is NOT implemented by this deployment-only commit**. iPhone 13 supports iOS 26 but device/locale model availability still requires runtime and physical-device checks. Preserve FSRS-6, WCDB, Obsidian original read-only rules and the missing-original-icon release gate.
-
-## V3.3 native dictation implementation (iOS 26)
-- A single `ImpressSpeechService` manages Apple `SpeechAnalyzer`, `SpeechTranscriber` and `DictationTranscriber`, on-device model availability and explicit `AssetInventory` installs. Legacy `SFSpeechRecognizer` and third-party/network STT are intentionally absent.
-- Settings → 语音输入 / Voice Input exposes an independent Mandarin (zh-CN), Traditional Chinese (zh-TW) or English (en-US) dictation preference, transcriber availability, manual model downloads and microphone authorization status. The UI language preference is separate.
-- A reusable native microphone keyboard accessory is attached to question, answer, choice-option, bulk import, understanding capture/edit, prompts and private Markdown draft editors. The original Obsidian source reader remains read-only with **no** microphone control.
-- Speech partial results are provisional, final text is inserted only after explicit completion and checked against the original editor text and UTF-16 caret selection. No audio is written to disk, logged, or uploaded. No FSRS/Calibration schemas are changed.
-- New UIKit tests cover volatile phrase replacement, Unicode ranges, stale editor rejection, one-change callback and settings navigation. CI validates an explicit mic purpose string and checks that no legacy/cloud speech code or private audio persistence path exists.
-- Full iPhone 13 audio permission, model download, spontaneous speech accuracy, microphone interruptions, language availability and UI/keyboard acceptance remain **device PENDING** until physical testing. Old MarkdownKit/MarkdownView dependency modernization is a separate protected gate, not falsely claimed as complete.
-
-## 2026-10-20 · 双向闭环测试补强（仍非发布认证）
-
-在 `feature/impress-duplex-loop-v1` 中追加一个独立临时测试 Vault → Markdown 章节候选卡 → WCDB 原卡 → FSRS 评分 → Chat 多会话与双目标批准 → QA fixture 文件协调写入 / 回读 → 原卡 CAS → 来源变化核查 → 逆向撤销 → 冷启动恢复的 XCTest 回归（`testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS`）。同时修复在合法 FSRS 评分后批准内容更新发生虚假调度冲突、以及意外取消正在进行的安全撤销记录的问题。详见本分支 `SMOKE_TEST_MATRIX.md` 与 `REQUIREMENT_EXECUTION_MATRIX_20261020.md`。
-
-**验收级别严格分开：** 该测试使用合成文本和临时 SQLite，不代表远端大模型、真机 iPhone13、iCloud 同步或用户 Vault 已验证。必须以此代码 SHA 的全套 CI 实际完成为自动化 PASS 依据；正式写入仍为 `ImVaultGuardedWrite.productionWriteEnabled = false`。原始图标与正式签名限制不变；无签名 IPA 仅是 QA 候选。
-
-## Duplex approved note revision retention (2026-10-20)
-
-Original and proposed Markdown bytes of each approved note edit are now kept as an immutable, protected `ImVaultPrivateStore/ApprovedDraft` record keyed by Vault ID, full relative path, base SHA-256 and proposed SHA-256. Starting a new revision after an already-applied QA edit requires explicit user selection and a fresh coordinated source read; old Chat receipts must never read the newer mutable working draft. A missing legacy source snapshot fails closed. This is local private storage only: it is not an encrypted external backup or verified iCloud sync, and a device reinstall can lack prior draft bytes. The production Vault write switch remains `false`. See SMOKE_TEST_MATRIX for 2-revision/undo fixture tests and remaining iPhone13 validation.
-
-## Source-impact direct original-card correction (2026-10-20)
-
-The note-source impact reviewer now includes a direct original-card editor alongside the explicit “unaffected” decision, reusing the existing card composer rather than creating a competing card update path. A user-approved edit validates the current authorized Vault identity, document SHA, unchanged original card content revision and source key, and then applies WCDB CAS with the *current* FSRS scheduling revision. Review events and cardID survive; changed source-section anchors are conservatively downgraded to file-level identity. Requires matching SHA XCTest and device QA; does not permit a production Vault write.
-
-## Source-context privacy and repeat provider consent (2026-10-20)
-
-Native Chat revalidates the explicitly approved note excerpts against a fresh, authorized File Provider read before invoking an HTTP model. Stored snippets must match the same source/session SHA and exact selected section (or expressly selected whole note), with a 40KB aggregate UTF-8 excerpt budget; stale, fabricated, cross-Vault, missing-context or oversized inputs are rejected without any inference request. Switching providers after a failed or cancelled first user request requires renewed confirmation, not just after a successful answer. The note-source impact editor separately rejects no-op edits as automatic “unaffected” acknowledgements. Protected original Markdown approval bytes stay on-device, **outside the unencrypted ZIP backup**, and missing snapshots fail closed. Release Vault writes remain disabled; see SMOKE_TEST_MATRIX for CI/device evidence.
-
-### Bounded conversation consent (2026-10-20)
-
-When a local discussion has more than 16 completed turns, the first subsequent Send explicitly discloses that the remote API receives only the latest 16 completed turns plus the current user input. Earlier turns remain fully persisted locally. The user may cancel; acknowledgement is session-local and resets when switching discussions. This is an explicit context-window boundary, not a claim that the model has read all saved history.
+[执行矩阵](REQUIREMENT_EXECUTION_MATRIX_20261020.md)保留85稳定ID与子项；[冒烟矩阵](SMOKE_TEST_MATRIX.md)保留ACCEPT-01～12、真实UI18步、故障注入及全回归；[差距审计](IMPLEMENTATION_GAP_AUDIT_20261020.md)区分已有基础/新缺口；[架构](KNOWLEDGE_LIFECYCLE_V1.md)规定引擎/来源/提案/恢复；[设备QA](VAULT_DEVICE_QA_V1.md)限定实际测试权限；[校准集成](CALIBRATION_V3_2_INTEGRATION.md)说明只恢复入口不解冻新规则。
+构建/来源背景仍见[PUBLIC_BUILD_CONTRACT.md](PUBLIC_BUILD_CONTRACT.md)、[BUILD_AND_SIGN.md](BUILD_AND_SIGN.md)、`SOURCE_MANIFEST.json`，但旧分支/布局指示不能覆盖当前产品稿。
+最终QA须绑定同一实际Git SHA、完整Core/原生XCTest、Debug/Release Simulator、ARM64、UI证据、IPA完整性及SHA-256。旧IPA不能称为新定稿版本；物理iPhone13、真实HTTP/Keychain、Files/iCloud分别验收。
+公开源缺权威原版1024图标的历史限制仍须复核，禁止自行生成替换；无签名QA不等于正式发行或已安装。不得向公共仓库提交私人笔记、用户截图、Key、数据库、证书或未授权资源。当前文档提交没有新IPA。

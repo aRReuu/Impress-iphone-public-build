@@ -1,200 +1,143 @@
-> **精确执行矩阵：** [REQUIREMENT_EXECUTION_MATRIX_20261020.md](REQUIREMENT_EXECUTION_MATRIX_20261020.md)；以下 A01～A20 仅为旧回归记录，不可单独认定已验收。
+# Impress · 当前验收与完整冒烟矩阵
 
-> **2026-10-20 最新验收优先级：** 当前产品验收唯一依据 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md) 和 [IMPLEMENTATION_GAP_AUDIT_20261020.md](IMPLEMENTATION_GAP_AUDIT_20261020.md)。以下 A01～A20 是历史 G0～G6 追踪记录，不能凌驾于最新 CARD/CHAT/LOOP/OPEN/ACCEPT 编号。特别：旧 A02“首页周校准图”已取消；CARD-11“修改历史移入编辑器”必须实现；CHAT-03 新建与历史切换不等于数据库仅能保存多会话。本表尚未证明 ACCEPT-01～12 全部通过。
+> **V1.1 开工前定稿，仅测试规格，未执行新测试。** 需求权威为 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md)，状态为 [REQUIREMENT_EXECUTION_MATRIX_20261020.md](REQUIREMENT_EXECUTION_MATRIX_20261020.md)。B0=`b7f5101187e37cffca87091bfd665eeaa94b9f59`，R0=`39443303363`，该历史 CI 已回读 success；不能据此认证新布局/复杂格式。服务层完整往返不是 UI E2E。
 
-# SMOKE_TEST_MATRIX — Impress V3.2 acceptance evidence
+## 1. 证据记录契约
 
-## 2026-10-19 redesign A01–A20 evidence
+每次验收必须记录：Requirement ID/子项、场景、具体源码/入口、实际测试方法、环境/fixture、结果、精确 Git SHA、Actions Run ID与job、Simulator、连续UI E2E、物理设备、截图/日志定位、缺陷或具体外部阻塞。计划方法均为 NOT_RUN，不能当作已有测试。只有真正执行的层级可 TEST_PASS/E2E_PASS；代码已写只可 CODE_DONE；未执行 NOT_RUN；内部未实现 IN_PROGRESS，不以 DEVICE_BLOCKED 遮掩；已复现 FAIL；明确延期 DEFERRED。
+以下“基线”统一指 B0/R0 的**证据定位而非整项 PASS**；V1.1 的执行 SHA/Run 目前为“—/—”，Simulator/UI E2E为NOT_RUN，Device为DEVICE_BLOCKED（无物理设备与真实授权证据）。后续必须逐行替换为实际结果，不能只改总标题。
 
-**G2/G3 native verification request:** compile and run the complete iOS 26 native suite for the exact commit that includes the new weekly chart click test, stable-source Chat restore test and localization-key startup guard. Keep original Vault writes disabled; publish a QA IPA only after all required CI stages succeed.
+## 2. ACCEPT-01～12 逐项证据台账
 
-For exact-SHA validation, CI must compile the iOS 26 Simulator target, execute native XCTest, and build an unsigned iPhoneOS ARM64 QA IPA. Separately record pure Swift tests, UIKit tests, real inference, iPhone Keychain, File Provider and production Vault consent. Never mark a device or real API gate from a build alone.
+源码缩写与 B-/P-测试定位按执行矩阵第2节解析为完整路径/方法。
 
-This section is the current navigation/knowledge acceptance contract. **Status is BLOCKED/NOT RUN unless backed by a CI run on the exact code SHA or a recorded device test.** The historical V3.2 results below are regressions only, not current pass evidence. Single authority: [KNOWLEDGE_LIFECYCLE_V1.md](KNOWLEDGE_LIFECYCLE_V1.md). No paid AI calls, real personal Vault tests, merge, or production-write bypass.
+| ID | Requirement | 入口 | 已有测试定位 | 新增/连续验证要求 | 基线 | V1.1 SHA/Run；Sim；E2E；Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| ACCEPT-01 | LOOP-03/06, CHAT-06 | SELECT/DB | B-L；B-X | 真实UI选章、候选审核/删除/编辑/勾选，仅保存所选原卡/来源 | B0/R0 | —/—；NOT_RUN；NOT_RUN；DEVICE_BLOCKED |
+| ACCEPT-02 | LOOP-03/04, SAFE-03 | REVIEW/NOTE/CORE | B-L | 双向导航，旧锚点/重名/跨Vault/移动/删除/撤权，不能猜来源 | B0/R0 | —/—；NOT_RUN；NOT_RUN；DEVICE_BLOCKED |
+| ACCEPT-03 | CARD-01～06/08/13, UI-04 | REVIEW/CARD/OVERLAY | B-R；旧长文测试需更新 | P-R：题干三行/全文、答案触底、无题答标签、单对图标、中央评分，滚动选字不评分 | B0/R0 | —/—；NOT_RUN；NOT_RUN；DEVICE_BLOCKED |
+| ACCEPT-04 | CARD-07/09/11 | REVIEW/EDITOR | B-E/B-F | 直接编辑/无改动/历史后回同卡同轮，取消不造版本 | B0/R0 | —/—；NOT_RUN；NOT_RUN；DEVICE_BLOCKED |
+| ACCEPT-05 | CARD-09/10/12/14 | DB/REVIEW/EDITOR | B-E/B-F | 真实内容改变后旧答案失效；问答/选择/图片/解析/恢复保FSRS | B0/R0 | —/—；NOT_RUN；NOT_RUN；DEVICE_BLOCKED |
+| ACCEPT-06 | CHAT-02/03/04/10/11 | CHAT/DB | B-C/B-B | P-C：极简导航/输入、搜索命中/跨源恢复/安全删除/防复活/冷启动 | B0/R0 | —/—；NOT_RUN；NOT_RUN；DEVICE_BLOCKED |
+| ACCEPT-07 | CHAT-05～08, AI-04～07 | CHAT/AI/SELECT/VAULT | B-M/B-A | P-M/P-V：二级配置、真实范围、复杂格式、依赖许可、首次说明≠发送许可 | B0/R0 | —/—；NOT_RUN；NOT_RUN；DEVICE_BLOCKED |
+| ACCEPT-08 | LOOP-05/10/11, CHAT-09 | CHAT/Approval/Change | B-D | 指定完成AI回复形成可编辑建议，删除/修正/拒绝，笔记/原卡单选或双选真实Diff | B0/R0 | —/—；NOT_RUN；NOT_RUN；DEVICE_BLOCKED |
+| ACCEPT-09 | SAFE-02～05 | VAULT/DB | B-U | 明确批准→测试Markdown真实协调写/回读＋WCDB CAS；未选零改动，正式Vault拒绝 | B0/R0 | —/—；NOT_RUN；NOT_RUN；DEVICE_BLOCKED |
+| ACCEPT-10 | LOOP-12/13, SAFE-07 | CORE/VAULT/DB/CHAT | B-D/B-U/B-B | 故障表F01～F13，逐对象事实、重复点击、崩溃窗口、重核查重批准 | B0/R0 | —/—；NOT_RUN；NOT_RUN；DEVICE_BLOCKED |
+| ACCEPT-11 | LOOP-07～09 | NOTE/SourceImpactGate/DB | B-S/B-L | 源变更直接改原卡/明确不影响，无改动保存不确认，无关/排版低扰 | B0/R0 | —/—；NOT_RUN；NOT_RUN；DEVICE_BLOCKED |
+| ACCEPT-12 | LOOP-01～14, SAFE-07/11 | REVIEW/CHAT/NOTE/DB/BACKUP | B-X/B-B/B-U | P-X真实UI全程＋反向核查＋撤销＋冷启动＋ZIP恢复边界；同cardID/FSRS/历史 | B0/R0 | —/—；NOT_RUN；NOT_RUN；DEVICE_BLOCKED |
 
-| ID | Required current scenario | Evidence target / current state |
-| --- | --- | --- |
-| A01 | Flashcards / Notes / Settings; calibration under Settings, correct tap router | Code + native XCTest submitted; current CI pending |
-| A02 | Current local Monday–Sunday, missing/unfinished/excused/future gap, accessible net-only fixed Y | Core tests submitted; native/iPhone13 layout unverified |
-| A03 | Home + adds 3 card types without restarting queue | Code submitted; native UI unverified |
-| A04 | Edit QA/choices/image, no-op save, independent explanation | Existing editor partly reused; full semantics pending |
-| A05 | Genuine content revision history and restore as new version | Atomic WCDB + native XCTest submitted; CI pending |
-| A06 | Old LearningEntry archive compatibility/migration | Existing journal preserved; migration audit pending |
-| A07 | Edits and rating interleaving, no stale display and no FSRS reset | Partial UI code; concurrency regression pending |
-| A08 | Note search/selection/reader/draft and Markdown fidelity | Existing reader; new workflow pending |
-| A09 | Chat model/prompt selection, provider scope | G3 native model chooser + provider consent code submitted; session prompt editing/native XCTest pending |
-| A10 | Durable context, local Chat history and resume | G3 cardID/revision-bound UI, full local history/draft resume and native test submitted; Notes/selection contexts pending |
-| A11 | Failure, cancel, retries and no-cost fallback | Failed message and unsent draft preserved; no silent paid fallback; native/retry/device verification pending |
-| A12 | Distinguish summarize vs explicit update | Proposal schema; executor pending |
-| A13 | Card → Chat → explicit test note safe diff/write/readback | BLOCKED until fixture executor/device |
-| A14 | Preview cancel/conflict/idempotence | BLOCKED |
-| A15 | Multi-card targets/new-note name conflicts | Not implemented |
-| A16 | Notes/Chat common candidate pool | Existing note flow; Chat integration pending |
-| A17 | Source revision stale prompts | Not implemented |
-| A18 | Added history/Chat/proposals in ZIP and safe restore | Same V3 SQLite + unit tests submitted; full archive test pending |
-| A19 | iPhone 13 / Dynamic Type / light-dark / 3 languages / STT | Simulator/device unverified |
-| A20 | No key leak, no production Vault tests/write, truthful status | Production gate unchanged; independent review required |
+四Tab和复合阅读是额外必需交叉验收，归入原NAV/UI/CHAT/SAFE，不新增第86个主需求。仅十二项旧服务方法成功不能完成V1.1。
 
-## Current evidence boundary
-The last verified V3.2 baseline is `58987edfe550f9ccd4f7b7168b12c1f83c98b920`, [CI #39093765853](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39093765853): 90/90 native UIKit XCTest, 17/17 portable Swift tests, Simulator and unsigned ARM64 candidate. The new theme, three-language UI, editable understanding and Notes redesign **require fresh CI on their own final HEAD**; no prior run is proof of these new edits. Simulator does not certify iPhone 13.
+## 3. 真正 UI 连续往返（P0-B，计划）
 
-## Native Simulator / automation
-| Area | Required actual gate |
+用独立临时Vault、独立测试WCDB、固定合成模型响应与确定性数据；通过正常可见控件进行操作。Debug fixture/网络注入可以准备数据，但不能用“测试专用完成按钮”或直接调用服务跳过业务页面。CI没有XCUITest目标时补目标/资源/工作流，按真实限制记录，不把服务测试重命名为UI测试。
+
+1. 启动App，验证四Tab并打开测试笔记。
+2. 展开实际目录，选择一个可靠章节，预览选择范围。
+3. 发起合成出题、进入候选池，编辑/删除候选并审核。
+4. 明确保存一张原卡，核查持久cardID、来源及初始内容版本。
+5. 从该原卡进入复习，验证三行题干及完整题干访问。
+6. 打开真实对应来源，再返回同一复习位置。
+7. 进入Chat，选择材料/模型并确认，保存一轮合成讨论。
+8. 从指定已完成AI回复提出局部笔记及原卡修订，修改/删去部分建议。
+9. 打开双目标完整Diff，切换单目标/双目标，验证取消无副作用。
+10. 用户明确确认所选目标，授权只对应所见内容和版本。
+11. 实际写测试Markdown与既有WCDB，不只存提案。
+12. 从真实存储回读双方并展示逐目标回执。
+13. 返回原卡/原队列继续FSRS，验证内容改变先重新揭示且评分恰好一次。
+14. 模拟外部修改同一笔记相关章节，再回到来源核查入口。
+15. 直接修改原卡或确认不影响，两条路径分别测试；无改动保存不算确认。
+16. 安全撤销已应用修改，后续合法修改冲突必须阻止旧撤销。
+17. 终止并重新启动App，不能通过重新初始化空数据库冒充恢复。
+18. 核查原cardID、会话历史、提案/回执、内容版本、FSRS事件及队列恢复约束。
+
+每一步保存可定位的运行证据。无网络/合成AI只证明该UI业务路径，不证明真实模型推理或Keychain；模拟器终止重开不证明真实Files Provider强杀后的全部行为。
+
+## 4. 新界面与范围测试（计划，当前全部 NOT_RUN）
+
+| 场景 | 必须观察的行为 |
 | --- | --- |
-| Branch / privacy | Public feature HEAD, no private/main changes, credential and source privacy checks |
-| Core | All `ImpressReviewCore` tests including five-indicator scoring, calendar, mood skip, extras, trends and reminder plan |
-| Navigation | Exactly three tabs ordered 闪卡 / 笔记 / 设置, with Card Collection right header only, + opening the V3 card editor; Daily Calibration is a Settings detail and notification target |
-| Appearance & locale | System/Light/Dark persistent window overrides, System fallback; three independent language modes (zh-Hans, zh-Hant, en), immediate native navigation refresh, no mutation of personal content or persisted reviews |
-| Understanding edit | Detail exposes explicit editor; successful CAS updates answer and appends previous revision to learning journal; invalid/blank/stale edits fail without changing data; ID, question, original AI feedback and FSRS remain stable |
-| Flashcards | Show Answer, four swipes, exactly-one FSRS event, card CRUD/pagination/content CAS and V3 schema upgrade |
-| Cards/media | Text QA, image BLOB, single/multiple choice, search, import, stale-save rejection |
-| Obsidian | Native inset-grouped Notes table, central font/color/spacing tokens, restrained Markdown reader, external read-only Vault index, bounded 128-note enumeration progress, verified-scope provisional cache, folder/path search, 120-item list paging, local attachments and iCloud-not-downloaded error; no automatic original writes |
-| Calibration check-ins | All five evaluated, unknown remains unknown, mood not scored, mutable current goals, immutable historic snapshots, manual +/- boundaries |
-| Calibration UI/chart | Week 7 days, month 30 days, year monthly daily mean, axes, missing-day gaps, readable Dynamic Type |
-| Notifications | Calibration IDs separate from FSRS, permissions, duplicate reconciliation, pending-day cancellation and click route |
-| Backup V1 | Legacy 3-data-member ZIP remains readable; does not delete calibration ledger |
-| Backup V2 | SQLite, JSON learning history, prompts, image BLOB, FSRS events and checkins all survive CRC/SHA/semantic validation |
-| Restore | User confirmation, recovery preview, durable pre-image of SQLite/WAL, learning history, prompts and calibration; process-death recovery before WCDB opens; fault-injected rollback |
-| Backup mutation race | Opaque mutation generations prevent concurrent writes clearing Dirty and reject mixed-era ZIP publication |
-| Device build | iPhoneOS ARM64 unsigned app, no embedded XCTest, IPA ZIP integrity and SHA-256 Artifact |
+| NAV 四Tab | 顺序正确，校准打开已有数据，通知/深链路由正确，无新分数/首页周图 |
+| Chat 空态/未配置 | 无AI讨论标题、模型说明、顶部材料/提示词按钮；只保留功能列表/新建；草稿不因配置引导丢失 |
+| Chat 输入 | 短输入紧凑，长输入增长后滚动，键盘跟随，附件按需出现，STT/发送/停止/失败重试可用 |
+| Chat 介绍/同意 | 首次介绍只一次；更换服务商/扩大范围/源变更仍重新批准，取消零HTTP |
+| Chat 历史搜索 | 全本地标题/消息/来源搜索、无结果/清空/返回位置、命中定位；跨来源不串材料 |
+| Chat 删除 | 普通/当前/带提案/已应用/中断会话分别测；回执可达；发送/草稿回调不复活；备份保留范围告知 |
+| 题干/答案 | 1/3/超3行、中英混排/emoji/H1/H2/大字号、短题无空占位；全文可达，答案触底 |
+| 卡片控件 | 只有内部右上编辑/讨论；来源入口未丢；无底部重复按钮，无额外题答文字标签 |
+| 评分 | 中央可见紧凑单提示，四方向/转向/取消/阈值/重复手势；浏览点击/滚动/选字零评分 |
+| 视觉 | iPhone13尺寸、简繁英、浅/深/跟随系统、DynamicType/SafeArea/VoiceOver；原生截图，不用HTML演示冒充 |
 
-## Device-only gates (not passed by Simulator)
-- iPhone 13 unsigned-IPA signing and actual launch; installation and retention after free seven-day re-signing.
-- iCloud Drive folder picker, stale bookmark after app restart, Files-provider local write versus server upload, offline retry.
-- Recovery from ZIP on a fresh device and app termination between staged restore and next cold start; no partial SQLite/JSON/prompt/calibration restore.
-- Local alert delivery at 20:00/22:00 across sleep/reboot, permission denial, Focus mode, timezone change, badges and FSRS coexistence.
-- UIKit appearance, Dynamic Type, Safe Area and Y-axis readability on iPhone 13; manually switch System/Light/Dark and zh-Hans/zh-Hant/en while navigating Flashcards, Calibration, Settings, Vault and understanding editor. Check text truncation, keyboard layout, saved editor revisions and theme persistence across relaunch. Original iPhone icon visual and missing marketing 1024 icon remain a release gate.
-- External Obsidian Vault remains read-only by design, including iCloud placeholders, images and safe path resolution.
+## 5. 复杂文档测试库（计划）
 
-## Mandatory evidence format
-Record final Git SHA, Actions run URL, each job conclusion, **total native XCTest passed/failed**, portable Swift tests and unsigned IPA SHA-256. A compiled source file is not a test result, and a CI artifact is not proof of phone-level Files/iCloud entitlement.
-
-## iOS 26 platform migration gate
-| Gate | Verifiable requirement | Current evidence type |
-| --- | --- | --- |
-| Deployment settings | Six Xcode app/test deployment values, Podfile and generated Pods floor, three native build overrides all 26.0 | New static audit in CI |
-| Binary | Signed state unchanged; unsigned ARM64 QA .app reports `MinimumOSVersion=26.0`, IPA ZIP/SHA valid | New native packaging assertion; pending CI |
-| iPhone 13 | iOS 26 installation and SpeechTranscriber hardware/locale/download checks; old-system support intentionally dropped | **Device PENDING** |
-| Global STT/Markdown | Apple SpeechAnalyzer and unified renderer/voice UI not yet implemented | **Development PENDING** |
-
-## V3.3 speech gate
-| Gate | Required evidence |
+| 样例 | 展示、选择与安全条件 |
 | --- | --- |
-| Speech code | Real iOS 26 compilation against Apple Speech; no SFSpeechRecognizer, no third-party STT and no private audio log/disk path |
-| Voice settings | Three independent recognition locales, engine availability, manual Apple model installation and microphone permissions displayed |
-| Text insertion | UTF-16 selection replacement, cancel leaves source unchanged, stale edit rejected, final-only commit, single editor-change callback |
-| Editor routing | Question, answer, options, batch import, understanding capture/edit, prompt inputs and Markdown **private drafts** provide one mic accessory; source Obsidian reader remains read-only |
-| Real device | iPhone 13 microphone and interrupted session; per-locale model availability, first-download permission, latency, accuracy, background cancellation and VoiceOver **PENDING** |
-| Markdown overhaul | One AST-backed parser and unified rendering pipeline **PENDING**; no old or external Vault document discarded |
+| Markdown结构 | ATX/Setext、跳级/重名/空标题、无标题开篇、嵌套列表引用、围栏长度/语言/缩进、伪标题 |
+| Markdown字节 | BOM、LF/CRLF/CR/混合行尾、中文组合字符/emoji，原始字节与显示范围映射 |
+| 富内容 | 代码/表格/公式/Callout/任务列表、WikiLink别名/heading/block、图片与本地附件 |
+| 父子选择 | 父节包含子节到下一个同级/上级；多选去重；片段不错误截断表格/代码/公式 |
+| 引用复合 | 笔记A嵌入B章节/块、再嵌绘图；每依赖版本/范围清单，普通链接不自动取全文 |
+| Excalidraw | 原生与Obsidian封装、压缩/普通数据、中文/本地图片/嵌入、整图/框架/组/区域；预览绑定版本 |
+| Canvas | 文字/文件/链接/分组、层叠/坐标/边/标签/subpath、选中/未选关系；平移缩放不写文件 |
+| 导图 | Mermaid mindmap与Markmap分别测试，深分支/长中文/选择子树及必要父路径 |
+| 模板/未知 | 模板语法/动态查询/未知插件保原文并局部告知；不运行模板、DataviewJS或插件代码 |
+| 负向资源 | 缺件/循环/越界/符号链接/撤权/iCloud未下载/异常大图或压缩数据，有限资源与取消 |
+| 兼容/权限 | 旧v1/v2/v3来源、旧Chat JSON、旧ZIP仍可读；扩展读取类型不放开Markdown写入器 |
+| 图像理解 | 图能显示≠模型能理解；图像范围/提供商/能力单独确认，不自动收费/上传整图 |
 
-## 双目标复核专项用例（必须在单一提交 SHA 通过，含 iPhone 13 QA）
+每个已支持格式均执行“打开→正确显示→选择→实际材料预览→加入Chat→重开恢复”。登记选定依赖版本、许可、资源包、实际支持的语法；不能承诺所有社区插件都支持。全部远程资源默认阻断，JS桥不能读取任意本地文件或执行SQL。记录iPhone13首屏/峰值内存/长文滚动/图形缩放/取消/后台恢复，不填未经测试的性能数字。
 
-- **DUPLEX-01 正向**：在复习原卡进入 Chat、完成讨论，在仅针对该 note 的私有草稿改一处 Markdown，编辑同一张标准原卡题目或答案，单屏完整预览两个目标，并分别打开/关闭两项选择。保存后卡片 cardID、FSRS 事件不变，未选对象无副作用。
-- **DUPLEX-02 不可默默写生产 Vault**：即使双目标都被用户勾选，Release 的正式笔记写回必须失败且草稿保留；卡片目标回执独立，不能用草稿已保存或 Debug 副本成功冒充真正 Vault 已更新。
-- **DUPLEX-03 Debug QA 文件实际回读**：在 Files 手动选定唯一授权文件夹 `Impress-Write-Test-Vault`；验证同名其他目录不可写、原文 SHA 变更拒绝覆盖、写前备份、按用户确认范围修改、协调写回和本机回读；不得据此声称 iCloud 服务器同步。
-- **DUPLEX-04 断点与幂等**：让文件成功后卡片 CAS 失败，强杀与重启后只能通过显式恢复操作继续；文件不得二次追加，未应用的原卡不得被覆盖；允许取消剩余操作，保留已成功回执。
-- **DUPLEX-05 逆向**：笔记从属卡片的 v2 源 digest 改变后，只在用户请求「来源核查」时提示；完整读当前 Markdown／原卡，确认不影响则只更新该 cardID 的已核验源摘要，不评分、不改变问题与答案；同名不同 Vault、缺失授权、变更中再次改文档均拒绝误关联。
-- **DUPLEX-06 回退与兼容**：旧 Chat JSON 无 `pendingDuplex` 时仍能打开；原有独立草稿/FSRS/图片/选择题/三语言/夜间模式未回归。校准待定模块不作为本轮预置闭环。
+## 6. P0-C 故障注入矩阵（所有成功事实必须保留）
 
-## 数据保真与历史回执追加核验
+| ID | 注入点 | 预期 |
+| --- | --- | --- |
+| F01 | 笔记成功、原卡CAS失败 | 笔记成功回执保留，不再写笔记；卡片重新核查明确批准 |
+| F02 | 笔记失败、原卡成功 | 卡片成功事实保留，不回滚/重播卡片；笔记单独处理 |
+| F03 | 文件已写、回执未持久化即终止 | 重启零自动重放；明确核对字节/快照后补事实，不猜成功 |
+| F04 | WCDB内容已改、状态记录未完成 | 事务/内容版本事实可核实，不重复生成内容版本 |
+| F05 | 重复确认/重试已应用提案 | 恰好一次应用；已应用对象禁止自动重放 |
+| F06 | 执行或undoing时取消/强杀/重开Chat | 不能因取消勾选抹掉中断事实，不能自动正向/反向重播 |
+| F07 | 同Markdown连续两次批准 | 不可变ApprovedDraft各自保留，历史Diff不读新草稿 |
+| F08 | 旧撤销遇到后续合法文件/卡片修改 | 冲突拒覆盖；逆序合法撤销可回原字节 |
+| F09 | 仅FSRS评分前进后改内容/撤销 | 使用最新调度CAS，保留评分，不制造虚假内容冲突 |
+| F10 | 断Vault/移动/删除/换SHA/跨Vault同名 | 明确失败/重新定位核查，不从缓存写回、不按标题猜 |
+| F11 | ApprovedDraft丢失/污染 | 安全失败，不用AI文本/SQLite元数据伪造原始字节 |
+| F12 | 旧DB/旧Chat JSON/旧ZIP恢复 | 保留兼容数据，无自动重放，不混时代恢复 |
+| F13 | 删除会话与发送/提案/备份并发 | 删除不复活、不级联删除已执行事实，恢复范围明确 |
 
-- **P0-BYTE-01**：取包含 BOM 的 UTF-8 + CRLF Markdown（含 Frontmatter/WikiLink/大于 500 行），在 iPhone 13 中仅修正文中一行。预览必须只呈现那一行的原文／改文，且允许确认完整范围；经过授权 QA 副本写回后新文件仍保留 BOM 与全部原始 CRLF，未修改内容逐字节一致。
-- **P0-BYTE-02**：原文为混合 LF/CRLF 时不得把纯换行归一化隐藏为「没有变更」。源文件被外部应用同时修改则冲突中止，不可覆盖、不可自动将建议覆盖已成功的原卡。
-- **P0-SOURCE-01**：笔记详情 → 私有草稿编辑 →（QA 副本经授权写回）→ 返回笔记详情，重读授权源文件并刷新最新 Markdown。关闭授权／文件移动／下载未完成后，不能从旧缓存建立有效写回提案、上传过期章节或者误发旧版本 Chat。
-- **P0-RECEIPT-01**：同一 Chat 顺序完成两次修改、首次只改原卡、第二次笔记冲突，强杀重启后历史回执仍逐项存在，可完整查看双方 cardID/Vault path/expected revision/部分结果；任何恢复行为都不得自动执行已保存修改。
+失败对象只能在新鲜身份/版本/完整Diff核对和明确批准后继续，不把“重试”当永久授权。P0-D保留直接修订入口；无变化保存不承认不影响；仅排版/无关变化低扰动；重复/失效章节保守降级，不用旧笔记覆盖后来合法原卡。
 
-## 安全撤销完整业务冒烟（LOOP-13）
+## 7. 原专项编号保留（回归，不因改版删除）
 
-- **UNDO-01（原卡）**：同一 cardID 人工批准修改问题／答案后，从 Chat 对应收据进入「安全撤销」。完整显示改前／改后字段、当前内容版本。二次确认后回原题／答案，卡片身份不变、FSRS dueAt/review events 不变、卡片内容历史保留批准版本与新 restored 版本。
-- **UNDO-02（原卡冲突）**：批准之后原卡又被用户合法修改，旧撤销必须拒绝覆盖，旧内容和 FSRS 都不丢。中间若仅发生 FSRS 评分则允许依据 **最新 FSRS revision** 在不改评分的前提下撤销卡片内容。
-- **UNDO-03（QA 笔记）**：在 Debug 显式授权独立测试副本写入含 BOM+CRLF／Frontmatter／WikiLink 的原始 Markdown，确认后通过完整反向 Diff 撤销。File Provider 回读须与第一版源字节完全一致，再次人工重试不产生重复写入。
-- **UNDO-04（锁定／冲突）**：Release 正式 Vault 永远不能绕过生产写门禁；独立 QA 授权丢失时不能进入 undoing；源文第三方修改、同名但其他 Vault 等情况必须拒绝写回。
-- **UNDO-05（崩溃恢复）**：写回后未记录成功收据即强杀，重启持久恢复 undoing 且零自动重放；用户再次手动确认并匹配目标已恢复的字节／内容版本，记为 reverted。归档旧提案的撤销不得覆盖后续提案与其他 Chat。
+DUPLEX-01正向双选、02生产拒写、03 Debug QA实际回读、04部分成功/幂等、05反向核查、06旧JSON/卡型兼容；P0-BYTE-01 BOM/CRLF局部修改、02混合换行不隐藏；P0-SOURCE-01返回重读；P0-RECEIPT-01连续提案收据保留。
+UNDO-01原卡新restored版本、02后来内容冲突/仅FSRS变化不冲突、03 QA字节级逆向、04锁定/权限、05中断恢复；ANCHOR-01单一证据来源、02无关不扰、03失效/重复降级、04旧v1/v2兼容；SOURCE-SEG-01原卡核验后片段导航；AI-UPLOAD-01源变化禁旧发送、02进入/预览不上传。
+必须保留回归：`testNewDraftAfterExternalEditCannotOverwriteOldPendingWork`、`testHistoricalDuplexPreviewKeepsOldDiffAfterLaterNoteDraft`、`testUnsentChatModelAndPromptSurviveColdStartAndLegacyJSON`；Portable `deselectionCannotErasePendingUndoAfterCrash`、`distantSmallEditsPreviewOnlyActualChangedHunks`、`separateInsertAndRemovalRemainVisible`。
 
-## 来源章节定位专项（ACCEPT-01/02/11、LOOP-03/07/08）
+## 8. 历史 A01～A20 与全业务回归
 
-- **ANCHOR-01**：在可丢弃测试 Vault 的 Markdown 含两个不同章节时，从明确勾选的一处章节生成单证据卡片，保存后 `source_note_path` 具有相同 Vault+完整相对路径+文档 SHA+章节 SHA，返回笔记能找到原 cardID，任何同名其他 Vault 不匹配。
-- **ANCHOR-02**：Obsidian 在其他章节增加段落/修改排版，刷新当前原文，若被引用章节完整文本仍唯一且未变动，反向核查不为这张卡创建无意义提示；已核实同源其他卡仍可独立核查。
-- **ANCHOR-03**：被引用章节改变、被删、被拆分或重复导致无法唯一定位时，只报告来源定位置信度不足，保留人工核查和「不影响」/修订原卡入口；绝不根据同名标题自动覆盖。
-- **ANCHOR-04**：老 v1/v2 来源、独立无来源卡、多证据引用和来源章节重复的卡继续采用原有安全回退，不触碰 FSRS 到期和历史；iPhone 13 复核实际导航、长 Markdown 和手势体验。
+| ID | 当前追踪口径 |
+| --- | --- |
+| A01 | 旧三Tab被四Tab替代，路由仍回归 |
+| A02 | 旧首页周图废止；只回归校准器已有数据/页面，不恢复首页图 |
+| A03 | 新增三类卡不重建当前队列 |
+| A04 | 问答/选择/图片编辑、独立解析、无改动/取消 |
+| A05 | 内容历史恢复为新版本，保中间版本 |
+| A06 | LearningEntry旧记录兼容/编辑历史 |
+| A07 | FSRS评分与内容修改交错 |
+| A08 | Vault授权/目录/搜索/复杂阅读/草稿/原字节保真 |
+| A09 | Provider/模型搜索/提示词/Keychain/GLM/自定义兼容 |
+| A10 | 多会话/材料/草稿/历史/删除恢复边界 |
+| A11 | 失败/停止/重试/无自动收费回退 |
+| A12 | 普通总结与具体修改提案分离 |
+| A13 | 原卡→Chat→测试笔记Diff/实际写/回读 |
+| A14 | 取消/冲突/幂等/不重放 |
+| A15 | 原有多卡/新建冲突需核查，不把全库重构变本轮前置 |
+| A16 | 笔记/Chat共用候选池与入库 |
+| A17 | 来源变化提示与原卡核查 |
+| A18 | 同一备份体系，Chat/提案/回执与旧ZIP兼容 |
+| A19 | 三语言/主题/字号/SafeArea/STT/键盘/真实设备 |
+| A20 | 无秘密泄漏/生产锁定/真实分层证据 |
 
-## 来源片段与出题隐私 QA
-
-- **SOURCE-SEG-01**：从关联原卡打开来源笔记时先回读原 cardID/contentRevision/Vault 身份，v3 锚点提供完整当前章节原文只读阅读，用户仍可返回整篇笔记。来源章节移动但内容唯一时仍可定位；章节删除或重复出现则明确说明无法精确定位，不查同名其他 Vault。
-- **AI-UPLOAD-01**：在用户勾选特定笔记章节并确认模型后、请求发送前模拟外部 Obsidian 修改选中章节，拒绝云端发送；修改未选章节仍由于全文 SHA 改变而拒绝发送，需重新确认最新版本。无授权/不同 Vault/材料篡改均不得发送。
-- **AI-UPLOAD-02**：用户仅打开 Chat、候选池、来源/片段阅读、草稿和预览，不上传正文；实际发送前告知此次源版本与材料范围，不自动扩大发送上下文或转用付费模型。
-
-## 2026-10-20 · 新增端到端模拟业务冒烟目标（未执行不标 PASS）
-
-| 场景 | 证据测试（本次新增） | 自动化现态 | 真机现态 |
-| --- | --- | --- | --- |
-| ACCEPT-01/02 | `testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS`：独立 Vault 笔记选章节→审定单候选→真实 WCDB cardID/来源锚点；跨 Vault 不匹配 | PENDING：需本次 exact SHA CI | BLOCKED |
-| ACCEPT-03 | 原生长 Markdown / 手势系列原有测试，尚无本次 iPhone13 长文交互证据 | PENDING 全套原生测试 | BLOCKED |
-| ACCEPT-04/05 | 同测试：内容 CAS、卡片原地版本/FSRS 插入评分后继续编辑 | PENDING | BLOCKED |
-| ACCEPT-06 | 同测试：Chat 多会话/历史/草稿/提案跨数据库冷启动恢复 | PENDING | BLOCKED |
-| ACCEPT-07 | `testAIQuestionMaterialRequiresExactLiveSourceBeforeHTTP`、现有上下文同意测试，不调用真实云端 | PENDING | BLOCKED |
-| ACCEPT-08 | 现有 `testDuplexProposalPersistsAcrossChatColdStartWithoutReplayingWrites` 与 Diff 测试；完整交互 UI 尚缺设备认证 | PENDING | BLOCKED |
-| ACCEPT-09/10 | 同测试：本地 QA fixture 源文件实际协调写、回读、备份、二次操作幂等、分对象回执；故障注入另见 `testDuplexPartialReceiptDoesNotReapplyWrittenQAFileOnCardConflict` | PENDING | BLOCKED |
-| ACCEPT-11 | 同测试：章节无关变动不打扰、相关变动仍需人工核查；现有 `testSourceRevisionAcknowledgementKeepsOriginalCardAndReviewSchedule` | PENDING | BLOCKED |
-| ACCEPT-12 | 同测试：逆向安全撤销、保留 FSRS/内容历史与会话、冷启动再读 | PENDING | BLOCKED |
-
-旧 A02 已被最新产品契约取消，不恢复首页周校准图。无线上模型、iPhone13、生产文件写回的真实验证不在这次模拟运行中。
-
-### 2026-10-20 后续：原生目标身份与未发送 Chat 模型
-
-新增 `testDuplexDiffPreviewDisplaysExactVaultIDAndSourcePath`、`testUnsentChatModelAndPromptSurviveColdStartAndLegacyJSON`。分别覆盖笔记+原卡统一预览中 Vault ID/全相对路径/实际来源 SHA 的可见性，以及只选择模型未发送消息时，模型、提示词和草稿在已有 WCDB 会话冷启动后的保留。过去 Chat JSON 缺少可选新字段时仍可读取。仅有对应 exact SHA XCTest 成功才可标记自动化 PASS；iPhone13/真实 Vault/在线模型仍不可直接推定。
-
-## 2026-10-20 · P0 同笔记多次批准快照测试（待此 SHA CI）
-
-- `testTwoApprovedNoteRevisionsRemainIndependentAndUndoInReverseOrder`：独立 QA Vault 中 BOM、CRLF、WikiLink 笔记连续两次写入；批准快照按 Vault 身份及双 SHA 持久化；旧撤销不能覆盖后来修改，按逆序撤销逐字节恢复。
-- `testNewDraftAfterExternalEditCannotOverwriteOldPendingWork`：外部修改冲突不得丢旧草稿、跨 Vault 不匹配。
-- `testHistoricalDuplexPreviewKeepsOldDiffAfterLaterNoteDraft`：新草稿不影响历史 Chat 收据中的旧差异。
-
-笔记详情、Chat、双目标编辑器共用显式草稿版本选择；开始下一版之前重新回读当前源文并保存旧批准快照。均为临时 fixture 自动化测试，不能冒充 iPhone13/File Provider/生产 Vault 验收；正式写入门禁保持 false。
-
-## 2026-10-20 · P0 多处局部 Markdown 差异预览（需精确 SHA 测试）
-
-Portable Swift `distantSmallEditsPreviewOnlyActualChangedHunks` 验证在 1200 行笔记相距千行的两处必要修改，仅显示实际四条 +/- 变更，不将中间未变化的整千行误报为修改或导致预览上限阻塞；`separateInsertAndRemovalRemainVisible` 验证分离的插入和删除都可见。使用标准库有界 diff（中段合计不超过 4000 行）；超大输入保留保守完整性保护，不能伪称只看到全部变化后批准。仍须原生阅读交互和 iPhone13 验收；生产 Vault 写入门禁不变。
-
-## 2026-10-20 · 反向核查可直接修订同一原卡（当前提交后续 CI 待执行）
-
-- `testSourceImpactIncludesDirectOriginalCardEditorAndUnaffectedChoice`：笔记 SHA 变化后的人工核查页同时提供“修订这张原卡”和“确认不影响”，不要求退出到卡片集按标题搜索。
-- `testSourceImpactRevisesOriginalCardWithFreshFSRSAndExactSource`：从同一 Vault ID＋全相对路径匹配的旧 source key 出发，用户修订原 cardID；写前回读笔记 SHA 和 WCDB 内容 CAS，重新绑定最新文件级来源 digest。允许正常 FSRS 评分已前进，不删除复习事件；拒绝另一 Vault 或过期笔记来源。原先章节内容已变化时不冒用旧锚点的精确定位。
-- 原生 XCTest 成功仅说明 SQLite、UI 入口与来源门禁；仍需 iPhone13/Files Provider 真实源核查与导航现场测试。正式 Vault 写回保持 false。
-
-## 2026-10-20 · P0 发送材料权限与供应商切换回归（新提交需 exact SHA CI）
-
-| 验证对象 | 对应 XCTest | 自动化 | 真机/真实服务 |
-| --- | --- | --- | --- |
-| 选定笔记材料发送前的身份、原文 SHA、所选章节原文一致性 | `testChatNoteMaterialGateRejectsStaleForgedAndOversizedExcerpts` | 新增待最新 SHA CI | BLOCKED |
-| 选定材料 40,000 UTF-8 字节上限，禁止静默截断或自动调用收费服务 | 同上 | 新增待最新 SHA CI | BLOCKED |
-| 第一次 Chat 失败/取消后切换云端服务商仍重新询问权限 | `testChatProviderSwitchRequiresConsentAfterFailedFirstAttempt` | 新增待最新 SHA CI | BLOCKED |
-| 来源核查直接修订原卡；内容没变时不冒充核查完成 | `testSourceImpactRevisesOriginalCardWithFreshFSRSAndExactSource` + 无改动拒绝分支 | 新增待最新 SHA CI | BLOCKED |
-| 反向编辑途中 Vault 授权已切换、源 SHA 或 cardID/contentRevision 变更 | 同上 + 原生界面门禁 | 代码完成/部分 XCTest | BLOCKED |
-
-注：普通未加密 ZIP 的 Chat/WCDB 记录不包含受保护的私人 Markdown 草稿和批准快照。测试失败或重装导致本机快照缺失时，应保留待核查/禁止撤销，不使用 AI 文本伪造原始字节。不能把 Debug 测试源写回或模拟器测试记为正式 Vault、iCloud 同步或 iPhone 13 验收。
-
-## 2026-10-20 · ACCEPT-01～12 可追踪业务验收总表
-
-> 证据层级：`CODE`（代码/测试存在）、`SIM PASS`（对应该测试的模拟器 XCTest 已通过）、`E2E BLOCKED`（未经真正完整交互链验证）、`DEVICE BLOCKED`（iPhone 13／真实 Files/Keychain 权限未验收）。同一 SHA 自动化通过 **不**代表真机 PASS；以下测试名称必须实际查询对应 Run，不能见到名称便标绿。
-
-| Acceptance | 当前可核验自动化用例 | 不可替代的尚缺证据 | 端到端最终状态 |
-| --- | --- | --- | --- |
-| ACCEPT-01 | `testNoteQuestionGenerationAnchorsOnlyUniqueEvidenceAndSkipsUnrelatedChanges`、`testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS` | 真正 UI 选定章节、候选审核、持久 cardID/来源核查 | E2E BLOCKED |
-| ACCEPT-02 | `testBidirectionalVaultLinksUseExactIdentityAndPreserveOriginalCard`、`testOriginalCardOffersVerifiedSourceSectionWithoutReplacingFullNote` | 文件移动/改名、撤权与跨 Vault 实际手机往返 | E2E BLOCKED |
-| ACCEPT-03 | `testV3LongMarkdownQuestionAndAnswerHaveIndependentScrollRegions`、`testActualTinderSwipeSavesOneFSRSEventOnlyAfterRevealingAnswer` | iPhone13 触底、文字选择、代码/表格/四向触控实测 | DEVICE BLOCKED |
-| ACCEPT-04 | `testQuickEditAndVerifiedSourceVisibleBeforeAnswerWithoutScoring`、`testCardContentHistoryIsAtomicNoOpAndRestoresWithoutRescoring` | 现场返回后原队列位置、人手操作的可见状态 | DEVICE BLOCKED |
-| ACCEPT-05 | `testReturningAfterExternalCardEditRequiresRevealingTheNewAnswer`、`testManagedCardCRUDPreservesIdentityAndFSRSReviewEvents` | 真实用户编辑/取消、旧揭示答案不可提交评分 | DEVICE BLOCKED |
-| ACCEPT-06 | `testOneSourceSupportsTwoIndependentChatSessionsWithoutOverwritingHistory`、`testConfirmedDuplexHistoryRetainsReceiptsWhenNewerProposalIsSaved`、`testUnsentChatModelAndPromptSurviveColdStartAndLegacyJSON` | 强杀、旧设备数据库、回执重载、草稿 UI 切换 | E2E BLOCKED |
-| ACCEPT-07 | `testAIQuestionMaterialRequiresExactLiveSourceBeforeHTTP`、`testChatNoteMaterialGateRejectsStaleForgedAndOversizedExcerpts`、`testChatProviderSwitchRequiresConsentAfterFailedFirstAttempt` | 真机授权、Keychain/真实模型失败切换、无私人材料被误发 | E2E BLOCKED |
-| ACCEPT-08 | `testDuplexDiffPreviewDisplaysExactVaultIDAndSourcePath`、`testDuplexProposalPersistsAcrossChatColdStartWithoutReplayingWrites` | 所选笔记+原卡完整增量 Diff、人工两目标切换/取消 | E2E BLOCKED |
-| ACCEPT-09 | `testUserApprovalRequiredAndSuccessfulFixtureWriteIsRecoverable`、`testExplicitQAUndoRestoresExactBOMCRLFBytesAndBlocksLaterConflict` | 单独授权真实 Files QA 副本的 SHA/CAS/回读 | DEVICE BLOCKED |
-| ACCEPT-10 | `testDuplexPartialReceiptDoesNotReapplyWrittenQAFileOnCardConflict`、`testDuplexProposalPersistsAcrossChatColdStartWithoutReplayingWrites` | 文件已写/DB 失败时真机强杀重启、逐对象重试零重播 | E2E BLOCKED |
-| ACCEPT-11 | `testNoteQuestionGenerationAnchorsOnlyUniqueEvidenceAndSkipsUnrelatedChanges`、`testSourceImpactRevisesOriginalCardWithFreshFSRSAndExactSource`、`testSourceRevisionAcknowledgementKeepsOriginalCardAndReviewSchedule` | 外部 Obsidian 编辑后的 UI 核查、改原卡/确认不影响、FSRS 继续 | DEVICE BLOCKED |
-| ACCEPT-12 | `testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS`、`testTwoApprovedNoteRevisionsRemainIndependentAndUndoInReverseOrder` | 真正完整交互路径在 iPhone 13 的复现记录及所有回执/恢复 | E2E BLOCKED |
-
-上述用例名称为**证据定位**，非每项通过证明；在最新 SHA 完整 CI 成功前，新增用例仅标 `CODE/PENDING`，旧有测试的最近完整成功基线见 Run 39435321232。
-
-### 长会话的显式远端窗口（CHAT-07 / ACCEPT-06～07）
-
-本机保存全部消息不等于模型每次收到全部历史。Chat 若已完成消息超过 16 条，首次发送时必须明确告知“仅发送最近 16 条已完成对话和当前输入”，并允许取消；每个会话只需确认一次，切换到别的会话重新提示。不会删除旧本地消息或伪称云端已读全部。纯逻辑原生 XCTest：`testLongChatWarnsAboutRemoteWindowWithoutDiscardingLocalHistory`，真机多语言/键盘与云端实际上下文仍待验收。模型调用上限是上文明确验证的材料范围，且不自动切换付费商。
+备份回归包含CRC/SHA/SQLite integrity、并发变更generation、Dirty标记、恢复前镜像、SQLite/WAL与JSON一致性、冷启动前完成恢复。普通ZIP不加密；原始Markdown批准快照仅本机保护目录，不进普通ZIP；恢复后缺快照禁撤销，不伪装异机字节恢复成功。
+STT回归包含三独立识别locale、模型可用/显式下载/麦克风权限、UTF-16范围、取消/过期编辑、final-only提交及单次回调，不新增伪语音聊天。通知回归含FSRS/校准命名空间隔离、权限、点击路由、不因新Tab新增催促策略。
+最终构建须同一SHA：全部Portable Core/原生XCTest、实际UI测试或明确运行限制、Debug/Release Simulator、ARM64、无XCTest污染的IPA、ZIP完整性及SHA-256。物理iPhone13/真实HTTP/Keychain/Files/iCloud各自留证据；正式Vault一直锁定，原版图标/签名限制如实保留。文档提交不产生新的QA安装包。
