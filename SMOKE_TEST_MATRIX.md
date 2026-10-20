@@ -151,3 +151,7 @@ Record final Git SHA, Actions run URL, each job conclusion, **total native XCTes
 - `testHistoricalDuplexPreviewKeepsOldDiffAfterLaterNoteDraft`：新草稿不影响历史 Chat 收据中的旧差异。
 
 笔记详情、Chat、双目标编辑器共用显式草稿版本选择；开始下一版之前重新回读当前源文并保存旧批准快照。均为临时 fixture 自动化测试，不能冒充 iPhone13/File Provider/生产 Vault 验收；正式写入门禁保持 false。
+
+## 2026-10-20 · P0 多处局部 Markdown 差异预览（需精确 SHA 测试）
+
+Portable Swift `distantSmallEditsPreviewOnlyActualChangedHunks` 验证在 1200 行笔记相距千行的两处必要修改，仅显示实际四条 +/- 变更，不将中间未变化的整千行误报为修改或导致预览上限阻塞；`separateInsertAndRemovalRemainVisible` 验证分离的插入和删除都可见。使用标准库有界 diff（中段合计不超过 4000 行）；超大输入保留保守完整性保护，不能伪称只看到全部变化后批准。仍须原生阅读交互和 iPhone13 验收；生产 Vault 写入门禁不变。

@@ -1103,7 +1103,7 @@ final class ImVaultDocumentController: UIViewController {
     }
 }
 
-/
+/// Shared safe editor entry for note/Chat/duplex flows.
 @MainActor
 enum ImVaultDraftEntry {
     /// One entry for Chat, note detail and duplex proposal. A second revision

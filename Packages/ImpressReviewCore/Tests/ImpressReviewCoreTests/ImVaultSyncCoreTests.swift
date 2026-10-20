@@ -141,6 +141,39 @@ struct ImVaultSyncCoreTests {
         #expect(short.text.contains("禁止提交"))
         #expect(ImVaultDiff.summary(base: a,edited: b,maximumLines: 4000).complete)
     }
+
+    @Test func distantSmallEditsPreviewOnlyActualChangedHunks() {
+        let original = (0..<1_200).map { "Line \($0)" }
+        var modified = original
+        modified[18] = "Improved early concept"
+        modified[1_090] = "Improved late concept"
+        let result = ImVaultDiff.summary(
+            base: original.joined(separator: "\n"),
+            edited: modified.joined(separator: "\n"), maximumLines: 8)
+        #expect(result.complete)
+        #expect(result.text.contains("第 19 行"))
+        #expect(result.text.contains("第 1091 行"))
+        #expect(result.text.contains("- Line 18"))
+        #expect(result.text.contains("+ Improved early concept"))
+        #expect(result.text.contains("- Line 1090"))
+        #expect(result.text.contains("+ Improved late concept"))
+        #expect(!result.text.contains("Line 500"))
+        #expect(!result.text.contains("禁止提交"))
+    }
+
+    @Test func separateInsertAndRemovalRemainVisible() {
+        let before = (0..<300).map { "Line \($0)" }
+        var after = before
+        after.insert("New assumption", at: 12)
+        after.remove(at: 250)
+        let diff = ImVaultDiff.summary(base: before.joined(separator: "\n"),
+            edited: after.joined(separator: "\n"), maximumLines: 6)
+        #expect(diff.complete)
+        #expect(diff.text.contains("+ New assumption"))
+        #expect(diff.text.contains("- Line 249"))
+        #expect(!diff.text.contains("Line 120"))
+    }
+
     @Test func utf8BOMAndCRLFRemainUntouchedWhenUITextViewNormalizesNewlines() throws {
         let identity = try ImVaultFileIdentity(vaultID: "qa",
             relativePath: "Study/CRLF.md")

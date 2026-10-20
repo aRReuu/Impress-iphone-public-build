@@ -177,16 +177,68 @@ public enum ImVaultDiff {
             suffix += 1
         }
         let oldEnd = before.count - suffix, newEnd = after.count - suffix
-        let removed = prefix < oldEnd ? Array(before[prefix..<oldEnd]).map { "- " + $0 } : []
-        let added = prefix < newEnd ? Array(after[prefix..<newEnd]).map { "+ " + $0 } : []
-        let all = removed + added
-        guard !all.isEmpty else { return ("没有变更", true) }
+        let middleBefore = Array(before[prefix..<oldEnd])
+        let middleAfter = Array(after[prefix..<newEnd])
+        guard middleBefore != middleAfter else { return ("没有变更", true) }
         let cap = max(1, maximumLines)
-        let shown = all.prefix(cap)
+
+        // An ordinary first/last-line trim incorrectly marks ALL unchanged
+        // middle paragraphs as modified when two distant sentences change.
+        // Use the Swift standard-library diff for bounded middle regions to
+        // show only real changed hunks. Very large/adversarial inputs retain
+        // the conservative (possibly incomplete) legacy preview; never omit
+        // a modification and then enable the write button.
+        if middleBefore.count + middleAfter.count <= 4_000 {
+            let changes = middleAfter.difference(from: middleBefore)
+            var removedIndices = Set<Int>()
+            var insertedIndices = Set<Int>()
+            for change in changes {
+                switch change {
+                case .remove(let index, _, _): removedIndices.insert(index)
+                case .insert(let index, _, _): insertedIndices.insert(index)
+                }
+            }
+            let oldMatches = middleBefore.indices.filter { !removedIndices.contains($0) }
+            let newMatches = middleAfter.indices.filter { !insertedIndices.contains($0) }
+            var oldCursor = 0, newCursor = 0
+            var emitted = 0, changed = 0
+            var sections: [String] = []
+
+            func appendHunk(oldEnd: Int, newEnd: Int) {
+                guard oldEnd > oldCursor || newEnd > newCursor else { return }
+                let minus = Array(middleBefore[oldCursor..<oldEnd]).map { "- " + $0 }
+                let plus = Array(middleAfter[newCursor..<newEnd]).map { "+ " + $0 }
+                let modified = minus + plus
+                changed += modified.count
+                var display = ["变更区域从第 \(prefix + oldCursor + 1) 行开始。删除 \(minus.count) 行，新增 \(plus.count) 行。"]
+                let remaining = max(0, cap - emitted)
+                if remaining > 0 {
+                    display.append(contentsOf: modified.prefix(remaining))
+                    emitted += min(modified.count, remaining)
+                }
+                sections.append(display.joined(separator: "\n"))
+            }
+
+            for (oldMatch, newMatch) in zip(oldMatches, newMatches) {
+                appendHunk(oldEnd: oldMatch, newEnd: newMatch)
+                oldCursor = oldMatch + 1
+                newCursor = newMatch + 1
+            }
+            appendHunk(oldEnd: middleBefore.count, newEnd: middleAfter.count)
+            if changed == 0 { return ("没有变更", true) }
+            let complete = changed <= cap
+            return (sections.joined(separator: "\n\n") +
+                (complete ? "" : "\n⚠ 变更预览已截断，禁止提交"), complete)
+        }
+
+        // CPU-bounded conservative fallback for unusually large diffs.
+        let removed = middleBefore.map { "- " + $0 }
+        let added = middleAfter.map { "+ " + $0 }
+        let all = removed + added
         let header = "变更区域从第 \(prefix + 1) 行开始。删除 \(removed.count) 行，新增 \(added.count) 行。\n"
         let complete = all.count <= cap
-        return (header + shown.joined(separator: "\n") +
-                (complete ? "" : "\n⚠ 变更预览已截断，禁止提交"), complete)
+        return (header + all.prefix(cap).joined(separator: "\n") +
+            (complete ? "" : "\n⚠ 变更预览已截断，禁止提交"), complete)
     }
 }
 
