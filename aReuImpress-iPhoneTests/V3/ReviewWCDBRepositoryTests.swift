@@ -284,7 +284,6 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
     }
 
     @MainActor
-    @MainActor
     func testNativeChatUIListsAndPreservesMultipleSessions() async throws {
         let repo = try ReviewWCDBRepository(
             databasePath: temporaryPath(), calculator: FSRS6ReviewCalculator())
@@ -343,6 +342,7 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(input.text, "")
     }
 
+    @MainActor
     func testNativeChatRestoresStableCardTranscriptAndUnsentDraft() async throws {
         let repository = try ReviewWCDBRepository(
             databasePath: temporaryPath(), calculator: FSRS6ReviewCalculator())

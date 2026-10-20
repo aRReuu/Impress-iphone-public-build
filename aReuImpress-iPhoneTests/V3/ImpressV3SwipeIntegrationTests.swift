@@ -32,6 +32,21 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testContentHistoryIsEditorOnly() throws {
+        let editor = ImpressV3CardComposerViewController(editingCardID: UUID())
+        editor.onOpenContentHistory = {}
+        editor.loadViewIfNeeded()
+        XCTAssertTrue(editor.navigationItem.rightBarButtonItems?.contains(where: {
+            $0.accessibilityIdentifier == "impress.composer.content-history"
+        }) == true)
+        let review = ImpressV3ReviewViewController()
+        review.loadViewIfNeeded()
+        XCTAssertFalse(review.view.subviews.compactMap { $0 as? UIButton }.contains(where: {
+            $0.accessibilityIdentifier == "impress.review.content-history"
+        }))
+    }
+
     private func makeRepository() throws -> ReviewWCDBRepository {
         let path = FileManager.default.temporaryDirectory
             .appendingPathComponent("V3Swipe-" + UUID().uuidString, isDirectory: true)

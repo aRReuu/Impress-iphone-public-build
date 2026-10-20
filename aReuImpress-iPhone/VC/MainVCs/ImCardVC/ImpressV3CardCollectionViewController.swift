@@ -319,6 +319,19 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
                     self.onMutation?()
                     self.reloadCards()
                 }
+                editor.onOpenContentHistory = { [weak self, weak editor] in
+                    editor?.dismiss(animated: true) {
+                        guard let self else { return }
+                        let page = ImpressV3CardVersionHistoryViewController(
+                            cardID: item.cardID, expectedReviewRevision: item.revision,
+                            repository: self.repository)
+                        page.onRestored = { [weak self] _ in
+                            self?.onMutation?()
+                            self?.reloadCards()
+                        }
+                        self.navigationController?.pushViewController(page, animated: true)
+                    }
+                }
                 showComposer(editor)
             } catch { self.showError(error) }
         }

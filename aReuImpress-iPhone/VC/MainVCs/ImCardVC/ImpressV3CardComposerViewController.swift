@@ -107,6 +107,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
     private var originalDraft: ImpressV3CardDraft
     private var currentType: CardType
     private var saveItem: UIBarButtonItem?
+    var onOpenContentHistory: (() -> Void)?
     private let editingCardID: UUID?
 
     init(draft: ImpressV3CardDraft = ImpressV3CardDraft(),
@@ -122,6 +123,11 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
 
     required init?(coder: NSCoder) { fatalError("init(draft:) required") }
 
+    @objc private func openCardContentHistory() {
+        guard !saving else { return }
+        onOpenContentHistory?()
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         title = editingCardID == nil ? V3L("新增卡片") : V3L("编辑卡片")
@@ -133,6 +139,13 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
                                    target: self, action: #selector(saveCard))
         navigationItem.rightBarButtonItem = save
         saveItem = save
+        if editingCardID != nil && onOpenContentHistory != nil {
+            let history = UIBarButtonItem(image: UIImage(systemName: "clock.arrow.circlepath"),
+                style: .plain, target: self, action: #selector(openCardContentHistory))
+            history.accessibilityLabel = V3L("卡片修改历史")
+            history.accessibilityIdentifier = "impress.composer.content-history"
+            navigationItem.rightBarButtonItems = [save, history]
+        }
 
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.keyboardDismissMode = .interactive

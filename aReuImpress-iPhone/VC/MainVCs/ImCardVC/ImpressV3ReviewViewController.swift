@@ -27,7 +27,6 @@ final class ImpressV3ReviewViewController: UIViewController {
     private let cardStack = SwipeCardStack()
     private let revealButton = UIButton(type: .system)
     private let answerTools = UIStackView()
-    private let contentHistoryAction = UIButton(type: .system)
     private let statusLabel = UILabel()
     private let completionLabel = UILabel()
     private let repeatButton = UIButton(type: .system)
@@ -108,7 +107,6 @@ final class ImpressV3ReviewViewController: UIViewController {
         cardStack.translatesAutoresizingMaskIntoConstraints = false
         revealButton.translatesAutoresizingMaskIntoConstraints = false
         answerTools.translatesAutoresizingMaskIntoConstraints = false
-        contentHistoryAction.translatesAutoresizingMaskIntoConstraints = false
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
         answerTools.axis = .horizontal
         answerTools.distribution = .fillEqually
@@ -137,12 +135,6 @@ final class ImpressV3ReviewViewController: UIViewController {
         // Both tertiary actions are optional; they do not submit FSRS ratings.
         answerTools.addArrangedSubview(reflect)
         answerTools.addArrangedSubview(discuss)
-        ImpressV3Appearance.styleQuietButton(contentHistoryAction,
-            title: V3L("查看历史版本"))
-        contentHistoryAction.accessibilityIdentifier = "impress.review.content-history"
-        contentHistoryAction.addTarget(self, action: #selector(openContentHistory),
-                                       for: .touchUpInside)
-        contentHistoryAction.isHidden = true
         revealButton.setTitle(V3L("查看答案"), for: .normal)
         revealButton.titleLabel?.font = ImpressV3Appearance.Typography.heading
         revealButton.titleLabel?.adjustsFontForContentSizeCategory = true
@@ -182,7 +174,6 @@ final class ImpressV3ReviewViewController: UIViewController {
         view.addSubview(cardStack)
         view.addSubview(revealButton)
         view.addSubview(answerTools)
-        view.addSubview(contentHistoryAction)
         view.addSubview(busyIndicator)
         view.addSubview(completionLabel)
         view.addSubview(repeatButton)
@@ -193,10 +184,7 @@ final class ImpressV3ReviewViewController: UIViewController {
             cardStack.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 8),
             cardStack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
             cardStack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-            cardStack.bottomAnchor.constraint(equalTo: contentHistoryAction.topAnchor, constant: -4),
-            contentHistoryAction.centerXAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerXAnchor),
-            contentHistoryAction.bottomAnchor.constraint(equalTo: revealButton.topAnchor, constant: -4),
-            contentHistoryAction.heightAnchor.constraint(equalToConstant: 28),
+            cardStack.bottomAnchor.constraint(equalTo: revealButton.topAnchor, constant: -8),
             revealButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: ImpressV3Appearance.Metrics.screenInset),
             revealButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -ImpressV3Appearance.Metrics.screenInset),
             revealButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
@@ -344,7 +332,6 @@ final class ImpressV3ReviewViewController: UIViewController {
             repeatButton.isHidden = false
             revealButton.isHidden = true
             answerTools.isHidden = true
-            contentHistoryAction.isHidden = true
             completionLabel.text = items.isEmpty ? V3L("暂无到期卡片，可以稍后再来。") :
                 "本轮复习完成：\(items.count) 张"
             statusLabel.text = V3L("本轮完成")
@@ -356,7 +343,6 @@ final class ImpressV3ReviewViewController: UIViewController {
         statusLabel.text = "第 \(currentIndex + 1) / \(items.count) 张 · 先回忆，再揭示答案"
         revealButton.isHidden = false
         answerTools.isHidden = true
-        contentHistoryAction.isHidden = true
         revealButton.isEnabled = true
         cardStack.isUserInteractionEnabled = true
         setRatingGesturesEnabled(false)
@@ -386,7 +372,6 @@ final class ImpressV3ReviewViewController: UIViewController {
                 self.setRatingGesturesEnabled(revealed)
                 self.revealButton.isHidden = revealed
                 self.answerTools.isHidden = !revealed
-                self.contentHistoryAction.isHidden = !revealed
                 self.statusLabel.text = revealed
                     ? V3L("← 困难   ↑ 良好   → 容易   ↓ 重来")
                     : V3L("先回忆，再查看答案")
@@ -453,6 +438,11 @@ final class ImpressV3ReviewViewController: UIViewController {
                         try await self.refreshEditedCard(newValue, reviewItem: item)
                     } // No-op saves retain answer reveal and the live FSRS phase.
                 }
+                editor.onOpenContentHistory = { [weak self, weak editor] in
+                    editor?.dismiss(animated: true) {
+                        self?.openContentHistory()
+                    }
+                }
                 let navigation = ImNavigationViewController(rootViewController: editor)
                 navigation.modalPresentationStyle = .pageSheet
                 navigation.sheetPresentationController?.detents = [.large()]
@@ -481,7 +471,6 @@ final class ImpressV3ReviewViewController: UIViewController {
         cardStack.topCard?.content = refreshed.content
         setRatingGesturesEnabled(false)
         answerTools.isHidden = true
-        contentHistoryAction.isHidden = true
         revealButton.isHidden = false
         statusLabel.text = V3L("先回忆，再查看答案")
     }
