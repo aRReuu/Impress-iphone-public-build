@@ -650,6 +650,8 @@ final class ImVaultDocumentController: UIViewController {
     private var latestReadSerial = 0
     private let readingView = UITextView()
     private let richView = MarkdownView()
+    private let canvasHost = UIView()
+    private var canvasGraph: ImpressCanvasNativeView?
     private let pathLabel = UILabel()
     private var preparedMarkdown: String?
     private var isSourceMode = false
@@ -711,6 +713,7 @@ final class ImVaultDocumentController: UIViewController {
     }
 
     private func prepareLivePreview(for current: ImVaultRawDocument) {
+        guard current.identity.documentFormat == .markdown else { return }
         ImVaultReadSync.shared.prepareAuthorizedPreview(current) { [weak self] result in
             guard let self, self.document.digest == current.digest,
                   self.document.identity == current.identity else { return }
@@ -740,6 +743,9 @@ final class ImVaultDocumentController: UIViewController {
         pathLabel.translatesAutoresizingMaskIntoConstraints = false
         readingView.translatesAutoresizingMaskIntoConstraints = false
         richView.translatesAutoresizingMaskIntoConstraints = false
+        canvasHost.translatesAutoresizingMaskIntoConstraints = false
+        canvasHost.isHidden = true
+        canvasHost.accessibilityIdentifier = "impress.canvas.host"
         richView.isScrollEnabled = true
         // Do not load external Markdown images or navigate to arbitrary
         // web URLs without an explicit user request. Obsidian Vault is private.
@@ -758,6 +764,7 @@ final class ImVaultDocumentController: UIViewController {
         view.addSubview(pathLabel)
         view.addSubview(readingView)
         view.addSubview(richView)
+        view.addSubview(canvasHost)
         let safe = view.safeAreaLayoutGuide
         let inset = ImpressV3Appearance.Metrics.screenInset
         let top = ImpressV3Appearance.Metrics.compactInset
@@ -774,7 +781,11 @@ final class ImVaultDocumentController: UIViewController {
             richView.topAnchor.constraint(equalTo: readingView.topAnchor),
             richView.bottomAnchor.constraint(equalTo: readingView.bottomAnchor),
             richView.leadingAnchor.constraint(equalTo: readingView.leadingAnchor),
-            richView.trailingAnchor.constraint(equalTo: readingView.trailingAnchor)
+            richView.trailingAnchor.constraint(equalTo: readingView.trailingAnchor),
+            canvasHost.topAnchor.constraint(equalTo: readingView.topAnchor),
+            canvasHost.bottomAnchor.constraint(equalTo: readingView.bottomAnchor),
+            canvasHost.leadingAnchor.constraint(equalTo: readingView.leadingAnchor),
+            canvasHost.trailingAnchor.constraint(equalTo: readingView.trailingAnchor)
         ])
         let draft = UIBarButtonItem(
             image: UIImage(systemName: "square.and.pencil"), style: .plain,
@@ -822,7 +833,24 @@ final class ImVaultDocumentController: UIViewController {
                     [weak self] _ in self?.checkLinkedCardChanges()
                 }
         ])
-        if sourceSectionDigest != nil {
+        if document.identity.documentFormat != .markdown {
+            // Readable complex files have no generic Markdown edit authority.
+            var actions: [UIMenuElement] = [
+                UIAction(title: V3L("查看原始文件内容"),
+                    image: UIImage(systemName: "chevron.left.forwardslash.chevron.right")) {
+                        [weak self] _ in self?.toggleSource()
+                    }
+            ]
+            if document.identity.documentFormat == .jsonCanvas {
+                actions.append(UIAction(title: V3L("所选画布节点预览并加入 Chat"),
+                    image: UIImage(systemName: "square.stack")) {
+                        [weak self] _ in self?.reviewSelectedCanvas()
+                })
+            }
+            more.menu = UIMenu(children: actions)
+        }
+        if sourceSectionDigest != nil &&
+           document.identity.documentFormat == .markdown {
             // Only a single verified section anchor may be offered. When
             // the section has moved or changed, the action fails closed
             // instead of guessing a similarly titled paragraph.
@@ -840,13 +868,49 @@ final class ImVaultDocumentController: UIViewController {
     }
 
     private func renderBody() {
-        readingView.isHidden = !isSourceMode
-        richView.isHidden = isSourceMode
+        canvasHost.isHidden = true
         if isSourceMode {
+            readingView.isHidden = false
+            richView.isHidden = true
             readingView.text = document.markdown
             readingView.font = ImpressV3Appearance.Typography.code
             readingView.adjustsFontForContentSizeCategory = true
+        } else if document.identity.documentFormat == .jsonCanvas {
+            richView.isHidden = true
+            readingView.isHidden = true
+            canvasHost.isHidden = false
+            do {
+                let model = try ImpressCanvasDocument.parse(document.sourceBytes)
+                let graph = try ImpressCanvasNativeView(source: model)
+                canvasHost.subviews.forEach { $0.removeFromSuperview() }
+                graph.translatesAutoresizingMaskIntoConstraints = false
+                canvasHost.addSubview(graph)
+                NSLayoutConstraint.activate([
+                    graph.topAnchor.constraint(equalTo: canvasHost.topAnchor),
+                    graph.bottomAnchor.constraint(equalTo: canvasHost.bottomAnchor),
+                    graph.leadingAnchor.constraint(equalTo: canvasHost.leadingAnchor),
+                    graph.trailingAnchor.constraint(equalTo: canvasHost.trailingAnchor)
+                ])
+                canvasGraph = graph
+            } catch {
+                canvasGraph = nil
+                canvasHost.isHidden = true
+                readingView.isHidden = false
+                readingView.isEditable = false
+                readingView.text = V3L("Canvas 绘制范围过大或结构不合法；未修改源文件。请查看源码以核查实际内容。") +
+                    "\n\n" + error.localizedDescription
+            }
+        } else if document.identity.documentFormat != .markdown {
+            canvasGraph = nil
+            richView.isHidden = true
+            readingView.isHidden = false
+            readingView.isEditable = false
+            readingView.font = ImpressV3Appearance.Typography.code
+            readingView.text = V3L("此复合文件的图形阅读器尚未完成，不会执行未知插件、模板或脚本。以下是只读原始数据：") +
+                "\n\n" + document.markdown
         } else {
+            readingView.isHidden = true
+            richView.isHidden = false
             // Existing bundled MarkdownView/markdown-it renders tables,
             // fenced code, lists and headings without exposing a mutable text
             // buffer. Blocking external images avoids silent HTTP requests
@@ -875,6 +939,133 @@ final class ImVaultDocumentController: UIViewController {
     @objc private func toggleSource() {
         isSourceMode.toggle()
         renderBody()
+    }
+
+    /// A selection from JSON Canvas requires live Vault re-read, exact node
+    /// IDs and a complete material preview. It never reads unselected files.
+    @objc private func reviewSelectedCanvas() {
+        guard document.identity.documentFormat == .jsonCanvas,
+              let chosenIDs = canvasGraph?.selectedIDs, !chosenIDs.isEmpty else {
+            let alert = UIAlertController(title: V3L("请先选择画布节点"),
+                message: V3L("轻点要讨论的节点；选择本身不发送数据。"),
+                preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+            present(alert, animated: true)
+            return
+        }
+        let originalDigest = document.digest
+        withVerifiedLiveDocument { [weak self] latest in
+            guard let self else { return }
+            guard latest.digest == originalDigest,
+                  latest.identity.documentFormat == .jsonCanvas else {
+                self.showVaultError(V3L("Canvas 来源已变化，请重新选材"),
+                    error: ImVaultSyncFailure.conflict)
+                return
+            }
+            do {
+                let model = try ImpressCanvasDocument.parse(latest.sourceBytes)
+                let includesGroup = model.nodes.contains {
+                    chosenIDs.contains($0.id) && $0.type == "group"
+                }
+                if includesGroup {
+                    let ask = UIAlertController(title: V3L("确认画布范围"),
+                        message: V3L("分组可能包含其他节点。仅所选节点与包含组内节点是不同的发送范围，请明确选择。"),
+                        preferredStyle: .actionSheet)
+                    ask.addAction(UIAlertAction(title: V3L("仅选择的节点"),
+                        style: .default) { [weak self] _ in
+                        self?.previewCanvasSelection(latest, model: model,
+                            ids: chosenIDs, expandGroups: false)
+                    })
+                    ask.addAction(UIAlertAction(title: V3L("同时包含分组内的节点"),
+                        style: .default) { [weak self] _ in
+                        self?.previewCanvasSelection(latest, model: model,
+                            ids: chosenIDs, expandGroups: true)
+                    })
+                    ask.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+                    ask.popoverPresentationController?.sourceView = self.view
+                    ask.popoverPresentationController?.sourceRect = CGRect(
+                        x: self.view.bounds.midX, y: self.view.bounds.midY,
+                        width: 1, height: 1)
+                    self.present(ask, animated: true)
+                } else {
+                    self.previewCanvasSelection(latest, model: model,
+                        ids: chosenIDs, expandGroups: false)
+                }
+            } catch {
+                self.showVaultError(V3L("无法核实画布节点"), error: error)
+            }
+        }
+    }
+
+    private func previewCanvasSelection(_ live: ImVaultRawDocument,
+                                        model: ImpressCanvasDocument,
+                                        ids: Set<String>, expandGroups: Bool) {
+        do {
+            let selection = try model.selection(nodeIDs: ids,
+                includeGroupMembers: expandGroups)
+            guard selection.nodes.allSatisfy(\.isKnownType) else {
+                throw ImpressCanvasError.invalidDocument
+            }
+            let json = try selection.serializedJSON()
+            let targetKey = "note:" + ImVaultDigest.sha256(
+                Data((live.identity.vaultID + "\n" +
+                      live.identity.relativePath).utf8))
+            let reference = WCDBV3ChatContextReference(
+                stableIdentity: targetKey, sourceRevision: live.digest,
+                excerpt: json, sourceFormat: "json-canvas",
+                selectedCanvasNodeIDs: selection.nodeIDs.sorted())
+            let page = UIViewController()
+            page.title = V3L("画布材料完整预览")
+            page.view.backgroundColor = ImpressV3Appearance.page
+            let preview = UITextView()
+            preview.translatesAutoresizingMaskIntoConstraints = false
+            preview.isEditable = false
+            preview.isSelectable = true
+            preview.isScrollEnabled = true
+            preview.font = ImpressV3Appearance.Typography.code
+            preview.adjustsFontForContentSizeCategory = true
+            preview.backgroundColor = ImpressV3Appearance.surface
+            preview.textColor = ImpressV3Appearance.primaryText
+            preview.text = V3L("真实 Vault：") + live.identity.vaultID +
+                "\n" + live.identity.relativePath +
+                "\nSHA-256: " + live.digest +
+                "\n" + V3L("选择节点数：") + String(selection.nodes.count) +
+                "\n\n" + json
+            preview.accessibilityIdentifier = "impress.canvas.material-preview"
+            page.view.addSubview(preview)
+            NSLayoutConstraint.activate([
+                preview.topAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.topAnchor),
+                preview.bottomAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.bottomAnchor),
+                preview.leadingAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.leadingAnchor),
+                preview.trailingAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.trailingAnchor)
+            ])
+            page.navigationItem.rightBarButtonItem = UIBarButtonItem(
+                primaryAction: UIAction(title: V3L("确认范围并加入 Chat"),
+                    image: UIImage(systemName: "bubble.left")) { [weak self] _ in
+                        guard let self,
+                              ImVaultReadOnlyProbe.shared.authorizedVaultID ==
+                                  live.identity.vaultID else {
+                            return
+                        }
+                        do {
+                            let repo = try ImpressV3ReviewEnvironment.repository()
+                            let chat = ImpressAINativeChatViewController(
+                                question: V3L("来源画布：") + live.identity.relativePath,
+                                answer: nil, repository: repo,
+                                sourceKey: targetKey, sourceVersion: live.digest,
+                                noteIdentity: live.identity, initialMaterials: [reference])
+                            self.navigationController?.pushViewController(
+                                chat, animated: true)
+                        } catch {
+                            self.showVaultError(V3L("无法保存所选画布材料"), error: error)
+                        }
+                })
+            page.navigationItem.rightBarButtonItem?.accessibilityIdentifier =
+                "impress.canvas.confirm-material"
+            navigationController?.pushViewController(page, animated: true)
+        } catch {
+            showVaultError(V3L("无法使用选定画布范围"), error: error)
+        }
     }
 
     private func openVerifiedSourceSection() {
@@ -972,6 +1163,11 @@ final class ImVaultDocumentController: UIViewController {
     }
 
     @objc private func generateAIQuestions() {
+        guard document.identity.documentFormat == .markdown else {
+            showVaultError(V3L("不支持从此复合格式直接生成问题"),
+                error: ImVaultSyncFailure.unsupportedComplexWrite)
+            return
+        }
         withVerifiedLiveDocument { [weak self] latest in
             self?.navigationController?.pushViewController(
                 ImpressAIQuestionGenerationViewController(document: latest), animated: true)
@@ -979,6 +1175,10 @@ final class ImVaultDocumentController: UIViewController {
     }
 
     @objc private func openNativeNoteDiscussion() {
+        if document.identity.documentFormat == .jsonCanvas {
+            reviewSelectedCanvas()
+            return
+        }
         withVerifiedLiveDocument { [weak self] latest in
             guard let self else { return }
             do {
@@ -1086,6 +1286,11 @@ final class ImVaultDocumentController: UIViewController {
     }
 
     @objc private func editDraft() {
+        guard document.identity.documentFormat.allowsGenericMarkdownDraft else {
+            showVaultError(V3L("此格式仅允许阅读和选材"),
+                error: ImVaultSyncFailure.unsupportedComplexWrite)
+            return
+        }
         withVerifiedLiveDocument { [weak self] latest in
             guard let self else { return }
             do {
@@ -1754,5 +1959,201 @@ final class ImVaultDiffController: UIViewController {
             }
         })
         present(alert, animated: true)
+    }
+}
+
+
+// MARK: - V1.1 read-only JSON Canvas native spatial visualization
+
+/// One spatial projection of the original JSON Canvas, with no JavaScript,
+/// network, plugin execution, automatic relayout or file write capability.
+/// Relative node positions, dimensions, group containment, edges and source
+/// order are preserved. A global offset only allows negative coordinates to
+/// appear within a UIKit scrollable view.
+@MainActor
+final class ImpressCanvasNativeView: UIScrollView, UIScrollViewDelegate {
+    let source: ImpressCanvasDocument
+    private let artboard = UIView()
+    private var buttons: [String: UIButton] = [:]
+    private var originalNodeColors: [String: UIColor] = [:]
+    private(set) var selectedIDs = Set<String>()
+    var onSelectionChanged: ((Set<String>) -> Void)?
+
+    init(source: ImpressCanvasDocument) throws {
+        self.source = source
+        super.init(frame: .zero)
+        backgroundColor = .systemGroupedBackground
+        accessibilityIdentifier = "impress.canvas.native-viewport"
+        delegate = self
+        minimumZoomScale = 0.25
+        maximumZoomScale = 2.5
+        bouncesZoom = true
+        alwaysBounceHorizontal = true
+        alwaysBounceVertical = true
+        showsHorizontalScrollIndicator = true
+        showsVerticalScrollIndicator = true
+
+        let all = source.nodes
+        let minX = all.map { Double($0.x) }.min() ?? 0
+        let minY = all.map { Double($0.y) }.min() ?? 0
+        let maxX = all.map { Double($0.x) + Double($0.width) }.max() ?? 320
+        let maxY = all.map { Double($0.y) + Double($0.height) }.max() ?? 380
+        let width = maxX - minX + 96
+        let height = maxY - minY + 96
+        // The file remains readable in source mode when an enormous canvas
+        // would exhaust UIKit memory. No silent clipping or downsampling.
+        guard width.isFinite, height.isFinite,
+              width <= 12_000, height <= 12_000 else {
+            throw ImpressCanvasError.tooLarge
+        }
+        artboard.frame = CGRect(x: 0, y: 0,
+            width: CGFloat(max(320, width)), height: CGFloat(max(400, height)))
+        artboard.backgroundColor = .systemBackground
+        artboard.isAccessibilityElement = false
+        addSubview(artboard)
+        contentSize = artboard.bounds.size
+
+        var frames: [String: CGRect] = [:]
+        for node in all {
+            frames[node.id] = CGRect(
+                x: CGFloat(Double(node.x) - minX + 48),
+                y: CGFloat(Double(node.y) - minY + 48),
+                width: CGFloat(node.width), height: CGFloat(node.height))
+        }
+        for edge in source.edges {
+            guard let from = frames[edge.fromNode], let to = frames[edge.toNode]
+            else { continue }
+            let start = Self.anchor(from, side: edge.fromSide ?? "right")
+            let finish = Self.anchor(to, side: edge.toSide ?? "left")
+            let path = UIBezierPath()
+            path.move(to: start)
+            let delta = max(20, abs(finish.x - start.x) * 0.38)
+            path.addCurve(to: finish,
+                controlPoint1: CGPoint(x: start.x + delta, y: start.y),
+                controlPoint2: CGPoint(x: finish.x - delta, y: finish.y))
+            if edge.toEnd == nil || edge.toEnd == "arrow" {
+                let angle = atan2(finish.y - start.y, finish.x - start.x)
+                let size: CGFloat = 9
+                path.move(to: CGPoint(x: finish.x - cos(angle - .pi / 6) * size,
+                                      y: finish.y - sin(angle - .pi / 6) * size))
+                path.addLine(to: finish)
+                path.addLine(to: CGPoint(x: finish.x - cos(angle + .pi / 6) * size,
+                                        y: finish.y - sin(angle + .pi / 6) * size))
+            }
+            let line = CAShapeLayer()
+            line.path = path.cgPath
+            line.strokeColor = (Self.canvasColor(edge.color) ?? UIColor.secondaryLabel).cgColor
+            line.fillColor = UIColor.clear.cgColor
+            line.lineWidth = 1.6
+            artboard.layer.addSublayer(line)
+            if let label = edge.label, !label.isEmpty {
+                let description = UILabel(frame: CGRect(
+                    x: (start.x + finish.x) / 2 - 65,
+                    y: (start.y + finish.y) / 2 - 10,
+                    width: 130, height: 24))
+                description.text = label
+                description.font = .preferredFont(forTextStyle: .caption2)
+                description.adjustsFontForContentSizeCategory = true
+                description.textColor = .secondaryLabel
+                description.textAlignment = .center
+                description.backgroundColor = .systemBackground
+                description.isUserInteractionEnabled = false
+                artboard.addSubview(description)
+            }
+        }
+        for node in all {
+            guard let frame = frames[node.id] else { continue }
+            let button = UIButton(type: .system)
+            button.frame = frame
+            button.backgroundColor = node.type == "group"
+                ? UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.55)
+                : UIColor.secondarySystemGroupedBackground
+            button.layer.cornerRadius = 10
+            button.layer.borderWidth = node.type == "group" ? 2 : 1
+            let originalColor = Self.canvasColor(node.color) ?? UIColor.separator
+            originalNodeColors[node.id] = originalColor
+            button.layer.borderColor = originalColor.cgColor
+            button.clipsToBounds = true
+            button.contentEdgeInsets = UIEdgeInsets(top: 9, left: 9, bottom: 9, right: 9)
+            button.titleLabel?.font = .preferredFont(forTextStyle: .body)
+            button.titleLabel?.adjustsFontForContentSizeCategory = true
+            button.titleLabel?.numberOfLines = 0
+            button.titleLabel?.lineBreakMode = .byTruncatingTail
+            button.contentHorizontalAlignment = .leading
+            button.contentVerticalAlignment = .top
+            let display = Self.displayText(for: node)
+            if node.type == "text",
+               let richText = MarkdownKitRenderer().parseMarkdown(display) {
+                button.setAttributedTitle(richText, for: .normal)
+            } else {
+                button.setTitle(display, for: .normal)
+                button.setTitleColor(.label, for: .normal)
+            }
+            button.accessibilityLabel = Self.displayText(for: node)
+            button.accessibilityIdentifier = "impress.canvas.node." + node.id
+            button.accessibilityHint = V3L("轻点选择或取消此节点；只有批准后才会加入 Chat")
+            button.addAction(UIAction { [weak self] _ in
+                self?.toggleSelection(node.id)
+            }, for: .touchUpInside)
+            artboard.addSubview(button)
+            buttons[node.id] = button
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(source:) unsupported") }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? { artboard }
+
+    private func toggleSelection(_ id: String) {
+        if !selectedIDs.insert(id).inserted { selectedIDs.remove(id) }
+        for (key, button) in buttons {
+            let selected = selectedIDs.contains(key)
+            button.layer.borderColor = (selected
+                ? ImpressV3Appearance.accent : (originalNodeColors[key] ?? UIColor.separator)).cgColor
+            button.layer.borderWidth = selected ? 3 : 1
+            button.accessibilityValue = selected ? V3L("已选择") : V3L("未选择")
+        }
+        onSelectionChanged?(selectedIDs)
+    }
+
+    /// Preset hues are intentionally app-defined in the JSON Canvas standard.
+    /// Hex colors are honored when supplied; no remote style sheets are used.
+    private static func canvasColor(_ token: String?) -> UIColor? {
+        guard let token else { return nil }
+        switch token {
+        case "1": return .systemRed
+        case "2": return .systemOrange
+        case "3": return .systemYellow
+        case "4": return .systemGreen
+        case "5": return .systemTeal
+        case "6": return .systemPurple
+        default:
+            guard token.first == "#", token.count == 7,
+                  let value = Int(token.dropFirst(), radix: 16) else { return nil }
+            return UIColor(red: CGFloat((value >> 16) & 255) / 255,
+                           green: CGFloat((value >> 8) & 255) / 255,
+                           blue: CGFloat(value & 255) / 255, alpha: 1)
+        }
+    }
+
+    private static func anchor(_ rect: CGRect, side: String) -> CGPoint {
+        switch side {
+        case "left": return CGPoint(x: rect.minX, y: rect.midY)
+        case "top": return CGPoint(x: rect.midX, y: rect.minY)
+        case "bottom": return CGPoint(x: rect.midX, y: rect.maxY)
+        default: return CGPoint(x: rect.maxX, y: rect.midY)
+        }
+    }
+
+    private static func displayText(for node: ImpressCanvasNode) -> String {
+        switch node.type {
+        case "text": return node.text ?? V3L("空白文本")
+        case "file":
+            return (node.file ?? V3L("未找到文件路径")) +
+                (node.subpath ?? "")
+        case "link": return node.url ?? V3L("空白链接")
+        case "group": return node.label ?? V3L("分组")
+        default: return V3L("不支持的插件节点 · ") + node.type
+        }
     }
 }

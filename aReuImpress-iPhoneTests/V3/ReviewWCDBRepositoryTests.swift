@@ -1303,6 +1303,104 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(history.tableView(history.tableView, numberOfRowsInSection: 0), 1)
     }
 
+    @MainActor
+    func testNativeCanvasRendersTrueCoordinatesAndSelectsOnlyTappedNode() throws {
+        let json = """
+        {"nodes":[
+          {"id":"g","type":"group","x":-30,"y":10,"width":480,"height":340,"label":"Group"},
+          {"id":"a","type":"text","x":0,"y":40,"width":140,"height":90,"text":"A"},
+          {"id":"b","type":"text","x":200,"y":40,"width":140,"height":90,"text":"B"}],
+         "edges":[{"id":"e","fromNode":"a","toNode":"b","label":"relates"}]}
+        """
+        let data = Data(json.utf8)
+        let model = try ImpressCanvasDocument.parse(data)
+        let visual = try ImpressCanvasNativeView(source: model)
+        visual.frame = CGRect(x: 0, y: 0, width: 390, height: 650)
+        visual.layoutIfNeeded()
+        func buttons(in root: UIView) -> [UIButton] {
+            let item = (root as? UIButton).map { [$0] } ?? []
+            return item + root.subviews.flatMap { buttons(in: $0) }
+        }
+        let all = buttons(in: visual)
+        let a = try XCTUnwrap(all.first(where: {
+            $0.accessibilityIdentifier == "impress.canvas.node.a"
+        }))
+        let b = try XCTUnwrap(all.first(where: {
+            $0.accessibilityIdentifier == "impress.canvas.node.b"
+        }))
+        XCTAssertEqual(b.frame.minX - a.frame.minX, 200, accuracy: 0.1)
+        XCTAssertTrue(visual.selectedIDs.isEmpty)
+        a.sendActions(for: .touchUpInside)
+        XCTAssertEqual(visual.selectedIDs, ["a"])
+        XCTAssertEqual(a.accessibilityValue, V3L("已选择"))
+        XCTAssertNotEqual(b.accessibilityValue, V3L("已选择"))
+        a.sendActions(for: .touchUpInside)
+        XCTAssertTrue(visual.selectedIDs.isEmpty)
+
+        let identity = try ImVaultFileIdentity(vaultID: "qa-canvas",
+            relativePath: "Study/Diagram.canvas")
+        let original = ImVaultRawDocument(identity: identity, sourceBytes: data,
+            markdown: json, digest: ImVaultDigest.sha256(data))
+        let notePage = ImVaultDocumentController(document: original)
+        notePage.loadViewIfNeeded()
+        func descendants(_ root: UIView) -> [UIView] {
+            [root] + root.subviews.flatMap { descendants($0) }
+        }
+        XCTAssertNotNil(descendants(notePage.view).first(where: {
+            $0.accessibilityIdentifier == "impress.canvas.native-viewport"
+        }))
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    @MainActor
+    func testCanvasChatScopeCannotSubstituteUnselectedNodeOrOldRevision() throws {
+        let json = """
+        {"nodes":[
+          {"id":"a","type":"text","x":0,"y":0,"width":160,"height":100,"text":"Approved"},
+          {"id":"b","type":"text","x":250,"y":0,"width":160,"height":100,"text":"Private"}]}
+        """
+        let identity = try ImVaultFileIdentity(vaultID: "qa-canvas",
+            relativePath: "Notes/Source.canvas")
+        let bytes = Data(json.utf8)
+        let digest = ImVaultDigest.sha256(bytes)
+        let document = ImVaultRawDocument(identity: identity,
+            sourceBytes: bytes, markdown: json, digest: digest)
+        let parsed = try ImpressCanvasDocument.parse(bytes)
+        let selected = try parsed.selection(nodeIDs: ["a"])
+        let excerpt = try selected.serializedJSON()
+        let key = "note:canvas-qa"
+        let trusted = WCDBV3ChatContextReference(
+            stableIdentity: key, sourceRevision: digest,
+            excerpt: excerpt, sourceFormat: "json-canvas",
+            selectedCanvasNodeIDs: ["a"])
+        XCTAssertNoThrow(try ImpressChatNoteUploadGate.validate(
+            document: document, expectedIdentity: identity,
+            expectedDigest: digest, conversationKey: key,
+            excerpts: [trusted]))
+        XCTAssertFalse(excerpt.contains("Private"))
+
+        let wrongNode = WCDBV3ChatContextReference(
+            stableIdentity: key, sourceRevision: digest,
+            excerpt: excerpt, sourceFormat: "json-canvas",
+            selectedCanvasNodeIDs: ["b"])
+        XCTAssertThrowsError(try ImpressChatNoteUploadGate.validate(
+            document: document, expectedIdentity: identity,
+            expectedDigest: digest, conversationKey: key,
+            excerpts: [wrongNode]))
+        let forged = WCDBV3ChatContextReference(
+            stableIdentity: key, sourceRevision: digest,
+            excerpt: excerpt + "\nPrivate", sourceFormat: "json-canvas",
+            selectedCanvasNodeIDs: ["a"])
+        XCTAssertThrowsError(try ImpressChatNoteUploadGate.validate(
+            document: document, expectedIdentity: identity,
+            expectedDigest: digest, conversationKey: key,
+            excerpts: [forged]))
+        XCTAssertThrowsError(try ImpressChatNoteUploadGate.validate(
+            document: document, expectedIdentity: identity,
+            expectedDigest: "stale-version", conversationKey: key,
+            excerpts: [trusted]))
+    }
+
     func testCompositeFilesRemainReadableButNeverEnterGenericWriteFlow() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "Impress-Composite-QA-" + UUID().uuidString, isDirectory: true)
