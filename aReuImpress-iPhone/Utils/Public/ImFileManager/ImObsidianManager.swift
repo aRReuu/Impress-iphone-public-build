@@ -325,7 +325,7 @@ enum ImVaultSyncFailure: LocalizedError {
         case .unsafePath: return "路径不安全；禁止访问或写回。"
         case .unavailable: return "源文件丢失、移动或不可读取，原内容未改变。"
         case .notDownloaded: return "这份笔记尚未从 iCloud 下载到本机。请先在「文件」App 中下载原件后重新打开。"
-        case .tooLarge: return "Markdown 超过 8MB 安全编辑上限。"
+        case .tooLarge: return "文件超过 8MB 安全读取或编辑上限。"
         case .notUTF8: return "该文件不是有效 UTF-8，原文件保持不变。"
         case .incompleteIndex: return "Vault 索引扫描未完成，不能覆盖已有索引。"
         case .conflict: return "Obsidian 已更新源文件，Impress 草稿保留，禁止自动覆盖。"
@@ -468,7 +468,8 @@ final class ImVaultReadSync {
                 ) else { throw ImVaultSyncFailure.incompleteIndex }
                 var batch = [ImVaultIndexNote]()
                 while let url = enumerator.nextObject() as? URL {
-                    guard url.pathExtension.lowercased() == "md" else { continue }
+                    guard ["md", "canvas", "excalidraw"].contains(
+                        url.pathExtension.lowercased()) else { continue }
                     let resolved = url.standardizedFileURL.resolvingSymlinksInPath()
                     guard resolved.path.hasPrefix(prefix) else { continue }
                     let v = try url.resourceValues(forKeys: [
@@ -878,8 +879,7 @@ enum ImVaultGuardedWrite {
         try draft.validate()
         // A .excalidraw.md document contains structured drawing data. Protect
         // both temporary QA and any future production path from generic edits.
-        guard !draft.identity.relativePath.lowercased()
-            .hasSuffix(".excalidraw.md") else {
+        guard draft.identity.documentFormat.allowsGenericMarkdownDraft else {
             throw ImVaultSyncFailure.unsupportedComplexWrite
         }
         guard userConfirmedDiff else { throw ImVaultSyncFailure.approvalMissing }

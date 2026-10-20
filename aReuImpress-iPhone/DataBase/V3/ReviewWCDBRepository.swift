@@ -294,15 +294,19 @@ public struct WCDBV3ChatContextReference: Codable, Equatable, Sendable {
     public let sourceStartUTF8: Int?
     public let sourceEndUTF8: Int?
     public let sourceFormat: String?
+    /// Explicit node IDs chosen in a visual Canvas. Never inferred from
+    /// filename, coordinates or any unselected node in the document.
+    public let selectedCanvasNodeIDs: [String]?
     public init(stableIdentity: String, sourceRevision: String, excerpt: String,
                 sourceStartUTF8: Int? = nil, sourceEndUTF8: Int? = nil,
-                sourceFormat: String? = nil) {
+                sourceFormat: String? = nil, selectedCanvasNodeIDs: [String]? = nil) {
         self.stableIdentity = stableIdentity
         self.sourceRevision = sourceRevision
         self.excerpt = excerpt
         self.sourceStartUTF8 = sourceStartUTF8
         self.sourceEndUTF8 = sourceEndUTF8
         self.sourceFormat = sourceFormat
+        self.selectedCanvasNodeIDs = selectedCanvasNodeIDs
     }
 }
 

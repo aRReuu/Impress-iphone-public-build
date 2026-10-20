@@ -1303,27 +1303,37 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(history.tableView(history.tableView, numberOfRowsInSection: 0), 1)
     }
 
-    func testExcalidrawMarkdownCannotBeModifiedByGenericSourceWriter() throws {
+    func testCompositeFilesRemainReadableButNeverEnterGenericWriteFlow() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "Impress-Excalidraw-QA-" + UUID().uuidString, isDirectory: true)
+            "Impress-Composite-QA-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(
             at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let file = root.appendingPathComponent("Drawing.excalidraw.md")
-        let original = "---\nexcalidraw-plugin: parsed\n---\n# Drawing\n"
-        try Data(original.utf8).write(to: file)
-        let identity = try ImVaultFileIdentity(vaultID: "test-only",
-            relativePath: "Drawing.excalidraw.md")
-        var draft = try ImVaultDraft(identity: identity,
-            baseText: original, baseRawData: Data(original.utf8))
-        try draft.update(original + "An invalid edit to structured data.\n")
-        XCTAssertThrowsError(try ImVaultGuardedWrite.commitFixture(
-            root: root, draft: draft, userConfirmedDiff: true)) { error in
-                guard case ImVaultSyncFailure.unsupportedComplexWrite = error else {
-                    XCTFail("The common writer must reject Excalidraw"); return
-                }
+
+        let specimens: [(String, String)] = [
+            ("Drawing.excalidraw.md", "---\nexcalidraw-plugin: parsed\n---\n# Drawing\n"),
+            ("Drawing.excalidraw", "{\"type\":\"excalidraw\",\"elements\":[]}"),
+            ("Diagram.canvas", "{\"nodes\":[],\"edges\":[]}")
+        ]
+        for (name, raw) in specimens {
+            let file = root.appendingPathComponent(name)
+            let original = Data(raw.utf8)
+            try original.write(to: file)
+            let identity = try ImVaultFileIdentity(vaultID: "test-only",
+                relativePath: name)
+            let read = try ImVaultReadSync.load(root: root, identity: identity)
+            XCTAssertEqual(read.sourceBytes, original)
+            XCTAssertEqual(read.identity, identity)
+            // Read enablement MUST NOT allow even constructing a generic
+            // Markdown draft; the production write gate remains closed.
+            XCTAssertThrowsError(try ImVaultDraft(identity: identity,
+                baseText: raw, baseRawData: original))
+            XCTAssertEqual(try Data(contentsOf: file), original)
         }
-        XCTAssertEqual(try Data(contentsOf: file), Data(original.utf8))
+        let list = try ImVaultReadSync.list(root: root, vaultID: "test-only")
+        XCTAssertEqual(list.count, specimens.count)
+        XCTAssertEqual(Set(list.map { $0.identity.relativePath }),
+                       Set(specimens.map { $0.0 }))
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 

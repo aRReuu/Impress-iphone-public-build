@@ -64,7 +64,11 @@ enum ImpressChatNoteUploadGate {
               !excerpts.isEmpty else {
             throw ImVaultSyncFailure.conflict
         }
-        let sections = ImpressAISectionExtractor.sections(in: document.markdown)
+        let format = expectedIdentity.documentFormat
+        let sections = format == .markdown
+            ? ImpressAISectionExtractor.sections(in: document.markdown) : []
+        let canvas = format == .jsonCanvas
+            ? try ImpressCanvasDocument.parse(document.sourceBytes) : nil
         var bytes = 0
         for item in excerpts {
             bytes += item.excerpt.utf8.count
@@ -73,23 +77,44 @@ enum ImpressChatNoteUploadGate {
             }
             guard item.stableIdentity == conversationKey,
                   item.sourceRevision == expectedDigest,
-                  (item.sourceFormat == nil || item.sourceFormat == "markdown"),
                   !item.excerpt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw ImVaultSyncFailure.conflict
             }
-            // Legacy v1-v3 selections had no byte span. Preserve exact-text
-            // compatibility; V1.1 selections must additionally match both
-            // source byte boundaries of the current authorized document.
-            let matched = sections.contains { section in
-                guard section.text == item.excerpt else { return false }
-                if let start = item.sourceStartUTF8, let end = item.sourceEndUTF8 {
-                    return section.startUTF8 == start && section.endUTF8 == end
+            switch format {
+            case .markdown:
+                guard (item.sourceFormat == nil || item.sourceFormat == "markdown"),
+                      item.selectedCanvasNodeIDs == nil else {
+                    throw ImVaultSyncFailure.conflict
                 }
-                return item.sourceStartUTF8 == nil && item.sourceEndUTF8 == nil
-            }
-            let legacyFullDocument = item.sourceStartUTF8 == nil &&
-                item.sourceEndUTF8 == nil && item.excerpt == document.markdown
-            guard matched || legacyFullDocument else {
+                // Legacy v1-v3 excerpts have no byte span. Retain strict text
+                // compatibility, but verify BOTH offsets for V1.1 materials.
+                let matched = sections.contains { section in
+                    guard section.text == item.excerpt else { return false }
+                    if let start = item.sourceStartUTF8, let end = item.sourceEndUTF8 {
+                        return section.startUTF8 == start && section.endUTF8 == end
+                    }
+                    return item.sourceStartUTF8 == nil && item.sourceEndUTF8 == nil
+                }
+                let legacyFull = item.sourceStartUTF8 == nil &&
+                    item.sourceEndUTF8 == nil && item.excerpt == document.markdown
+                guard matched || legacyFull else { throw ImVaultSyncFailure.conflict }
+            case .jsonCanvas:
+                guard let canvas,
+                      item.sourceFormat == "json-canvas",
+                      item.sourceStartUTF8 == nil, item.sourceEndUTF8 == nil,
+                      let requested = item.selectedCanvasNodeIDs, !requested.isEmpty,
+                      Set(requested).count == requested.count else {
+                    throw ImVaultSyncFailure.conflict
+                }
+                let selected = try canvas.selection(nodeIDs: Set(requested))
+                guard selected.nodes.count == requested.count,
+                      selected.nodes.allSatisfy(\.isKnownType),
+                      try selected.serializedJSON() == item.excerpt else {
+                    throw ImVaultSyncFailure.conflict
+                }
+            case .excalidrawMarkdown, .excalidrawJSON, .unsupported:
+                // A readable drawing is not automatically text-model input.
+                // Explicit image consent and supported engines are separate.
                 throw ImVaultSyncFailure.conflict
             }
         }
@@ -173,7 +198,8 @@ final class ImpressAINativeChatViewController: UIViewController,
         sourceVersionToken ?? String(sourceContentRevision ?? -1)
     }
     private var noteDraftTarget: ImVaultFileIdentity? {
-        noteIdentity ?? linkedNoteIdentity
+        let note = noteIdentity ?? linkedNoteIdentity
+        return note?.documentFormat == .markdown ? note : nil
     }
 
     private let tableView = UITableView(frame: .zero, style: .plain)
@@ -189,6 +215,7 @@ final class ImpressAINativeChatViewController: UIViewController,
     private let composerRow = UIStackView()
     private var messageHeight: NSLayoutConstraint?
     private static let introductionKey = "ImpressV11ChatIntroductionSeen"
+    private var pendingInitialMaterials: [WCDBV3ChatContextReference]
     private var sessionPromptOverride: String?
 
     init(question: String? = nil, answer: String? = nil,
@@ -196,7 +223,9 @@ final class ImpressAINativeChatViewController: UIViewController,
          repository: ReviewWCDBRepository? = nil,
          sourceKey: String? = nil, sourceVersion: String? = nil,
          noteIdentity: ImVaultFileIdentity? = nil,
-         linkedNoteIdentity: ImVaultFileIdentity? = nil) {
+         linkedNoteIdentity: ImVaultFileIdentity? = nil,
+         initialMaterials: [WCDBV3ChatContextReference] = []) {
+        self.pendingInitialMaterials = initialMaterials
         self.linkedNoteIdentity = linkedNoteIdentity
         self.explicitSourceKey = sourceKey
         self.sourceVersionToken = sourceVersion
@@ -613,7 +642,7 @@ final class ImpressAINativeChatViewController: UIViewController,
                     self?.showFullMaterialPreview()
                 })
         }
-        if noteIdentity != nil && !isForeignSession {
+        if noteIdentity?.documentFormat == .markdown && !isForeignSession {
             alert.addAction(UIAlertAction(title: V3L("选择笔记章节"),
                 style: .default) { [weak self] _ in self?.openNoteSectionPicker() })
         }
@@ -669,7 +698,7 @@ final class ImpressAINativeChatViewController: UIViewController,
 
     private func openNoteSectionPicker() {
         guard !sending && !restoring, !isForeignSession,
-              let identity = noteIdentity else { return }
+              let identity = noteIdentity, identity.documentFormat == .markdown else { return }
         ImVaultReadSync.shared.read(identity) { [weak self] result in
             guard let self else { return }
             switch result {
@@ -1225,6 +1254,9 @@ final class ImpressAINativeChatViewController: UIViewController,
         if includeApprovedContext, !isForeignSession,
            let question = sourceQuestion, !question.isEmpty {
             if noteIdentity != nil {
+                if noteIdentity?.documentFormat == .jsonCanvas {
+                    system += "\n" + V3L("这仅是 JSON Canvas 的显式节点与连线文本，没有发送图像像素，不能声称完成视觉理解。")
+                }
                 system += "\n" + V3L("当前笔记来源：") + question
                 for reference in authorizedReferences {
                     system += "\n" + V3L("本次明确批准的章节或摘录：") + reference.excerpt
@@ -1343,10 +1375,25 @@ final class ImpressAINativeChatViewController: UIViewController,
         do {
             let repo = try injectedRepository ?? ImpressV3ReviewEnvironment.repository()
             chatRepository = repo
-            let sessions = try await repo.chatSessions(for: identity)
-            if let latest = sessions.first {
-                activateSession(latest)
-                if history != latest.messages { enqueuePersistence() }
+            if !pendingInitialMaterials.isEmpty {
+                // Explicit new Canvas selection creates its own session.
+                // Never overwrite a previous source's materials or draft.
+                guard pendingInitialMaterials.allSatisfy({
+                    $0.stableIdentity == identity &&
+                    $0.sourceRevision == currentSourceVersion
+                }) else { throw WCDBV3ChatStorageError.invalidRecord }
+                var fresh = WCDBV3ChatSession(sourceIdentity: identity)
+                fresh.sourceDisplayName = entrySourceDisplayName
+                fresh.contextReferences = pendingInitialMaterials
+                try await repo.saveChatSession(fresh, expectedRevision: nil)
+                pendingInitialMaterials = []
+                activateSession(fresh)
+            } else {
+                let sessions = try await repo.chatSessions(for: identity)
+                if let latest = sessions.first {
+                    activateSession(latest)
+                    if history != latest.messages { enqueuePersistence() }
+                }
             }
         } catch {
             showTransientStatus(V3L("本地聊天恢复失败。请保留当前页面，不要覆盖历史。"))
@@ -1545,7 +1592,9 @@ final class ImpressAINativeChatViewController: UIViewController,
         next.pendingDuplex = pendingDuplex
         next.duplexHistory = previousDuplex
         next.contextConsentGranted = contextConsentGranted
-        next.updatedAt = Date()
+        // Device clock and imported backups can be older than a saved row.
+        // WCDB uses monotonic CAS timestamps, including before New Discussion.
+        next.updatedAt = max(Date(), base.updatedAt.addingTimeInterval(0.001))
         next.revision = storedSession == nil ? 0 : base.revision + 1
         do {
             try await repository.saveChatSession(

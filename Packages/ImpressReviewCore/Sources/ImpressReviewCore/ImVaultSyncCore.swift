@@ -10,6 +10,21 @@ public enum ImVaultCoreError: Error, Equatable {
     case oversizedFile
 }
 
+public enum ImVaultDocumentFormat: String, Codable, Sendable {
+    case markdown, excalidrawMarkdown, excalidrawJSON, jsonCanvas, unsupported
+
+    public static func detect(relativePath: String) -> Self? {
+        let lower = relativePath.lowercased()
+        if lower.hasSuffix(".excalidraw.md") { return .excalidrawMarkdown }
+        if lower.hasSuffix(".md") { return .markdown }
+        if lower.hasSuffix(".excalidraw") { return .excalidrawJSON }
+        if lower.hasSuffix(".canvas") { return .jsonCanvas }
+        return nil
+    }
+
+    public var allowsGenericMarkdownDraft: Bool { self == .markdown }
+}
+
 public struct ImVaultFileIdentity: Codable, Hashable, Sendable {
     public let vaultID: String
     public let relativePath: String
@@ -25,11 +40,18 @@ public struct ImVaultFileIdentity: Codable, Hashable, Sendable {
         }
         let segments = raw.split(separator: "/", omittingEmptySubsequences: false)
         guard !segments.isEmpty, segments.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }),
-              segments[0] != ".obsidian", raw.lowercased().hasSuffix(".md") else {
+              segments[0] != ".obsidian",
+              ImVaultDocumentFormat.detect(relativePath: raw) != nil else {
             throw ImVaultCoreError.invalidRelativePath
         }
         self.vaultID = key
         self.relativePath = raw
+    }
+
+    public var documentFormat: ImVaultDocumentFormat {
+        // Identity initialization/decoding remains validated on every file
+        // access; malformed persisted paths must never grant write authority.
+        ImVaultDocumentFormat.detect(relativePath: relativePath) ?? .unsupported
     }
 }
 
@@ -66,6 +88,9 @@ public struct ImVaultDraft: Codable, Equatable, Sendable {
     public init(identity: ImVaultFileIdentity, baseText: String,
                 baseRawData: Data? = nil, editedText: String? = nil,
                 createdAt: Date = Date()) throws {
+        guard identity.documentFormat.allowsGenericMarkdownDraft else {
+            throw ImVaultCoreError.invalidDraft
+        }
         guard baseText.utf8.count <= 8 * 1024 * 1024 else {
             throw ImVaultCoreError.oversizedFile
         }
@@ -124,7 +149,8 @@ public struct ImVaultDraft: Codable, Equatable, Sendable {
     }
 
     public func validate() throws {
-        guard ImVaultDigest.sha256(baseRawData) == baseDigest,
+        guard identity.documentFormat.allowsGenericMarkdownDraft,
+              ImVaultDigest.sha256(baseRawData) == baseDigest,
               String(data: baseRawData, encoding: .utf8) == baseText,
               proposedBytes.count <= 8 * 1024 * 1024 else {
             throw ImVaultCoreError.invalidDraft

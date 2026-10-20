@@ -102,6 +102,30 @@ struct ImVaultSyncCoreTests {
             try ImVaultFileIdentity(vaultID: "vault", relativePath: path)
         }
     }
+    @Test func compositeReadIdentitiesNeverGrantGenericWriteAuthority() throws {
+        let formats: [(String, ImVaultDocumentFormat)] = [
+            ("Lessons/Ordinary.md", .markdown),
+            ("Lessons/Graph.canvas", .jsonCanvas),
+            ("Drawings/Sketch.excalidraw", .excalidrawJSON),
+            ("Drawings/Sketch.excalidraw.md", .excalidrawMarkdown)
+        ]
+        for (path, format) in formats {
+            let id = try ImVaultFileIdentity(vaultID: "fixture", relativePath: path)
+            #expect(id.documentFormat == format)
+            if format == .markdown {
+                #expect((try? ImVaultDraft(identity: id, baseText: "# Safe")) != nil)
+            } else {
+                #expect(throws: ImVaultCoreError.invalidDraft) {
+                    try ImVaultDraft(identity: id, baseText: "structured content")
+                }
+            }
+        }
+        #expect(ImVaultDocumentFormat.detect(relativePath: "unknown.bin") == nil)
+        #expect(throws: ImVaultCoreError.invalidRelativePath) {
+            try ImVaultFileIdentity(vaultID: "fixture", relativePath: "unknown.bin")
+        }
+    }
+
     @Test func draftPreservesOriginalMarkdown() throws {
         let text = "---\ntags: [demo]\n---\n# Heading\n![[image.png]]\n[[Linked]]\n"
         let id = try ImVaultFileIdentity(vaultID: "v",relativePath: "notes/test.md")
