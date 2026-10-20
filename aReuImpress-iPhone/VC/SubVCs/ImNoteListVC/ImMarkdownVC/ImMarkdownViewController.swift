@@ -1099,6 +1099,32 @@ final class ImVaultDraftEditorController: UIViewController, UITextViewDelegate {
     }
 }
 
+// A verified local File Provider response is not evidence of iCloud server upload.
+// Keep the receipt precise for each outcome, and never imply that a no-op wrote bytes.
+@MainActor
+enum ImVaultWriteReceiptText {
+    static func present(_ result: Result<ImVaultCommitOutcome, Error>,
+                        testCopy: Bool) -> (title: String, detail: String) {
+        switch result {
+        case .success(.unchanged):
+            return (V3L("内容未变化"),
+                    V3L("原文与拟保存内容一致，没有写入文件，也没有修改复习数据。"))
+        case .success(.alreadyApplied):
+            return (V3L("内容已存在"),
+                    V3L("文件内容已经与提案一致，没有重复写入，也没有再次追加内容。云端同步尚未核实。"))
+        case .success(.written(_)):
+            let destination = testCopy
+                ? V3L("已写入独立测试副本") : V3L("源文件已在本机写入")
+            return (destination,
+                    V3L("重新验证了原文件版本，写前已保留恢复副本，写后本机回读字节一致。File Provider 的本机写入成功不代表 iCloud 已完成同步。"))
+        case .failure(let error):
+            return (V3L("原文件未确认写入"),
+                    error.localizedDescription + "\n" +
+                    V3L("请检查冲突、授权及草稿状态，不要重复覆盖，也不要把保存草稿当成原文件已更新。"))
+        }
+    }
+}
+
 @MainActor
 final class ImVaultDiffController: UIViewController {
     private let draft: ImVaultDraft
@@ -1157,7 +1183,7 @@ final class ImVaultDiffController: UIViewController {
                     save.isEnabled = true
                     self.navigationItem.prompt = V3L("仅限测试副本；原始 Vault 仍保持只读")
                 case .success(false):
-                    self.navigationItem.prompt = V3L("请在「文件」App 选择 Impress-Write-Test-Vault 测试副本")
+                    self.navigationItem.prompt = V3L("正式 Vault 不可写入；当前草稿安全保存。仅独立 QA 测试副本允许写回。")
                 case .failure(let error):
                     self.navigationItem.prompt = error.localizedDescription
                 }
@@ -1190,13 +1216,10 @@ final class ImVaultDiffController: UIViewController {
                                                   userConfirmedDiff: true,
                                                   deviceQATestCopyConfirmed: qaCopyRequested) { result in
                 self.navigationItem.rightBarButtonItem?.isEnabled = true
-                let content: String
-                switch result {
-                case .success: content = "写入已验证并保留恢复副本。"
-                case let .failure(error): content = error.localizedDescription
-                }
-                let response = UIAlertController(title: "Vault 写回结果",
-                    message: content, preferredStyle: .alert)
+                let receipt = ImVaultWriteReceiptText.present(
+                    result, testCopy: qaCopyRequested)
+                let response = UIAlertController(title: receipt.title,
+                    message: receipt.detail, preferredStyle: .alert)
                 response.addAction(UIAlertAction(title: V3L("确定"), style: .default))
                 self.present(response, animated: true)
             }

@@ -1341,6 +1341,27 @@ final class ImVaultSyncIntegrationTests: XCTestCase {
         XCTAssertEqual(draft.editedText, "Impress edit")
     }
 
+    func testVaultReceiptNeverConfusesNoOpLocalWriteAndCloudSync() throws {
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+        let unchanged = ImVaultWriteReceiptText.present(
+            .success(.unchanged), testCopy: true)
+        XCTAssertTrue(unchanged.title.contains("未变化"))
+        XCTAssertTrue(unchanged.detail.contains("没有写入"))
+        let idempotent = ImVaultWriteReceiptText.present(
+            .success(.alreadyApplied), testCopy: true)
+        XCTAssertTrue(idempotent.detail.contains("没有重复写入"))
+        let verified = ImVaultWriteReceiptText.present(
+            .success(.written(recoveryURL: URL(fileURLWithPath: "/tmp/fixture-backup"))),
+            testCopy: true)
+        XCTAssertTrue(verified.title.contains("测试副本"))
+        XCTAssertTrue(verified.detail.contains("云端"))
+        XCTAssertTrue(verified.detail.contains("不代表"))
+        let rejected = ImVaultWriteReceiptText.present(
+            .failure(ImVaultSyncFailure.conflict), testCopy: true)
+        XCTAssertTrue(rejected.title.contains("未确认"))
+        XCTAssertFalse(rejected.detail.contains("已在本机写入"))
+    }
+
     func testUserApprovalRequiredAndSuccessfulFixtureWriteIsRecoverable() throws {
         let root = try createRoot()
         defer { try? FileManager.default.removeItem(at: root) }
