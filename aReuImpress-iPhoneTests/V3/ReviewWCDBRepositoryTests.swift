@@ -470,6 +470,215 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
     }
 
 
+
+    // ACCEPT-01/02/04/05/06/09/10/11/12 service-layer fixture roundtrip.
+    // This does NOT claim real AI inference, UI gestures or iPhone File Provider.
+    // Every source byte here belongs to a disposable temporary test Vault.
+    @MainActor
+    func testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS() async throws {
+        let root = try createRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = Data([0xEF, 0xBB, 0xBF]) + Data(
+            "---\r\\ntitle: Duplex QA\r\\n---\r\\n# Theory\r\\n" +
+            "F = ma.\r\\n- [[Dynamics]]\r\\n\r\\n# Practice\r\\n" +
+            "Check units.\r\\n```swift\r\\nlet value = 1\r\\n```\r\\n"
+            .utf8)
+        let file = try put("disposable", root: root, path: "Notes/Duplex.md")
+        try original.write(to: file, options: .atomic)
+        let identity = try ImVaultFileIdentity(vaultID: UUID().uuidString,
+            relativePath: "Notes/Duplex.md")
+        let sourceDocument = try ImVaultReadSync.load(root: root, identity: identity)
+        let selectedSection = try XCTUnwrap(
+            ImpressAISectionExtractor.sections(in: sourceDocument.markdown)
+                .first(where: { $0.heading == "Theory" }))
+        let source = ImpressAISource(vaultID: identity.vaultID,
+            relativePath: identity.relativePath,
+            documentSHA256: sourceDocument.digest, heading: selectedSection.heading)
+        let excerpt = ImpressAIExcerpt(id: selectedSection.id, source: source,
+            text: selectedSection.text, sectionHeading: selectedSection.heading)
+        let pool = ImpressAIQuestionPool(source: source, excerpts: [excerpt],
+            requestedCount: 1, modelProfileID: UUID(), candidates: [
+                ImpressAIQuestionCandidate(question: "What does F = ma describe?",
+                    answer: "Net force, mass and acceleration.",
+                    dimension: .mechanism, evidenceIDs: [excerpt.id])
+            ])
+        let confirmed = try ImpressAIQuestionValidator.validatedSelection(pool)
+        XCTAssertEqual(confirmed.count, 1)
+        let link = try ImpressAINoteCardLink.sourceKey(identity: identity,
+            documentDigest: sourceDocument.digest, candidateEvidenceIDs: confirmed[0].evidenceIDs,
+            excerpts: [excerpt], sourceMarkdown: sourceDocument.markdown)
+        XCTAssertNotNil(try ImpressBatchSourceKey.sectionDigest(for: link))
+        let databasePath = temporaryPath()
+        let calculator = FSRS6ReviewCalculator()
+        let repository = try ReviewWCDBRepository(databasePath: databasePath,
+            calculator: calculator)
+        let created = Date(timeIntervalSince1970: 1_726_000_000)
+        let input = WCDBV3CardInput(question: confirmed[0].question,
+            answerText: confirmed[0].answer, sourceNotePath: link)
+        XCTAssertEqual(try await repository.insertBatchCards([(
+            input, try calculator.newCardSnapshot(id: input.cardID, now: created)
+        )], now: created), 1)
+        let related = try await repository.listRelatedCards(for: identity)
+        XCTAssertEqual(related.map(\.cardID), [input.cardID])
+        let otherVault = try ImVaultFileIdentity(vaultID: "other-vault",
+            relativePath: identity.relativePath)
+        XCTAssertTrue(try await repository.listRelatedCards(for: otherVault).isEmpty)
+
+        let sourceToken = "card:" + input.cardID.uuidString
+        var chat = WCDBV3ChatSession(sourceIdentity: sourceToken)
+        chat.messages = [
+            WCDBV3ChatMessage(role: .user, text: "Explain the boundary.",
+                status: .completed),
+            WCDBV3ChatMessage(role: .assistant, text: "Review the related assumption.",
+                status: .completed)
+        ]
+        chat.inputDraft = "An unsent follow-up"
+        chat.promptOverride = "Use first principles and the simplest explanation."
+        var secondChat = WCDBV3ChatSession(sourceIdentity: sourceToken)
+        secondChat.inputDraft = "Another independent discussion"
+        try await repository.saveChatSession(chat, expectedRevision: nil)
+        try await repository.saveChatSession(secondChat, expectedRevision: nil)
+
+        var draft = try ImVaultDraft(identity: identity,
+            baseText: sourceDocument.markdown, baseRawData: original)
+        try draft.update(sourceDocument.markdown.replacingOccurrences(
+            of: "F = ma.", with: "Net force is F = ma."))
+        XCTAssertTrue(ImVaultDiff.summary(base: draft.baseText,
+            edited: draft.editedText, maximumLines: 200).complete)
+        XCTAssertTrue(draft.proposedBytes.starts(with: [0xEF, 0xBB, 0xBF]))
+        try ImVaultPrivateStore.saveDraft(draft)
+
+        // The approval records the OLD FSRS revision intentionally. Reviewing
+        // after approval must not turn a valid CONTENT-only edit into conflict.
+        let originalContent = try XCTUnwrap(try await repository.content(for: input.cardID))
+        let originalQueue = try XCTUnwrap(try await repository.fetchQueueCandidates()
+            .first(where: { $0.cardID == input.cardID }))
+        var proposal = WCDBV3DuplexProposal(sourceMessageID: chat.messages.last?.messageID,
+            noteIdentity: identity, noteBaseDigest: draft.baseDigest,
+            noteEditedDigest: ImVaultDigest.sha256(draft.proposedBytes),
+            cardID: input.cardID, cardReviewRevision: originalQueue.revision,
+            cardContentRevision: originalContent.contentRevision,
+            cardBaseQuestion: originalContent.question,
+            cardBaseAnswer: originalContent.answerText,
+            cardEditedQuestion: originalContent.question,
+            cardEditedAnswer: "Net force causes acceleration.",
+            state: ImDuplexApprovalState(noteSelected: true, cardSelected: true))
+        chat.pendingDuplex = proposal
+        chat.revision += 1
+        chat.updatedAt = Date()
+        try await repository.saveChatSession(chat, expectedRevision: 0)
+        _ = try await repository.commit(ReviewSubmission(eventID: UUID(),
+            cardID: input.cardID, expectedRevision: originalQueue.revision,
+            rating: .good, reviewedAt: created.addingTimeInterval(2)))
+        let afterReview = try XCTUnwrap(try await repository.fetchQueueCandidates()
+            .first(where: { $0.cardID == input.cardID }))
+        XCTAssertEqual(afterReview.revision, originalQueue.revision + 1)
+        XCTAssertEqual(ImDuplexCardVersionGate.decide(
+            expectedContentRevision: originalContent.contentRevision,
+            currentContentRevision: originalContent.contentRevision,
+            baseQuestion: originalContent.question, baseAnswer: originalContent.answerText,
+            proposedQuestion: originalContent.question,
+            proposedAnswer: proposal.cardEditedAnswer,
+            currentQuestion: originalContent.question,
+            currentAnswer: originalContent.answerText), .safeToWrite)
+
+        let written = try ImVaultGuardedWrite.commitFixture(root: root,
+            draft: draft, userConfirmedDiff: true)
+        guard case let .written(recovery) = written else {
+            XCTFail("The disposable note must actually be written and read back")
+            return
+        }
+        XCTAssertEqual(try Data(contentsOf: recovery), original)
+        XCTAssertEqual(try Data(contentsOf: file), draft.proposedBytes)
+        proposal.state.noteStatus = .applied
+        proposal.noteReceipt = "QA fixture written, verified and recoverable"
+        chat.pendingDuplex = proposal
+        chat.revision += 1
+        chat.updatedAt = Date()
+        try await repository.saveChatSession(chat, expectedRevision: 1)
+        try await repository.updateManagedCard(WCDBV3CardInput(
+            cardID: input.cardID, question: originalContent.question,
+            answerText: proposal.cardEditedAnswer, sourceNotePath: link),
+            expectedRevision: afterReview.revision,
+            expectedContentRevision: originalContent.contentRevision,
+            origin: .approvedAI)
+        proposal.state.cardStatus = .applied
+        proposal.cardReceipt = "Original card updated with no new FSRS score"
+        chat.pendingDuplex = proposal
+        chat.revision += 1
+        chat.updatedAt = Date()
+        try await repository.saveChatSession(chat, expectedRevision: 2)
+        let updatedContent = try XCTUnwrap(try await repository.content(for: input.cardID))
+        XCTAssertEqual(updatedContent.cardID, input.cardID)
+        XCTAssertEqual(updatedContent.contentRevision, originalContent.contentRevision + 1)
+        XCTAssertEqual((try await repository.reviewHistory(for: input.cardID)).count, 1)
+        XCTAssertEqual(try await repository.fetchQueueCandidates()
+            .first(where: { $0.cardID == input.cardID })?.revision,
+            afterReview.revision)
+        guard case .alreadyApplied = try ImVaultGuardedWrite.commitFixture(
+            root: root, draft: draft, userConfirmedDiff: true) else {
+            XCTFail("A resumed note operation must not append twice")
+            return
+        }
+
+        let unrelatedEdit = sourceDocument.markdown.replacingOccurrences(
+            of: "Check units.", with: "Check SI units.")
+        XCTAssertTrue(ImpressAINoteCardLink.verifiedSectionUnchanged(
+            sourceKey: link, currentMarkdown: unrelatedEdit))
+        let relatedEdit = try XCTUnwrap(String(data: draft.proposedBytes,
+            encoding: .utf8))
+        XCTAssertFalse(ImpressAINoteCardLink.verifiedSectionUnchanged(
+            sourceKey: link, currentMarkdown: relatedEdit))
+
+        // Reverse each applied target with a NEW CAS revision; never erase
+        // history or replay a forward write from a persisted receipt.
+        let updatedQueue = try XCTUnwrap(try await repository.fetchQueueCandidates()
+            .first(where: { $0.cardID == input.cardID }))
+        try await repository.updateManagedCard(WCDBV3CardInput(
+            cardID: input.cardID, question: originalContent.question,
+            answerText: originalContent.answerText, sourceNotePath: link),
+            expectedRevision: updatedQueue.revision,
+            expectedContentRevision: updatedContent.contentRevision, origin: .restored)
+        let inverse = try ImpressDuplexUndoGate.inverseDraft(draft,
+            expectedBaseDigest: proposal.noteBaseDigest,
+            expectedAppliedDigest: proposal.noteEditedDigest)
+        guard case .written = try ImVaultGuardedWrite.commitFixture(
+            root: root, draft: inverse, userConfirmedDiff: true) else {
+            XCTFail("The independently approved inverse must write the source bytes")
+            return
+        }
+        XCTAssertEqual(try Data(contentsOf: file), original)
+        proposal.state.noteStatus = .reverted
+        proposal.state.cardStatus = .reverted
+        proposal.noteReceipt = "QA byte-for-byte source restored"
+        proposal.cardReceipt = "Card restored with a new content revision"
+        chat.pendingDuplex = proposal
+        chat.revision += 1
+        chat.updatedAt = Date()
+        try await repository.saveChatSession(chat, expectedRevision: 3)
+
+        let coldStart = try ReviewWCDBRepository(databasePath: databasePath,
+            calculator: calculator)
+        let recovered = try await coldStart.chatSessions(for: sourceToken)
+        XCTAssertEqual(recovered.count, 2)
+        XCTAssertEqual(recovered.first(where: { $0.sessionID == chat.sessionID })?
+            .pendingDuplex?.state.noteStatus, .reverted)
+        XCTAssertEqual(recovered.first(where: { $0.sessionID == chat.sessionID })?
+            .messages.count, 2)
+        XCTAssertTrue(recovered.contains(where: {
+            $0.sessionID == secondChat.sessionID &&
+            $0.inputDraft == "Another independent discussion"
+        }))
+        let restored = try XCTUnwrap(try await coldStart.content(for: input.cardID))
+        XCTAssertEqual(restored.cardID, input.cardID)
+        XCTAssertEqual(restored.question, originalContent.question)
+        XCTAssertEqual(restored.answerText, originalContent.answerText)
+        XCTAssertEqual(restored.contentRevision, originalContent.contentRevision + 2)
+        XCTAssertEqual((try await coldStart.contentHistory(for: input.cardID)).count, 3)
+        XCTAssertEqual((try await coldStart.reviewHistory(for: input.cardID)).count, 1)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
     /// Standalone disposable File Provider fixture for end-to-end Chat +
     /// original-card tests. Helpers in another XCTestCase are private and
     /// deliberately must not be referenced across class boundaries.

@@ -1986,10 +1986,13 @@ final class ImpressDuplexApprovalController: UIViewController {
             guard let self else { return }
             Task {
                 var cancelled = self.proposal
-                if cancelled.state.noteStatus != .applied {
+                // Discard may stop an unexecuted forward proposal only.
+                // Undoing/reverted targets are immutable audit history; hiding
+                // an undoing flag would orphan an in-flight inverse write.
+                if ![.applied, .undoing, .reverted].contains(cancelled.state.noteStatus) {
                     cancelled.state.noteSelected = false
                 }
-                if cancelled.state.cardStatus != .applied {
+                if ![.applied, .undoing, .reverted].contains(cancelled.state.cardStatus) {
                     cancelled.state.cardSelected = false
                 }
                 guard await self.saveProposal(cancelled) else {
@@ -2203,10 +2206,13 @@ final class ImpressDuplexApprovalController: UIViewController {
                     proposal.state.cardStatus = .conflict
                     proposal.cardReceipt = V3L("原卡内容已被其他编辑修改，拒绝覆盖。")
                 case .safeToWrite:
+                    // A legitimate FSRS rating after proposal creation is
+                    // independent of card content. Take the CURRENT scheduling
+                    // revision for transactional CAS, while the content gate
+                    // above still rejects any intervening content edit.
                     guard let queue = try await repository.fetchQueueCandidates()
-                            .first(where: { $0.cardID == id }),
-                          queue.revision == proposal.cardReviewRevision else {
-                        throw ReviewWCDBError.revisionConflict
+                            .first(where: { $0.cardID == id }) else {
+                        throw ReviewWCDBError.missingCard
                     }
                     try await repository.updateManagedCard(
                         WCDBV3CardInput(cardID: id, question: replacement,

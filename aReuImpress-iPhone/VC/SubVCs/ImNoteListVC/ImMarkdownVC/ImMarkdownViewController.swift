@@ -1124,7 +1124,6 @@ final class ImpressNoteSourceImpactController: UIViewController {
     private let markUnaffected = UIButton(type: .system)
     private var ready = false
     private var observedRevision: Int?
-    private var observedReviewRevision: Int?
     private var originalSourceKey: String?
 
     init(document: ImVaultRawDocument, cardID: UUID, previousDigest: String,
@@ -1181,14 +1180,13 @@ final class ImpressNoteSourceImpactController: UIViewController {
     private func loadCard() async {
         do {
             guard let card = try await repository.content(for: cardID),
-                  let revision = try await repository.fetchQueueCandidates()
-                    .first(where: { $0.cardID == cardID })?.revision,
+                  let queue = try await repository.fetchQueueCandidates()
+                    .first(where: { $0.cardID == cardID }),
                   let key = card.sourceNotePath,
                   (try? ImpressBatchSourceKey.decode(key)) == document.identity,
                   (try? ImpressBatchSourceKey.documentDigest(for: key)) == previousDigest
             else { throw ImVaultSyncFailure.conflict }
             observedRevision = card.contentRevision
-            observedReviewRevision = revision
             originalSourceKey = key
             reading.text = V3L("仅能确认文件级来源变化；请阅读当前完整笔记及原卡，再决定是否受影响。") +
                 "\n\n" + V3L("来源：") + document.identity.relativePath +
@@ -1208,7 +1206,6 @@ final class ImpressNoteSourceImpactController: UIViewController {
 
     @objc private func confirmUnaffected() {
         guard ready, let originalRevision = observedRevision,
-              let fsrsRevision = observedReviewRevision,
               let oldKey = originalSourceKey else { return }
         let alert = UIAlertController(title: V3L("确认不影响原卡？"),
             message: V3L("仅更新这张原卡的已核实来源摘要；题目、答案和 FSRS 评分不变。修改仍需版本核验，其他卡片不受影响。"),
@@ -1231,8 +1228,7 @@ final class ImpressNoteSourceImpactController: UIViewController {
                                   content.contentRevision == originalRevision,
                                   content.sourceNotePath == oldKey,
                                   let queue = try await self.repository.fetchQueueCandidates()
-                                    .first(where: { $0.cardID == self.cardID }),
-                                  queue.revision == fsrsRevision else {
+                                    .first(where: { $0.cardID == self.cardID }) else {
                                 throw ImVaultSyncFailure.conflict
                             }
                             let newest = try ImpressBatchSourceKey.encode(
@@ -1244,7 +1240,9 @@ final class ImpressNoteSourceImpactController: UIViewController {
                                     correctIndices: content.correctIndices,
                                     cardType: content.cardType,
                                     imageData: content.imageData, sourceNotePath: newest),
-                                expectedRevision: fsrsRevision,
+                                // FSRS may advance while the user reads; only
+                                // content/source changes invalidate approval.
+                                expectedRevision: queue.revision,
                                 expectedContentRevision: originalRevision, origin: .manual)
                             let done = UIAlertController(
                                 title: V3L("已确认这张原卡不受影响"),

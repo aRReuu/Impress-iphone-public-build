@@ -262,6 +262,22 @@ struct ImVaultSyncCoreTests {
         #expect(state.completed)
     }
 
+    @Test func deselectionCannotErasePendingUndoAfterCrash() throws {
+        var state = ImDuplexApprovalState(noteSelected: true, cardSelected: true,
+            noteStatus: .undoing, cardStatus: .undoing)
+        // A historic faulty cancel action could persist the selections as
+        // false. Never interpret this as a completed or replayable proposal.
+        state.noteSelected = false
+        state.cardSelected = false
+        let encoded = try JSONEncoder().encode(state)
+        let restored = try JSONDecoder().decode(ImDuplexApprovalState.self, from: encoded)
+        #expect(restored.needsNoteUndo)
+        #expect(restored.needsCardUndo)
+        #expect(!restored.needsNoteAction && !restored.needsCardAction)
+        #expect(!restored.completed)
+        restored.noteStatus == .undoing ? #expect(true) : #expect(false)
+    }
+
     @Test func reverseCardEditUsesFreshCASAndRejectsInterveningRevision() {
         let originallyApplied = ImDuplexCardVersionGate.decide(
             expectedContentRevision: 5, currentContentRevision: 5,

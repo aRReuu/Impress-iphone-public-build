@@ -225,8 +225,10 @@ public struct ImDuplexApprovalState: Codable, Equatable, Sendable {
     public var needsCardAction: Bool {
         cardSelected && Self.needsForwardAction(cardStatus)
     }
-    public var needsNoteUndo: Bool { noteSelected && noteStatus == .undoing }
-    public var needsCardUndo: Bool { cardSelected && cardStatus == .undoing }
+    // Undo intent remains durable even if a legacy or faulty UI snapshot
+    // deselected the target. It must never become "completed" by deselection.
+    public var needsNoteUndo: Bool { noteStatus == .undoing }
+    public var needsCardUndo: Bool { cardStatus == .undoing }
     public var completed: Bool {
         // A crash between the reverse write and its receipt is never
         // mistaken for an already-finished operation. Recover manually.
