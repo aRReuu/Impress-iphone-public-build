@@ -1541,6 +1541,23 @@ final class ImVaultSyncIntegrationTests: XCTestCase {
         #endif
     }
 
+    func testDiffReviewNamesExactMarkdownTargetAndBaselineBeforeConfirmation() throws {
+        let identity = try ImVaultFileIdentity(
+            vaultID: "disposable-qa-vault",
+            relativePath: "Notes/Chapter/Concept.md")
+        var draft = try ImVaultDraft(identity: identity, baseText: "# Old source")
+        try draft.update("# Revised source")
+        let view = ImVaultDiffController(draft: draft,
+            summary: "- # Old source\n+ # Revised source", canApprove: false)
+        view.loadViewIfNeeded()
+        let visible = try XCTUnwrap(view.view.subviews.compactMap { $0 as? UITextView }.first)
+        XCTAssertTrue(visible.text.contains("Notes/Chapter/Concept.md"))
+        XCTAssertTrue(visible.text.contains(draft.baseDigest))
+        XCTAssertTrue(visible.text.contains("+ # Revised source"))
+        XCTAssertFalse(view.navigationItem.rightBarButtonItem?.isEnabled ?? true)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
     func testIncompleteSourceDiffNeverActivatesDeviceWriteAction() throws {
         let id = try ImVaultFileIdentity(vaultID: UUID().uuidString,
                                          relativePath: "Only/Test.md")

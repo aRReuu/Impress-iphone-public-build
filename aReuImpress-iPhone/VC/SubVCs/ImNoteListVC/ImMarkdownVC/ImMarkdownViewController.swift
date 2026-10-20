@@ -1151,7 +1151,12 @@ final class ImVaultDiffController: UIViewController {
         text.textColor = ImpressV3Appearance.primaryText
         text.backgroundColor = ImpressV3Appearance.surface
         text.layer.cornerRadius = ImpressV3Appearance.Radius.field
-        text.text = summary
+        // The user approves an exact Vault file and its observed source
+        // revision. Display this even for a short one-line diff.
+        let targetHeader = V3L("目标文件：") + draft.identity.relativePath
+        let versionHeader = "SHA-256: " + draft.baseDigest
+        text.text = targetHeader + "\n" + versionHeader + "\n\n" + summary
+        text.accessibilityIdentifier = "impress.vault.diff.full-preview"
         text.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding,
                                              bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
         text.translatesAutoresizingMaskIntoConstraints = false
@@ -1199,12 +1204,14 @@ final class ImVaultDiffController: UIViewController {
         #else
         let qaCopyRequested = false
         #endif
+        let targetContext = V3L("目标文件：") + draft.identity.relativePath +
+            "\nSHA-256: " + draft.baseDigest + "\n\n"
         let alert = UIAlertController(
             title: qaCopyRequested ? V3L("确认修改独立测试副本？") :
                                      V3L("确认修改 Obsidian 源文件？"),
-            message: qaCopyRequested
+            message: targetContext + (qaCopyRequested
                 ? V3L("仅操作「文件」中名称为 Impress-Write-Test-Vault 的独立副本。正式 Vault 不可写入。将重新核对原文 SHA-256，保存恢复副本后再尝试写入；请先自行复制重要笔记。")
-                : V3L("将重新验证源文件 SHA-256，并先保存私有恢复副本。如果出现版本冲突会拒绝覆盖。"),
+                : V3L("将重新验证源文件 SHA-256，并先保存私有恢复副本。如果出现版本冲突会拒绝覆盖。")),
             preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
         alert.addAction(UIAlertAction(title: qaCopyRequested ? V3L("确认测试副本写回") :
