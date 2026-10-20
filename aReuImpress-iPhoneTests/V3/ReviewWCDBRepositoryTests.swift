@@ -1218,6 +1218,46 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(Set((first + second).map(\.cardID)).count, 3)
     }
 
+    @MainActor
+    func testHistorySearchRestoresMatchedSessionContext() async throws {
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
+            calculator: FSRS6ReviewCalculator())
+        var a = WCDBV3ChatSession(sourceIdentity: "card:" + UUID().uuidString)
+        var b = WCDBV3ChatSession(sourceIdentity: "note:another-vault")
+        a.messages = [WCDBV3ChatMessage(role: .user, text: "Talk about momentum",
+            status: .completed)]
+        let target = WCDBV3ChatMessage(role: .assistant,
+            text: "Unique memory consolidation finding",
+            status: .completed)
+        b.messages = [WCDBV3ChatMessage(role: .user, text: "Review other note",
+            status: .completed), target]
+        b.promptOverride = "One local prompt"
+        b.inputDraft = "A completely separate draft"
+        try await repo.saveChatSession(a, expectedRevision: nil)
+        try await repo.saveChatSession(b, expectedRevision: nil)
+        let history = ImpressChatSessionHistoryViewController(
+            sessions: try await repo.allChatSessions(),
+            currentSessionID: a.sessionID, repository: repo)
+        history.loadViewIfNeeded()
+        let search = try XCTUnwrap(history.navigationItem.searchController)
+        search.searchBar.text = "consolidation"
+        history.updateSearchResults(for: search)
+        XCTAssertEqual(history.tableView(history.tableView, numberOfRowsInSection: 0), 1)
+        var selected: UUID?
+        var selectedMessage: UUID?
+        history.onSelect = { id, messageID in
+            selected = id
+            selectedMessage = messageID
+        }
+        history.tableView(history.tableView,
+            didSelectRowAt: IndexPath(row: 0, section: 0))
+        XCTAssertEqual(selected, b.sessionID)
+        XCTAssertEqual(selectedMessage, target.messageID)
+        search.searchBar.text = "note:another-vault"
+        history.updateSearchResults(for: search)
+        XCTAssertEqual(history.tableView(history.tableView, numberOfRowsInSection: 0), 1)
+    }
+
     func testDeleteConversationPreservesAppliedReceiptsAndDoesNotResurrect() async throws {
         let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
             calculator: FSRS6ReviewCalculator())
@@ -1243,10 +1283,13 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         done.cardReceipt = "Exact original card updated and reread"
         discussion.duplexHistory = [done]
         try await repo.saveChatSession(discussion, expectedRevision: nil)
-        XCTAssertEqual(try await repo.allChatSessions().count, 1)
+        let allBefore = try await repo.allChatSessions()
+        XCTAssertEqual(allBefore.count, 1)
         try await repo.deleteChatSession(discussion.sessionID, expectedRevision: 0)
-        XCTAssertTrue(try await repo.allChatSessions().isEmpty)
-        XCTAssertTrue(try await repo.chatSessions(for: discussion.sourceIdentity).isEmpty)
+        let allAfter = try await repo.allChatSessions()
+        XCTAssertTrue(allAfter.isEmpty)
+        let sourceAfter = try await repo.chatSessions(for: discussion.sourceIdentity)
+        XCTAssertTrue(sourceAfter.isEmpty)
         let receipts = try await repo.retainedChatReceipts()
         XCTAssertEqual(receipts.count, 1)
         XCTAssertTrue(receipts[0].messages.isEmpty)
@@ -1261,7 +1304,8 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             try await repo.saveChatSession(discussion, expectedRevision: 0)
             XCTFail("An async draft save must never resurrect a deleted row")
         } catch WCDBV3ChatStorageError.conflict { }
-        XCTAssertTrue(try await repo.allChatSessions().isEmpty)
+        let allAfterResurrectionAttempt = try await repo.allChatSessions()
+        XCTAssertTrue(allAfterResurrectionAttempt.isEmpty)
 
         var inFlight = WCDBV3ChatSession(sourceIdentity: "card:" + UUID().uuidString)
         inFlight.pendingDuplex = WCDBV3DuplexProposal(

@@ -129,7 +129,7 @@ final class ImpressAINativeChatViewController: UIViewController,
     private var requestTask: Task<Void, Never>?
     private var draftDebounce: Task<Void, Never>?
 
-    private var sourceIdentity: String? {
+    private var entrySourceIdentity: String? {
         if let explicitSourceKey { return explicitSourceKey }
         if let sourceCardID { return "card:" + sourceCardID.uuidString }
         if let note = noteIdentity ?? linkedNoteIdentity {
@@ -137,6 +137,13 @@ final class ImpressAINativeChatViewController: UIViewController,
             return "note:" + ImVaultDigest.sha256(Data(scoped.utf8))
         }
         return "chat:standalone:v1"
+    }
+    private var sourceIdentity: String? {
+        storedSession?.sourceIdentity ?? entrySourceIdentity
+    }
+    private var isForeignSession: Bool {
+        guard let storedSession else { return false }
+        return storedSession.sourceIdentity != entrySourceIdentity
     }
     private var currentSourceVersion: String {
         sourceVersionToken ?? String(sourceContentRevision ?? -1)
@@ -536,7 +543,7 @@ final class ImpressAINativeChatViewController: UIViewController,
                     self?.showFullMaterialPreview()
                 })
         }
-        if noteIdentity != nil {
+        if noteIdentity != nil && !isForeignSession {
             alert.addAction(UIAlertAction(title: V3L("选择笔记章节"),
                 style: .default) { [weak self] _ in self?.openNoteSectionPicker() })
         }
@@ -591,7 +598,8 @@ final class ImpressAINativeChatViewController: UIViewController,
     }
 
     private func openNoteSectionPicker() {
-        guard !sending && !restoring, let identity = noteIdentity else { return }
+        guard !sending && !restoring, !isForeignSession,
+              let identity = noteIdentity else { return }
         ImVaultReadSync.shared.read(identity) { [weak self] result in
             guard let self else { return }
             switch result {
@@ -762,6 +770,16 @@ final class ImpressAINativeChatViewController: UIViewController,
     private func openDuplexReview(sourceMessageID: UUID?) {
         guard !sending && !restoring, sourceIdentity != nil,
               let repo = chatRepository else { return }
+        // A foreign session's immutable entry card/note is NOT the proposal
+        // target. Reopen its real source before authoring any new proposal.
+        guard !isForeignSession else {
+            let alert = UIAlertController(title: V3L("请从原来源继续修订"),
+                message: V3L("已恢复历史消息及回执，但不能将另一个卡片或笔记的身份当作当前修订目标。请从该会话真实来源重新进入并核验。"),
+                preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+            present(alert, animated: true)
+            return
+        }
         // Never replace an unfinished two-target operation with an unrelated
         // Chat suggestion: resume the recorded partial receipt first.
         if let p = pendingDuplex, !p.state.completed {
@@ -1034,7 +1052,8 @@ final class ImpressAINativeChatViewController: UIViewController,
 
     private func chooseSourceContext(_ text: String,
                                      route: ImpressAIResolvedRoute) {
-        if !contextChoiceMade, let question = sourceQuestion, !question.isEmpty {
+        if !contextChoiceMade, !isForeignSession,
+           let question = sourceQuestion, !question.isEmpty {
             let confirm = UIAlertController(title: noteIdentity == nil
                 ? V3L("是否附带当前卡片？") : V3L("是否附带当前笔记材料？"),
                 message: noteIdentity == nil
@@ -1103,7 +1122,8 @@ final class ImpressAINativeChatViewController: UIViewController,
         let providerID = route.connection.id
         let modelName = route.model.identifier
         var system = prompt
-        if includeApprovedContext, let question = sourceQuestion, !question.isEmpty {
+        if includeApprovedContext, !isForeignSession,
+           let question = sourceQuestion, !question.isEmpty {
             if noteIdentity != nil {
                 system += "\n" + V3L("当前笔记来源：") + question
                 for reference in authorizedReferences {
@@ -1154,7 +1174,8 @@ final class ImpressAINativeChatViewController: UIViewController,
                 }
                 // The current card can change while this controller is open.
                 // Never transmit or grade using a stale identity/revision.
-                if let id = sourceCardID, let revision = sourceContentRevision {
+                if !isForeignSession, let id = sourceCardID,
+                   let revision = sourceContentRevision {
                     let store = try chatRepository ?? injectedRepository ??
                         ImpressV3ReviewEnvironment.repository()
                     guard let card = try await store.content(for: id),
@@ -1246,12 +1267,17 @@ final class ImpressAINativeChatViewController: UIViewController,
         contextReferences = session.contextReferences
         updateAttachmentPresentation()
         requestFailure = session.requestError
-        contextConsentGranted = session.contextConsentGranted == true
+        // Restoring a session opened from another card/note never gives
+        // this entry card's material to the foreign session by accident.
+        contextConsentGranted = !isForeignSession &&
+            session.contextConsentGranted == true
         let approved = contextReferences.first(where: { $0.stableIdentity == sourceIdentity })
         let stillCurrent = approved?.sourceRevision == currentSourceVersion
         includeCardContext = contextConsentGranted && approved != nil && stillCurrent
-        contextChoiceMade = includeCardContext
-        if approved != nil && !stillCurrent {
+        contextChoiceMade = isForeignSession || includeCardContext
+        if isForeignSession {
+            privacyLabel.text = V3L("已恢复该来源的消息、模型、提示词和材料记录。进入其他来源的讨论不会自动批准或发送当前卡片的附件。")
+        } else if approved != nil && !stillCurrent {
             privacyLabel.text = V3L("来源内容有更新；发送前请重新确认引用范围。")
         }
         activeProviderID = history.reversed().compactMap(\.providerID).first
@@ -1286,18 +1312,45 @@ final class ImpressAINativeChatViewController: UIViewController,
     }
 
     @objc private func openDiscussionHistory() {
-        guard !restoring && !sending, let identity = sourceIdentity,
+        guard !restoring && !sending,
               let repository = chatRepository else { return }
         Task { [weak self] in
             guard let self else { return }
             do {
-                let sessions = try await repository.chatSessions(for: identity)
+                let sessions = try await repository.allChatSessions()
                 let page = ImpressChatSessionHistoryViewController(
-                    sessions: sessions, currentSessionID: self.storedSession?.sessionID)
-                page.onSelect = { [weak self] id in self?.switchDiscussion(to: id) }
+                    sessions: sessions, currentSessionID: self.storedSession?.sessionID,
+                    repository: repository)
+                page.onSelect = { [weak self] id, matchedMessageID in
+                    self?.switchDiscussion(to: id, highlightedMessageID: matchedMessageID)
+                }
+                page.onDeleted = { [weak self] id in
+                    self?.handleDeletedDiscussion(id)
+                }
                 self.navigationController?.pushViewController(page, animated: true)
             } catch { self.showProblem(error) }
         }
+    }
+
+    private func handleDeletedDiscussion(_ id: UUID) {
+        guard storedSession?.sessionID == id else { return }
+        draftDebounce?.cancel()
+        // The DB tombstone rejects any previously queued asynchronous writes.
+        storedSession = nil
+        history = []
+        pendingDuplex = nil
+        previousDuplex = []
+        contextReferences = []
+        requestFailure = nil
+        sessionPromptOverride = nil
+        selectedModelID = nil
+        contextConsentGranted = false
+        includeCardContext = false
+        contextChoiceMade = false
+        messageInput.text = ""
+        updateAttachmentPresentation()
+        reloadAndScroll()
+        textViewDidChange(messageInput)
     }
 
     @objc private func startNewDiscussion() {
@@ -1320,8 +1373,8 @@ final class ImpressAINativeChatViewController: UIViewController,
         }
     }
 
-    private func switchDiscussion(to id: UUID) {
-        guard !restoring && !sending, let identity = sourceIdentity,
+    private func switchDiscussion(to id: UUID, highlightedMessageID: UUID? = nil) {
+        guard !restoring && !sending,
               let repository = chatRepository else { return }
         restoring = true
         Task { [weak self] in
@@ -1334,11 +1387,12 @@ final class ImpressAINativeChatViewController: UIViewController,
             do {
                 // Re-read authoritative row instead of using a possibly stale
                 // snapshot from the history list.
-                let all = try await repository.chatSessions(for: identity)
+                let all = try await repository.allChatSessions()
                 guard let chosen = all.first(where: { $0.sessionID == id }) else {
                     throw WCDBV3ChatStorageError.invalidRecord
                 }
                 self.activateSession(chosen)
+                self.reloadAndScroll(to: highlightedMessageID)
                 self.navigationController?.popViewController(animated: true)
                 if self.history != chosen.messages { self.enqueuePersistence() }
             } catch { self.showProblem(error) }
@@ -1400,12 +1454,14 @@ final class ImpressAINativeChatViewController: UIViewController,
         if presentedViewController == nil { present(alert, animated: true) }
     }
 
-    private func reloadAndScroll() {
+    private func reloadAndScroll(to messageID: UUID? = nil) {
         tableView.reloadData()
-        if !history.isEmpty {
-            tableView.scrollToRow(at: IndexPath(row: history.count - 1, section: 0),
-                                  at: .bottom, animated: false)
-        }
+        guard !history.isEmpty else { return }
+        let index = messageID.flatMap { target in
+            history.firstIndex(where: { $0.messageID == target })
+        } ?? history.count - 1
+        tableView.scrollToRow(at: IndexPath(row: index, section: 0),
+                              at: .middle, animated: false)
     }
 }
 
@@ -1454,15 +1510,29 @@ final class ImpressChatFeatureListViewController: UITableViewController {
 }
 
 @MainActor
-final class ImpressChatSessionHistoryViewController: UITableViewController {
-    private let sessions: [WCDBV3ChatSession]
-    private let currentSessionID: UUID?
-    var onSelect: ((UUID) -> Void)?
+final class ImpressChatSessionHistoryViewController: UITableViewController,
+                                                      UISearchResultsUpdating {
+    private struct Hit {
+        let session: WCDBV3ChatSession
+        let messageID: UUID?
+        let preview: String
+    }
 
-    init(sessions: [WCDBV3ChatSession], currentSessionID: UUID?) {
+    private var sessions: [WCDBV3ChatSession]
+    private var hits: [Hit] = []
+    private let currentSessionID: UUID?
+    private let repository: ReviewWCDBRepository
+    private let search = UISearchController(searchResultsController: nil)
+    var onSelect: ((UUID, UUID?) -> Void)?
+    var onDeleted: ((UUID) -> Void)?
+
+    init(sessions: [WCDBV3ChatSession], currentSessionID: UUID?,
+         repository: ReviewWCDBRepository) {
         self.sessions = sessions
         self.currentSessionID = currentSessionID
+        self.repository = repository
         super.init(style: .insetGrouped)
+        buildHits(query: "")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
 
@@ -1472,45 +1542,156 @@ final class ImpressChatSessionHistoryViewController: UITableViewController {
         tableView.backgroundColor = ImpressV3Appearance.page
         tableView.rowHeight = UITableView.automaticDimension
         tableView.accessibilityIdentifier = "impress.ai.chat.history-list"
-        if sessions.isEmpty {
-            let label = UILabel()
-            label.text = V3L("还没有历史讨论；创建新讨论不会删除旧会话。")
-            label.numberOfLines = 0
-            label.textAlignment = .center
-            label.font = ImpressV3Appearance.Typography.body
-            label.textColor = ImpressV3Appearance.secondaryText
-            tableView.backgroundView = label
+        search.searchResultsUpdater = self
+        search.obscuresBackgroundDuringPresentation = false
+        search.searchBar.placeholder = V3L("搜索标题、消息或来源")
+        navigationItem.searchController = search
+        navigationItem.hidesSearchBarWhenScrolling = false
+        definesPresentationContext = true
+        updateEmptyState()
+    }
+
+    private func displayTitle(for session: WCDBV3ChatSession) -> String {
+        let first = session.messages.first(where: { $0.role == .user })?.text ??
+            (session.inputDraft.isEmpty ? V3L("空白讨论") : session.inputDraft)
+        return String(first.prefix(100))
+    }
+
+    private func buildHits(query: String) {
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        var next: [Hit] = []
+        for session in sessions where session.isDeleted != true {
+            if term.isEmpty {
+                next.append(Hit(session: session, messageID: nil,
+                                preview: displayTitle(for: session)))
+                continue
+            }
+            let title = displayTitle(for: session)
+            if title.localizedCaseInsensitiveContains(term) ||
+               session.sourceIdentity.localizedCaseInsensitiveContains(term) ||
+               session.inputDraft.localizedCaseInsensitiveContains(term) {
+                next.append(Hit(session: session, messageID: nil, preview: title))
+            } else if let message = session.messages.first(where: {
+                $0.text.localizedCaseInsensitiveContains(term)
+            }) {
+                next.append(Hit(session: session, messageID: message.messageID,
+                                preview: String(message.text.prefix(140))))
+            }
         }
+        hits = next
+    }
+
+    func updateSearchResults(for searchController: UISearchController) {
+        buildHits(query: searchController.searchBar.text ?? "")
+        tableView.reloadData()
+        updateEmptyState()
+    }
+
+    private func updateEmptyState() {
+        guard hits.isEmpty else {
+            tableView.backgroundView = nil
+            return
+        }
+        let label = UILabel()
+        label.text = sessions.isEmpty
+            ? V3L("还没有历史讨论；新建不会删除旧会话。")
+            : V3L("没有符合搜索条件的本地讨论。")
+        label.numberOfLines = 0
+        label.textAlignment = .center
+        label.font = ImpressV3Appearance.Typography.body
+        label.textColor = ImpressV3Appearance.secondaryText
+        tableView.backgroundView = label
     }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        sessions.count
+        hits.count
     }
+
     override func tableView(_ tableView: UITableView,
                             cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let session = sessions[indexPath.row]
+        let hit = hits[indexPath.row]
+        let session = hit.session
         let cell = tableView.dequeueReusableCell(withIdentifier: "chat.history")
             ?? UITableViewCell(style: .subtitle, reuseIdentifier: "chat.history")
-        let first = session.messages.first(where: { $0.role == .user })?.text ??
-            (session.inputDraft.isEmpty ? V3L("空白讨论") : session.inputDraft)
         var config = UIListContentConfiguration.subtitleCell()
-        config.text = String(first.prefix(100))
-        config.secondaryText = DateFormatter.localizedString(
-            from: session.updatedAt, dateStyle: .medium, timeStyle: .short) +
-            " · " + String(session.messages.count) + " " + V3L("条消息")
+        config.text = hit.preview
+        config.secondaryText = session.sourceIdentity + " · " +
+            DateFormatter.localizedString(from: session.updatedAt,
+                dateStyle: .short, timeStyle: .short)
         config.textProperties.numberOfLines = 2
+        config.secondaryTextProperties.numberOfLines = 1
         config.textProperties.font = ImpressV3Appearance.Typography.body
         config.secondaryTextProperties.font = ImpressV3Appearance.Typography.caption
         cell.contentConfiguration = config
         cell.backgroundColor = ImpressV3Appearance.surface
-        cell.accessoryType = session.sessionID == currentSessionID ? .checkmark : .disclosureIndicator
+        cell.accessoryType = session.sessionID == currentSessionID
+            ? .checkmark : .disclosureIndicator
         cell.accessibilityIdentifier = "impress.ai.chat.history-row"
         return cell
     }
+
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        guard sessions.indices.contains(indexPath.row) else { return }
-        onSelect?(sessions[indexPath.row].sessionID)
+        guard hits.indices.contains(indexPath.row) else { return }
+        let hit = hits[indexPath.row]
+        onSelect?(hit.session.sessionID, hit.messageID)
         tableView.deselectRow(at: indexPath, animated: true)
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath)
+        -> UISwipeActionsConfiguration? {
+        guard hits.indices.contains(indexPath.row) else { return nil }
+        let id = hits[indexPath.row].session.sessionID
+        let action = UIContextualAction(style: .destructive, title: V3L("删除")) {
+            [weak self] _, _, completion in
+            // The swipe itself is NOT approval. Cancel the swipe and show an
+            // explicit, full-scope confirmation first.
+            completion(false)
+            self?.confirmDeletion(of: id)
+        }
+        action.image = UIImage(systemName: "trash")
+        let config = UISwipeActionsConfiguration(actions: [action])
+        config.performsFirstActionWithFullSwipe = false
+        return config
+    }
+
+    private func confirmDeletion(of id: UUID) {
+        let warning = UIAlertController(title: V3L("删除本地讨论？"),
+            message: V3L("将清除普通消息、草稿和未执行提案。已经执行的卡片或笔记修改不会撤销，必要回执仍保留在本机修订记录中；旧的未加密备份可能仍包含删除前的聊天。执行中或未核实的修订必须先核查。"),
+            preferredStyle: .alert)
+        warning.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        warning.addAction(UIAlertAction(title: V3L("确认删除"), style: .destructive) {
+            [weak self] _ in
+            guard let self else { return }
+            Task {
+                do {
+                    let latest = try await self.repository.allChatSessions()
+                    guard let session = latest.first(where: { $0.sessionID == id }) else {
+                        throw WCDBV3ChatStorageError.invalidRecord
+                    }
+                    try await self.repository.deleteChatSession(id,
+                        expectedRevision: session.revision)
+                    self.sessions = try await self.repository.allChatSessions()
+                    self.buildHits(query: self.search.searchBar.text ?? "")
+                    self.tableView.reloadData()
+                    self.updateEmptyState()
+                    self.onDeleted?(id)
+                } catch {
+                    let explanation: String
+                    if case WCDBV3ChatStorageError.unsafeDeletion = error {
+                        explanation = V3L("存在执行中、撤销中或部分成功但未核实的修订。请先从原来源核查回执，删除已被阻止。")
+                    } else {
+                        explanation = V3L("删除未成功，原会话保持不变：") +
+                            error.localizedDescription
+                    }
+                    let alert = UIAlertController(title: V3L("无法安全删除"),
+                        message: explanation, preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+                    self.present(alert, animated: true)
+                }
+            }
+        })
+        present(warning, animated: true)
     }
 }
 
