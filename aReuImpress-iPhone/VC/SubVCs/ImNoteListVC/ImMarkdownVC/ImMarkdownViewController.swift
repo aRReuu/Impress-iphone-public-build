@@ -1161,8 +1161,6 @@ enum ImVaultDraftEntry {
 /// decision for this original card. It does NOT modify Obsidian source, score
 /// a review, fabricate section-level linkage or silently mark other cards.
 @MainActor
-
-@MainActor
 enum ImpressSourceImpactCardRevisionGate {
     /// A note's current content is evidence, not authority to silently edit
     /// its original cards. Only the user-edited card input is applied, with
@@ -1193,6 +1191,7 @@ enum ImpressSourceImpactCardRevisionGate {
     }
 }
 
+@MainActor
 final class ImpressNoteSourceImpactController: UIViewController {
     private let document: ImVaultRawDocument
     private let cardID: UUID
