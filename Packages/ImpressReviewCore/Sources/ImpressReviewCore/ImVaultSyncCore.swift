@@ -136,6 +136,63 @@ public enum ImVaultDiff {
     }
 }
 
+/// One review can approve two independently selected objects, but never pretends
+/// an external File Provider write and a WCDB transaction are atomic.
+public enum ImDuplexTargetStatus: String, Codable, Equatable, Sendable {
+    case pending, applying, applied, conflict, failed
+}
+public struct ImDuplexApprovalState: Codable, Equatable, Sendable {
+    public var noteSelected: Bool
+    public var cardSelected: Bool
+    public var noteStatus: ImDuplexTargetStatus
+    public var cardStatus: ImDuplexTargetStatus
+    public init(noteSelected: Bool, cardSelected: Bool,
+                noteStatus: ImDuplexTargetStatus = .pending,
+                cardStatus: ImDuplexTargetStatus = .pending) {
+        self.noteSelected = noteSelected
+        self.cardSelected = cardSelected
+        self.noteStatus = noteStatus
+        self.cardStatus = cardStatus
+    }
+    /// NEVER auto-run in-flight work after app restart. A later explicit
+    /// confirmation may retry only the targets that were not applied.
+    public var needsNoteAction: Bool { noteSelected && noteStatus != .applied }
+    public var needsCardAction: Bool { cardSelected && cardStatus != .applied }
+    public var completed: Bool {
+        // Both choices may become false only after explicit discard. A newly
+        // created proposal is always required to select at least one target.
+        !needsNoteAction && !needsCardAction
+    }
+}
+
+public enum ImDuplexCardVersionDecision: Equatable, Sendable {
+    case unchanged, safeToWrite, alreadyApplied, conflict
+}
+public enum ImDuplexCardVersionGate {
+    /// This gate checks *content* revision independently of FSRS review
+    /// revision, and rejects an unrelated edit even when text coincidentally
+    /// shares a title. Equal proposed bytes at revision + 1 are idempotent.
+    public static func decide(expectedContentRevision: Int, currentContentRevision: Int,
+                              baseQuestion: String, baseAnswer: String?,
+                              proposedQuestion: String, proposedAnswer: String?,
+                              currentQuestion: String, currentAnswer: String?)
+        -> ImDuplexCardVersionDecision {
+        let sameAsBase = currentQuestion == baseQuestion && currentAnswer == baseAnswer
+        let sameAsProposal = currentQuestion == proposedQuestion &&
+            currentAnswer == proposedAnswer
+        if proposedQuestion == baseQuestion && proposedAnswer == baseAnswer {
+            return .unchanged
+        }
+        if currentContentRevision == expectedContentRevision && sameAsBase {
+            return .safeToWrite
+        }
+        if currentContentRevision == expectedContentRevision + 1 && sameAsProposal {
+            return .alreadyApplied
+        }
+        return .conflict
+    }
+}
+
 /// Cryptographic content version: Apple CryptoKit on iOS and a portable
 /// FIPS-180 SHA-256 implementation on Linux test runners.
 public enum ImVaultDigest {

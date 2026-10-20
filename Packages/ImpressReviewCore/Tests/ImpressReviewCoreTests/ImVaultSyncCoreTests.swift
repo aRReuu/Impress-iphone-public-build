@@ -152,5 +152,53 @@ struct ImVaultSyncCoreTests {
         #expect(tampered != String(decoding: data, as: UTF8.self))
         let loaded = try decoder.decode(ImVaultDraft.self, from: Data(tampered.utf8))
         #expect(throws: ImVaultCoreError.invalidDraft) { try loaded.validate() }
+    } 
+    @Test func duplexIndividualTargetsAndExplicitRetryAreIdempotent() {
+        var both = ImDuplexApprovalState(noteSelected: true, cardSelected: true)
+        #expect(both.needsNoteAction && both.needsCardAction)
+        #expect(!both.completed)
+        both.noteStatus = .applied
+        both.cardStatus = .failed
+        #expect(!both.needsNoteAction && both.needsCardAction)
+        #expect(!both.completed)
+        let restored = try? JSONDecoder().decode(ImDuplexApprovalState.self,
+            from: JSONEncoder().encode(both))
+        #expect(restored == both)
+        #expect(restored?.needsCardAction == true)
+        both.cardStatus = .applied
+        #expect(both.completed)
+        var cardOnly = ImDuplexApprovalState(noteSelected: false, cardSelected: true)
+        #expect(!cardOnly.needsNoteAction)
+        cardOnly.cardStatus = .applied
+        #expect(cardOnly.completed)
+        var discarded = ImDuplexApprovalState(noteSelected: true, cardSelected: true)
+        discarded.noteSelected = false
+        discarded.cardSelected = false
+        #expect(discarded.completed)
+        #expect(!discarded.needsNoteAction && !discarded.needsCardAction)
     }
+
+    @Test func duplexCardConflictAndRepeatNeverOverwriteAnotherVersion() {
+        let safe = ImDuplexCardVersionGate.decide(expectedContentRevision: 3,
+            currentContentRevision: 3, baseQuestion: "Original Q", baseAnswer: "Original A",
+            proposedQuestion: "Revised Q", proposedAnswer: "Revised A",
+            currentQuestion: "Original Q", currentAnswer: "Original A")
+        #expect(safe == .safeToWrite)
+        let retry = ImDuplexCardVersionGate.decide(expectedContentRevision: 3,
+            currentContentRevision: 4, baseQuestion: "Original Q", baseAnswer: "Original A",
+            proposedQuestion: "Revised Q", proposedAnswer: "Revised A",
+            currentQuestion: "Revised Q", currentAnswer: "Revised A")
+        #expect(retry == .alreadyApplied)
+        let conflict = ImDuplexCardVersionGate.decide(expectedContentRevision: 3,
+            currentContentRevision: 4, baseQuestion: "Original Q", baseAnswer: "Original A",
+            proposedQuestion: "Revised Q", proposedAnswer: "Revised A",
+            currentQuestion: "A different edit", currentAnswer: "Original A")
+        #expect(conflict == .conflict)
+        #expect(ImDuplexCardVersionGate.decide(expectedContentRevision: 3,
+            currentContentRevision: 3, baseQuestion: "Original Q", baseAnswer: "Original A",
+            proposedQuestion: "Original Q", proposedAnswer: "Original A",
+            currentQuestion: "Original Q", currentAnswer: "Original A") == .unchanged)
+    }
+
+
 }

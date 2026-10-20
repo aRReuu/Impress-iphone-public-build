@@ -316,6 +316,50 @@ public struct WCDBV3EditProposal: Codable, Equatable, Sendable {
     public var resultReceipt: String?
 }
 
+/// This record contains NO entire Vault Markdown. The exact source bytes and
+/// edited private draft remain in ImVaultPrivateStore with separate protection.
+/// The card fields, original content revision and independent receipts survive
+/// process termination inside the existing WCDB-backed Chat session/backup.
+public struct WCDBV3DuplexProposal: Codable, Equatable, Sendable {
+    public let proposalID: UUID
+    public let sourceMessageID: UUID?
+    public let noteIdentity: ImVaultFileIdentity?
+    public let noteBaseDigest: String?
+    public let noteEditedDigest: String?
+    public let cardID: UUID?
+    public let cardReviewRevision: Int?
+    public let cardContentRevision: Int?
+    public let cardBaseQuestion: String?
+    public let cardBaseAnswer: String?
+    public let cardEditedQuestion: String?
+    public let cardEditedAnswer: String?
+    public var state: ImDuplexApprovalState
+    public var noteReceipt: String?
+    public var cardReceipt: String?
+    public init(proposalID: UUID = UUID(), sourceMessageID: UUID?,
+                noteIdentity: ImVaultFileIdentity?, noteBaseDigest: String?,
+                noteEditedDigest: String?, cardID: UUID?, cardReviewRevision: Int?,
+                cardContentRevision: Int?, cardBaseQuestion: String?,
+                cardBaseAnswer: String?, cardEditedQuestion: String?,
+                cardEditedAnswer: String?, state: ImDuplexApprovalState) {
+        self.proposalID = proposalID
+        self.sourceMessageID = sourceMessageID
+        self.noteIdentity = noteIdentity
+        self.noteBaseDigest = noteBaseDigest
+        self.noteEditedDigest = noteEditedDigest
+        self.cardID = cardID
+        self.cardReviewRevision = cardReviewRevision
+        self.cardContentRevision = cardContentRevision
+        self.cardBaseQuestion = cardBaseQuestion
+        self.cardBaseAnswer = cardBaseAnswer
+        self.cardEditedQuestion = cardEditedQuestion
+        self.cardEditedAnswer = cardEditedAnswer
+        self.state = state
+        self.noteReceipt = nil
+        self.cardReceipt = nil
+    }
+}
+
 public struct WCDBV3ChatSession: Codable, Equatable, Sendable {
     public let sessionID: UUID
     public let sourceIdentity: String
@@ -327,6 +371,8 @@ public struct WCDBV3ChatSession: Codable, Equatable, Sendable {
     public var inputDraft: String
     public var contextReferences: [WCDBV3ChatContextReference]
     public var pendingProposal: WCDBV3EditProposal?
+    /// Nil when decoding historic Chat rows. Does not automatically replay.
+    public var pendingDuplex: WCDBV3DuplexProposal?
     public var requestError: String?
     /// Optional per-discussion prompt; legacy rows decode to nil.
     public var promptOverride: String?
@@ -344,6 +390,7 @@ public struct WCDBV3ChatSession: Codable, Equatable, Sendable {
         self.inputDraft = ""
         self.contextReferences = []
         self.pendingProposal = nil
+        self.pendingDuplex = nil
         self.requestError = nil
         self.promptOverride = nil
         self.contextConsentGranted = false

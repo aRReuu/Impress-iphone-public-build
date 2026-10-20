@@ -174,3 +174,12 @@
 - 已完成 AI 回复提供：**修订关联原卡**（使用原 cardID、共用 Editor、WCDB CAS，不自动粘贴模型输出；成功后禁止继续使用旧来源版本发送）、**在关联笔记草稿中整理**（现有保护草稿／Diff／QA 文件门禁）和 **生成关联笔记候选卡**（复用既有章节选择与候选池／明确发送确认）。只有有身份的对象显示相应操作；未完成回复不提供写入相关动作。
 - Chat 提示词与材料可完整滚动预览，标签显示实际字节范围；不将只显示前 350/1000 字符冒充完整预览。
 - 此阶段仍**不具备**统一笔记＋原卡双选 Diff、联合执行回执、部分成功幂等恢复及正式 Vault 写入；LOOP-10～13、ACCEPT-08～12 继续 BLOCKED，需后续整体集成和真机验证。
+
+## 2026-10-20 · 原笔记／原卡两目标人工批准执行链（源码待 HEAD CI 验证）
+
+- Chat 已完成回复提供「统一预览笔记与原卡修订」；从卡片进入绑定原 cardID，从笔记进入先列出同一个 Vault+相对路径的原卡供明确选择。并非将回复自动写入：用户先在唯一私有草稿里整理局部 Markdown，在原卡输入题目／答案，只有完整 diff 和明确双目标选择后才能执行。选择题／图片卡仍调用原卡编辑器，不在普通题答案输入框丢失选项或图片。
+- 提案在原 Chat 会话的 WCDB 存储 `pendingDuplex`；只保留 Vault 身份、原始／拟议摘要、卡片字段、预期 revision、分对象状态及回执，不把整份 Obsidian Markdown 复制进 SQLite。原文字节与原文修改仍由私有 `ImVaultDraft` 保存。退出／重启仅恢复待办，不自动重放；可明确放弃尚未执行的目标。
+- 文件写回沿用 `ImVaultGuardedWrite.commitAuthorized`（SHA 对照、独立恢复副本、NSFileCoordinator、回读，源版本冲突拒绝覆盖），原卡沿用 `ReviewWCDBRepository.updateManagedCard` 双 revision CAS（cardID／FSRS 不变）。执行先持久化状态，每一步持久化回执；失败后人工明确重试，仅处理尚未 applied 的目标，文件已写时 `alreadyApplied` 不重复追加。
+- 笔记详情「核查笔记更新是否影响原卡」是手动反向核验入口。仅对已记录了 v2 源文件 digest 且 digest 变化的卡片提供核对；先在可滚动页面展示 **完整当前笔记** 与 **原卡题目、答案**；用户显式确认「不影响」后，只更新此卡的来源 digest 元数据，并由 WCDB CAS 保存，绝不伪称精确片段定位、自动污染其他原卡或产生 FSRS 评分。
+- 自动化新增：双目标分状态／重启恢复／文件写后卡冲突回执／测试 fixture 再次提交幂等／不影响确认原卡身份与调度保护。此处「已有源码」**不等于**模拟器测试通过；以同 HEAD Actions 成功为准。**不代表**实际 iPhone 13／File Provider／生产 Obsidian 写回已完成。
+- **安全门禁保持不变**：`ImVaultGuardedWrite.productionWriteEnabled = false`；仅 Debug 使用用户选择的独立 `Impress-Write-Test-Vault` 可以测试写源文件。正式 Vault 的生产写回仍须独立授权＋真机核验，未经授权不打开。真实密钥、联网大模型和 iCloud 远端同步均未由该实现验证。

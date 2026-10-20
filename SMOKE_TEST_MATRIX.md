@@ -86,3 +86,12 @@ Record final Git SHA, Actions run URL, each job conclusion, **total native XCTes
 | Editor routing | Question, answer, options, batch import, understanding capture/edit, prompt inputs and Markdown **private drafts** provide one mic accessory; source Obsidian reader remains read-only |
 | Real device | iPhone 13 microphone and interrupted session; per-locale model availability, first-download permission, latency, accuracy, background cancellation and VoiceOver **PENDING** |
 | Markdown overhaul | One AST-backed parser and unified rendering pipeline **PENDING**; no old or external Vault document discarded |
+
+## 双目标复核专项用例（必须在单一提交 SHA 通过，含 iPhone 13 QA）
+
+- **DUPLEX-01 正向**：在复习原卡进入 Chat、完成讨论，在仅针对该 note 的私有草稿改一处 Markdown，编辑同一张标准原卡题目或答案，单屏完整预览两个目标，并分别打开/关闭两项选择。保存后卡片 cardID、FSRS 事件不变，未选对象无副作用。
+- **DUPLEX-02 不可默默写生产 Vault**：即使双目标都被用户勾选，Release 的正式笔记写回必须失败且草稿保留；卡片目标回执独立，不能用草稿已保存或 Debug 副本成功冒充真正 Vault 已更新。
+- **DUPLEX-03 Debug QA 文件实际回读**：在 Files 手动选定唯一授权文件夹 `Impress-Write-Test-Vault`；验证同名其他目录不可写、原文 SHA 变更拒绝覆盖、写前备份、按用户确认范围修改、协调写回和本机回读；不得据此声称 iCloud 服务器同步。
+- **DUPLEX-04 断点与幂等**：让文件成功后卡片 CAS 失败，强杀与重启后只能通过显式恢复操作继续；文件不得二次追加，未应用的原卡不得被覆盖；允许取消剩余操作，保留已成功回执。
+- **DUPLEX-05 逆向**：笔记从属卡片的 v2 源 digest 改变后，只在用户请求「来源核查」时提示；完整读当前 Markdown／原卡，确认不影响则只更新该 cardID 的已核验源摘要，不评分、不改变问题与答案；同名不同 Vault、缺失授权、变更中再次改文档均拒绝误关联。
+- **DUPLEX-06 回退与兼容**：旧 Chat JSON 无 `pendingDuplex` 时仍能打开；原有独立草稿/FSRS/图片/选择题/三语言/夜间模式未回归。校准待定模块不作为本轮预置闭环。

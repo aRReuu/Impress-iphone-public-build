@@ -48,6 +48,7 @@ final class ImpressAINativeChatViewController: UIViewController,
     private let linkedNoteIdentity: ImVaultFileIdentity?
     private var chatRepository: ReviewWCDBRepository?
     private var storedSession: WCDBV3ChatSession?
+    private var pendingDuplex: WCDBV3DuplexProposal?
     private var contextReferences: [WCDBV3ChatContextReference] = []
     private var history: [WCDBV3ChatMessage] = []
     private var requestFailure: String?
@@ -144,7 +145,15 @@ final class ImpressAINativeChatViewController: UIViewController,
             style: .plain, target: self, action: #selector(startNewDiscussion))
         fresh.accessibilityIdentifier = "impress.ai.chat.new-discussion"
         fresh.accessibilityLabel = V3L("新建讨论")
-        navigationItem.rightBarButtonItems = [fresh, old, model]
+        var buttons = [fresh, old, model]
+        if let p = pendingDuplex, !p.state.completed {
+            let pending = UIBarButtonItem(image: UIImage(systemName: "checklist"),
+                style: .plain, target: self, action: #selector(resumeDuplexReview))
+            pending.accessibilityIdentifier = "impress.ai.chat.pending-duplex"
+            pending.accessibilityLabel = V3L("待确认的笔记与原卡修改")
+            buttons.insert(pending, at: 0)
+        }
+        navigationItem.rightBarButtonItems = buttons
     }
 
     @objc private func chooseConversationModel() {
@@ -494,6 +503,13 @@ final class ImpressAINativeChatViewController: UIViewController,
             }
         ]
         if turn.role == .assistant && turn.status == .completed {
+            if sourceCardID != nil || noteDraftTarget != nil {
+                actions.append(UIAction(
+                    title: V3L("统一预览笔记与原卡修订"),
+                    image: UIImage(systemName: "checklist")) { [weak self] _ in
+                        self?.openDuplexReview(sourceMessageID: turn.messageID)
+                    })
+            }
             if sourceCardID != nil {
                 actions.append(UIAction(
                     title: V3L("修订关联原卡"),
@@ -526,6 +542,76 @@ final class ImpressAINativeChatViewController: UIViewController,
             [weak self] _ in
             self?.messageMenu(for: message) ?? UIMenu(children: [])
         }
+    }
+
+    @objc private func resumeDuplexReview() {
+        openDuplexReview(sourceMessageID: pendingDuplex?.sourceMessageID)
+    }
+
+    private func openDuplexReview(sourceMessageID: UUID?) {
+        guard !sending && !restoring, sourceIdentity != nil,
+              let repo = chatRepository else { return }
+        // Never replace an unfinished two-target operation with an unrelated
+        // Chat suggestion: resume the recorded partial receipt first.
+        if let p = pendingDuplex, !p.state.completed {
+            showDuplexEditor(repository: repo, cardID: p.cardID,
+                contentRevision: nil, messageID: p.sourceMessageID, recovering: p)
+            return
+        }
+        if sourceCardID == nil, let identity = noteDraftTarget {
+            // Reverse direction: a note may have several original cards. User
+            // chooses by stable cardID instead of guessing from the title.
+            Task { [weak self] in
+                guard let self else { return }
+                do {
+                    let cards = try await repo.listRelatedCards(for: identity, limit: 20)
+                    let picker = UIAlertController(title: V3L("选择关联原卡"),
+                        message: V3L("可仅修改笔记，或选择一张已关联的原卡共同预览。"),
+                        preferredStyle: .actionSheet)
+                    picker.addAction(UIAlertAction(title: V3L("仅修改笔记"),
+                        style: .default) { [weak self] _ in
+                        self?.showDuplexEditor(repository: repo, cardID: nil,
+                            contentRevision: nil, messageID: sourceMessageID, recovering: nil)
+                    })
+                    for card in cards {
+                        picker.addAction(UIAlertAction(
+                            title: String(card.question.prefix(48)),
+                            style: .default) { [weak self] _ in
+                            self?.showDuplexEditor(repository: repo, cardID: card.cardID,
+                                contentRevision: nil, messageID: sourceMessageID, recovering: nil)
+                        })
+                    }
+                    picker.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+                    picker.popoverPresentationController?.sourceView = self.view
+                    picker.popoverPresentationController?.sourceRect = CGRect(
+                        x: self.view.bounds.midX, y: self.view.bounds.midY,
+                        width: 1, height: 1)
+                    self.present(picker, animated: true)
+                } catch { self.showProblem(error) }
+            }
+            return
+        }
+        showDuplexEditor(repository: repo, cardID: sourceCardID,
+            contentRevision: sourceContentRevision, messageID: sourceMessageID,
+            recovering: nil)
+    }
+
+    private func showDuplexEditor(repository: ReviewWCDBRepository, cardID: UUID?,
+                                  contentRevision: Int?, messageID: UUID?,
+                                  recovering: WCDBV3DuplexProposal?) {
+        let editor = ImpressDuplexChangeController(
+            repository: repository, cardID: cardID,
+            sourceContentRevision: contentRevision,
+            noteIdentity: noteDraftTarget, sourceMessageID: messageID,
+            pending: recovering) { [weak self] changed in
+                guard let self else { return false }
+                await self.saveChain?.value
+                self.pendingDuplex = changed
+                let ok = await self.persistLocal()
+                if ok { self.refreshModelPicker() }
+                return ok
+            }
+        navigationController?.pushViewController(editor, animated: true)
     }
 
     /// These actions reuse the existing authoritative editor and WCDB CAS.
@@ -899,6 +985,7 @@ final class ImpressAINativeChatViewController: UIViewController,
 
     private func activateSession(_ session: WCDBV3ChatSession) {
         storedSession = session
+        pendingDuplex = session.pendingDuplex
         sessionPromptOverride = session.promptOverride
         history = session.messages
         for i in history.indices where history[i].status == .pending {
@@ -1024,6 +1111,7 @@ final class ImpressAINativeChatViewController: UIViewController,
            base.contextReferences == contextReferences &&
            base.requestError == requestFailure &&
            base.promptOverride == sessionPromptOverride &&
+           base.pendingDuplex == pendingDuplex &&
            (base.contextConsentGranted == true) == contextConsentGranted { return true }
         var next = base
         next.messages = history
@@ -1031,6 +1119,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         next.contextReferences = contextReferences
         next.requestError = requestFailure
         next.promptOverride = sessionPromptOverride
+        next.pendingDuplex = pendingDuplex
         next.contextConsentGranted = contextConsentGranted
         next.updatedAt = Date()
         next.revision = storedSession == nil ? 0 : base.revision + 1
@@ -1234,5 +1323,648 @@ final class ImpressChatNoteSectionPicker: UITableViewController {
         let size = selection.reduce(0) { $0 + $1.text.utf8.count }
         guard !selection.isEmpty, size <= 8_000 else { return }
         onApply?(selection)
+    }
+}
+
+
+// MARK: - Explicit, recoverable note + ORIGINAL card change review
+//
+// This deliberately uses the existing private Vault draft, authorized scoped
+// file writer, WCDB card CAS, and Chat session record. The AI response is only
+// discussion; there is no model-to-file command and NO implicit production write.
+@MainActor
+final class ImpressDuplexChangeController: UIViewController {
+    typealias SaveProposal = @MainActor (WCDBV3DuplexProposal) async -> Bool
+    private let repository: ReviewWCDBRepository
+    private let cardID: UUID?
+    private let sourceContentRevision: Int?
+    private let noteIdentity: ImVaultFileIdentity?
+    private let sourceMessageID: UUID?
+    private let saveProposal: SaveProposal
+    private var pending: WCDBV3DuplexProposal?
+    private var card: WCDBV3CardContent?
+    private var reviewRevision: Int?
+    private var draft: ImVaultDraft?
+    private var loaded = false
+
+    private let cardInfo = UILabel()
+    private let noteInfo = UILabel()
+    private let questionInput = UITextView()
+    private let answerInput = UITextView()
+    private let editNoteButton = UIButton(type: .system)
+    private let previewButton = UIButton(type: .system)
+
+    init(repository: ReviewWCDBRepository, cardID: UUID?,
+         sourceContentRevision: Int?, noteIdentity: ImVaultFileIdentity?,
+         sourceMessageID: UUID?, pending: WCDBV3DuplexProposal?,
+         saveProposal: @escaping SaveProposal) {
+        self.repository = repository
+        self.cardID = cardID
+        self.sourceContentRevision = sourceContentRevision
+        self.noteIdentity = noteIdentity
+        self.sourceMessageID = sourceMessageID
+        self.pending = pending
+        self.saveProposal = saveProposal
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    private func label(_ content: String) -> UILabel {
+        let label = UILabel()
+        label.text = content
+        label.font = ImpressV3Appearance.Typography.body
+        label.adjustsFontForContentSizeCategory = true
+        label.textColor = ImpressV3Appearance.primaryText
+        label.numberOfLines = 0
+        return label
+    }
+    private func configure(_ view: UITextView, identifier: String, height: CGFloat) {
+        view.font = ImpressV3Appearance.Typography.body
+        view.adjustsFontForContentSizeCategory = true
+        view.textColor = ImpressV3Appearance.primaryText
+        view.backgroundColor = ImpressV3Appearance.surface
+        view.layer.cornerRadius = ImpressV3Appearance.Radius.field
+        view.textContainerInset = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
+        view.heightAnchor.constraint(equalToConstant: height).isActive = true
+        view.accessibilityIdentifier = identifier
+        ImpressSpeechAccessory.install(on: view)
+    }
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = V3L("笔记与原卡修订")
+        view.backgroundColor = ImpressV3Appearance.page
+        navigationItem.largeTitleDisplayMode = .never
+        let scroll = UIScrollView()
+        let stack = UIStackView()
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.axis = .vertical
+        stack.spacing = ImpressV3Appearance.Metrics.rowSpacing
+        stack.isLayoutMarginsRelativeArrangement = true
+        stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 12, leading: 16,
+                                                                  bottom: 24, trailing: 16)
+        cardInfo.font = ImpressV3Appearance.Typography.footnote
+        noteInfo.font = ImpressV3Appearance.Typography.footnote
+        for info in [cardInfo, noteInfo] {
+            info.adjustsFontForContentSizeCategory = true
+            info.numberOfLines = 0
+            info.textColor = ImpressV3Appearance.secondaryText
+        }
+        configure(questionInput, identifier: "impress.duplex.question", height: 114)
+        configure(answerInput, identifier: "impress.duplex.answer", height: 160)
+        ImpressV3Appearance.styleQuietButton(editNoteButton,
+            title: V3L("修改对应笔记的私有草稿"), symbol: "square.and.pencil")
+        editNoteButton.addTarget(self, action: #selector(editNote), for: .touchUpInside)
+        editNoteButton.accessibilityIdentifier = "impress.duplex.edit-note"
+        ImpressV3Appearance.styleQuietButton(previewButton,
+            title: V3L("预览两个对象的完整修改"), symbol: "checkmark.shield")
+        previewButton.addTarget(self, action: #selector(preparePreview), for: .touchUpInside)
+        previewButton.accessibilityIdentifier = "impress.duplex.preview"
+        previewButton.isEnabled = false
+        stack.addArrangedSubview(label(V3L("原卡 · 编辑题目与答案")))
+        stack.addArrangedSubview(cardInfo)
+        stack.addArrangedSubview(label(V3L("题目")))
+        stack.addArrangedSubview(questionInput)
+        stack.addArrangedSubview(label(V3L("答案")))
+        stack.addArrangedSubview(answerInput)
+        stack.addArrangedSubview(label(V3L("关联笔记 · 局部改动")))
+        stack.addArrangedSubview(noteInfo)
+        stack.addArrangedSubview(editNoteButton)
+        stack.addArrangedSubview(previewButton)
+        view.addSubview(scroll)
+        scroll.addSubview(stack)
+        NSLayoutConstraint.activate([
+            scroll.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
+            stack.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor)
+        ])
+        Task { await loadTargets() }
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        if loaded { refreshDraft() }
+    }
+
+    private func loadTargets() async {
+        do {
+            if let cardID {
+                guard let item = try await repository.content(for: cardID),
+                      let queue = try await repository.fetchQueueCandidates()
+                        .first(where: { $0.cardID == cardID }) else {
+                    throw ReviewWCDBError.missingCard
+                }
+                if pending == nil, let expected = sourceContentRevision,
+                   item.contentRevision != expected {
+                    throw ReviewWCDBError.contentConflict
+                }
+                // A card+note proposal may only target the card's exact
+                // verified Vault identity, never a same-title note.
+                if let identity = noteIdentity {
+                    guard let encoded = item.sourceNotePath,
+                          (try? ImpressBatchSourceKey.decode(encoded)) == identity else {
+                        throw ImVaultSyncFailure.wrongVault
+                    }
+                }
+                card = item
+                reviewRevision = queue.revision
+                let canEditStandard = item.cardType == 0
+                questionInput.isEditable = canEditStandard && pending == nil
+                answerInput.isEditable = canEditStandard && pending == nil
+                questionInput.text = pending?.cardEditedQuestion ?? item.question
+                answerInput.text = pending?.cardEditedAnswer ?? item.answerText ?? ""
+                cardInfo.text = "cardID: " + cardID.uuidString +
+                    "\nContent revision: " + String(item.contentRevision) +
+                    (canEditStandard ? "" :
+                        "\n" + V3L("非普通卡片请在原卡编辑器修改；本次可仅确认笔记。"))
+            } else {
+                cardInfo.text = V3L("没有关联原卡，本次仅核查笔记修改。")
+                questionInput.isHidden = true
+                answerInput.isHidden = true
+            }
+            if noteIdentity == nil {
+                editNoteButton.isHidden = true
+                noteInfo.text = V3L("没有可核实的来源笔记，仅修改原卡。")
+            }
+            if pending != nil {
+                editNoteButton.isEnabled = false
+                navigationItem.prompt = V3L("恢复待处理提案；不会自动重放任何写入。")
+            }
+            loaded = true
+            previewButton.isEnabled = true
+            refreshDraft()
+        } catch { presentIssue(V3L("读取原卡或来源失败"), error.localizedDescription) }
+    }
+
+    private func refreshDraft() {
+        guard let identity = noteIdentity else { return }
+        do {
+            guard ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID else {
+                throw ImVaultSyncFailure.wrongVault
+            }
+            draft = try ImVaultPrivateStore.loadDraft(identity: identity)
+            if let draft {
+                let diff = ImVaultDiff.summary(base: draft.baseText,
+                    edited: draft.editedText, maximumLines: 200)
+                noteInfo.text = V3L("目标：") + identity.relativePath +
+                    "\nSHA-256: " + draft.baseDigest +
+                    "\n" + (draft.hasChanges
+                        ? (diff.complete ? V3L("已有局部修订草稿，可预览与选择写回。") :
+                           V3L("修改范围超过预览上限，禁止确认笔记写回。"))
+                        : V3L("草稿未修改；可只更新原卡。"))
+            } else {
+                noteInfo.text = V3L("目标：") + identity.relativePath +
+                    "\n" + V3L("尚无笔记修订草稿；打开编辑器增量修改原文。")
+            }
+        } catch {
+            draft = nil
+            noteInfo.text = V3L("无法读取笔记草稿：") + error.localizedDescription
+        }
+    }
+
+    @objc private func editNote() {
+        guard pending == nil, let identity = noteIdentity,
+              ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID else {
+            presentIssue(V3L("来源身份已失效"), ImVaultSyncFailure.wrongVault.localizedDescription)
+            return
+        }
+        ImVaultReadSync.shared.read(identity) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let source):
+                do {
+                    let edit = try ImVaultPrivateStore.loadDraft(identity: identity)
+                        ?? ImVaultDraft(identity: identity, baseText: source.markdown,
+                                        baseRawData: source.sourceBytes)
+                    self.navigationController?.pushViewController(
+                        ImVaultDraftEditorController(draft: edit), animated: true)
+                } catch { self.presentIssue(V3L("笔记草稿不可用"), error.localizedDescription) }
+            case .failure(let error):
+                self.presentIssue(V3L("源笔记读取失败"), error.localizedDescription)
+            }
+        }
+    }
+
+    @objc private func preparePreview() {
+        guard loaded else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            if let pending = self.pending {
+                self.openApproval(pending)
+                return
+            }
+            let revisedQ = self.questionInput.text.trimmingCharacters(
+                in: .whitespacesAndNewlines)
+            let revisedA = self.answerInput.text ?? ""
+            let changedCard = self.card?.cardType == 0 &&
+                (self.card?.question != revisedQ || self.card?.answerText != revisedA)
+            let changedNote = self.draft?.hasChanges == true
+            guard changedCard || changedNote else {
+                self.presentIssue(V3L("内容未变化"), V3L("请先编辑笔记草稿或原卡。"))
+                return
+            }
+            guard !changedCard || (!revisedQ.isEmpty && revisedQ.utf8.count <= 10_000 &&
+                                  revisedA.utf8.count <= 40_000) else {
+                self.presentIssue(V3L("卡片内容无效"), V3L("题目不能为空或超过安全长度。"))
+                return
+            }
+            if changedNote, let d = self.draft {
+                guard ImVaultDiff.summary(base: d.baseText, edited: d.editedText,
+                                          maximumLines: 200).complete else {
+                    self.presentIssue(V3L("修改预览过长"),
+                        V3L("请把笔记修改缩小到可完整核对的范围。"))
+                    return
+                }
+            }
+            let p = WCDBV3DuplexProposal(sourceMessageID: self.sourceMessageID,
+                noteIdentity: changedNote ? self.noteIdentity : nil,
+                noteBaseDigest: changedNote ? self.draft?.baseDigest : nil,
+                noteEditedDigest: changedNote ? self.draft.map {
+                    ImVaultDigest.sha256(Data($0.editedText.utf8))
+                } : nil,
+                cardID: changedCard ? self.cardID : nil,
+                cardReviewRevision: changedCard ? self.reviewRevision : nil,
+                cardContentRevision: changedCard ? self.card?.contentRevision : nil,
+                cardBaseQuestion: changedCard ? self.card?.question : nil,
+                cardBaseAnswer: changedCard ? self.card?.answerText : nil,
+                cardEditedQuestion: changedCard ? revisedQ : nil,
+                cardEditedAnswer: changedCard ? revisedA : nil,
+                state: ImDuplexApprovalState(noteSelected: changedNote,
+                                             cardSelected: changedCard))
+            guard await self.saveProposal(p) else {
+                self.presentIssue(V3L("提案未保存"),
+                    V3L("Chat 的原子版本检查失败；修改尚未得到保存确认，禁止执行。"))
+                return
+            }
+            self.pending = p
+            self.openApproval(p)
+        }
+    }
+
+    private func openApproval(_ proposal: WCDBV3DuplexProposal) {
+        let page = ImpressDuplexApprovalController(
+            repository: repository, proposal: proposal) { [weak self] changed in
+                guard let self else { return false }
+                let saved = await self.saveProposal(changed)
+                if saved { self.pending = changed }
+                return saved
+            }
+        navigationController?.pushViewController(page, animated: true)
+    }
+
+    private func presentIssue(_ title: String, _ detail: String) {
+        let alert = UIAlertController(title: title, message: detail, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+        if presentedViewController == nil { present(alert, animated: true) }
+    }
+}
+
+@MainActor
+final class ImpressDuplexApprovalController: UIViewController {
+    private let repository: ReviewWCDBRepository
+    private let saveProposal: @MainActor (WCDBV3DuplexProposal) async -> Bool
+    private var proposal: WCDBV3DuplexProposal
+    private let noteToggle = UISwitch()
+    private let cardToggle = UISwitch()
+    private let preview = UITextView()
+    private let confirm = UIButton(type: .system)
+    private var notePreviewValid = false
+    private var committing = false
+
+    init(repository: ReviewWCDBRepository, proposal: WCDBV3DuplexProposal,
+         saveProposal: @escaping @MainActor (WCDBV3DuplexProposal) async -> Bool) {
+        self.repository = repository
+        self.proposal = proposal
+        self.saveProposal = saveProposal
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = V3L("逐项核对并确认修改")
+        view.backgroundColor = ImpressV3Appearance.page
+        preview.translatesAutoresizingMaskIntoConstraints = false
+        preview.isEditable = false
+        preview.isSelectable = true
+        preview.backgroundColor = ImpressV3Appearance.surface
+        preview.textColor = ImpressV3Appearance.primaryText
+        preview.font = ImpressV3Appearance.Typography.compactCode
+        preview.adjustsFontForContentSizeCategory = true
+        preview.accessibilityIdentifier = "impress.duplex.full-diff"
+        preview.textContainerInset = UIEdgeInsets(top: 14, left: 12, bottom: 22, right: 12)
+
+        let controls = UIStackView()
+        controls.translatesAutoresizingMaskIntoConstraints = false
+        controls.axis = .vertical
+        controls.spacing = 6
+        controls.addArrangedSubview(makeToggleRow(V3L("修改原笔记"), noteToggle))
+        controls.addArrangedSubview(makeToggleRow(V3L("修改原卡"), cardToggle))
+        noteToggle.accessibilityIdentifier = "impress.duplex.select-note"
+        cardToggle.accessibilityIdentifier = "impress.duplex.select-card"
+        noteToggle.isOn = proposal.state.noteSelected
+        cardToggle.isOn = proposal.state.cardSelected
+        noteToggle.addTarget(self, action: #selector(updateConfirmation), for: .valueChanged)
+        cardToggle.addTarget(self, action: #selector(updateConfirmation), for: .valueChanged)
+        noteToggle.isEnabled = proposal.noteIdentity != nil &&
+            proposal.state.noteStatus != .applied
+        cardToggle.isEnabled = proposal.cardID != nil &&
+            proposal.state.cardStatus != .applied
+
+        ImpressV3Appearance.styleQuietButton(confirm,
+            title: V3L("确认执行所选修改"), symbol: "checkmark.shield")
+        confirm.addTarget(self, action: #selector(confirmChanges), for: .touchUpInside)
+        confirm.accessibilityIdentifier = "impress.duplex.confirm"
+        confirm.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(preview)
+        view.addSubview(controls)
+        view.addSubview(confirm)
+        NSLayoutConstraint.activate([
+            preview.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
+            preview.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 12),
+            preview.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -12),
+            preview.bottomAnchor.constraint(equalTo: controls.topAnchor, constant: -8),
+            controls.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            controls.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            controls.bottomAnchor.constraint(equalTo: confirm.topAnchor, constant: -8),
+            confirm.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            confirm.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            confirm.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
+            confirm.heightAnchor.constraint(greaterThanOrEqualToConstant: 48)
+        ])
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: V3L("放弃未完成项"), style: .plain,
+            target: self, action: #selector(discardUnapplied))
+        refreshPreview()
+    }
+
+    @objc private func discardUnapplied() {
+        guard !committing else { return }
+        let confirmDiscard = UIAlertController(title: V3L("放弃未完成项？"),
+            message: V3L("仅取消尚未执行的目标，已成功的笔记和原卡保留且不会撤销。"),
+            preferredStyle: .alert)
+        confirmDiscard.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        confirmDiscard.addAction(UIAlertAction(title: V3L("确认放弃"), style: .destructive) {
+            [weak self] _ in
+            guard let self else { return }
+            Task {
+                var cancelled = self.proposal
+                if cancelled.state.noteStatus != .applied {
+                    cancelled.state.noteSelected = false
+                }
+                if cancelled.state.cardStatus != .applied {
+                    cancelled.state.cardSelected = false
+                }
+                guard await self.saveProposal(cancelled) else {
+                    self.showResult(V3L("无法保存取消决定"),
+                        V3L("原待处理项仍然保留，不执行任何写回。"))
+                    return
+                }
+                self.proposal = cancelled
+                self.navigationController?.popViewController(animated: true)
+            }
+        })
+        present(confirmDiscard, animated: true)
+    }
+
+    private func makeToggleRow(_ name: String, _ control: UISwitch) -> UIView {
+        let label = UILabel()
+        label.text = name
+        label.font = ImpressV3Appearance.Typography.body
+        label.adjustsFontForContentSizeCategory = true
+        label.textColor = ImpressV3Appearance.primaryText
+        let row = UIStackView(arrangedSubviews: [label, control])
+        row.axis = .horizontal
+        row.alignment = .center
+        row.distribution = .equalSpacing
+        row.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        return row
+    }
+
+    private func refreshPreview() {
+        var pieces = [V3L("文件与数据库不是同一个事务；按对象保留回执、冲突与重试。"),
+                      V3L("必须逐项核对下方完整差异；无确认不会写入。")]
+        if let identity = proposal.noteIdentity {
+            pieces.append("\n" + V3L("笔记：") + identity.relativePath +
+                          "\nSHA-256: " + (proposal.noteBaseDigest ?? "?") +
+                          "\n" + V3L("状态：") + proposal.state.noteStatus.rawValue)
+            do {
+                guard let draft = try ImVaultPrivateStore.loadDraft(identity: identity),
+                      draft.baseDigest == proposal.noteBaseDigest,
+                      ImVaultDigest.sha256(Data(draft.editedText.utf8)) ==
+                          proposal.noteEditedDigest else {
+                    throw ImVaultSyncFailure.conflict
+                }
+                let diff = ImVaultDiff.summary(base: draft.baseText,
+                    edited: draft.editedText, maximumLines: 200)
+                notePreviewValid = diff.complete
+                pieces.append(diff.text)
+            } catch {
+                notePreviewValid = false
+                pieces.append(V3L("草稿变更或不存在：旧批准已失效，不能写入。") +
+                              "\n" + error.localizedDescription)
+            }
+        }
+        if let id = proposal.cardID {
+            pieces.append("\ncardID: " + id.uuidString +
+                          "\nContent revision: " + String(proposal.cardContentRevision ?? -1) +
+                          "\n" + V3L("状态：") + proposal.state.cardStatus.rawValue)
+            pieces.append("\n" + V3L("原题目：") + "\n" + (proposal.cardBaseQuestion ?? "") +
+                          "\n" + V3L("新题目：") + "\n" + (proposal.cardEditedQuestion ?? "") +
+                          "\n" + V3L("原答案：") + "\n" + (proposal.cardBaseAnswer ?? "") +
+                          "\n" + V3L("新答案：") + "\n" + (proposal.cardEditedAnswer ?? ""))
+        }
+        if let receipt = proposal.noteReceipt {
+            pieces.append("\n" + V3L("笔记回执：") + receipt)
+        }
+        if let receipt = proposal.cardReceipt {
+            pieces.append("\n" + V3L("卡片回执：") + receipt)
+        }
+        preview.text = pieces.joined(separator: "\n")
+        updateConfirmation()
+    }
+
+    @objc private func updateConfirmation() {
+        confirm.isEnabled = !committing &&
+            ((noteToggle.isOn && noteToggle.isEnabled && notePreviewValid) ||
+             (cardToggle.isOn && cardToggle.isEnabled))
+    }
+
+    @objc private func confirmChanges() {
+        guard !committing else { return }
+        let noteChosen = (noteToggle.isOn && notePreviewValid) ||
+            (proposal.state.noteSelected && proposal.state.noteStatus == .applied)
+        let cardChosen = cardToggle.isOn ||
+            (proposal.state.cardSelected && proposal.state.cardStatus == .applied)
+        guard noteChosen || cardChosen else { return }
+        // The two selection bits belong to this exact saved proposal, not a
+        // mutable UI draft. A new material revision needs a NEW proposal.
+        var selected = proposal
+        selected.state.noteSelected = noteChosen
+        selected.state.cardSelected = cardChosen
+        let targets = [
+            noteChosen ? (V3L("笔记：") + (selected.noteIdentity?.relativePath ?? "")) : nil,
+            cardChosen ? (V3L("原卡：") + (selected.cardID?.uuidString ?? "")) : nil
+        ].compactMap { $0 }.joined(separator: "\n")
+        let consent = UIAlertController(title: V3L("确认这两个目标的所选修改？"),
+            message: targets + "\n\n" +
+                V3L("来源冲突时停止覆盖；可能部分成功。正式 Vault 写入仍锁定，只有独立 Debug QA 副本获授权后能实际修改文件。"),
+            preferredStyle: .alert)
+        consent.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        consent.addAction(UIAlertAction(title: V3L("确认执行"), style: .destructive) {
+            [weak self] _ in
+            guard let self else { return }
+            Task { await self.execute(selected) }
+        })
+        present(consent, animated: true)
+    }
+
+    private func execute(_ chosen: WCDBV3DuplexProposal) async {
+        committing = true
+        updateConfirmation()
+        defer { committing = false; refreshPreview() }
+        guard await saveProposal(chosen) else {
+            showResult(V3L("回执无法保存"), V3L("未执行任何修改。"))
+            return
+        }
+        proposal = chosen
+        if proposal.state.needsNoteAction {
+            // Intent recorded before the first side effect. On restart this
+            // remains pending and is NEVER auto-replayed.
+            proposal.state.noteStatus = .applying
+            guard await saveProposal(proposal) else {
+                showResult(V3L("笔记状态无法保存"), V3L("未执行文件写入。"))
+                return
+            }
+            do {
+                guard let id = proposal.noteIdentity,
+                      let draft = try ImVaultPrivateStore.loadDraft(identity: id),
+                      draft.baseDigest == proposal.noteBaseDigest,
+                      ImVaultDigest.sha256(Data(draft.editedText.utf8)) ==
+                          proposal.noteEditedDigest,
+                      ImVaultDiff.summary(base: draft.baseText, edited: draft.editedText,
+                                          maximumLines: 200).complete else {
+                    throw ImVaultSyncFailure.conflict
+                }
+                let qaAuthorized: Bool = await withCheckedContinuation { continuation in
+                    ImVaultGuardedWrite.checkQAVaultEligibility(for: id) { result in
+                        continuation.resume(returning: (try? result.get()) == true)
+                    }
+                }
+                let result: Result<ImVaultCommitOutcome, Error> =
+                    await withCheckedContinuation { continuation in
+                        ImVaultGuardedWrite.commitAuthorized(
+                            draft: draft, userConfirmedDiff: true,
+                            deviceQATestCopyConfirmed: qaAuthorized) { r in
+                                continuation.resume(returning: r)
+                            }
+                    }
+                switch result {
+                case .success(let outcome):
+                    proposal.state.noteStatus = .applied
+                    let receipt = ImVaultWriteReceiptText.present(
+                        .success(outcome), testCopy: qaAuthorized)
+                    proposal.noteReceipt = receipt.title + " · " + receipt.detail
+                case .failure(let error):
+                    if case ImVaultSyncFailure.conflict = error {
+                        proposal.state.noteStatus = .conflict
+                    } else {
+                        proposal.state.noteStatus = .failed
+                    }
+                    proposal.noteReceipt = error.localizedDescription
+                }
+            } catch {
+                if case ImVaultSyncFailure.conflict = error {
+                    proposal.state.noteStatus = .conflict
+                } else {
+                    proposal.state.noteStatus = .failed
+                }
+                proposal.noteReceipt = error.localizedDescription
+            }
+            guard await saveProposal(proposal) else {
+                showResult(V3L("写回回执未能保存"),
+                    V3L("文件结果不明，请先检查目标和本机恢复副本；不可重试卡片，避免失配。"))
+                return
+            }
+        }
+        if proposal.state.needsCardAction {
+            proposal.state.cardStatus = .applying
+            guard await saveProposal(proposal) else {
+                showResult(V3L("卡片状态无法保存"), V3L("未修改数据库。"))
+                return
+            }
+            do {
+                guard let id = proposal.cardID, let original = proposal.cardBaseQuestion,
+                      let replacement = proposal.cardEditedQuestion,
+                      let revision = proposal.cardContentRevision,
+                      let card = try await repository.content(for: id) else {
+                    throw ReviewWCDBError.missingCard
+                }
+                if let note = proposal.noteIdentity {
+                    guard let link = card.sourceNotePath,
+                          (try? ImpressBatchSourceKey.decode(link)) == note else {
+                        throw ImVaultSyncFailure.wrongVault
+                    }
+                }
+                switch ImDuplexCardVersionGate.decide(
+                    expectedContentRevision: revision, currentContentRevision: card.contentRevision,
+                    baseQuestion: original, baseAnswer: proposal.cardBaseAnswer,
+                    proposedQuestion: replacement, proposedAnswer: proposal.cardEditedAnswer,
+                    currentQuestion: card.question, currentAnswer: card.answerText) {
+                case .unchanged, .alreadyApplied:
+                    proposal.state.cardStatus = .applied
+                    proposal.cardReceipt = V3L("原卡内容已一致；未重复保存、未评分。")
+                case .conflict:
+                    proposal.state.cardStatus = .conflict
+                    proposal.cardReceipt = V3L("原卡内容已被其他编辑修改，拒绝覆盖。")
+                case .safeToWrite:
+                    guard let queue = try await repository.fetchQueueCandidates()
+                            .first(where: { $0.cardID == id }),
+                          queue.revision == proposal.cardReviewRevision else {
+                        throw ReviewWCDBError.revisionConflict
+                    }
+                    try await repository.updateManagedCard(
+                        WCDBV3CardInput(cardID: id, question: replacement,
+                            answerText: proposal.cardEditedAnswer, choices: card.choices,
+                            correctIndices: card.correctIndices, cardType: card.cardType,
+                            imageData: card.imageData, sourceNotePath: card.sourceNotePath),
+                        expectedRevision: queue.revision,
+                        expectedContentRevision: revision, origin: .approvedAI)
+                    proposal.state.cardStatus = .applied
+                    proposal.cardReceipt = V3L("原卡已按确认内容更新；cardID 与 FSRS 历史保留。")
+                }
+            } catch {
+                if case ReviewWCDBError.contentConflict = error {
+                    proposal.state.cardStatus = .conflict
+                } else if case ReviewWCDBError.revisionConflict = error {
+                    proposal.state.cardStatus = .conflict
+                } else {
+                    proposal.state.cardStatus = .failed
+                }
+                proposal.cardReceipt = error.localizedDescription
+            }
+            guard await saveProposal(proposal) else {
+                showResult(V3L("卡片回执未能保存"),
+                    V3L("请从原卡重新读取当前版本，确认是否已经更新；不可盲目重试。"))
+                return
+            }
+        }
+        showResult(proposal.state.completed ? V3L("所选修改已处理") : V3L("存在未完成的修改"),
+            (proposal.noteReceipt ?? V3L("笔记未选择")) + "\n\n" +
+            (proposal.cardReceipt ?? V3L("原卡未选择")) + "\n\n" +
+            V3L("所有回执存于原 Chat 会话；失败目标仅允许再次手动核查后重试。"))
+    }
+
+    private func showResult(_ name: String, _ message: String) {
+        let alert = UIAlertController(title: name, message: message,
+                                      preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+        present(alert, animated: true)
     }
 }

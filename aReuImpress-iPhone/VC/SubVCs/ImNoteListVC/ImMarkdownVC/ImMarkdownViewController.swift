@@ -759,6 +759,10 @@ final class ImVaultDocumentController: UIViewController {
             UIAction(title: V3L("关联卡片"),
                 image: UIImage(systemName: "rectangle.stack")) {
                     [weak self] _ in self?.openLinkedCards()
+                },
+            UIAction(title: V3L("核查笔记更新是否影响原卡"),
+                image: UIImage(systemName: "checkmark.shield")) {
+                    [weak self] _ in self?.checkLinkedCardChanges()
                 }
         ])
         navigationItem.rightBarButtonItems = [discussion, more]
@@ -904,6 +908,66 @@ final class ImVaultDocumentController: UIViewController {
         }
     }
 
+    /// Explicit reverse check only. Source key v2 is file-level evidence,
+    /// NOT a claim that an unrelated paragraph changed the card's answer.
+    @objc private func checkLinkedCardChanges() {
+        guard ImVaultReadOnlyProbe.shared.authorizedVaultID == document.identity.vaultID else {
+            showVaultError(V3L("Vault 授权已失效"), error: ImVaultSyncFailure.wrongVault)
+            return
+        }
+        ImVaultReadSync.shared.read(document.identity) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .failure(let error):
+                self.showVaultError(V3L("来源笔记读取失败"), error: error)
+            case .success(let source):
+                Task { [weak self] in
+                    guard let self else { return }
+                    do {
+                        let repo = try ImpressV3ReviewEnvironment.repository()
+                        let related = try await repo.listRelatedCards(for: source.identity)
+                        let oldHashes: [(WCDBV3ManagedCard, String)] = related.compactMap {
+                            card in
+                            guard let key = card.sourceNotePath,
+                                  let original = try? ImpressBatchSourceKey.documentDigest(for: key),
+                                  original != source.digest else { return nil }
+                            return (card, original)
+                        }
+                        if oldHashes.isEmpty {
+                            let message = UIAlertController(
+                                title: V3L("没有需要核查的已记录变化"),
+                                message: V3L("关联原卡没有已记录的来源版本差异，或旧卡缺少来源摘要。不能据此证明笔记和卡片始终一致。"),
+                                preferredStyle: .alert)
+                            message.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+                            self.present(message, animated: true)
+                            return
+                        }
+                        let picker = UIAlertController(title: V3L("核查关联原卡"),
+                            message: V3L("只看到文件版本变化，无法假装精确定位相关章节。请选择一张原卡进行人工核对。"),
+                            preferredStyle: .actionSheet)
+                        for (card, digest) in oldHashes.prefix(16) {
+                            picker.addAction(UIAlertAction(
+                                title: String(card.question.prefix(52)),
+                                style: .default) { [weak self] _ in
+                                self?.navigationController?.pushViewController(
+                                    ImpressNoteSourceImpactController(
+                                        document: source, cardID: card.cardID,
+                                        previousDigest: digest, repository: repo),
+                                    animated: true)
+                            })
+                        }
+                        picker.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+                        picker.popoverPresentationController?.sourceView = self.view
+                        picker.popoverPresentationController?.sourceRect = CGRect(
+                            x: self.view.bounds.midX, y: self.view.bounds.midY,
+                            width: 1, height: 1)
+                        self.present(picker, animated: true)
+                    } catch { self.showVaultError(V3L("无法查询关联卡片"), error: error) }
+                }
+            }
+        }
+    }
+
     @objc private func editDraft() {
         do {
             // A prior unsent version is NEVER overwritten by a newer source.
@@ -922,6 +986,167 @@ final class ImVaultDocumentController: UIViewController {
         let alert = UIAlertController(title: title,
                                       message: error.localizedDescription,
                                       preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+        present(alert, animated: true)
+    }
+}
+
+/// A low-weight, manual reverse check. Only records an explicit "unaffected"
+/// decision for this original card. It does NOT modify Obsidian source, score
+/// a review, fabricate section-level linkage or silently mark other cards.
+@MainActor
+final class ImpressNoteSourceImpactController: UIViewController {
+    private let document: ImVaultRawDocument
+    private let cardID: UUID
+    private let previousDigest: String
+    private let repository: ReviewWCDBRepository
+    private let reading = UITextView()
+    private let markUnaffected = UIButton(type: .system)
+    private var ready = false
+    private var observedRevision: Int?
+    private var observedReviewRevision: Int?
+    private var originalSourceKey: String?
+
+    init(document: ImVaultRawDocument, cardID: UUID, previousDigest: String,
+         repository: ReviewWCDBRepository) {
+        self.document = document
+        self.cardID = cardID
+        self.previousDigest = previousDigest
+        self.repository = repository
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = V3L("原卡来源核查")
+        view.backgroundColor = ImpressV3Appearance.page
+        reading.translatesAutoresizingMaskIntoConstraints = false
+        reading.font = ImpressV3Appearance.Typography.body
+        reading.adjustsFontForContentSizeCategory = true
+        reading.isEditable = false
+        reading.isSelectable = true
+        reading.textColor = ImpressV3Appearance.primaryText
+        reading.backgroundColor = ImpressV3Appearance.surface
+        reading.accessibilityIdentifier = "impress.notes.source-impact.full-text"
+        ImpressV3Appearance.styleQuietButton(markUnaffected,
+            title: V3L("已核对：修改不影响这张原卡"), symbol: "checkmark.shield")
+        markUnaffected.translatesAutoresizingMaskIntoConstraints = false
+        markUnaffected.accessibilityIdentifier = "impress.notes.source-impact.unaffected"
+        markUnaffected.isEnabled = false
+        markUnaffected.addTarget(self, action: #selector(confirmUnaffected),
+                                 for: .touchUpInside)
+        view.addSubview(reading)
+        view.addSubview(markUnaffected)
+        NSLayoutConstraint.activate([
+            reading.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor,
+                                          constant: 8),
+            reading.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor,
+                                              constant: 12),
+            reading.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor,
+                                               constant: -12),
+            reading.bottomAnchor.constraint(equalTo: markUnaffected.topAnchor,
+                                             constant: -12),
+            markUnaffected.leadingAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            markUnaffected.trailingAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            markUnaffected.bottomAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
+            markUnaffected.heightAnchor.constraint(greaterThanOrEqualToConstant: 48)
+        ])
+        Task { await loadCard() }
+    }
+
+    private func loadCard() async {
+        do {
+            guard let card = try await repository.content(for: cardID),
+                  let revision = try await repository.fetchQueueCandidates()
+                    .first(where: { $0.cardID == cardID })?.revision,
+                  let key = card.sourceNotePath,
+                  (try? ImpressBatchSourceKey.decode(key)) == document.identity,
+                  (try? ImpressBatchSourceKey.documentDigest(for: key)) == previousDigest
+            else { throw ImVaultSyncFailure.conflict }
+            observedRevision = card.contentRevision
+            observedReviewRevision = revision
+            originalSourceKey = key
+            reading.text = V3L("仅能确认文件级来源变化；请阅读当前完整笔记及原卡，再决定是否受影响。") +
+                "\n\n" + V3L("来源：") + document.identity.relativePath +
+                "\n" + V3L("原来源 SHA-256：") + previousDigest +
+                "\n" + V3L("新来源 SHA-256：") + document.digest +
+                "\n\ncardID: " + cardID.uuidString +
+                "\n\n" + V3L("题目：") + card.question +
+                "\n\n" + V3L("答案：") + (card.answerText ?? "") +
+                "\n\n" + V3L("当前笔记完整 Markdown：") + "\n" + document.markdown
+            ready = true
+            markUnaffected.isEnabled = true
+        } catch {
+            reading.text = error.localizedDescription
+            markUnaffected.isEnabled = false
+        }
+    }
+
+    @objc private func confirmUnaffected() {
+        guard ready, let originalRevision = observedRevision,
+              let fsrsRevision = observedReviewRevision,
+              let oldKey = originalSourceKey else { return }
+        let alert = UIAlertController(title: V3L("确认不影响原卡？"),
+            message: V3L("仅更新这张原卡的已核实来源摘要；题目、答案和 FSRS 评分不变。修改仍需版本核验，其他卡片不受影响。"),
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("确认不影响"), style: .default) {
+            [weak self] _ in
+            guard let self else { return }
+            self.markUnaffected.isEnabled = false
+            ImVaultReadSync.shared.read(self.document.identity) { [weak self] result in
+                guard let self else { return }
+                switch result {
+                case .failure(let error):
+                    self.presentError(error)
+                case .success(let latest):
+                    Task {
+                        do {
+                            guard latest.digest == self.document.digest,
+                                  let content = try await self.repository.content(for: self.cardID),
+                                  content.contentRevision == originalRevision,
+                                  content.sourceNotePath == oldKey,
+                                  let queue = try await self.repository.fetchQueueCandidates()
+                                    .first(where: { $0.cardID == self.cardID }),
+                                  queue.revision == fsrsRevision else {
+                                throw ImVaultSyncFailure.conflict
+                            }
+                            let newest = try ImpressBatchSourceKey.encode(
+                                self.document.identity, documentDigest: latest.digest)
+                            try await self.repository.updateManagedCard(
+                                WCDBV3CardInput(cardID: self.cardID,
+                                    question: content.question,
+                                    answerText: content.answerText, choices: content.choices,
+                                    correctIndices: content.correctIndices,
+                                    cardType: content.cardType,
+                                    imageData: content.imageData, sourceNotePath: newest),
+                                expectedRevision: fsrsRevision,
+                                expectedContentRevision: originalRevision, origin: .manual)
+                            let done = UIAlertController(
+                                title: V3L("已确认这张原卡不受影响"),
+                                message: V3L("仅更新来源核对版本，保留原卡、答案、FSRS 历史及源笔记。"),
+                                preferredStyle: .alert)
+                            done.addAction(UIAlertAction(title: V3L("确定"),
+                                style: .default) { [weak self] _ in
+                                self?.navigationController?.popViewController(animated: true)
+                            })
+                            self.present(done, animated: true)
+                        } catch { self.presentError(error) }
+                    }
+                }
+            }
+        })
+        present(alert, animated: true)
+    }
+
+    private func presentError(_ error: Error) {
+        markUnaffected.isEnabled = true
+        let alert = UIAlertController(title: V3L("来源核查失败"),
+            message: error.localizedDescription, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
         present(alert, animated: true)
     }

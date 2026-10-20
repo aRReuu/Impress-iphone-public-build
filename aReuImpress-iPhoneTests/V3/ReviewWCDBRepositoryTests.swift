@@ -10,6 +10,8 @@ import ImpressReviewCore
 
 private enum ForcedSchedulingError: Error {
     case fixtureFailure
+
+
 }
 
 private struct FailingReviewCalculator: WCDBReviewCalculating {
@@ -20,6 +22,124 @@ private struct FailingReviewCalculator: WCDBReviewCalculating {
 }
 
 final class ReviewWCDBRepositoryTests: XCTestCase {
+
+    @MainActor
+    func testSourceRevisionAcknowledgementKeepsOriginalCardAndReviewSchedule() async throws {
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
+                                            calculator: FSRS6ReviewCalculator())
+        let calculator = FSRS6ReviewCalculator()
+        let identity = try ImVaultFileIdentity(vaultID: "stable", relativePath: "Topic.md")
+        let previous = String(repeating: "a", count: 64)
+        let latest = String(repeating: "b", count: 64)
+        let previousKey = try ImpressBatchSourceKey.encode(identity, documentDigest: previous)
+        let cardID = UUID(), created = Date(timeIntervalSince1970: 1_726_000_000)
+        try await repo.insertNewCard(WCDBV3CardInput(cardID: cardID,
+            question: "What does this explain?", answerText: "The original answer",
+            sourceNotePath: previousKey),
+            initial: try calculator.newCardSnapshot(id: cardID, now: created), now: created)
+        let beforeValue = try await repo.content(for: cardID)
+        let before = try XCTUnwrap(beforeValue)
+        let previousCandidates = try await repo.fetchQueueCandidates()
+        let previousReview = try XCTUnwrap(previousCandidates.first {
+            $0.cardID == cardID
+        })
+        let newKey = try ImpressBatchSourceKey.encode(identity, documentDigest: latest)
+        try await repo.updateManagedCard(WCDBV3CardInput(cardID: cardID,
+            question: before.question, answerText: before.answerText,
+            choices: before.choices, correctIndices: before.correctIndices,
+            cardType: before.cardType, imageData: before.imageData,
+            sourceNotePath: newKey),
+            expectedRevision: previousReview.revision,
+            expectedContentRevision: before.contentRevision)
+        let afterValue = try await repo.content(for: cardID)
+        let after = try XCTUnwrap(afterValue)
+        let nextCandidates = try await repo.fetchQueueCandidates()
+        let nextReview = try XCTUnwrap(nextCandidates.first {
+            $0.cardID == cardID
+        })
+        XCTAssertEqual(after.cardID, cardID)
+        XCTAssertEqual(after.question, before.question)
+        XCTAssertEqual(after.answerText, before.answerText)
+        XCTAssertEqual(after.contentRevision, before.contentRevision + 1)
+        XCTAssertEqual(try ImpressBatchSourceKey.documentDigest(for:
+            try XCTUnwrap(after.sourceNotePath)), latest)
+        XCTAssertEqual(nextReview.revision, previousReview.revision)
+        XCTAssertEqual(nextReview.dueAt, previousReview.dueAt)
+        let related = try await repo.listRelatedCards(for: identity)
+        XCTAssertEqual(related.map(\.cardID), [cardID])
+    }
+
+    @MainActor
+    func testDuplexPartialReceiptDoesNotReapplyWrittenQAFileOnCardConflict() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DuplexQA-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let identity = try ImVaultFileIdentity(vaultID: "fixture", relativePath: "One.md")
+        let original = "# Topic\nOld detail\n"
+        let file = root.appendingPathComponent("One.md")
+        try Data(original.utf8).write(to: file)
+        var draft = try ImVaultDraft(identity: identity, baseText: original)
+        try draft.update("# Topic\nCorrected detail\n")
+        let outcome = try ImVaultGuardedWrite.commitFixture(root: root,
+            draft: draft, userConfirmedDiff: true)
+        guard case .written = outcome else {
+            XCTFail("First write must verify a real disposable fixture file")
+            return
+        }
+        var state = ImDuplexApprovalState(noteSelected: true, cardSelected: true)
+        state.noteStatus = .applied
+        let conflict = ImDuplexCardVersionGate.decide(expectedContentRevision: 0,
+            currentContentRevision: 1, baseQuestion: "Q", baseAnswer: "A",
+            proposedQuestion: "Q2", proposedAnswer: "A2",
+            currentQuestion: "Changed by another editor", currentAnswer: "A")
+        XCTAssertEqual(conflict, .conflict)
+        state.cardStatus = .conflict
+        XCTAssertFalse(state.needsNoteAction)
+        XCTAssertTrue(state.needsCardAction)
+        let second = try ImVaultGuardedWrite.commitFixture(root: root,
+            draft: draft, userConfirmedDiff: true)
+        guard case .alreadyApplied = second else {
+            XCTFail("Retry must never append or write a second time")
+            return
+        }
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8),
+                       "# Topic\nCorrected detail\n")
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    @MainActor
+    func testDuplexProposalPersistsAcrossChatColdStartWithoutReplayingWrites() async throws {
+        let path = temporaryPath()
+        let storage = try ReviewWCDBRepository(
+            databasePath: path, calculator: FSRS6ReviewCalculator())
+        let cardID = UUID()
+        let source = "card:" + cardID.uuidString
+        let note = try ImVaultFileIdentity(vaultID: "qa-source", relativePath: "Note.md")
+        var saved = WCDBV3ChatSession(sourceIdentity: source)
+        saved.pendingDuplex = WCDBV3DuplexProposal(
+            sourceMessageID: UUID(), noteIdentity: note,
+            noteBaseDigest: String(repeating: "a", count: 64),
+            noteEditedDigest: String(repeating: "b", count: 64),
+            cardID: cardID, cardReviewRevision: 3, cardContentRevision: 5,
+            cardBaseQuestion: "Q", cardBaseAnswer: "A",
+            cardEditedQuestion: "Q2", cardEditedAnswer: "A2",
+            state: ImDuplexApprovalState(noteSelected: true, cardSelected: true,
+                noteStatus: .applied, cardStatus: .failed))
+        try await storage.saveChatSession(saved, expectedRevision: nil)
+        let reopened = try ReviewWCDBRepository(
+            databasePath: path, calculator: FSRS6ReviewCalculator())
+        let rows = try await reopened.chatSessions(for: source)
+        let restored = try XCTUnwrap(rows.first?.pendingDuplex)
+        XCTAssertEqual(restored.proposalID, saved.pendingDuplex?.proposalID)
+        XCTAssertEqual(restored.noteIdentity, note)
+        XCTAssertFalse(restored.state.needsNoteAction)
+        XCTAssertTrue(restored.state.needsCardAction)
+        XCTAssertFalse(restored.state.completed)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+
     private func temporaryPath() -> String {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("ImpressV3-" + UUID().uuidString, isDirectory: true)
@@ -419,6 +539,9 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             $0.title == V3L("修订关联原卡")
         }))
         XCTAssertTrue(linkedActions.contains(where: {
+            $0.title == V3L("统一预览笔记与原卡修订")
+        }))
+        XCTAssertTrue(linkedActions.contains(where: {
             $0.title == V3L("生成关联笔记候选卡")
         }))
         let noSourceActions = unlinked.messageMenu(for: assistantTurn).children
@@ -429,7 +552,7 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         let pendingActions = linked.messageMenu(for: pendingTurn).children
             .compactMap { $0 as? UIAction }
         for title in [V3L("在关联笔记草稿中整理"),
-                      V3L("修订关联原卡"), V3L("生成关联笔记候选卡")] {
+                      V3L("修订关联原卡"), V3L("生成关联笔记候选卡"), V3L("统一预览笔记与原卡修订")] {
             XCTAssertFalse(pendingActions.contains(where: { $0.title == title }))
         }
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
