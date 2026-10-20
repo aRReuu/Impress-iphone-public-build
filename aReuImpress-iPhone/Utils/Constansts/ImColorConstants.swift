@@ -718,6 +718,10 @@ enum ImpressV3Language: String, CaseIterable {
     }
 
     private static let translations: [String: (traditional: String, english: String)] = [
+        "完整预览已选材料": ("完整預覽已選材料", "Preview All Selected Materials"),
+        "修订关联原卡": ("修訂關聯原卡", "Revise Original Card"),
+        "生成关联笔记候选卡": ("生成關聯筆記候選卡", "Generate Candidate Cards"),
+        "原卡已按确认内容保存；继续讨论前请重新打开以读取新版本。": ("原卡已按確認內容儲存；繼續討論前請重新開啟以讀取新版本。", "Original card saved. Reopen Chat to use the updated source version."),
         "闪卡": ("閃卡", "Flashcards"),
         "本周校准": ("本週校準", "This Week"),
         "切换模型": ("切換模型", "Choose Model"),

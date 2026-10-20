@@ -341,29 +341,58 @@ final class ImpressAINativeChatViewController: UIViewController,
         present(picker, animated: true)
     }
 
+    /// Display the complete user-authored prompt. A 1,000-character alert
+    /// preview could conceal important instructions before user approval.
     private func previewPrompt(title: String, text: String) {
-        let alert = UIAlertController(title: title,
-            message: String(text.prefix(1000)), preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
-        alert.addAction(UIAlertAction(title: V3L("本次使用"), style: .default) {
-            [weak self] _ in
-            self?.sessionPromptOverride = text
-            self?.enqueuePersistence()
-        })
-        present(alert, animated: true)
+        let page = UIViewController()
+        page.title = title
+        page.view.backgroundColor = ImpressV3Appearance.page
+        let body = UITextView()
+        body.translatesAutoresizingMaskIntoConstraints = false
+        body.isEditable = false
+        body.isSelectable = true
+        body.isScrollEnabled = true
+        body.font = ImpressV3Appearance.Typography.body
+        body.adjustsFontForContentSizeCategory = true
+        body.textColor = ImpressV3Appearance.primaryText
+        body.backgroundColor = ImpressV3Appearance.surface
+        body.text = text
+        body.accessibilityIdentifier = "impress.ai.chat.full-prompt-preview"
+        page.view.addSubview(body)
+        NSLayoutConstraint.activate([
+            body.topAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.topAnchor),
+            body.leadingAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.leadingAnchor),
+            body.trailingAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.trailingAnchor),
+            body.bottomAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.bottomAnchor)
+        ])
+        page.navigationItem.rightBarButtonItem = UIBarButtonItem(
+            primaryAction: UIAction(title: V3L("本次使用")) { [weak self, weak page] _ in
+                self?.sessionPromptOverride = text
+                self?.enqueuePersistence()
+                page?.navigationController?.popViewController(animated: true)
+            })
+        navigationController?.pushViewController(page, animated: true)
     }
 
     @objc private func reviewSessionMaterials() {
         guard !sending && !restoring else { return }
+        // The overview names the exact stored scope and byte count.
+        // Never present a 350-character excerpt as though it is the full source.
         let preview = contextReferences.map {
-            $0.stableIdentity + "\n" + String($0.excerpt.prefix(350))
-        }.joined(separator: "\n\n")
+            $0.stableIdentity + " · " + String($0.excerpt.utf8.count) + " bytes"
+        }.joined(separator: "\n")
         let alert = UIAlertController(title: V3L("本次引用材料"),
             message: preview.isEmpty
                 ? V3L("暂无引用。选择材料不会自动发送到云端。")
                 : preview + (contextConsentGranted ? "\n\n" + V3L("已确认发送范围")
                              : "\n\n" + V3L("尚未确认发送范围")),
             preferredStyle: .actionSheet)
+        if !contextReferences.isEmpty {
+            alert.addAction(UIAlertAction(title: V3L("完整预览已选材料"),
+                style: .default) { [weak self] _ in
+                    self?.showFullMaterialPreview()
+                })
+        }
         if noteIdentity != nil {
             alert.addAction(UIAlertAction(title: V3L("选择笔记章节"),
                 style: .default) { [weak self] _ in self?.openNoteSectionPicker() })
@@ -387,6 +416,34 @@ final class ImpressAINativeChatViewController: UIViewController,
         alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
         alert.popoverPresentationController?.sourceView = materialButton
         present(alert, animated: true)
+    }
+
+    private func showFullMaterialPreview() {
+        let page = UIViewController()
+        page.title = V3L("本次引用材料")
+        page.view.backgroundColor = ImpressV3Appearance.page
+        let body = UITextView()
+        body.translatesAutoresizingMaskIntoConstraints = false
+        body.isEditable = false
+        body.isSelectable = true
+        body.font = ImpressV3Appearance.Typography.body
+        body.adjustsFontForContentSizeCategory = true
+        body.textColor = ImpressV3Appearance.primaryText
+        body.backgroundColor = ImpressV3Appearance.surface
+        body.text = contextReferences.enumerated().map { index, reference in
+            String(index + 1) + ". " + reference.stableIdentity + "\n" +
+            "Version: " + reference.sourceRevision + "\n" +
+            String(reference.excerpt.utf8.count) + " bytes\n\n" + reference.excerpt
+        }.joined(separator: "\n\n---\n\n")
+        body.accessibilityIdentifier = "impress.ai.chat.full-material-preview"
+        page.view.addSubview(body)
+        NSLayoutConstraint.activate([
+            body.topAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.topAnchor),
+            body.leadingAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.leadingAnchor),
+            body.trailingAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.trailingAnchor),
+            body.bottomAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.bottomAnchor)
+        ])
+        navigationController?.pushViewController(page, animated: true)
     }
 
     private func openNoteSectionPicker() {
@@ -436,13 +493,26 @@ final class ImpressAINativeChatViewController: UIViewController,
                 UIPasteboard.general.string = turn.text
             }
         ]
-        if turn.role == .assistant && turn.status == .completed &&
-           noteDraftTarget != nil {
-            actions.append(UIAction(
-                title: V3L("在关联笔记草稿中整理"),
-                image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
-                    self?.openAuthorizedNoteDraft()
-                })
+        if turn.role == .assistant && turn.status == .completed {
+            if sourceCardID != nil {
+                actions.append(UIAction(
+                    title: V3L("修订关联原卡"),
+                    image: UIImage(systemName: "rectangle.and.pencil.and.ellipsis")) {
+                        [weak self] _ in self?.openReviewedOriginalCard()
+                    })
+            }
+            if noteDraftTarget != nil {
+                actions.append(UIAction(
+                    title: V3L("在关联笔记草稿中整理"),
+                    image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
+                        self?.openAuthorizedNoteDraft()
+                    })
+                actions.append(UIAction(
+                    title: V3L("生成关联笔记候选卡"),
+                    image: UIImage(systemName: "square.stack.3d.up")) { [weak self] _ in
+                        self?.openNoteCandidatePool()
+                    })
+            }
         }
         return UIMenu(children: actions)
     }
@@ -455,6 +525,86 @@ final class ImpressAINativeChatViewController: UIViewController,
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) {
             [weak self] _ in
             self?.messageMenu(for: message) ?? UIMenu(children: [])
+        }
+    }
+
+    /// These actions reuse the existing authoritative editor and WCDB CAS.
+    /// AI message text is advice, never executable instructions or an implicit
+    /// replacement answer. The user manually reviews and saves the ORIGINAL ID.
+    private func openReviewedOriginalCard() {
+        guard !sending && !restoring, let cardID = sourceCardID,
+              let expected = sourceContentRevision else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let repo = try self.chatRepository ?? self.injectedRepository ??
+                    ImpressV3ReviewEnvironment.repository()
+                guard let card = try await repo.content(for: cardID) else {
+                    throw ReviewWCDBError.missingCard
+                }
+                guard card.contentRevision == expected else {
+                    throw ChatFlowError.sourceChanged
+                }
+                guard let queueItem = try await repo.fetchQueueCandidates().first(where: {
+                    $0.cardID == cardID
+                }) else { throw ReviewWCDBError.missingCard }
+                let correct = Set((card.correctIndices ?? "").split(separator: ",")
+                    .compactMap { Int($0) })
+                let choices: [ImpressV3CardDraft.Choice] =
+                    (card.choices ?? "").isEmpty
+                    ? [.init(), .init()]
+                    : (card.choices ?? "").components(separatedBy: "\n")
+                        .enumerated().map { index, text in
+                            .init(text: text, isCorrect: correct.contains(index))
+                        }
+                let draft = ImpressV3CardDraft(
+                    kind: CardType(rawValue: card.cardType) ?? .standard,
+                    question: card.question, answer: card.answerText ?? "",
+                    choices: choices, allowsMultipleCorrect: correct.count > 1,
+                    imageData: card.imageData, sourceNotePath: card.sourceNotePath)
+                let editor = ImpressV3CardComposerViewController(
+                    draft: draft, editingCardID: cardID)
+                editor.onSave = { [weak self] updated in
+                    try await repo.updateManagedCard(updated,
+                        expectedRevision: queueItem.revision,
+                        expectedContentRevision: card.contentRevision,
+                        origin: .approvedAI)
+                    self?.privacyLabel.text = V3L(
+                        "原卡已按确认内容保存；继续讨论前请重新打开以读取新版本。")
+                    // The Chat source version is immutable for this controller:
+                    // a subsequent Send fails closed rather than reusing stale context.
+                }
+                let nav = ImNavigationViewController(rootViewController: editor)
+                nav.modalPresentationStyle = .pageSheet
+                nav.sheetPresentationController?.detents = [.large()]
+                self.present(nav, animated: true)
+            } catch { self.showProblem(error) }
+        }
+    }
+
+    /// Reuse the existing confirmed question-pool flow; no implicit model call,
+    /// no new duplicate-card path, and no automatic upload of the linked note.
+    private func openNoteCandidatePool() {
+        guard !sending && !restoring, let identity = noteDraftTarget else { return }
+        guard ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID else {
+            showProblem(ImVaultSyncFailure.wrongVault)
+            return
+        }
+        ImVaultReadSync.shared.read(identity) { [weak self] result in
+            guard let self,
+                  ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID
+            else { return }
+            switch result {
+            case .success(let document):
+                guard document.identity == identity else {
+                    self.showProblem(ImVaultSyncFailure.wrongVault)
+                    return
+                }
+                self.navigationController?.pushViewController(
+                    ImpressAIQuestionGenerationViewController(document: document),
+                    animated: true)
+            case .failure(let error): self.showProblem(error)
+            }
         }
     }
 

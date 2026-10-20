@@ -406,13 +406,20 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             role: .assistant, text: "Incomplete reply",
             status: .pending)
         let linked = ImpressAINativeChatViewController(
-            question: "Q", answer: "A", linkedNoteIdentity: identity)
+            question: "Q", answer: "A", cardID: UUID(),
+            contentRevision: 0, linkedNoteIdentity: identity)
         let unlinked = ImpressAINativeChatViewController(question: "Q", answer: "A")
         let linkedActions = linked.messageMenu(for: assistantTurn).children
             .compactMap { $0 as? UIAction }
         XCTAssertTrue(linkedActions.contains(where: { $0.title == V3L("复制消息") }))
         XCTAssertTrue(linkedActions.contains(where: {
             $0.title == V3L("在关联笔记草稿中整理")
+        }))
+        XCTAssertTrue(linkedActions.contains(where: {
+            $0.title == V3L("修订关联原卡")
+        }))
+        XCTAssertTrue(linkedActions.contains(where: {
+            $0.title == V3L("生成关联笔记候选卡")
         }))
         let noSourceActions = unlinked.messageMenu(for: assistantTurn).children
             .compactMap { $0 as? UIAction }
@@ -421,9 +428,10 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         }))
         let pendingActions = linked.messageMenu(for: pendingTurn).children
             .compactMap { $0 as? UIAction }
-        XCTAssertFalse(pendingActions.contains(where: {
-            $0.title == V3L("在关联笔记草稿中整理")
-        }))
+        for title in [V3L("在关联笔记草稿中整理"),
+                      V3L("修订关联原卡"), V3L("生成关联笔记候选卡")] {
+            XCTAssertFalse(pendingActions.contains(where: { $0.title == title }))
+        }
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 
