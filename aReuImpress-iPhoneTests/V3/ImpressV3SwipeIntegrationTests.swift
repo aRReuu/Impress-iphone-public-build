@@ -172,19 +172,27 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         func controls(in root: UIView) -> [UIButton] {
             (root as? UIButton).map { [$0] } ?? root.subviews.flatMap(controls(in:))
         }
-        let ready = try await eventually {
-            controls(in: review.view).contains {
-                $0.accessibilityIdentifier == "impress.review.quick-edit" &&
-                !$0.isHidden
-            }
-        }
-        XCTAssertTrue(ready)
-        XCTAssertTrue(controls(in: review.view).contains {
-            $0.accessibilityIdentifier == "impress.review.source-note" && !$0.isHidden
-        })
+        // The controls exist during initial layout while their parent stack
+        // remains hidden. Wait for async WCDB queue reload, not for a local
+        // UIButton.isHidden flag (which ignores hidden ancestors).
         let stack = try XCTUnwrap(review.view.subviews.compactMap {
             $0 as? SwipeCardStack
         }.first)
+        let ready = try await eventually {
+            let elements = controls(in: review.view)
+            let edit = elements.first {
+                $0.accessibilityIdentifier == "impress.review.quick-edit"
+            }
+            let source = elements.first {
+                $0.accessibilityIdentifier == "impress.review.source-note"
+            }
+            return stack.topCard?.content is ImMemoryCardView &&
+                edit?.superview?.isHidden == false &&
+                source?.superview?.isHidden == false &&
+                source?.isHidden == false &&
+                stack.topCard?.panGestureRecognizer.isEnabled == false
+        }
+        XCTAssertTrue(ready, "The loaded current card exposes edit and exact-source buttons")
         XCTAssertFalse(stack.topCard?.panGestureRecognizer.isEnabled ?? true)
         let events = try await store.reviewHistory(for: id)
         XCTAssertTrue(events.isEmpty)
