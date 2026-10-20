@@ -970,7 +970,6 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
 
 
     @MainActor
-    @MainActor
     func testMarkdownMaterialRangesPreserveSourceUTF8AndRejectForgedOffsets() throws {
         let identity = try ImVaultFileIdentity(vaultID: "qa-structure",
             relativePath: "Notes/Mixed.md")
@@ -1010,6 +1009,7 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(effective.map(\.heading), ["Topic", "Next"])
     }
 
+    @MainActor
     func testChatNoteMaterialGateRejectsStaleForgedAndOversizedExcerpts() throws {
         let identity = try ImVaultFileIdentity(vaultID: "qa-vault",
             relativePath: "Lessons/Mechanics.md")

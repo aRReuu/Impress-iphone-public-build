@@ -133,6 +133,10 @@ public enum ImpressMarkdownStructure {
             .trimmingCharacters(in: .whitespaces)
         if first == "---" { inFrontmatter = true }
         var previousEligible = false
+        // List continuation lines can start with a pair of indentation
+        // spaces followed by hashes. They belong to the list item, not the
+        // document's root heading hierarchy.
+        var listContinuationIndent: Int?
 
         for index in lines.indices {
             let line = lines[index]
@@ -164,6 +168,30 @@ public enum ImpressMarkdownStructure {
                     inComment = true
                     body = String(body[..<start.lowerBound])
                 }
+            }
+            let indentation = body.prefix(while: { $0 == " " }).count
+            let root = String(body.dropFirst(indentation))
+            let bullet = root.hasPrefix("- ") || root.hasPrefix("+ ") ||
+                root.hasPrefix("* ")
+            let digits = root.prefix(while: { $0 >= "0" && $0 <= "9" })
+            let tail = root.dropFirst(digits.count)
+            let numbered = !digits.isEmpty && digits.count <= 9 &&
+                (tail.hasPrefix(". ") || tail.hasPrefix(") "))
+            if indentation <= 3 && (bullet || numbered) {
+                listContinuationIndent = indentation + (bullet ? 2 : digits.count + 2)
+                previousEligible = false
+                continue
+            }
+            if let needed = listContinuationIndent {
+                if root.trimmingCharacters(in: .whitespaces).isEmpty {
+                    previousEligible = false
+                    continue
+                }
+                if indentation >= needed {
+                    previousEligible = false
+                    continue
+                }
+                listContinuationIndent = nil
             }
             if let existing = fence {
                 if fenceCloses(body, opener: existing) { fence = nil }
