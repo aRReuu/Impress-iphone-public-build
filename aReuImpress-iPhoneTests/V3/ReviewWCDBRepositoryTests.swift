@@ -927,6 +927,12 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         let approved = WCDBV3CardInput(cardID: cardID,
             question: "What is the law?", answerText: "Corrected",
             sourceNotePath: originalKey)
+        let unchanged = WCDBV3CardInput(cardID: cardID,
+            question: content.question, answerText: content.answerText,
+            sourceNotePath: originalKey)
+        XCTAssertThrowsError(try ImpressSourceImpactCardRevisionGate.refreshedInput(
+            approved: unchanged, original: content, oldSourceKey: originalKey,
+            currentNote: doc, expectedCurrentDigest: doc.digest))
         let input = try ImpressSourceImpactCardRevisionGate.refreshedInput(
             approved: approved, original: content, oldSourceKey: originalKey,
             currentNote: doc, expectedCurrentDigest: doc.digest)
@@ -956,6 +962,108 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertThrowsError(try ImpressSourceImpactCardRevisionGate.refreshedInput(
             approved: approved, original: content, oldSourceKey: originalKey,
             currentNote: doc, expectedCurrentDigest: "stale-digest"))
+    }
+
+
+    @MainActor
+    func testChatNoteMaterialGateRejectsStaleForgedAndOversizedExcerpts() throws {
+        let identity = try ImVaultFileIdentity(vaultID: "qa-vault",
+            relativePath: "Lessons/Mechanics.md")
+        let raw = "# Force\nNet force changes momentum.\n\n" +
+            "# Practice\nSolve F = ma.\n"
+        let bytes = Data(raw.utf8), digest = ImVaultDigest.sha256(bytes)
+        let doc = ImVaultRawDocument(identity: identity,
+            sourceBytes: bytes, markdown: raw, digest: digest)
+        let chosen = try XCTUnwrap(ImpressAISectionExtractor.sections(in: raw).first)
+        let key = "note:verified-qa-session"
+        let trusted = WCDBV3ChatContextReference(stableIdentity: key,
+            sourceRevision: digest, excerpt: chosen.text)
+        XCTAssertNoThrow(try ImpressChatNoteUploadGate.validate(
+            document: doc, expectedIdentity: identity,
+            expectedDigest: digest, conversationKey: key, excerpts: [trusted]))
+        let full = WCDBV3ChatContextReference(stableIdentity: key,
+            sourceRevision: digest, excerpt: raw)
+        XCTAssertNoThrow(try ImpressChatNoteUploadGate.validate(
+            document: doc, expectedIdentity: identity,
+            expectedDigest: digest, conversationKey: key, excerpts: [full]))
+        XCTAssertThrowsError(try ImpressChatNoteUploadGate.validate(
+            document: doc, expectedIdentity: identity,
+            expectedDigest: nil, conversationKey: key, excerpts: [trusted]))
+        XCTAssertThrowsError(try ImpressChatNoteUploadGate.validate(
+            document: doc, expectedIdentity: identity,
+            expectedDigest: String(repeating: "0", count: 64),
+            conversationKey: key, excerpts: [trusted]))
+        let wrongVault = try ImVaultFileIdentity(vaultID: "foreign",
+            relativePath: identity.relativePath)
+        XCTAssertThrowsError(try ImpressChatNoteUploadGate.validate(
+            document: doc, expectedIdentity: wrongVault,
+            expectedDigest: digest, conversationKey: key, excerpts: [trusted]))
+        let stale = WCDBV3ChatContextReference(stableIdentity: key,
+            sourceRevision: "old", excerpt: chosen.text)
+        let foreignSession = WCDBV3ChatContextReference(stableIdentity: "another-chat",
+            sourceRevision: digest, excerpt: chosen.text)
+        let fabricated = WCDBV3ChatContextReference(stableIdentity: key,
+            sourceRevision: digest, excerpt: "Made-up model-generated paragraph.")
+        for ref in [stale, foreignSession, fabricated] {
+            XCTAssertThrowsError(try ImpressChatNoteUploadGate.validate(
+                document: doc, expectedIdentity: identity,
+                expectedDigest: digest, conversationKey: key, excerpts: [ref]))
+        }
+        let oversized = WCDBV3ChatContextReference(stableIdentity: key,
+            sourceRevision: digest,
+            excerpt: String(repeating: "untrusted", count: 6_000))
+        XCTAssertThrowsError(try ImpressChatNoteUploadGate.validate(
+            document: doc, expectedIdentity: identity,
+            expectedDigest: digest, conversationKey: key, excerpts: [oversized]))
+        XCTAssertThrowsError(try ImpressChatNoteUploadGate.validate(
+            document: doc, expectedIdentity: identity,
+            expectedDigest: digest, conversationKey: key, excerpts: []))
+    }
+
+    @MainActor
+    func testChatProviderSwitchRequiresConsentAfterFailedFirstAttempt() {
+        let first = UUID(), second = UUID()
+        let failed = WCDBV3ChatMessage(role: .user, text: "Prior message",
+            status: .failed, providerID: first, modelIdentifier: "model-a")
+        XCTAssertFalse(ImpressChatProviderConsentGate.needsReapproval(
+            history: [], destination: second))
+        XCTAssertFalse(ImpressChatProviderConsentGate.needsReapproval(
+            history: [failed], destination: first))
+        XCTAssertTrue(ImpressChatProviderConsentGate.needsReapproval(
+            history: [failed], destination: second))
+        let cancelled = WCDBV3ChatMessage(role: .user, text: "Stopped",
+            status: .cancelled, providerID: second, modelIdentifier: "model-b")
+        XCTAssertTrue(ImpressChatProviderConsentGate.needsReapproval(
+            history: [failed, cancelled], destination: first))
+        XCTAssertFalse(ImpressChatProviderConsentGate.needsReapproval(
+            history: [failed, cancelled], destination: second))
+    }
+
+
+    @MainActor
+    func testLongChatWarnsAboutRemoteWindowWithoutDiscardingLocalHistory() {
+        let provider = UUID()
+        let complete = (0..<18).map { index in
+            WCDBV3ChatMessage(role: .user, text: "Turn \(index)",
+                status: .completed, providerID: provider,
+                modelIdentifier: "qa-model")
+        }
+        XCTAssertEqual(ImpressChatWindowPolicy.maximumPreviousTurns, 16)
+        XCTAssertEqual(ImpressChatWindowPolicy.omittedCompletedCount(
+            in: Array(complete.prefix(16))), 0)
+        XCTAssertEqual(ImpressChatWindowPolicy.omittedCompletedCount(
+            in: complete), 2)
+        let failed = WCDBV3ChatMessage(role: .user, text: "Retry",
+            status: .failed, providerID: provider,
+            modelIdentifier: "qa-model")
+        XCTAssertEqual(ImpressChatWindowPolicy.omittedCompletedCount(
+            in: complete + [failed]), 2)
+        // The bounded remote window is not a destructive truncation:
+        // the full Chat session still retains all original message IDs.
+        var session = WCDBV3ChatSession(sourceIdentity: "chat:window-qa")
+        session.messages = complete + [failed]
+        XCTAssertEqual(session.messages.count, 19)
+        XCTAssertEqual(Set(session.messages.map(\.messageID)).count, 19)
     }
 
     /// Standalone disposable File Provider fixture for end-to-end Chat +

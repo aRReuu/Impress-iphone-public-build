@@ -2,19 +2,20 @@
 
 基准：`3e98db7cb0eb10ae6a0734a655fb3337d18d8fc2`（历史审计；后续修复并非已完成验收）。最新逐项表见 [REQUIREMENT_EXECUTION_MATRIX_20261020.md](REQUIREMENT_EXECUTION_MATRIX_20261020.md)；`897895c` 补选择题解析，`c38efbe` 补首页前置编辑与来源按钮。旧表 CARD-01/11、CHAT-03/04 的 FAIL 结论已存在后来源码变化，禁止不核实即重报。此页仅记录审计结论，**不是完工清单**。权威需求见 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md)。
 
-| 需求 | 审计状态 | 可复核证据 | 最小通过条件 |
-|---|---|---|---|
-| CARD-01～03 | FAIL | `ImMemoryCardView.swift` questionTextView.isScrollEnabled=false，raw text；答案 Markdown | 长题/答案在首页滚动到末尾，H1/H2/表格不溢出，手势隔离 XCTest 与 iPhone13 |
-| CARD-11 | FAIL | `ImpressV3ReviewViewController` contentHistoryAction 仍占底栏；Composer 无历史入口 | 复习底栏不显示历史，编辑器有可到达的内容历史 |
-| CARD-07～09 | PARTIAL | 现场编辑、CAS、无改动保护已有基础 | 保持相同 cardID/复习位置/FSRS，长文压力场景仍正确 |
-| CHAT-01～04 | FAIL/PARTIAL | `ImpressAINativeChatViewController` UITableView subtitle cell；无新建/历史 UI | 同源可新建/选择/继续多个会话，Markdown 消息可选/复制，停止/失败保留输入 |
-| CHAT-05～08 | PARTIAL | 只读全局提示词/模型覆盖、来源仅当前 cardID | Chat 内可见提示词/当前材料与范围，显式确认才发送，清空/变化安全 |
-| CHAT-09～10 | NOT DELIVERED | 数据模型有 pendingProposal，但没有完整 Chat→统一 Diff→执行和恢复 | 测试源、原卡按确认范围修改，重开不覆盖历史/重复执行 |
-| LOOP-03 | PARTIAL | Vault＋路径 + SHA、笔记关联卡片已接通 | 稳定片段身份/移动改名/撤权不串联 |
-| LOOP-07～13 | NOT DELIVERED | 文件级变更提示，不是片段影响/受控执行 | 不相关段落不干扰；有冲突/部分成功正确回执 |
-| AI-01～07 | PARTIAL | 默认五入口已缩减；模型搜索已有基础 | 所有入口行为/UI 核查，旧 GLM/Keychain 不回归 |
-| CAL-01～15 / OPEN-01/06 | DEFERRED | 旧打分方案仍在；最新定版只是保留原则 | 绝不宣称已实现四固定行为方案，不为本轮主线阻塞 |
-| ACCEPT-01～12 | BLOCKED | 旧 `SMOKE_TEST_MATRIX.md` A01～A20 为历史门槛 | 一篇独立测试笔记与一张原卡完整往返，有 exact SHA 证据 |
+| 需求范围 | 当前代码/自动化证据（最后完整成功 Run 39435321232 · dabbc9d） | 完整产品验收结论 | 下一门禁 |
+| --- | --- | --- | --- |
+| CARD-01～03 | 长题/答案 Markdown 独立滚动、H1/H2 等原生测试已通过；158/158 iOS XCTest 的前一基线。 | **自动化 PASS，真机 BLOCKED** | iPhone 13 Dynamic Type、长列表/表格阅读、选文与四向手势无冲突 |
+| CARD-11 | 编辑器内保留内容历史，原生 `testContentHistoryIsEditorOnly`。 | **自动化 PASS，设备 BLOCKED** | iPhone13 实际入口/返回路径 |
+| CARD-07～10 | 快速现场编辑、卡片 CAS、FSRS revision 隔离与揭示失效验证已有原生测试。 | **自动化 PASS，设备 BLOCKED** | 真机原队列/旧答案屏蔽验证 |
+| CHAT-01～04 | 同源多会话、新建/历史切换、草稿、Markdown 消息及失败保存 XCTest 已通过。 | **自动化 PASS，设备 BLOCKED** | 真实 Keychain / HTTP / 中断恢复及多语言 UX |
+| CHAT-05～08 | 模型/提示词与材料范围选择已有源码，发送前逐摘录和失败后跨 Provider 二次批准补强已准备，尚需新 CI。 | **部分自动化；新增安全门禁待 CI** | 同 SHA Xcode/XCTest、设备权限/真实请求 |
+| CHAT-09～10 / LOOP-10～13 | 已有双目标预览、逐对象 CAS/回执、幂等、保护快照及独立撤销；同笔记重复修订的三项原生回归通过。 | **自动化核心 PASS，完整设备/异常验收 BLOCKED** | 强杀恢复、真实 File Provider、备份兼容边界 |
+| LOOP-03 / 07～09 | 来源身份 v1/v2/v3、单节唯一 SHA、无关节低扰动、原卡来源核查；反向直接修订入口已提交，后续 SHA 测试待结果。 | **部分自动化；反向编辑新批次待 CI** | 文件移动/重复/权限撤销、iPhone 13 实际导航 |
+| AI-01～07 | 默认四服务商+自定义、保留 GLM、自定义 Keychain、模型 ID/服务商搜索已有源码及原生测试。 | **自动化部分 PASS，真实服务 BLOCKED** | 不收费授权下的真实模型测试与多 Provider 交互 |
+| SAFE-02～07 | `productionWriteEnabled = false`，QA fixture 的 SHA、备份、协调写、回读与逆向撤销已通过。 | **测试副本自动化 PASS，正式写回禁止** | 真实 Files/Provider、iCloud 同步、非加密 ZIP 不含私人原笔记 |
+| ACCEPT-01～12 | 具有对应分层 XCTest 和完整 fixture 往返，但未运行完整实际手机 UX 及在线模型。 | **不得标记全部 PASS** | 每项 exact SHA 自动化/端到端/真机独立回执 |
+
+**旧审计说明：** 本表原先记录在 `3e98db7...` 对 CARD/CHAT 的 FAIL，为当时真实缺口；不能忽视后续实际修复。最近完整验证层是 [Run 39435321232](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39435321232)，其后的提交必须以其各自 CI 结论另行认证。
 
 ### 为什么 128/128 XCTest 仍然导致产品 FAIL
 
@@ -50,3 +51,7 @@
 ## 2026-10-20 · 修补反向流程入口缺口
 
 原来源核查页只提供“确认不影响原卡”，缺少用户在该核查上下文直接修订原 cardID 的操作。现补共用原卡编辑器入口，在存储前回读源 Markdown 与来源 SHA，并按内容 CAS 更新用户明确修改的原卡、保留 FSRS。若来源变化或不同 Vault 则拒绝覆盖，不再强迫到卡片集通过标题搜索。完整手机实测与数据授权另行验收。
+
+## 2026-10-20 · 新排查 P0：Chat 发送材料与供应商重复授权
+
+此前 Chat 的 HTTP 门禁只比对整份源 SHA，而不复验已保存的单项摘录是否仍与真实笔记精确对应；还有一种可能：首次请求失败后 `activeProviderID` 未记录，但用户切换不同提供商，旧代码仅在出现 `completed` 消息时弹确认。为避免原文转发风险，现新增逐摘录字节/身份/版本验证及 40KB 精确边界；即使上次请求失败/取消，只要曾向某 Provider 发送过用户消息，改选服务商也必须重新确认。同时补反向原卡无改动误更新源摘要的问题；保留未发送草稿和模型选择。所有新门禁需新 CI 和设备独立验收。

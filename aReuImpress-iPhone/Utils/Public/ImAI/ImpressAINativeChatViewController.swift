@@ -32,6 +32,69 @@ enum ImpressAIChatPromptSelection {
 /// conversation to the existing V3 SQLite/backup authority. Local history is
 /// complete; the remote request window is bounded and independently consented.
 /// Ordinary Chat produces no FSRS events or Markdown writes.
+
+enum ImpressChatWindowPolicy {
+    static let maximumPreviousTurns = 16
+
+    /// Keep the complete archive locally but never imply that the remote
+    /// model received the entire transcript when its context was bounded.
+    static func omittedCompletedCount(in history: [WCDBV3ChatMessage]) -> Int {
+        max(0, history.filter { $0.status == .completed }.count -
+            maximumPreviousTurns)
+    }
+}
+
+@MainActor
+enum ImpressChatNoteUploadGate {
+    /// The user approves THIS exact Vault version and these excerpt bytes,
+    /// not arbitrary saved text that happens to share a title or session ID.
+    /// This is checked after a coordinated File Provider read, immediately
+    /// before any paid or free HTTP call is attempted.
+    static let maximumSentNoteBytes = 40_000
+
+    static func validate(document: ImVaultRawDocument,
+                         expectedIdentity: ImVaultFileIdentity,
+                         expectedDigest: String?,
+                         conversationKey: String?,
+                         excerpts: [WCDBV3ChatContextReference]) throws {
+        guard let expectedDigest, let conversationKey, !conversationKey.isEmpty,
+              document.identity == expectedIdentity,
+              document.digest == expectedDigest,
+              ImVaultDigest.sha256(document.sourceBytes) == expectedDigest,
+              !excerpts.isEmpty else {
+            throw ImVaultSyncFailure.conflict
+        }
+        let sections = ImpressAISectionExtractor.sections(in: document.markdown)
+        var bytes = 0
+        for item in excerpts {
+            bytes += item.excerpt.utf8.count
+            guard bytes <= maximumSentNoteBytes else {
+                throw ImpressAIServiceError.tooLarge
+            }
+            guard item.stableIdentity == conversationKey,
+                  item.sourceRevision == expectedDigest,
+                  !item.excerpt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  item.excerpt == document.markdown ||
+                  sections.contains(where: { $0.text == item.excerpt }) else {
+                throw ImVaultSyncFailure.conflict
+            }
+        }
+    }
+}
+
+@MainActor
+enum ImpressChatProviderConsentGate {
+    /// A failed or cancelled first call may have disclosed user text. Do not
+    /// treat that attempt as if the user never selected a provider.
+    static func needsReapproval(history: [WCDBV3ChatMessage],
+                                destination: UUID) -> Bool {
+        guard let previous = history.reversed().first(where: {
+            $0.role == .user && $0.providerID != nil
+        })?.providerID else { return false }
+        return previous != destination
+    }
+}
+
 @MainActor
 final class ImpressAINativeChatViewController: UIViewController,
                                                 UITableViewDataSource, UITableViewDelegate, UITextViewDelegate {
@@ -59,6 +122,7 @@ final class ImpressAINativeChatViewController: UIViewController,
     private var contextChoiceMade = false
     private var contextConsentGranted = false
     private var includeCardContext = false
+    private var acknowledgedBoundedContext = false
     private var restoring = false
     private var sending = false
     private var saveChain: Task<Void, Never>?
@@ -600,7 +664,8 @@ final class ImpressAINativeChatViewController: UIViewController,
             "\n" + V3L("状态：") + receipt.state.cardStatus.rawValue +
             "\n" + V3L("卡片回执：") + (receipt.cardReceipt ??
                 V3L("尚无回执")) +
-            "\n\n" + V3L("此页为历史回执，不自动重试或改写任何内容。")
+            "\n\n" + V3L("此页为历史回执，不自动重试或改写任何内容。") +
+            "\n\n" + V3L("涉及原文的字节级恢复快照仅存于本机受保护目录；普通未加密 ZIP 不包含私人 Markdown。删除应用或迁移设备后可能无法撤销旧文件修改。")
         page.view.addSubview(text)
         NSLayoutConstraint.activate([
             text.topAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.topAnchor),
@@ -845,6 +910,21 @@ final class ImpressAINativeChatViewController: UIViewController,
         let text = messageInput.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf8.count <= 12_000,
               !sending, !restoring else { return }
+        let omitted = ImpressChatWindowPolicy.omittedCompletedCount(in: history)
+        if omitted > 0 && !acknowledgedBoundedContext {
+            let alert = UIAlertController(title: V3L("确认有限对话上下文"),
+                message: V3L("本次仅向云端模型发送最近 16 条已完成对话及当前输入；更早的消息仍完整保存在本机，不代表模型已经读过。") +
+                    "\n" + V3L("本次未传送的早期消息条数：") + String(omitted),
+                preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            alert.addAction(UIAlertAction(title: V3L("确认此会话的发送范围"),
+                style: .default) { [weak self] _ in
+                self?.acknowledgedBoundedContext = true
+                self?.submitMessage()
+            })
+            present(alert, animated: true)
+            return
+        }
         let route: ImpressAIResolvedRoute
         do { route = try liveRoute() }
         catch {
@@ -871,8 +951,8 @@ final class ImpressAINativeChatViewController: UIViewController,
             return
         }
 
-        if let previous = activeProviderID, previous != route.connection.id,
-           history.contains(where: { $0.status == .completed }) {
+        if ImpressChatProviderConsentGate.needsReapproval(
+            history: history, destination: route.connection.id) {
             let warning = UIAlertController(
                 title: V3L("切换 AI 服务商"),
                 message: V3L("此次请求会把近期对话材料发送给新服务商，是否同意？"),
@@ -950,14 +1030,19 @@ final class ImpressAINativeChatViewController: UIViewController,
         guard !sending, !restoring else { return }
         draftDebounce?.cancel()
         sending = true
+        // Freeze the exact approved material selection for this Send. A later
+        // draft/save callback may not change the material sent by this turn.
+        let authorizedReferences = contextReferences
+        let authorizedSourceIdentity = sourceIdentity
+        let includeApprovedContext = includeCardContext
         let prompt = sessionPromptOverride ?? ImpressAIChatPromptSelection.systemText()
         let providerID = route.connection.id
         let modelName = route.model.identifier
         var system = prompt
-        if includeCardContext, let question = sourceQuestion, !question.isEmpty {
+        if includeApprovedContext, let question = sourceQuestion, !question.isEmpty {
             if noteIdentity != nil {
                 system += "\n" + V3L("当前笔记来源：") + question
-                for reference in contextReferences {
+                for reference in authorizedReferences {
                     system += "\n" + V3L("本次明确批准的章节或摘录：") + reference.excerpt
                 }
             } else {
@@ -986,17 +1071,22 @@ final class ImpressAINativeChatViewController: UIViewController,
                 try Task.checkCancellation()
                 // Re-check the authorized Vault and content SHA immediately
                 // before any note context is sent to a remote provider.
-                if self.includeCardContext, let noteID = self.noteIdentity,
-                   let expectedSHA = self.sourceVersionToken {
+                if includeApprovedContext, let noteID = self.noteIdentity {
                     let current: ImVaultRawDocument = try await withCheckedThrowingContinuation {
                         (continuation: CheckedContinuation<ImVaultRawDocument, Error>) in
                         ImVaultReadSync.shared.read(noteID) { result in
                             continuation.resume(with: result)
                         }
                     }
-                    guard current.digest == expectedSHA else {
-                        throw ChatFlowError.sourceChanged
+                    guard ImVaultReadOnlyProbe.shared.authorizedVaultID ==
+                          noteID.vaultID else {
+                        throw ImVaultSyncFailure.wrongVault
                     }
+                    try ImpressChatNoteUploadGate.validate(
+                        document: current, expectedIdentity: noteID,
+                        expectedDigest: self.sourceVersionToken,
+                        conversationKey: authorizedSourceIdentity,
+                        excerpts: authorizedReferences)
                 }
                 // The current card can change while this controller is open.
                 // Never transmit or grade using a stale identity/revision.
@@ -1011,7 +1101,7 @@ final class ImpressAINativeChatViewController: UIViewController,
                 guard await persistLocal() else { throw ChatFlowError.localSaveFailed }
                 let earlier = history.filter {
                     $0.messageID != messageID && $0.status == .completed
-                }.suffix(16)
+                }.suffix(ImpressChatWindowPolicy.maximumPreviousTurns)
                 let safeWindow = earlier.drop(while: { $0.role != .user })
                 var turns = safeWindow.map { saved in
                     ImpressAIChatTurn(
@@ -1080,6 +1170,7 @@ final class ImpressAINativeChatViewController: UIViewController,
 
     private func activateSession(_ session: WCDBV3ChatSession) {
         storedSession = session
+        acknowledgedBoundedContext = false
         pendingDuplex = session.pendingDuplex
         previousDuplex = session.duplexHistory ?? []
         sessionPromptOverride = session.promptOverride
@@ -2036,7 +2127,8 @@ final class ImpressDuplexApprovalController: UIViewController {
 
     private func refreshPreview() {
         var pieces = [V3L("文件与数据库不是同一个事务；按对象保留回执、冲突与重试。"),
-                      V3L("必须逐项核对下方完整差异；无确认不会写入。")]
+                      V3L("必须逐项核对下方完整差异；无确认不会写入。"),
+                      V3L("个人 Markdown 批准快照只保存在本机受保护目录，不包含在普通未加密 ZIP 备份。卸载或迁移后旧文件撤销可能不可用。")]
         if let identity = proposal.noteIdentity {
             pieces.append("\nVault ID: " + identity.vaultID +
                           "\n" + V3L("笔记：") + identity.relativePath +

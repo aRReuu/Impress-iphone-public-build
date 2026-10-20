@@ -16,9 +16,31 @@ acceptance = set(re.findall(r"^\|\s*(ACCEPT-\d{2})\s*\|",
                             contract, flags=re.MULTILINE))
 open_issues = set(re.findall(r"^\|\s*(OPEN-\d{2})\s*\|",
                              contract, flags=re.MULTILINE))
-assert len(ledger_ids) >= 85, f"Requirement coverage declined: {len(ledger_ids)}"
-assert len(acceptance) == 12, f"ACCEPT-01..12 incomplete: {sorted(acceptance)}"
-assert len(open_issues) == 6, f"OPEN-01..06 incomplete: {sorted(open_issues)}"
+# Stable requirements are an exact contract, not an aggregate target.
+# Checking only len >= 85 would let one ID disappear as another is duplicated
+# or a superseded historical ID is accidentally reintroduced.
+expected_groups = {
+    "NAV": 6, "LOOP": 14, "CARD": 14, "UI": 4, "AI": 7,
+    "CHAT": 11, "CAL": 15, "LOCAL": 3, "SAFE": 11,
+}
+expected_ids = {
+    f"{prefix}-{index:02d}"
+    for prefix, count in expected_groups.items()
+    for index in range(1, count + 1)
+}
+expected_acceptance = {f"ACCEPT-{i:02d}" for i in range(1, 13)}
+expected_open = {f"OPEN-{i:02d}" for i in range(1, 7)}
+assert len(expected_ids) == 85
+assert ledger_ids == expected_ids, (
+    f"Stable requirement drift: missing={sorted(expected_ids - ledger_ids)}, "
+    f"unknown={sorted(ledger_ids - expected_ids)}"
+)
+assert acceptance == expected_acceptance, (
+    f"Acceptance drift: missing={sorted(expected_acceptance - acceptance)}"
+)
+assert open_issues == expected_open, (
+    f"Open decisions drift: missing={sorted(expected_open - open_issues)}"
+)
 
 def source(path):
     return (ROOT / path).read_text(encoding="utf-8")
@@ -45,6 +67,24 @@ assert "impress.notes.ai-discussion" in notes, "Notes no longer opens shared Cha
 assert re.search(r"productionWriteEnabled\s*=\s*false\b", vault)
 assert not re.search(r"productionWriteEnabled\s*=\s*true\b", vault)
 assert "private" in contract.lower() or "私有" in contract
+assert "ImVaultPrivateStore.approvedDraft" in chat
+assert "ImVaultPrivateStore.archiveApprovedDraft" in chat
+assert "ImpressSourceImpactCardRevisionGate.refreshedInput" in notes
+assert "ImpressChatNoteUploadGate.validate" in chat
+assert "ImpressChatProviderConsentGate.needsReapproval" in chat
+smoke = source("SMOKE_TEST_MATRIX.md")
+native_tests = source("aReuImpress-iPhoneTests/V3/ReviewWCDBRepositoryTests.swift")
+for acceptance_id in expected_acceptance:
+    assert acceptance_id in smoke, f"Missing smoke evidence reference: {acceptance_id}"
+for symbol in (
+    "testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS",
+    "testTwoApprovedNoteRevisionsRemainIndependentAndUndoInReverseOrder",
+    "testSourceImpactRevisesOriginalCardWithFreshFSRSAndExactSource",
+    "testChatNoteMaterialGateRejectsStaleForgedAndOversizedExcerpts",
+    "testChatProviderSwitchRequiresConsentAfterFailedFirstAttempt",
+    "testLongChatWarnsAboutRemoteWindowWithoutDiscardingLocalHistory",
+):
+    assert symbol in native_tests, f"Missing P0 native regression: {symbol}"
 assert "xcode-27" in workflow, "iOS 26+ Xcode SDK regression"
 print(f"PRODUCT_CONTRACT_STATIC_PASS: {len(ledger_ids)} requirements, "
       f"{len(acceptance)} acceptances, {len(open_issues)} open decisions")

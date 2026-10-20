@@ -99,22 +99,26 @@
 | SAFE-10 | 私有 main 同步、合并和分支清理不因本次定版自动获得授权；保留私有原始 icon、图片、Pods、历史文档，不反向泄露到公开仓库。 | CODE_DONE | `aReuImpress-iPhone/Utils/Public/ImFileManager/ImObsidianManager.swift` | 候选：ReviewWCDBRepositoryTests（须逐项确认覆盖） | 代码存在；不得自动推断 CI/真机 |
 | SAFE-11 | 编译、Mock、模拟器 XCTest、IPA 打包、真实云端推理、iPhone Keychain、File Provider 和生产写回分别验收。不得互相替代。 | IN_PROGRESS | `aReuImpress-iPhone/Utils/Public/ImFileManager/ImObsidianManager.swift` | 候选：ReviewWCDBRepositoryTests（须逐项确认覆盖） | 需要精确场景与证据 |
 
-## ACCEPT-01～12：业务与端到端验收（当前一律未达）
+## ACCEPT-01～12：代码、测试与真机证据逐项分层（正式验收尚未全部通过）
 
-| ID | 完整场景 | 状态 | 缺少的证据 |
-| --- | --- | --- | --- |
-| ACCEPT-01 | 从独立测试笔记选定内容产生候选卡，确认后只保存所选卡，并保留可核实的来源关联。 | BLOCKED | 测试笔记＋原卡端到端回执或 iPhone 13 权限／真机证据未齐；不能用单测/草稿代替 |
-| ACCEPT-02 | 在原卡打开正确来源；在笔记中找到关联原卡；同名、改名、移动、权限撤销不能静默串错对象。 | BLOCKED | 测试笔记＋原卡端到端回执或 iPhone 13 权限／真机证据未齐；不能用单测/草稿代替 |
-| ACCEPT-03 | 复习长问题／答案能读到末尾；H1/H2 不撑坏布局；阅读／文字选择不产生评分。 | BLOCKED | 测试笔记＋原卡端到端回执或 iPhone 13 权限／真机证据未齐；不能用单测/草稿代替 |
-| ACCEPT-04 | 现场直接编辑保存后回同一张卡和同一轮；无改动保存不生成新内容版本、不重置有效 UI 状态。 | BLOCKED | 测试笔记＋原卡端到端回执或 iPhone 13 权限／真机证据未齐；不能用单测/草稿代替 |
-| ACCEPT-05 | 真正内容修正保留 cardID 和 FSRS 历史；实际内容变化后不可用旧答案评分；取消不改任何源数据。 | BLOCKED | 测试笔记＋原卡端到端回执或 iPhone 13 权限／真机证据未齐；不能用单测/草稿代替 |
-| ACCEPT-06 | 同一来源可继续旧 Chat，也可新建会话；关闭重开后历史、草稿和待确认结果恢复，旧会话未覆盖。 | BLOCKED | 测试笔记＋原卡端到端回执或 iPhone 13 权限／真机证据未齐；不能用单测/草稿代替 |
-| ACCEPT-07 | 用户明确选择本次材料与模型；搜索选择可用；进入页面／点击材料不自动发送私人正文。 | BLOCKED | 测试笔记＋原卡端到端回执或 iPhone 13 权限／真机证据未齐；不能用单测/草稿代替 |
-| ACCEPT-08 | Chat 结论先形成局部修改预览，展示笔记和必要的卡片改动；用户可独立选择对象，不把整段聊天塞回原文。 | BLOCKED | 测试笔记＋原卡端到端回执或 iPhone 13 权限／真机证据未齐；不能用单测/草稿代替 |
-| ACCEPT-09 | 确认后按允许范围保存，读回相符；冲突中止覆盖；测试副本成功不能冒充生产写回。 | BLOCKED | 测试笔记＋原卡端到端回执或 iPhone 13 权限／真机证据未齐；不能用单测/草稿代替 |
-| ACCEPT-10 | 文件成功、数据库失败等分支准确保留部分结果；重试不重复追加，不生成重复卡；恢复不自动重放。 | BLOCKED | 测试笔记＋原卡端到端回执或 iPhone 13 权限／真机证据未齐；不能用单测/草稿代替 |
-| ACCEPT-11 | 修改来源相关片段后可核查并修订原卡；无关改动不强扰；用户能确认“不影响”，不是再造一张卡。 | BLOCKED | 测试笔记＋原卡端到端回执或 iPhone 13 权限／真机证据未齐；不能用单测/草稿代替 |
-| ACCEPT-12 | 最终仍是原笔记与原卡，讨论可找回，历史可追溯，复习可继续；笔记／卡片只改用户确认范围。 | BLOCKED | 测试笔记＋原卡端到端回执或 iPhone 13 权限／真机证据未齐；不能用单测/草稿代替 |
+> 记录基准：上一完整成功 Run [39435321232](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39435321232)（`dabbc9db7aa964979af38f14760f39cfc6db04ff`、158/158 iOS XCTest、28/28 Core），不自动覆盖后续 SHA。表中测试是可定位证据而不是“ACCEPT 全场景 PASS”；最新改动应在最终 SHA 对应的完整 CI 中另行确认。测试方法名和精确路径的完整列表见 `SMOKE_TEST_MATRIX.md`。
+
+| ID | 稳定需求 ID | 源码入口（均位于 `aReuImpress-iPhone/`，Package 路径特别注明） | 自动化定位测试 | 端到端状态 | 设备／遗留问题 |
+| --- | --- | --- | --- | --- | --- |
+| ACCEPT-01 | LOOP-03/AI-04 | `Utils/Public/ImAI/ImpressAIQuestionFlow.swift · sourceKey + DataBase/V3/ReviewWCDBRepository.swift · insertBatchCards` | `testNoteQuestionGenerationAnchorsOnlyUniqueEvidenceAndSkipsUnrelatedChanges；testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS` | 自动化：部分覆盖，新增项待本 SHA CI；实际完整往返：**BLOCKED** | iPhone13/File Provider/Keychain/生产写回按项目单独 BLOCKED |
+| ACCEPT-02 | LOOP-03/04 | `Packages/ImpressReviewCore/Sources/ImpressReviewCore/ImpressBatchParser.swift · ImpressBatchSourceKey；ImMarkdownViewController.swift · openVerifiedSourceSection` | `testBidirectionalVaultLinksUseExactIdentityAndPreserveOriginalCard；testOriginalCardOffersVerifiedSourceSectionWithoutReplacingFullNote` | 自动化：部分覆盖，新增项待本 SHA CI；实际完整往返：**BLOCKED** | iPhone13/File Provider/Keychain/生产写回按项目单独 BLOCKED |
+| ACCEPT-03 | CARD-01～06 | `View/ImCard/ImMemoryCard/ImMemoryCardView.swift · Markdown reader + VC/MainVCs/ImCardVC/ImpressV3ReviewViewController.swift` | `testV3LongMarkdownQuestionAndAnswerHaveIndependentScrollRegions；testActualTinderSwipeSavesOneFSRSEventOnlyAfterRevealingAnswer` | 自动化：部分覆盖，新增项待本 SHA CI；实际完整往返：**BLOCKED** | iPhone13/File Provider/Keychain/生产写回按项目单独 BLOCKED |
+| ACCEPT-04 | CARD-07～09 | `VC/MainVCs/ImCardVC/ImpressV3ReviewViewController.swift · quick edit + CardComposerViewController.swift · saveCard` | `testQuickEditAndVerifiedSourceVisibleBeforeAnswerWithoutScoring；testCardContentHistoryIsAtomicNoOpAndRestoresWithoutRescoring` | 自动化：部分覆盖，新增项待本 SHA CI；实际完整往返：**BLOCKED** | iPhone13/File Provider/Keychain/生产写回按项目单独 BLOCKED |
+| ACCEPT-05 | CARD-09/10 | `DataBase/V3/ReviewWCDBRepository.swift · updateManagedCard/contentRevision + review controller · re-reveal` | `testReturningAfterExternalCardEditRequiresRevealingTheNewAnswer；testManagedCardCRUDPreservesIdentityAndFSRSReviewEvents` | 自动化：部分覆盖，新增项待本 SHA CI；实际完整往返：**BLOCKED** | iPhone13/File Provider/Keychain/生产写回按项目单独 BLOCKED |
+| ACCEPT-06 | CHAT-02/03/10 | `Utils/Public/ImAI/ImpressAINativeChatViewController.swift · persistLocal/switchDiscussion + WCDB ChatSessions` | `testOneSourceSupportsTwoIndependentChatSessionsWithoutOverwritingHistory；testConfirmedDuplexHistoryRetainsReceiptsWhenNewerProposalIsSaved` | 自动化：部分覆盖，新增项待本 SHA CI；实际完整往返：**BLOCKED** | iPhone13/File Provider/Keychain/生产写回按项目单独 BLOCKED |
+| ACCEPT-07 | CHAT-05～08/AI-04 | `Utils/Public/ImAI/ImpressAINativeChatViewController.swift · performSend/ImpressChatNoteUploadGate` | `testAIQuestionMaterialRequiresExactLiveSourceBeforeHTTP；testChatNoteMaterialGateRejectsStaleForgedAndOversizedExcerpts；testChatProviderSwitchRequiresConsentAfterFailedFirstAttempt` | 自动化：部分覆盖，新增项待本 SHA CI；实际完整往返：**BLOCKED** | iPhone13/File Provider/Keychain/生产写回按项目单独 BLOCKED |
+| ACCEPT-08 | LOOP-10/11 | `Utils/Public/ImAI/ImpressAINativeChatViewController.swift · ImpressDuplexApprovalController` | `testDuplexDiffPreviewDisplaysExactVaultIDAndSourcePath；testDuplexProposalPersistsAcrossChatColdStartWithoutReplayingWrites` | 自动化：部分覆盖，新增项待本 SHA CI；实际完整往返：**BLOCKED** | iPhone13/File Provider/Keychain/生产写回按项目单独 BLOCKED |
+| ACCEPT-09 | SAFE-02～05 | `Utils/Public/ImFileManager/ImObsidianManager.swift · commitAuthorized/commitFixture + WCDB updateManagedCard` | `testUserApprovalRequiredAndSuccessfulFixtureWriteIsRecoverable；testExplicitQAUndoRestoresExactBOMCRLFBytesAndBlocksLaterConflict` | 自动化：部分覆盖，新增项待本 SHA CI；实际完整往返：**BLOCKED** | iPhone13/File Provider/Keychain/生产写回按项目单独 BLOCKED |
+| ACCEPT-10 | LOOP-12/13 | `Packages/ImpressReviewCore/Sources/ImpressReviewCore/ImVaultSyncCore.swift · ImDuplexApprovalState + ImpressAINativeChatViewController.swift · execute/executeUndo` | `testDuplexPartialReceiptDoesNotReapplyWrittenQAFileOnCardConflict；testDuplexProposalPersistsAcrossChatColdStartWithoutReplayingWrites` | 自动化：部分覆盖，新增项待本 SHA CI；实际完整往返：**BLOCKED** | iPhone13/File Provider/Keychain/生产写回按项目单独 BLOCKED |
+| ACCEPT-11 | LOOP-07～09 | `ImMarkdownViewController.swift · ImpressNoteSourceImpactController/ImpressSourceImpactCardRevisionGate` | `testSourceImpactRevisesOriginalCardWithFreshFSRSAndExactSource；testSourceRevisionAcknowledgementKeepsOriginalCardAndReviewSchedule` | 自动化：部分覆盖，新增项待本 SHA CI；实际完整往返：**BLOCKED** | iPhone13/File Provider/Keychain/生产写回按项目单独 BLOCKED |
+| ACCEPT-12 | LOOP-01～14 | `ReviewWCDBRepository.swift + ImObsidianManager.swift + ImpressAINativeChatViewController.swift` | `testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS；testTwoApprovedNoteRevisionsRemainIndependentAndUndoInReverseOrder` | 自动化：部分覆盖，新增项待本 SHA CI；实际完整往返：**BLOCKED** | iPhone13/File Provider/Keychain/生产写回按项目单独 BLOCKED |
+
+**生产写回状态**：`ImVaultGuardedWrite.productionWriteEnabled = false`。合成 fixture 写入、WCDB 数据测试、网络 Mock、无签名 IPA 与真机、File Provider/iCloud 真实回读、真实 Keychain 模型调用互不等价。只允许按照真实执行过的证据把单独层级标成 PASS；本表的 END-TO-END 最终状态仍为 BLOCKED。
 
 ## A01～A20：历史回归（旧业务编号，不覆盖最新契约）
 
@@ -237,3 +241,15 @@
 ### 2026-10-20 · LOOP-07～09/ACCEPT-11 反向核查直接编辑原卡
 
 新增笔记来源变化核查页上的原 cardID 编辑入口，调用现有 `ImpressV3CardComposerViewController`，与“确认不影响”并列；所有卡片类型仍使用同一个编辑器。提交时核对当前 File Provider 来源身份和实际字节 SHA、原 cardID/contentRevision/source key，WCDB 以当时最新 FSRS revision 更新内容，不改变评分历史。人工确认后的新链接以最新版完整文件摘要保存，绝不将已变化的章节误标为“原精确锚点仍有效”。新增原生测试 `testSourceImpactIncludesDirectOriginalCardEditorAndUnaffectedChoice` 和 `testSourceImpactRevisesOriginalCardWithFreshFSRSAndExactSource`；本代码/测试尚需对应 HEAD 的 CI 实际成功，真机和生产 Vault 仍外部阻塞。
+
+## 2026-10-20 · LOOP-08/09、CHAT-08、SAFE-02、ACCEPT-07/11 联合补强（最新 CI 待运行）
+
+- **反向修订原卡**：新 `ImpressSourceImpactCardRevisionGate.refreshedInput` 显式拒绝无实际卡片内容变更的保存；不把点击编辑器保存伪装成“已人工确认不影响”。保存前重新确认 File Provider 授权 Vault ID、当前文件字节 SHA、原 cardID/source key/contentRevision；成功更新引用版本并保持 FSRS 事件和原卡身份。
+- **Chat 原文发送前的精确范围 Gate**：`ImpressChatNoteUploadGate.validate` 检查真实已授权原文件全文 SHA、当前 Vault+全路径和本次会话身份；仅接受与当前原文件精确一致的全文（明确批准范围时）或当前唯一选取的 Markdown 章节正文。伪造材料、过期来源、另一会话材料、无授权摘要或超过 40KB 的引用被拒绝并保留未发送草稿；不默默截断、不收费重试。
+- **跨服务商二次确认**：失败或取消的首次发送仍可包含私人材料；`ImpressChatProviderConsentGate` 检查已尝试用户消息中的 Provider ID。用户改选另一个服务商时必须重新批准，不再只以 `completed` 消息判断是否披露过材料。
+- **不可加密 ZIP 的真实边界**：批准的 Markdown 字节恢复快照仅存本机受保护目录，普通备份 ZIP 不包含这些私人明文；历史回执与预览明确提示卸载/跨设备迁移后的安全撤销可能被阻断，不能把 SQLite Chat 元数据当作文件原件备份。
+- **本批证据尚未通过**：新增 `testChatNoteMaterialGateRejectsStaleForgedAndOversizedExcerpts`、`testChatProviderSwitchRequiresConsentAfterFailedFirstAttempt`、`testDuplexSourceRevisionAndPrivacyWarningsAreLocalized` 等，须核对对应最新代码 SHA 的全部 Core/iOS XCTest、Debug/Release、ARM64/IPA。真实 iPhone13/Keychain/模型 HTTP/File Provider/生产 Vault 仍单独 BLOCKED。
+
+### 2026-10-20 · CHAT-07 长历史远端范围告知
+
+原本 `performSend` 使用最近 16 条已完成消息作为 API 上下文，但未提前告知用户早期消息被排除。现仅在已完成记录超过 16 时展示一次该会话的明确发送范围确认；用户可取消，早期消息依旧完整保存在 WCDB。切换 Chat 会话需要独立确认。新增原生 `testLongChatWarnsAboutRemoteWindowWithoutDiscardingLocalHistory`（待同 SHA CI），真实 API/设备验收不可据此标记 PASS。

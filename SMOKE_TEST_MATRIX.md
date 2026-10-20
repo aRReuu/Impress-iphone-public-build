@@ -161,3 +161,40 @@ Portable Swift `distantSmallEditsPreviewOnlyActualChangedHunks` 验证在 1200 �
 - `testSourceImpactIncludesDirectOriginalCardEditorAndUnaffectedChoice`：笔记 SHA 变化后的人工核查页同时提供“修订这张原卡”和“确认不影响”，不要求退出到卡片集按标题搜索。
 - `testSourceImpactRevisesOriginalCardWithFreshFSRSAndExactSource`：从同一 Vault ID＋全相对路径匹配的旧 source key 出发，用户修订原 cardID；写前回读笔记 SHA 和 WCDB 内容 CAS，重新绑定最新文件级来源 digest。允许正常 FSRS 评分已前进，不删除复习事件；拒绝另一 Vault 或过期笔记来源。原先章节内容已变化时不冒用旧锚点的精确定位。
 - 原生 XCTest 成功仅说明 SQLite、UI 入口与来源门禁；仍需 iPhone13/Files Provider 真实源核查与导航现场测试。正式 Vault 写回保持 false。
+
+## 2026-10-20 · P0 发送材料权限与供应商切换回归（新提交需 exact SHA CI）
+
+| 验证对象 | 对应 XCTest | 自动化 | 真机/真实服务 |
+| --- | --- | --- | --- |
+| 选定笔记材料发送前的身份、原文 SHA、所选章节原文一致性 | `testChatNoteMaterialGateRejectsStaleForgedAndOversizedExcerpts` | 新增待最新 SHA CI | BLOCKED |
+| 选定材料 40,000 UTF-8 字节上限，禁止静默截断或自动调用收费服务 | 同上 | 新增待最新 SHA CI | BLOCKED |
+| 第一次 Chat 失败/取消后切换云端服务商仍重新询问权限 | `testChatProviderSwitchRequiresConsentAfterFailedFirstAttempt` | 新增待最新 SHA CI | BLOCKED |
+| 来源核查直接修订原卡；内容没变时不冒充核查完成 | `testSourceImpactRevisesOriginalCardWithFreshFSRSAndExactSource` + 无改动拒绝分支 | 新增待最新 SHA CI | BLOCKED |
+| 反向编辑途中 Vault 授权已切换、源 SHA 或 cardID/contentRevision 变更 | 同上 + 原生界面门禁 | 代码完成/部分 XCTest | BLOCKED |
+
+注：普通未加密 ZIP 的 Chat/WCDB 记录不包含受保护的私人 Markdown 草稿和批准快照。测试失败或重装导致本机快照缺失时，应保留待核查/禁止撤销，不使用 AI 文本伪造原始字节。不能把 Debug 测试源写回或模拟器测试记为正式 Vault、iCloud 同步或 iPhone 13 验收。
+
+## 2026-10-20 · ACCEPT-01～12 可追踪业务验收总表
+
+> 证据层级：`CODE`（代码/测试存在）、`SIM PASS`（对应该测试的模拟器 XCTest 已通过）、`E2E BLOCKED`（未经真正完整交互链验证）、`DEVICE BLOCKED`（iPhone 13／真实 Files/Keychain 权限未验收）。同一 SHA 自动化通过 **不**代表真机 PASS；以下测试名称必须实际查询对应 Run，不能见到名称便标绿。
+
+| Acceptance | 当前可核验自动化用例 | 不可替代的尚缺证据 | 端到端最终状态 |
+| --- | --- | --- | --- |
+| ACCEPT-01 | `testNoteQuestionGenerationAnchorsOnlyUniqueEvidenceAndSkipsUnrelatedChanges`、`testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS` | 真正 UI 选定章节、候选审核、持久 cardID/来源核查 | E2E BLOCKED |
+| ACCEPT-02 | `testBidirectionalVaultLinksUseExactIdentityAndPreserveOriginalCard`、`testOriginalCardOffersVerifiedSourceSectionWithoutReplacingFullNote` | 文件移动/改名、撤权与跨 Vault 实际手机往返 | E2E BLOCKED |
+| ACCEPT-03 | `testV3LongMarkdownQuestionAndAnswerHaveIndependentScrollRegions`、`testActualTinderSwipeSavesOneFSRSEventOnlyAfterRevealingAnswer` | iPhone13 触底、文字选择、代码/表格/四向触控实测 | DEVICE BLOCKED |
+| ACCEPT-04 | `testQuickEditAndVerifiedSourceVisibleBeforeAnswerWithoutScoring`、`testCardContentHistoryIsAtomicNoOpAndRestoresWithoutRescoring` | 现场返回后原队列位置、人手操作的可见状态 | DEVICE BLOCKED |
+| ACCEPT-05 | `testReturningAfterExternalCardEditRequiresRevealingTheNewAnswer`、`testManagedCardCRUDPreservesIdentityAndFSRSReviewEvents` | 真实用户编辑/取消、旧揭示答案不可提交评分 | DEVICE BLOCKED |
+| ACCEPT-06 | `testOneSourceSupportsTwoIndependentChatSessionsWithoutOverwritingHistory`、`testConfirmedDuplexHistoryRetainsReceiptsWhenNewerProposalIsSaved`、`testUnsentChatModelAndPromptSurviveColdStartAndLegacyJSON` | 强杀、旧设备数据库、回执重载、草稿 UI 切换 | E2E BLOCKED |
+| ACCEPT-07 | `testAIQuestionMaterialRequiresExactLiveSourceBeforeHTTP`、`testChatNoteMaterialGateRejectsStaleForgedAndOversizedExcerpts`、`testChatProviderSwitchRequiresConsentAfterFailedFirstAttempt` | 真机授权、Keychain/真实模型失败切换、无私人材料被误发 | E2E BLOCKED |
+| ACCEPT-08 | `testDuplexDiffPreviewDisplaysExactVaultIDAndSourcePath`、`testDuplexProposalPersistsAcrossChatColdStartWithoutReplayingWrites` | 所选笔记+原卡完整增量 Diff、人工两目标切换/取消 | E2E BLOCKED |
+| ACCEPT-09 | `testUserApprovalRequiredAndSuccessfulFixtureWriteIsRecoverable`、`testExplicitQAUndoRestoresExactBOMCRLFBytesAndBlocksLaterConflict` | 单独授权真实 Files QA 副本的 SHA/CAS/回读 | DEVICE BLOCKED |
+| ACCEPT-10 | `testDuplexPartialReceiptDoesNotReapplyWrittenQAFileOnCardConflict`、`testDuplexProposalPersistsAcrossChatColdStartWithoutReplayingWrites` | 文件已写/DB 失败时真机强杀重启、逐对象重试零重播 | E2E BLOCKED |
+| ACCEPT-11 | `testNoteQuestionGenerationAnchorsOnlyUniqueEvidenceAndSkipsUnrelatedChanges`、`testSourceImpactRevisesOriginalCardWithFreshFSRSAndExactSource`、`testSourceRevisionAcknowledgementKeepsOriginalCardAndReviewSchedule` | 外部 Obsidian 编辑后的 UI 核查、改原卡/确认不影响、FSRS 继续 | DEVICE BLOCKED |
+| ACCEPT-12 | `testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS`、`testTwoApprovedNoteRevisionsRemainIndependentAndUndoInReverseOrder` | 真正完整交互路径在 iPhone 13 的复现记录及所有回执/恢复 | E2E BLOCKED |
+
+上述用例名称为**证据定位**，非每项通过证明；在最新 SHA 完整 CI 成功前，新增用例仅标 `CODE/PENDING`，旧有测试的最近完整成功基线见 Run 39435321232。
+
+### 长会话的显式远端窗口（CHAT-07 / ACCEPT-06～07）
+
+本机保存全部消息不等于模型每次收到全部历史。Chat 若已完成消息超过 16 条，首次发送时必须明确告知“仅发送最近 16 条已完成对话和当前输入”，并允许取消；每个会话只需确认一次，切换到别的会话重新提示。不会删除旧本地消息或伪称云端已读全部。纯逻辑原生 XCTest：`testLongChatWarnsAboutRemoteWindowWithoutDiscardingLocalHistory`，真机多语言/键盘与云端实际上下文仍待验收。模型调用上限是上文明确验证的材料范围，且不自动切换付费商。

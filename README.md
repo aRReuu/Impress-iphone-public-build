@@ -54,3 +54,11 @@ Original and proposed Markdown bytes of each approved note edit are now kept as 
 ## Source-impact direct original-card correction (2026-10-20)
 
 The note-source impact reviewer now includes a direct original-card editor alongside the explicit “unaffected” decision, reusing the existing card composer rather than creating a competing card update path. A user-approved edit validates the current authorized Vault identity, document SHA, unchanged original card content revision and source key, and then applies WCDB CAS with the *current* FSRS scheduling revision. Review events and cardID survive; changed source-section anchors are conservatively downgraded to file-level identity. Requires matching SHA XCTest and device QA; does not permit a production Vault write.
+
+## Source-context privacy and repeat provider consent (2026-10-20)
+
+Native Chat revalidates the explicitly approved note excerpts against a fresh, authorized File Provider read before invoking an HTTP model. Stored snippets must match the same source/session SHA and exact selected section (or expressly selected whole note), with a 40KB aggregate UTF-8 excerpt budget; stale, fabricated, cross-Vault, missing-context or oversized inputs are rejected without any inference request. Switching providers after a failed or cancelled first user request requires renewed confirmation, not just after a successful answer. The note-source impact editor separately rejects no-op edits as automatic “unaffected” acknowledgements. Protected original Markdown approval bytes stay on-device, **outside the unencrypted ZIP backup**, and missing snapshots fail closed. Release Vault writes remain disabled; see SMOKE_TEST_MATRIX for CI/device evidence.
+
+### Bounded conversation consent (2026-10-20)
+
+When a local discussion has more than 16 completed turns, the first subsequent Send explicitly discloses that the remote API receives only the latest 16 completed turns plus the current user input. Earlier turns remain fully persisted locally. The user may cancel; acknowledgement is session-local and resets when switching discussions. This is an explicit context-window boundary, not a claim that the model has read all saved history.

@@ -577,6 +577,26 @@ final class ImpressR041NativeNavigationTests: XCTestCase {
         XCTAssertEqual(ImpressV3Appearance.selectedMode(in: defaults), .system)
     }
 
+
+    func testDuplexSourceRevisionAndPrivacyWarningsAreLocalized() {
+        for original in [
+            "核查后修订这张原卡",
+            "确认有限对话上下文",
+            "本次仅向云端模型发送最近 16 条已完成对话及当前输入；更早的消息仍完整保存在本机，不代表模型已经读过。",
+            "确认此会话的发送范围",
+            "原卡已按人工修订保存；cardID 和 FSRS 历史保留。返回可继续复习。",
+            "已应用的笔记草稿",
+            "建立下一版笔记草稿",
+            "个人 Markdown 批准快照只保存在本机受保护目录，不包含在普通未加密 ZIP 备份。卸载或迁移后旧文件撤销可能不可用。"
+        ] {
+            let english = ImpressV3Language.text(original, language: .english)
+            let traditional = ImpressV3Language.text(original, language: .traditional)
+            XCTAssertNotEqual(english, original)
+            XCTAssertNotEqual(traditional, original)
+            XCTAssertFalse(english.isEmpty)
+        }
+    }
+
     func testThreeUserLanguagesPersistWithoutEditingSavedContent() throws {
         let suite = "test.interface.language." + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

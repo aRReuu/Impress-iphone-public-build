@@ -1170,7 +1170,15 @@ enum ImpressSourceImpactCardRevisionGate {
                                oldSourceKey: String,
                                currentNote: ImVaultRawDocument,
                                expectedCurrentDigest: String) throws -> WCDBV3CardInput {
-        guard approved.cardID == original.cardID,
+        // A no-op Save is NOT an implicit "source did not affect this card"
+        // acknowledgement. Use the explicit unaffected action for that.
+        let contentChanged = approved.question != original.question ||
+            approved.answerText != original.answerText ||
+            approved.choices != original.choices ||
+            approved.correctIndices != original.correctIndices ||
+            approved.cardType != original.cardType ||
+            approved.imageData != original.imageData
+        guard contentChanged, approved.cardID == original.cardID,
               approved.sourceNotePath == oldSourceKey,
               original.sourceNotePath == oldSourceKey,
               (try? ImpressBatchSourceKey.decode(oldSourceKey)) == currentNote.identity,
@@ -1348,6 +1356,10 @@ final class ImpressNoteSourceImpactController: UIViewController {
                           let queue = try await self.repository.fetchQueueCandidates()
                             .first(where: { $0.cardID == self.cardID }) else {
                         throw ImVaultSyncFailure.conflict
+                    }
+                    guard ImVaultReadOnlyProbe.shared.authorizedVaultID ==
+                          self.document.identity.vaultID else {
+                        throw ImVaultSyncFailure.wrongVault
                     }
                     let authorized = try ImpressSourceImpactCardRevisionGate.refreshedInput(
                         approved: approved, original: actual, oldSourceKey: oldKey,

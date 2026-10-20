@@ -718,6 +718,23 @@ enum ImpressV3Language: String, CaseIterable {
     }
 
     private static let translations: [String: (traditional: String, english: String)] = [
+        "确认有限对话上下文": ("確認有限的對話上下文", "Confirm Limited Chat Context"),
+        "本次仅向云端模型发送最近 16 条已完成对话及当前输入；更早的消息仍完整保存在本机，不代表模型已经读过。": ("這次僅向雲端模型傳送最近 16 則已完成訊息及目前輸入；較早訊息仍完整保留於本機，不代表模型已讀過。", "Only the latest 16 completed turns and the current input are sent to the provider. Earlier messages remain on your device and are not represented as read by the model."),
+        "本次未传送的早期消息条数：": ("本次未傳送的較早訊息數量：", "Older Messages Not Sent: "),
+        "确认此会话的发送范围": ("確認本次對話的傳送範圍", "Confirm This Conversation's Scope"),
+
+        "核查后修订这张原卡": ("核查後修訂此原卡", "Edit Affected Original Card"),
+        "原卡已按人工修订保存；cardID 和 FSRS 历史保留。返回可继续复习。": ("原卡已按人工修訂儲存；cardID 和 FSRS 歷史保留。返回後可繼續複習。", "Original card updated with manual approval. Card ID and FSRS history are preserved; you can resume review."),
+        "个人 Markdown 批准快照只保存在本机受保护目录，不包含在普通未加密 ZIP 备份。卸载或迁移后旧文件撤销可能不可用。": ("個人 Markdown 核准快照僅留在裝置保護目錄，不包含在一般未加密 ZIP 備份中。移除或換機後可能無法復原舊文件。", "Approved private Markdown snapshots remain in protected on-device storage and are not included in unencrypted ZIP backups. Uninstalling or migrating may prevent reverting past file edits."),
+        "涉及原文的字节级恢复快照仅存于本机受保护目录；普通未加密 ZIP 不包含私人 Markdown。删除应用或迁移设备后可能无法撤销旧文件修改。": ("原文字節復原快照僅存於裝置保護目錄；未加密 ZIP 不包含私人 Markdown。移除 App 或更換裝置後可能無法撤銷舊文件修改。", "Byte-accurate source recovery snapshots remain in protected on-device storage; unencrypted ZIP backups exclude private Markdown. After uninstall or migration, older file changes may no longer be reversible."),
+        "原卡已保存": ("原卡已儲存", "Original Card Saved"),
+        "已应用的笔记草稿": ("已套用的筆記草稿", "Applied Note Draft"),
+        "查看旧草稿": ("查看舊草稿", "View Previous Draft"),
+        "建立下一版笔记草稿": ("建立下一版筆記草稿", "Start Next Note Revision"),
+        "无法建立新草稿": ("無法建立新草稿", "Cannot Start New Draft"),
+        "原草稿与当前来源一致。可查看旧草稿，或明确创建下一次修订；会保留旧批准快照与历史回执。": ("舊草稿與目前來源一致。可檢視舊草稿或明確建立下一次修訂；保留舊核准快照與歷史回執。", "The previous edit matches the current source. Inspect it or explicitly start the next revision; approved snapshots and receipts are retained."),
+        "个人材料范围过大": ("個人材料範圍過大", "Selected Material Too Large"),
+
         "查看核实过的来源片段": ("查看核實過的來源片段", "View Verified Source Excerpt"),
         "来源片段无法可靠定位": ("來源片段無法可靠定位", "Source Excerpt Cannot Be Reliably Located"),
         "已核实来源片段": ("已核實來源片段", "Verified Source Excerpt"),
