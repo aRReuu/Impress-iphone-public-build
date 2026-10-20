@@ -24,6 +24,51 @@ private struct FailingReviewCalculator: WCDBReviewCalculating {
 final class ReviewWCDBRepositoryTests: XCTestCase {
 
     @MainActor
+    func testConfirmedDuplexHistoryRetainsReceiptsWhenNewerProposalIsSaved() async throws {
+        let path = temporaryPath()
+        let original = try ReviewWCDBRepository(databasePath: path,
+            calculator: FSRS6ReviewCalculator())
+        let source = "card:" + UUID().uuidString
+        var session = WCDBV3ChatSession(sourceIdentity: source)
+        var earlier = WCDBV3DuplexProposal(sourceMessageID: UUID(),
+            noteIdentity: nil, noteBaseDigest: nil, noteEditedDigest: nil,
+            cardID: UUID(), cardReviewRevision: 0, cardContentRevision: 0,
+            cardBaseQuestion: "Before", cardBaseAnswer: "A",
+            cardEditedQuestion: "After", cardEditedAnswer: "A",
+            state: ImDuplexApprovalState(noteSelected: false, cardSelected: true,
+                cardStatus: .applied))
+        earlier.cardReceipt = "applied previous card without scoring"
+        var recent = WCDBV3DuplexProposal(sourceMessageID: UUID(),
+            noteIdentity: nil, noteBaseDigest: nil, noteEditedDigest: nil,
+            cardID: UUID(), cardReviewRevision: 1, cardContentRevision: 0,
+            cardBaseQuestion: "Q", cardBaseAnswer: "A",
+            cardEditedQuestion: "Q2", cardEditedAnswer: "A2",
+            state: ImDuplexApprovalState(noteSelected: false, cardSelected: true,
+                cardStatus: .conflict))
+        recent.cardReceipt = "newer conflict"
+        session.duplexHistory = [earlier]
+        session.pendingDuplex = recent
+        try await original.saveChatSession(session, expectedRevision: nil)
+        let reopened = try ReviewWCDBRepository(databasePath: path,
+            calculator: FSRS6ReviewCalculator())
+        let restoredRows = try await reopened.chatSessions(for: source)
+        let restored = try XCTUnwrap(restoredRows.first)
+        XCTAssertEqual(restored.duplexHistory?.count, 1)
+        XCTAssertEqual(restored.duplexHistory?.first?.cardReceipt,
+                       "applied previous card without scoring")
+        XCTAssertEqual(restored.pendingDuplex?.cardReceipt, "newer conflict")
+        let page = ImpressDuplexReceiptHistoryController(
+            records: [try XCTUnwrap(restored.pendingDuplex)] +
+                (restored.duplexHistory ?? []))
+        page.loadViewIfNeeded()
+        XCTAssertEqual(page.tableView.numberOfRows(inSection: 0), 2)
+        var selectedID: UUID?
+        page.onSelect = { selectedID = $0.proposalID }
+        page.tableView(page.tableView, didSelectRowAt: IndexPath(row: 1, section: 0))
+        XCTAssertEqual(selectedID, earlier.proposalID)
+    }
+
+    @MainActor
     func testSourceRevisionAcknowledgementKeepsOriginalCardAndReviewSchedule() async throws {
         let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
                                             calculator: FSRS6ReviewCalculator())

@@ -145,8 +145,30 @@ public enum ImVaultDiff {
     /// Displays ALL differing middle lines up to the preview cap. When the
     /// preview is truncated, approval must remain disabled by the caller.
     public static func summary(base: String, edited: String, maximumLines: Int = 200) -> (text: String, complete: Bool) {
-        let before = base.components(separatedBy: "\n")
-        let after = edited.components(separatedBy: "\n")
+        // Editing a uniform CRLF/classic-Mac file in UITextView may yield LF
+        // even when the write path restores the original separators. Compare
+        // logical lines in that case, or the preview would claim every line
+        // changed and arbitrarily block a one-line edit in a long note.
+        // A mixed-newline source is NOT normalized here: a newline-only
+        // rewrite in that file must remain visible and approvable explicitly.
+        let stripped = base.replacingOccurrences(of: "\r\n", with: "")
+        let uniformCRLF = base.contains("\r\n") &&
+            !stripped.contains("\r") && !stripped.contains("\n")
+        let classicMac = base.contains("\r") && !base.contains("\n")
+        func logicalLines(_ text: String) -> [String] {
+            if uniformCRLF {
+                return text.replacingOccurrences(of: "\r\n", with: "\n")
+                    .components(separatedBy: "\n")
+            }
+            if classicMac {
+                return text.replacingOccurrences(of: "\r\n", with: "\n")
+                    .replacingOccurrences(of: "\r", with: "\n")
+                    .components(separatedBy: "\n")
+            }
+            return text.components(separatedBy: "\n")
+        }
+        let before = logicalLines(base)
+        let after = logicalLines(edited)
         var prefix = 0
         while prefix < min(before.count, after.count) && before[prefix] == after[prefix] { prefix += 1 }
         var suffix = 0

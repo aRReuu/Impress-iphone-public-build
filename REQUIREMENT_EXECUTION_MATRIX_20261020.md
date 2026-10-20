@@ -25,13 +25,13 @@
 | LOOP-04 | 独立创建的卡片允许没有来源，不强制归入笔记。不按同名标题猜关联，不把新建的同名文件误认作旧来源。 | IN_PROGRESS | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | 候选：ReviewWCDBRepositoryTests（须逐项确认覆盖） | 需要精确场景与证据 |
 | LOOP-05 | 讨论结论优先增量修订已有笔记的相关章节，不默认复制整段聊天，不默认创建多个“总结第 N 版”。没有合适目标时才明确选择其他笔记或新建。 | IN_PROGRESS | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | 候选：ReviewWCDBRepositoryTests（须逐项确认覆盖） | 需要精确场景与证据 |
 | LOOP-06 | 新增知识点与修订已有知识点分开处理：前者可生成候选新卡；后者优先改原卡。不能通过不断生成新卡代替维护旧卡。 | IN_PROGRESS | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | 候选：ReviewWCDBRepositoryTests（须逐项确认覆盖） | 需要精确场景与证据 |
-| LOOP-07 | 来源变化只提示核查，不自动断言旧卡错误。只改排版或无关章节，不应打扰相关卡。定位不可靠时如实提示，不能假装精确。 | NOT_STARTED | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | —（缺完整业务入口／自动化） | 需要精确场景与证据 |
-| LOOP-08 | 核查后可更新原卡，也可确认不受影响。提示低权重，不弹窗强迫处理，不形成必须清空的任务债务。 | NOT_STARTED | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | —（缺完整业务入口／自动化） | 需要精确场景与证据 |
-| LOOP-09 | 卡片先被修正时，不用尚未更新的旧笔记覆盖它。用户确认的具体修改是本次操作权威，笔记不是永远正确的裁决者。 | NOT_STARTED | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | —（缺完整业务入口／自动化） | 需要精确场景与证据 |
-| LOOP-10 | 一个修改预览流程可显示“笔记改动”和“关联卡片改动”；只显示实际必要的改动，允许分别勾选，最终一次确认所选对象。不强制两边同时改。 | NOT_STARTED | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | —（缺完整业务入口／自动化） | 需要精确场景与证据 |
-| LOOP-11 | 预览明确目标、位置、原文和修改结果；确认只针对当时看见的内容与版本。提案／目标／源文改变后旧确认失效。 | NOT_STARTED | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | —（缺完整业务入口／自动化） | 需要精确场景与证据 |
-| LOOP-12 | 文件与数据库不是单一事务。必须能报告部分成功、保留待处理项、幂等重试，不能重试时重复追加或误报全部成功。 | NOT_STARTED | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | —（缺完整业务入口／自动化） | 需要精确场景与证据 |
-| LOOP-13 | 退出、重启或重试不丢待确认内容；恢复后不自动重放已执行修改。撤销也要检查当前版本，不覆盖后来发生的合法编辑。 | NOT_STARTED | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | —（缺完整业务入口／自动化） | 需要精确场景与证据 |
+| LOOP-07 | 来源变化只提示核查，不自动断言旧卡错误。只改排版或无关章节，不应打扰相关卡。定位不可靠时如实提示，不能假装精确。 | IN_PROGRESS | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | 源码已有交互及回归测试；需本次 SHA CI + 真机进一步验证 | 设备/授权 Vault/人工完整回执需复核 |
+| LOOP-08 | 核查后可更新原卡，也可确认不受影响。提示低权重，不弹窗强迫处理，不形成必须清空的任务债务。 | IN_PROGRESS | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | 源码已有交互及回归测试；需本次 SHA CI + 真机进一步验证 | 设备/授权 Vault/人工完整回执需复核 |
+| LOOP-09 | 卡片先被修正时，不用尚未更新的旧笔记覆盖它。用户确认的具体修改是本次操作权威，笔记不是永远正确的裁决者。 | IN_PROGRESS | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | 源码已有交互及回归测试；需本次 SHA CI + 真机进一步验证 | 设备/授权 Vault/人工完整回执需复核 |
+| LOOP-10 | 一个修改预览流程可显示“笔记改动”和“关联卡片改动”；只显示实际必要的改动，允许分别勾选，最终一次确认所选对象。不强制两边同时改。 | IN_PROGRESS | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | 源码已有交互及回归测试；需本次 SHA CI + 真机进一步验证 | 设备/授权 Vault/人工完整回执需复核 |
+| LOOP-11 | 预览明确目标、位置、原文和修改结果；确认只针对当时看见的内容与版本。提案／目标／源文改变后旧确认失效。 | IN_PROGRESS | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | 源码已有交互及回归测试；需本次 SHA CI + 真机进一步验证 | 设备/授权 Vault/人工完整回执需复核 |
+| LOOP-12 | 文件与数据库不是单一事务。必须能报告部分成功、保留待处理项、幂等重试，不能重试时重复追加或误报全部成功。 | IN_PROGRESS | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | 源码已有交互及回归测试；需本次 SHA CI + 真机进一步验证 | 设备/授权 Vault/人工完整回执需复核 |
+| LOOP-13 | 退出、重启或重试不丢待确认内容；恢复后不自动重放已执行修改。撤销也要检查当前版本，不覆盖后来发生的合法编辑。 | IN_PROGRESS | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | 源码已有交互及回归测试；需本次 SHA CI + 真机进一步验证 | 设备/授权 Vault/人工完整回执需复核 |
 | LOOP-14 | 第一轮验收聚焦一篇笔记与一张原卡的真实往返。全库自动分析、跨多文档重构和批量联动全部旧卡，不作为第一轮前置条件。 | IN_PROGRESS | `aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift` | 候选：ReviewWCDBRepositoryTests（须逐项确认覆盖） | 需要精确场景与证据 |
 | CARD-01 | 问题、答案均能在首页完整阅读；内容长可以滚动，不能依靠截断或强制去另一页面才看完。全屏阅读可辅助，但不能掩盖首页缺陷。 | CODE_DONE | `aReuImpress-iPhone/View/ImCard/ImMemoryCard/ImMemoryCardView.swift` | 候选：testV3LongMarkdownQuestionAndAnswerHaveIndependentScrollRegions | 代码存在；不得自动推断 CI/真机 |
 | CARD-02 | 问题／答案统一支持相应 Markdown 层级，重点处理 H1、H2、长段落、列表、引用、代码块、表格及图片卡既有语义。原始内容不因排版修改。 | CODE_DONE | `aReuImpress-iPhone/View/ImCard/ImMemoryCard/ImMemoryCardView.swift` | 候选：testV3LongMarkdownQuestionAndAnswerHaveIndependentScrollRegions | 代码存在；不得自动推断 CI/真机 |
@@ -66,7 +66,7 @@
 | CHAT-06 | 可搜索选择笔记／章节／片段以及卡片指定内容；材料标签可预览、移除、显示范围。添加资料不是立即发送，更不是授权写入。 | IN_PROGRESS | `aReuImpress-iPhone/Utils/Public/ImAI/ImpressAINativeChatViewController.swift` | 候选：ReviewWCDBRepositoryTests（须逐项确认覆盖） | 需要精确场景与证据 |
 | CHAT-07 | 长文和长会话采用明确、有限的发送范围；不偷偷截断仍声称已读全文。本地保存完整历史不等于每次全部发送。 | IN_PROGRESS | `aReuImpress-iPhone/Utils/Public/ImAI/ImpressAINativeChatViewController.swift` | 候选：ReviewWCDBRepositoryTests（须逐项确认覆盖） | 需要精确场景与证据 |
 | CHAT-08 | 首次发送材料、扩大范围或更换云端服务商时确认；进入 Chat 不自动发送；撤销权限后不能继续读取。图片未送入支持模型不能假装识图。 | IN_PROGRESS | `aReuImpress-iPhone/Utils/Public/ImAI/ImpressAINativeChatViewController.swift` | 候选：ReviewWCDBRepositoryTests（须逐项确认覆盖） | 需要精确场景与证据 |
-| CHAT-09 | 结果按需整理到笔记／修改当前卡片／生成候选卡，不把所有回复自动转成待写内容。普通总结只回复。 | NOT_STARTED | `aReuImpress-iPhone/Utils/Public/ImAI/ImpressAINativeChatViewController.swift` | —（缺完整业务入口／自动化） | 需要精确场景与证据 |
+| CHAT-09 | 结果按需整理到笔记／修改当前卡片／生成候选卡，不把所有回复自动转成待写内容。普通总结只回复。 | IN_PROGRESS | `aReuImpress-iPhone/Utils/Public/ImAI/ImpressAINativeChatViewController.swift` | 源码已有交互及回归测试；需本次 SHA CI + 真机进一步验证 | 设备/授权 Vault/人工完整回执需复核 |
 | CHAT-10 | 保留会话、草稿、来源版本、待确认提案和执行回执；已保存／未发送／失败／待确认／已应用等状态不能混淆。 | IN_PROGRESS | `aReuImpress-iPhone/DataBase/V3/ReviewWCDBRepository.swift` | 候选：ReviewWCDBRepositoryTests（须逐项确认覆盖） | 需要精确场景与证据 |
 | CHAT-11 | 新建按钮、历史入口、模型选择、提示词标签和材料区的最终布局尚需图稿确认。“笔记 Tab 顶栏最近讨论”只是曾提出的方案，不自动增加为硬需求。 | IN_PROGRESS | `aReuImpress-iPhone/Utils/Public/ImAI/ImpressAINativeChatViewController.swift` | 候选：ReviewWCDBRepositoryTests（须逐项确认覆盖） | 需要精确场景与证据 |
 | CAL-01 | 四固定指标明确为睡眠、运动、饮食、阅读。不是旧三项，也不能把 reading 与 custom 混为一项。 | DEFERRED | `Packages/ImpressReviewCore/Sources/ImpressReviewCore/CalibrationScoreCore.swift` | 保留规则，不作为本轮验收 | 需要精确场景与证据 |
@@ -131,12 +131,12 @@
 | A09 | Chat model/prompt selection, provider scope | IN_PROGRESS | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
 | A10 | Durable context, local Chat history and resume | IN_PROGRESS | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
 | A11 | Failure, cancel, retries and no-cost fallback | IN_PROGRESS | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
-| A12 | Distinguish summarize vs explicit update | NOT_STARTED | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
-| A13 | Card → Chat → explicit test note safe diff/write/readback | NOT_STARTED | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
-| A14 | Preview cancel/conflict/idempotence | NOT_STARTED | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
+| A12 | Distinguish summarize vs explicit update | IN_PROGRESS | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
+| A13 | Card → Chat → explicit test note safe diff/write/readback | IN_PROGRESS | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
+| A14 | Preview cancel/conflict/idempotence | IN_PROGRESS | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
 | A15 | Multi-card targets/new-note name conflicts | NOT_STARTED | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
 | A16 | Notes/Chat common candidate pool | IN_PROGRESS | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
-| A17 | Source revision stale prompts | NOT_STARTED | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
+| A17 | Source revision stale prompts | IN_PROGRESS | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
 | A18 | Added history/Chat/proposals in ZIP and safe restore | NOT_STARTED | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
 | A19 | iPhone 13 / Dynamic Type / light-dark / 3 languages / STT | IN_PROGRESS | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
 | A20 | No key leak, no production Vault tests/write, truthful status | IN_PROGRESS | [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md)；须对最新契约与 exact HEAD 复核 |
@@ -183,3 +183,10 @@
 - 笔记详情「核查笔记更新是否影响原卡」是手动反向核验入口。仅对已记录了 v2 源文件 digest 且 digest 变化的卡片提供核对；先在可滚动页面展示 **完整当前笔记** 与 **原卡题目、答案**；用户显式确认「不影响」后，只更新此卡的来源 digest 元数据，并由 WCDB CAS 保存，绝不伪称精确片段定位、自动污染其他原卡或产生 FSRS 评分。
 - 自动化新增：双目标分状态／重启恢复／文件写后卡冲突回执／测试 fixture 再次提交幂等／不影响确认原卡身份与调度保护。此处「已有源码」**不等于**模拟器测试通过；以同 HEAD Actions 成功为准。**不代表**实际 iPhone 13／File Provider／生产 Obsidian 写回已完成。
 - **安全门禁保持不变**：`ImVaultGuardedWrite.productionWriteEnabled = false`；仅 Debug 使用用户选择的独立 `Impress-Write-Test-Vault` 可以测试写源文件。正式 Vault 的生产写回仍须独立授权＋真机核验，未经授权不打开。真实密钥、联网大模型和 iCloud 远端同步均未由该实现验证。
+
+## 2026-10-20 · 源文刷新、换行保持与完整历史回执补强（待最新 CI）
+
+- 笔记详情从子页返回时会对授权的当前源文重新进行协调读取；打开 Chat、笔记出题和首次创建修改草稿前亦单独取 **最新** 源文件，而不相信旧详情页缓存。读取失败时停止使用旧快照执行资料相关操作，并明确提示页面可能已过期。刷新不会上传材料或自行更新闪卡。
+- 统一 Diff 以原文件实际换行规则计算逻辑行。在 **整份统一 CRLF 或老式 CR** 文件中，UIKit 将编辑区换行为 LF 时不得误把 1 行文字编辑显示成数千行修改；混合换行仍须完整显示实际变更，不可静默归一化。与上一提交保持 BOM、换行的 `proposedBytes` 字节门禁配套。
+- 过去确认的双目标提案和逐对象回执保存在同源 Chat `duplexHistory`，后续新提案不会覆盖旧收据。原 Chat 消息菜单可查看完整（不截断为前 100 条）修订回执历史、身份、版本及应用结果。记录在原 ReviewV3.sqlite 内复用备份；不把 Obsidian 原文复制进收据，也不暗中重试旧提案。
+- 代码测试新增：长 CRLF 一行修改与混合行尾 Diff、双目标多次收据跨进程重建和原生回执列表。所有以上均只能称为**源码实现，未据此认证真机 iPhone 13 或生产 Vault 写入**；正式源文件写权限仍保持关闭，实机 QA 仅可用独立测试副本。

@@ -178,6 +178,30 @@ struct ImVaultSyncCoreTests {
         #expect(draft.proposedBytes == Data("A\rCorrected\r".utf8))
     }
 
+    @Test func revisionDiffDoesNotMislabelOriginalUniformLineEndings() {
+        let original = (0..<1500).map { "Line \($0)" }.joined(separator: "\r\n")
+        var newLines = (0..<1500).map { "Line \($0)" }
+        newLines[725] = "Corrected line"
+        let current = newLines.joined(separator: "\n")
+        let result = ImVaultDiff.summary(base: original, edited: current, maximumLines: 6)
+        #expect(result.complete)
+        #expect(result.text.contains("第 726 行"))
+        #expect(result.text.contains("- Line 725"))
+        #expect(result.text.contains("+ Corrected line"))
+        let merelyNormalized = ImVaultDiff.summary(base: original,
+            edited: original.replacingOccurrences(of: "\r\n", with: "\n"))
+        #expect(merelyNormalized.complete)
+        #expect(merelyNormalized.text == "没有变更")
+    }
+
+    @Test func mixedNewlineFormattingChangeMustNotBeInvisible() {
+        let original = "One\r\nTwo\nThree\r\n"
+        let newText = "One\nTwo\nThree\n"
+        let diff = ImVaultDiff.summary(base: original, edited: newText)
+        #expect(diff.complete)
+        #expect(diff.text != "没有变更")
+    }
+
     @Test func draftDetectsModifiedBaseline() throws {
         let id = try ImVaultFileIdentity(vaultID: "v",relativePath: "A.md")
         let initial = try ImVaultDraft(identity: id, baseText: "A")

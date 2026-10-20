@@ -49,6 +49,7 @@ final class ImpressAINativeChatViewController: UIViewController,
     private var chatRepository: ReviewWCDBRepository?
     private var storedSession: WCDBV3ChatSession?
     private var pendingDuplex: WCDBV3DuplexProposal?
+    private var previousDuplex: [WCDBV3DuplexProposal] = []
     private var contextReferences: [WCDBV3ChatContextReference] = []
     private var history: [WCDBV3ChatMessage] = []
     private var requestFailure: String?
@@ -529,6 +530,13 @@ final class ImpressAINativeChatViewController: UIViewController,
                         self?.openNoteCandidatePool()
                     })
             }
+            if pendingDuplex != nil || !previousDuplex.isEmpty {
+                actions.append(UIAction(
+                    title: V3L("查看修订记录与逐项回执"),
+                    image: UIImage(systemName: "doc.text.magnifyingglass")) {
+                        [weak self] _ in self?.openDuplexReceipts()
+                    })
+            }
         }
         return UIMenu(children: actions)
     }
@@ -542,6 +550,53 @@ final class ImpressAINativeChatViewController: UIViewController,
             [weak self] _ in
             self?.messageMenu(for: message) ?? UIMenu(children: [])
         }
+    }
+
+    @objc private func openDuplexReceipts() {
+        let recorded = (pendingDuplex.map { [$0] } ?? []) + previousDuplex
+        guard !recorded.isEmpty else { return }
+        let page = ImpressDuplexReceiptHistoryController(records: recorded)
+        page.onSelect = { [weak self] record in
+            self?.showDuplexReceipt(record)
+        }
+        navigationController?.pushViewController(page, animated: true)
+    }
+
+    private func showDuplexReceipt(_ receipt: WCDBV3DuplexProposal) {
+        let page = UIViewController()
+        page.title = V3L("修订回执详情")
+        page.view.backgroundColor = ImpressV3Appearance.page
+        let text = UITextView()
+        text.translatesAutoresizingMaskIntoConstraints = false
+        text.isEditable = false
+        text.isSelectable = true
+        text.font = ImpressV3Appearance.Typography.body
+        text.adjustsFontForContentSizeCategory = true
+        text.textColor = ImpressV3Appearance.primaryText
+        text.backgroundColor = ImpressV3Appearance.surface
+        text.accessibilityIdentifier = "impress.duplex.receipt-detail"
+        text.text = V3L("提案 ID：") + receipt.proposalID.uuidString +
+            "\n\n" + V3L("笔记：") + (receipt.noteIdentity?.relativePath ??
+                V3L("笔记未选择")) +
+            "\nSHA-256: " + (receipt.noteBaseDigest ?? "-") +
+            "\n" + V3L("状态：") + receipt.state.noteStatus.rawValue +
+            "\n" + V3L("笔记回执：") + (receipt.noteReceipt ??
+                V3L("尚无回执")) +
+            "\n\n" + V3L("原卡：") + (receipt.cardID?.uuidString ??
+                V3L("原卡未选择")) +
+            "\nRevision: " + String(receipt.cardContentRevision ?? -1) +
+            "\n" + V3L("状态：") + receipt.state.cardStatus.rawValue +
+            "\n" + V3L("卡片回执：") + (receipt.cardReceipt ??
+                V3L("尚无回执")) +
+            "\n\n" + V3L("此页为历史回执，不自动重试或改写任何内容。")
+        page.view.addSubview(text)
+        NSLayoutConstraint.activate([
+            text.topAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.topAnchor),
+            text.bottomAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.bottomAnchor),
+            text.leadingAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.leadingAnchor),
+            text.trailingAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.trailingAnchor)
+        ])
+        navigationController?.pushViewController(page, animated: true)
     }
 
     @objc private func resumeDuplexReview() {
@@ -606,8 +661,21 @@ final class ImpressAINativeChatViewController: UIViewController,
             pending: recovering) { [weak self] changed in
                 guard let self else { return false }
                 await self.saveChain?.value
+                let original = self.pendingDuplex
+                let archived = self.previousDuplex
+                if let original, original.proposalID != changed.proposalID {
+                    // Do not silently discard old receipts. If the WCDB
+                    // record reaches its protective size cap, fail closed and
+                    // keep the prior durable proposal instead.
+                    guard original.state.completed else { return false }
+                    self.previousDuplex.insert(original, at: 0)
+                }
                 self.pendingDuplex = changed
                 let ok = await self.persistLocal()
+                if !ok {
+                    self.pendingDuplex = original
+                    self.previousDuplex = archived
+                }
                 if ok { self.refreshModelPicker() }
                 return ok
             }
@@ -986,6 +1054,7 @@ final class ImpressAINativeChatViewController: UIViewController,
     private func activateSession(_ session: WCDBV3ChatSession) {
         storedSession = session
         pendingDuplex = session.pendingDuplex
+        previousDuplex = session.duplexHistory ?? []
         sessionPromptOverride = session.promptOverride
         history = session.messages
         for i in history.indices where history[i].status == .pending {
@@ -1112,6 +1181,7 @@ final class ImpressAINativeChatViewController: UIViewController,
            base.requestError == requestFailure &&
            base.promptOverride == sessionPromptOverride &&
            base.pendingDuplex == pendingDuplex &&
+           (base.duplexHistory ?? []) == previousDuplex &&
            (base.contextConsentGranted == true) == contextConsentGranted { return true }
         var next = base
         next.messages = history
@@ -1120,6 +1190,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         next.requestError = requestFailure
         next.promptOverride = sessionPromptOverride
         next.pendingDuplex = pendingDuplex
+        next.duplexHistory = previousDuplex
         next.contextConsentGranted = contextConsentGranted
         next.updatedAt = Date()
         next.revision = storedSession == nil ? 0 : base.revision + 1
@@ -1326,6 +1397,45 @@ final class ImpressChatNoteSectionPicker: UITableViewController {
     }
 }
 
+
+
+@MainActor
+final class ImpressDuplexReceiptHistoryController: UITableViewController {
+    private let records: [WCDBV3DuplexProposal]
+    var onSelect: ((WCDBV3DuplexProposal) -> Void)?
+
+    init(records: [WCDBV3DuplexProposal]) {
+        self.records = records
+        super.init(style: .insetGrouped)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = V3L("修订回执历史")
+        tableView.accessibilityIdentifier = "impress.duplex.receipt-history"
+    }
+    override func tableView(_ tableView: UITableView,
+                            numberOfRowsInSection section: Int) -> Int {
+        records.count
+    }
+    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath)
+        -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "duplex.receipt")
+            ?? UITableViewCell(style: .subtitle, reuseIdentifier: "duplex.receipt")
+        let entry = records[indexPath.row]
+        cell.textLabel?.text = entry.noteIdentity?.relativePath ??
+            (entry.cardID?.uuidString ?? entry.proposalID.uuidString)
+        cell.detailTextLabel?.text = V3L("笔记：") + entry.state.noteStatus.rawValue +
+            " · " + V3L("原卡：") + entry.state.cardStatus.rawValue
+        cell.accessoryType = .disclosureIndicator
+        return cell
+    }
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        onSelect?(records[indexPath.row])
+    }
+}
 
 // MARK: - Explicit, recoverable note + ORIGINAL card change review
 //

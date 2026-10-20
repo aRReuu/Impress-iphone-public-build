@@ -373,6 +373,9 @@ public struct WCDBV3ChatSession: Codable, Equatable, Sendable {
     public var pendingProposal: WCDBV3EditProposal?
     /// Nil when decoding historic Chat rows. Does not automatically replay.
     public var pendingDuplex: WCDBV3DuplexProposal?
+    /// Previously confirmed proposals and their independently verified
+    /// receipts survive later edits. Optional for backwards-compatible reads.
+    public var duplexHistory: [WCDBV3DuplexProposal]?
     public var requestError: String?
     /// Optional per-discussion prompt; legacy rows decode to nil.
     public var promptOverride: String?
@@ -391,6 +394,7 @@ public struct WCDBV3ChatSession: Codable, Equatable, Sendable {
         self.contextReferences = []
         self.pendingProposal = nil
         self.pendingDuplex = nil
+        self.duplexHistory = []
         self.requestError = nil
         self.promptOverride = nil
         self.contextConsentGranted = false
@@ -1138,6 +1142,13 @@ public actor ReviewWCDBRepository: ReviewRepository {
         guard !session.sourceIdentity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               session.revision >= 0,
               session.messages.count <= 10_000,
+              Set((session.duplexHistory ?? []).map(\.proposalID)).count ==
+                  (session.duplexHistory ?? []).count,
+              session.pendingDuplex.map { active in
+                  !(session.duplexHistory ?? []).contains(where: {
+                      $0.proposalID == active.proposalID
+                  })
+              } ?? true,
               Set(session.messages.map(\.messageID)).count == session.messages.count,
               session.messages.allSatisfy({ !$0.text.isEmpty || $0.status != .completed })
         else { throw WCDBV3ChatStorageError.invalidRecord }

@@ -718,6 +718,7 @@ enum ImpressV3Language: String, CaseIterable {
     }
 
     private static let translations: [String: (traditional: String, english: String)] = [
+        "源文件无法回读；本页可能是旧内容": ("來源檔案無法重新讀取；本頁可能顯示舊內容", "Cannot re-read source file. This page may display an older version."),
         "核查笔记更新是否影响原卡": ("核查筆記更新是否影響原卡", "Check Whether Note Changes Affect Cards"),
         "没有需要核查的已记录变化": ("沒有需要核查的已記錄變更", "No Recorded Changes to Check"),
         "关联原卡没有已记录的来源版本差异，或旧卡缺少来源摘要。不能据此证明笔记和卡片始终一致。": ("關聯原卡沒有已記錄的來源版本差異，或舊卡缺少來源摘要。不能據此證明筆記和卡片始終一致。", "No recorded source-version difference was found, or an older card lacks a source digest. This does not prove that note and card remain consistent."),

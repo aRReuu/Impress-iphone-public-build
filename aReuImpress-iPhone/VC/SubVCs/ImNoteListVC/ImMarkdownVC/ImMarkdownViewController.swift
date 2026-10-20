@@ -644,7 +644,9 @@ extension ImMarkdownViewController: UISearchBarDelegate
 /// as Markdown; unknown Obsidian syntax remains intact in source mode.
 @MainActor
 final class ImVaultDocumentController: UIViewController {
-    private let document: ImVaultRawDocument
+    private var document: ImVaultRawDocument
+    private var hasAppearedOnce = false
+    private var latestReadSerial = 0
     private let readingView = UITextView()
     private let richView = MarkdownView()
     private let pathLabel = UILabel()
@@ -661,8 +663,61 @@ final class ImVaultDocumentController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         pathLabel.text = V3L("只读") + " · " + document.identity.relativePath
+        if hasAppearedOnce {
+            // Re-read after the draft editor, QA source write, other Files
+            // provider edits, or a child discussion. Never keep showing a
+            // stale cached note as though it were the authoritative original.
+            withVerifiedLiveDocument()
+        }
+        hasAppearedOnce = true
     }
 
+    /// All actions that consume Markdown (AI questions, Chat context and new
+    /// drafts) read the CURRENT scoped source. A read-only preview may be
+    /// cached for scrolling, but it is not an authority for future edits.
+    private func withVerifiedLiveDocument(
+        _ action: ((ImVaultRawDocument) -> Void)? = nil
+    ) {
+        let identity = document.identity
+        guard ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID else {
+            showVaultError(V3L("Vault 授权已失效"), error: ImVaultSyncFailure.wrongVault)
+            return
+        }
+        latestReadSerial += 1
+        let readSerial = latestReadSerial
+        ImVaultReadSync.shared.read(identity) { [weak self] result in
+            guard let self, self.latestReadSerial == readSerial else { return }
+            switch result {
+            case .failure(let error):
+                self.navigationItem.prompt = V3L("源文件无法回读；本页可能是旧内容")
+                if action != nil { self.showVaultError(V3L("来源笔记读取失败"), error: error) }
+            case .success(let latest):
+                guard latest.identity == identity else {
+                    self.showVaultError(V3L("来源身份已失效"), error: ImVaultSyncFailure.wrongVault)
+                    return
+                }
+                self.navigationItem.prompt = nil
+                if latest.digest != self.document.digest {
+                    self.document = latest
+                    self.preparedMarkdown = nil
+                    self.renderBody()
+                    self.prepareLivePreview(for: latest)
+                }
+                action?(latest)
+            }
+        }
+    }
+
+    private func prepareLivePreview(for current: ImVaultRawDocument) {
+        ImVaultReadSync.shared.prepareAuthorizedPreview(current) { [weak self] result in
+            guard let self, self.document.digest == current.digest,
+                  self.document.identity == current.identity else { return }
+            if case let .success(safeMarkdown) = result {
+                self.preparedMarkdown = safeMarkdown
+                if !self.isSourceMode { self.renderBody() }
+            }
+        }
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -769,13 +824,7 @@ final class ImVaultDocumentController: UIViewController {
         renderBody()
         // Replaces only explicitly referenced local image embeds with bounded
         // in-memory data URIs. Never reads outside this authorized Vault.
-        ImVaultReadSync.shared.prepareAuthorizedPreview(document) { [weak self] result in
-            guard let self = self else { return }
-            if case let .success(safeMarkdown) = result {
-                self.preparedMarkdown = safeMarkdown
-                if !self.isSourceMode { self.renderBody() }
-            }
-        }
+        prepareLivePreview(for: document)
     }
 
     private func renderBody() {
@@ -864,30 +913,31 @@ final class ImVaultDocumentController: UIViewController {
     }
 
     @objc private func generateAIQuestions() {
-        navigationController?.pushViewController(
-            ImpressAIQuestionGenerationViewController(document: document), animated: true)
+        withVerifiedLiveDocument { [weak self] latest in
+            self?.navigationController?.pushViewController(
+                ImpressAIQuestionGenerationViewController(document: latest), animated: true)
+        }
     }
 
     @objc private func openNativeNoteDiscussion() {
-        guard ImVaultReadOnlyProbe.shared.authorizedVaultID == document.identity.vaultID else {
-            showVaultError(V3L("Vault 授权已失效"), error: ImVaultCoreError.invalidVaultIdentity)
-            return
-        }
-        do {
-            let repository = try ImpressV3ReviewEnvironment.repository()
-            // Stable Vault+path, NOT content digest: editing a note must not
-            // silently orphan the discussion history.
-            let key = "note:" + (try ImpressBatchSourceKey.encode(document.identity))
-            let canShareWholeNote = document.markdown.utf8.count <= 8_000
-            let chat = ImpressAINativeChatViewController(
-                question: V3L("来源笔记：") + document.identity.relativePath,
-                answer: canShareWholeNote ? document.markdown : nil,
-                repository: repository,
-                sourceKey: key, sourceVersion: document.digest,
-                noteIdentity: document.identity)
-            navigationController?.pushViewController(chat, animated: true)
-        } catch {
-            showVaultError(V3L("无法打开笔记讨论"), error: error)
+        withVerifiedLiveDocument { [weak self] latest in
+            guard let self else { return }
+            do {
+                let repository = try ImpressV3ReviewEnvironment.repository()
+                // Only the newly coordinated source snapshot may be offered
+                // as optional context. Chat still separately checks its SHA
+                // immediately before sending.
+                let key = "note:" + (try ImpressBatchSourceKey.encode(latest.identity))
+                let canShareWholeNote = latest.markdown.utf8.count <= 8_000
+                let chat = ImpressAINativeChatViewController(
+                    question: V3L("来源笔记：") + latest.identity.relativePath,
+                    answer: canShareWholeNote ? latest.markdown : nil,
+                    repository: repository, sourceKey: key,
+                    sourceVersion: latest.digest, noteIdentity: latest.identity)
+                self.navigationController?.pushViewController(chat, animated: true)
+            } catch {
+                self.showVaultError(V3L("无法打开笔记讨论"), error: error)
+            }
         }
     }
 
@@ -969,16 +1019,19 @@ final class ImVaultDocumentController: UIViewController {
     }
 
     @objc private func editDraft() {
-        do {
-            // A prior unsent version is NEVER overwritten by a newer source.
-            let draft = try ImVaultPrivateStore.loadDraft(identity: document.identity)
-                ?? ImVaultDraft(identity: document.identity,
-                                baseText: document.markdown,
-                                baseRawData: document.sourceBytes)
-            navigationController?.pushViewController(
-                ImVaultDraftEditorController(draft: draft), animated: true)
-        } catch {
-            showVaultError(V3L("无法打开独立草稿"), error: error)
+        withVerifiedLiveDocument { [weak self] latest in
+            guard let self else { return }
+            do {
+                // Preserve an unsent draft even when the Vault changed.
+                // If no draft exists, capture the verified current bytes
+                // instead of an old document-controller snapshot.
+                let draft = try ImVaultPrivateStore.loadDraft(identity: latest.identity)
+                    ?? ImVaultDraft(identity: latest.identity,
+                                    baseText: latest.markdown,
+                                    baseRawData: latest.sourceBytes)
+                self.navigationController?.pushViewController(
+                    ImVaultDraftEditorController(draft: draft), animated: true)
+            } catch { self.showVaultError(V3L("无法打开独立草稿"), error: error) }
         }
     }
 
