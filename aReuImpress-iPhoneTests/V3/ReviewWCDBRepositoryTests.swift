@@ -553,8 +553,8 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         // Never prepend an additional BOM when UIKit normalizes editable text.
         try draft.update(editedMarkdown.hasPrefix("\u{feff}")
             ? String(editedMarkdown.dropFirst()) : editedMarkdown)
-        XCTAssertTrue(ImVaultDiff.summary(base: draft.baseText,
-            edited: draft.editedText, maximumLines: 200).complete)
+        XCTAssertTrue(ImVaultDiff.summary(base: draft.byteFaithfulBaseText,
+            edited: draft.byteFaithfulEditedText, maximumLines: 200).complete)
         XCTAssertTrue(draft.proposedBytes.starts(with: [0xEF, 0xBB, 0xBF]))
         try ImVaultPrivateStore.saveDraft(draft)
 
@@ -1358,10 +1358,14 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         let identity = try ImVaultFileIdentity(vaultID: "qa-section",
             relativePath: "Knowledge/Mixed.md")
         let source = Data(base.utf8)
+        // The real Vault reader returns Foundation's BOM-stripped UTF-8
+        // projection while retaining the exact BOM in sourceBytes.
+        let readerText = try XCTUnwrap(String(data: source, encoding: .utf8))
+        XCTAssertFalse(readerText.hasPrefix("\u{FEFF}"))
         let live = ImVaultRawDocument(identity: identity,
-            sourceBytes: source, markdown: base,
+            sourceBytes: source, markdown: readerText,
             digest: ImVaultDigest.sha256(source))
-        let parts = ImpressMarkdownStructure.sections(in: base)
+        let parts = ImpressMarkdownStructure.sections(in: readerText)
         let scoped = try XCTUnwrap(parts.first(where: { $0.heading == "Section" }))
         let draft = try ImpressDuplexScopedDraftBuilder.proposed(
             live: live, section: scoped, replacement: "## Section\r\n更新的候选解释 🌱\r\n")
@@ -1369,8 +1373,10 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(draft.identity, identity)
         XCTAssertEqual(draft.baseRawData, source)
         XCTAssertEqual(draft.baseDigest, live.digest)
-        let modified = try XCTUnwrap(String(data: draft.proposedBytes, encoding: .utf8))
+        let modified = String(decoding: draft.proposedBytes, as: UTF8.self)
         XCTAssertTrue(modified.hasPrefix("\u{FEFF}# 上层\r\n保留前文\r\n"))
+        XCTAssertEqual(modified, draft.byteFaithfulEditedText)
+        XCTAssertEqual(draft.byteFaithfulBaseText, base)
         XCTAssertTrue(modified.contains("## Section\r\n更新的候选解释 🌱\r\n"))
         XCTAssertTrue(modified.hasSuffix("# Ending\r\nKeep"))
         XCTAssertFalse(modified.contains("原始内容"))

@@ -168,8 +168,14 @@ public struct ImVaultDraft: Codable, Equatable, Sendable {
     /// Exact UTF-8 content that would be committed after BOM/newline handling.
     /// The editor's raw text can differ from these bytes even when they look
     /// visually identical. Approval and verification diffs MUST use this.
+    public var byteFaithfulBaseText: String {
+        // Foundation's String(data:encoding:) strips UTF-8 BOM. Preserve
+        // all original bytes in the readable full-diff projection instead.
+        String(decoding: baseRawData, as: UTF8.self)
+    }
+
     public var byteFaithfulEditedText: String {
-        String(data: proposedBytes, encoding: .utf8) ?? editedText
+        String(decoding: proposedBytes, as: UTF8.self)
     }
 }
 

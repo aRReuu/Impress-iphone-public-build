@@ -2248,7 +2248,7 @@ final class ImpressDuplexChangeController: UIViewController {
                 draft = try ImVaultPrivateStore.loadDraft(identity: identity)
             }
             if let draft {
-                let diff = ImVaultDiff.summary(base: draft.baseText,
+                let diff = ImVaultDiff.summary(base: draft.byteFaithfulBaseText,
                     edited: draft.byteFaithfulEditedText, maximumLines: 200)
                 noteInfo.text = "Vault ID: " + identity.vaultID +
                     "\n" + V3L("目标：") + identity.relativePath +
@@ -2373,7 +2373,7 @@ final class ImpressDuplexChangeController: UIViewController {
                 return
             }
             if changedNote, let d = self.draft {
-                guard ImVaultDiff.summary(base: d.baseText, edited: d.byteFaithfulEditedText,
+                guard ImVaultDiff.summary(base: d.byteFaithfulBaseText, edited: d.byteFaithfulEditedText,
                                           maximumLines: 200).complete else {
                     self.presentIssue(V3L("修改预览过长"),
                         V3L("请把笔记修改缩小到可完整核对的范围。"))
@@ -2695,7 +2695,7 @@ final class ImpressDuplexApprovalController: UIViewController {
                     editedDigest: proposal.noteEditedDigest) else {
                     throw ImVaultSyncFailure.conflict
                 }
-                let diff = ImVaultDiff.summary(base: draft.baseText,
+                let diff = ImVaultDiff.summary(base: draft.byteFaithfulBaseText,
                     edited: draft.byteFaithfulEditedText, maximumLines: 200)
                 notePreviewValid = diff.complete
                 pieces.append(diff.text)
@@ -2790,7 +2790,7 @@ final class ImpressDuplexApprovalController: UIViewController {
                       let draft = try ImVaultPrivateStore.approvedDraft(
                           identity: id, baseDigest: proposal.noteBaseDigest,
                           editedDigest: proposal.noteEditedDigest),
-                      ImVaultDiff.summary(base: draft.baseText, edited: draft.byteFaithfulEditedText,
+                      ImVaultDiff.summary(base: draft.byteFaithfulBaseText, edited: draft.byteFaithfulEditedText,
                                           maximumLines: 200).complete else {
                     throw ImVaultSyncFailure.conflict
                 }
@@ -2967,7 +2967,7 @@ final class ImpressDuplexApprovalController: UIViewController {
                     throw ImVaultSyncFailure.conflict
                 }
                 let diff = ImVaultDiff.summary(
-                    base: inverse.baseText, edited: inverse.byteFaithfulEditedText, maximumLines: 200)
+                    base: inverse.byteFaithfulBaseText, edited: inverse.byteFaithfulEditedText, maximumLines: 200)
                 guard diff.complete else { throw ImVaultSyncFailure.previewTruncated }
                 details = V3L("撤销笔记改动") + "\nVault ID: " + id.vaultID +
                     "\n" + id.relativePath +
@@ -3167,12 +3167,19 @@ enum ImpressDuplexScopedDraftBuilder {
               }) else { throw ImVaultSyncFailure.conflict }
         let bytes = Array(live.sourceBytes)
         let raw = Array(section.rawUTF8.utf8)
-        guard Array(bytes[section.startUTF8..<section.endUTF8]) == raw else {
+        // Foundation decodes and removes a file's UTF-8 BOM, while
+        // structured section positions are relative to the decoded Markdown.
+        // Shift to original-file byte positions for the scoped CAS draft.
+        let bomLength = live.sourceBytes.starts(with: [0xEF, 0xBB, 0xBF]) ? 3 : 0
+        let fileStart = section.startUTF8 + bomLength
+        let fileEnd = section.endUTF8 + bomLength
+        guard fileStart >= bomLength, fileEnd <= bytes.count,
+              Array(bytes[fileStart..<fileEnd]) == raw else {
             throw ImVaultSyncFailure.conflict
         }
-        var changed = Data(bytes[..<section.startUTF8])
+        var changed = Data(bytes[..<fileStart])
         changed.append(contentsOf: replacement.utf8)
-        changed.append(contentsOf: bytes[section.endUTF8...])
+        changed.append(contentsOf: bytes[fileEnd...])
         guard changed.count <= 8 * 1024 * 1024,
               let value = String(data: changed, encoding: .utf8) else {
             throw ImVaultSyncFailure.tooLarge
@@ -3182,11 +3189,11 @@ enum ImpressDuplexScopedDraftBuilder {
         // An original BOM belongs to the file byte prefix, never to the
         // UITextView replacement payload. The shared draft writer restores
         // exactly one BOM and does not normalize mixed newlines invisibly.
-        let edited = value.hasPrefix("\u{FEFF}") ? String(value.dropFirst()) : value
+        let edited = value // String(data:) already strips a UTF-8 BOM.
         try draft.update(edited)
         try draft.validate()
         guard draft.hasChanges else { throw ImVaultSyncFailure.approvalMissing }
-        guard ImVaultDiff.summary(base: draft.baseText,
+        guard ImVaultDiff.summary(base: draft.byteFaithfulBaseText,
             edited: draft.byteFaithfulEditedText, maximumLines: 200).complete else {
             throw ImVaultSyncFailure.previewTruncated
         }

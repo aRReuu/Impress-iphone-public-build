@@ -130,14 +130,20 @@ struct ImVaultSyncCoreTests {
         let original = "\u{FEFF}# Heading\r\nOriginal\r\n"
         let id = try ImVaultFileIdentity(vaultID: "qa-bom",
             relativePath: "Notes/Original.md")
-        var draft = try ImVaultDraft(identity: id, baseText: original,
-            baseRawData: Data(original.utf8))
+        let originalBytes = Data(original.utf8)
+        // ImVaultReadSync.load returns Foundation-decoded Markdown without
+        // UTF-8 BOM while the original file bytes still contain the BOM.
+        let sourceProjection = try #require(String(data: originalBytes,
+            encoding: .utf8))
+        var draft = try ImVaultDraft(identity: id, baseText: sourceProjection,
+            baseRawData: originalBytes)
         try draft.update("# Heading\nRevised\n")
         #expect(draft.byteFaithfulEditedText ==
             "\u{FEFF}# Heading\r\nRevised\r\n")
         #expect(draft.proposedBytes ==
             Data(draft.byteFaithfulEditedText.utf8))
-        let diff = ImVaultDiff.summary(base: draft.baseText,
+        #expect(draft.byteFaithfulBaseText == original)
+        let diff = ImVaultDiff.summary(base: draft.byteFaithfulBaseText,
             edited: draft.byteFaithfulEditedText, maximumLines: 200)
         #expect(diff.complete)
         #expect(diff.text.contains("Revised"))
