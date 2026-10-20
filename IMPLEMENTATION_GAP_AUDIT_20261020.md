@@ -1,6 +1,6 @@
 # Impress · 实施差距及防回归门槛（2026-10-20）
 
-基准：`3e98db7cb0eb10ae6a0734a655fb3337d18d8fc2`。此页仅记录审计结论，**不是完工清单**。权威需求见 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md)。
+基准：`3e98db7cb0eb10ae6a0734a655fb3337d18d8fc2`（历史审计；后续修复并非已完成验收）。最新逐项表见 [REQUIREMENT_EXECUTION_MATRIX_20261020.md](REQUIREMENT_EXECUTION_MATRIX_20261020.md)；`897895c` 补选择题解析，`c38efbe` 补首页前置编辑与来源按钮。旧表 CARD-01/11、CHAT-03/04 的 FAIL 结论已存在后来源码变化，禁止不核实即重报。此页仅记录审计结论，**不是完工清单**。权威需求见 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md)。
 
 | 需求 | 审计状态 | 可复核证据 | 最小通过条件 |
 |---|---|---|---|

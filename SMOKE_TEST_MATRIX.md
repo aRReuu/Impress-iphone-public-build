@@ -1,3 +1,5 @@
+> **精确执行矩阵：** [REQUIREMENT_EXECUTION_MATRIX_20261020.md](REQUIREMENT_EXECUTION_MATRIX_20261020.md)；以下 A01～A20 仅为旧回归记录，不可单独认定已验收。
+
 > **2026-10-20 最新验收优先级：** 当前产品验收唯一依据 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md) 和 [IMPLEMENTATION_GAP_AUDIT_20261020.md](IMPLEMENTATION_GAP_AUDIT_20261020.md)。以下 A01～A20 是历史 G0～G6 追踪记录，不能凌驾于最新 CARD/CHAT/LOOP/OPEN/ACCEPT 编号。特别：旧 A02“首页周校准图”已取消；CARD-11“修改历史移入编辑器”必须实现；CHAT-03 新建与历史切换不等于数据库仅能保存多会话。本表尚未证明 ACCEPT-01～12 全部通过。
 
 # SMOKE_TEST_MATRIX — Impress V3.2 acceptance evidence
