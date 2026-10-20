@@ -92,7 +92,11 @@ class ImMemoryCardView: UIView
     // MARK: - Public Methods
     func updateCardContent(_ model: ImCardModel) {
         self.cardModel = model
-        questionTextView.text = model.question
+        if usesCompactV3Style {
+            questionTextView.setMarkdownText(model.question ?? "")
+        } else {
+            questionTextView.text = model.question
+        }
         updateQuestionTextViewHeight()
 
         // 更新答案内容
@@ -115,13 +119,24 @@ class ImMemoryCardView: UIView
         if v3Style {
             // High-priority question text is primary label color, not muted gray.
             questionTextView.textColor = ImpressV3Appearance.primaryText
-            questionTextView.font = ImpressV3Appearance.Typography.largeTitle
+            questionTextView.font = ImpressV3Appearance.Typography.cardTitle
             answerTextView.font = ImpressV3Appearance.Typography.body
+            // Make long Markdown accessible without shrinking text or leaving this page.
+            questionTextView.isScrollEnabled = true
+            questionTextView.showsVerticalScrollIndicator = true
+            answerTextView.showsVerticalScrollIndicator = true
+            questionTextView.isSelectable = true
+            answerTextView.isSelectable = true
+            answerContainerView.accessibilityElementsHidden = true
             questionTextView.adjustsFontForContentSizeCategory = true
             answerTextView.adjustsFontForContentSizeCategory = true
         }
         self.cardModel = model
-        questionTextView.text = model.question
+        if v3Style {
+            questionTextView.setMarkdownText(model.question ?? "")
+        } else {
+            questionTextView.text = model.question
+        }
         setupUI()
         configureAnswerView(for: model)
         updateQuestionTextViewHeight()
@@ -225,7 +240,7 @@ class ImMemoryCardView: UIView
         ])
     }
     
-    private func updateQuestionTextViewHeight()
+    private func updateQuestionTextViewHeight(revealed: Bool? = nil)
     {
         // 增加安全检查，确保cardView有有效尺寸
         guard cardView.bounds.width > 0 && cardView.bounds.height > 0 else {
@@ -240,13 +255,17 @@ class ImMemoryCardView: UIView
         let size = CGSize(width: maxWidth, height: CGFloat.greatestFiniteMagnitude)
         let estimatedSize = questionTextView.sizeThatFits(size)
 
-        // 只有当高度发生显著变化时才更新，避免不必要的布局计算
-        let heightDifference = abs(questionTextViewHeightConstraint.constant - estimatedSize.height)
-        guard heightDifference > 1.0 else {
-            return
-        }
-
-        questionTextViewHeightConstraint.constant = estimatedSize.height
+        // Cap only the viewport, not the original Markdown. After reveal,
+        // reserve enough visible space for a separately scrollable answer.
+        let split = revealed ?? isAnswerShown
+        let available = max(56, cardView.bounds.height -
+            (usesCompactV3Style ? 32 : 64))
+        let maximum = usesCompactV3Style
+            ? (split ? max(48, available * 0.42) : available)
+            : estimatedSize.height
+        let target = min(estimatedSize.height, maximum)
+        guard abs(questionTextViewHeightConstraint.constant - target) > 1.0 else { return }
+        questionTextViewHeightConstraint.constant = target
         // 移除强制布局调用，避免在布局过程中触发新的布局周期
     }
 
@@ -297,6 +316,8 @@ class ImMemoryCardView: UIView
         questionTextViewTopConstraint.isActive = true
         answerContainerTopConstraintToCenter.isActive = false
         answerContainerTopConstraintToQuestionTextView.isActive = true
+        updateQuestionTextViewHeight(revealed: true)
+        answerContainerView.accessibilityElementsHidden = false
 
         UIView.animate(withDuration: ImAnimationConfig.fadeAnimationDuration, animations: { [weak self] in
             guard let self = self else { return }
@@ -314,6 +335,8 @@ class ImMemoryCardView: UIView
         questionTextViewCenterYConstraint.isActive = true
         answerContainerTopConstraintToQuestionTextView.isActive = false
         answerContainerTopConstraintToCenter.isActive = true
+        updateQuestionTextViewHeight(revealed: false)
+        answerContainerView.accessibilityElementsHidden = true
 
         UIView.animate(withDuration: ImAnimationConfig.fadeAnimationDuration, animations: { [weak self] in
             guard let self = self else { return }

@@ -132,7 +132,12 @@ class ImMultipleChoiceCardView: UIView {
     
     
     func configure(with model: ImCardModel) {
-        questionLabel.text = model.question
+        if usesNativeOptionButtons {
+            questionLabel.attributedText = MarkdownKitRenderer().parseMarkdown(model.question ?? "")
+                ?? NSAttributedString(string: model.question ?? "")
+        } else {
+            questionLabel.text = model.question
+        }
         
         optionsStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         optionButtons.removeAll()

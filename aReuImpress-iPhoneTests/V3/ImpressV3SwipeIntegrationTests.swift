@@ -47,6 +47,41 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         }))
     }
 
+    @MainActor
+    func testV3LongMarkdownQuestionAndAnswerHaveIndependentScrollRegions() async throws {
+        let card = ImCardModel()
+        card.cardType = CardType.standard.rawValue
+        card.question = "# Heading\\n\\n" +
+            String(repeating: "## Subheading\\nLong question with **emphasis**.\\n", count: 100)
+        card.answer = "# Answer\\n\\n" +
+            String(repeating: "A long structured answer with **bold** and lists.\\n", count: 130)
+        let review = ImMemoryCardView(model: card, v3Style: true)
+        let host = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 650))
+        review.frame = host.bounds
+        host.addSubview(review)
+        host.layoutIfNeeded()
+        review.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(150))
+        review.layoutIfNeeded()
+        let question = review.questionTextView
+        XCTAssertTrue(question.isScrollEnabled)
+        XCTAssertTrue(question.isSelectable)
+        XCTAssertGreaterThan(question.contentSize.height, question.bounds.height)
+        review.revealAnswerIfNeeded()
+        try await Task.sleep(for: .milliseconds(700))
+        review.layoutIfNeeded()
+        func allTextViews(_ root: UIView) -> [ImExtractTextView] {
+            let selfView = (root as? ImExtractTextView).map { [$0] } ?? []
+            return selfView + root.subviews.flatMap { allTextViews($0) }
+        }
+        let answer = try XCTUnwrap(allTextViews(review).first(where: { $0 !== question }))
+        XCTAssertTrue(answer.isScrollEnabled)
+        XCTAssertTrue(answer.isSelectable)
+        XCTAssertGreaterThan(answer.contentSize.height, answer.bounds.height)
+        XCTAssertLessThan(question.bounds.height, review.bounds.height * 0.55)
+        XCTAssertTrue(review.answerIsRevealed)
+    }
+
     private func makeRepository() throws -> ReviewWCDBRepository {
         let path = FileManager.default.temporaryDirectory
             .appendingPathComponent("V3Swipe-" + UUID().uuidString, isDirectory: true)
