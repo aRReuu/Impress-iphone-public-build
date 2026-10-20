@@ -554,6 +554,7 @@ final class ImpressAINativeChatViewController: UIViewController,
 
     private func activateSession(_ session: WCDBV3ChatSession) {
         storedSession = session
+        sessionPromptOverride = session.promptOverride
         history = session.messages
         for i in history.indices where history[i].status == .pending {
             history[i].status = .failed // No auto-replay after interruption.
@@ -675,12 +676,14 @@ final class ImpressAINativeChatViewController: UIViewController,
         if storedSession != nil && base.messages == history &&
            base.inputDraft == messageInput.text &&
            base.contextReferences == contextReferences &&
-           base.requestError == requestFailure { return true }
+           base.requestError == requestFailure &&
+           base.promptOverride == sessionPromptOverride { return true }
         var next = base
         next.messages = history
         next.inputDraft = messageInput.text ?? ""
         next.contextReferences = contextReferences
         next.requestError = requestFailure
+        next.promptOverride = sessionPromptOverride
         next.updatedAt = Date()
         next.revision = storedSession == nil ? 0 : base.revision + 1
         do {

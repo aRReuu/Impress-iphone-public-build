@@ -343,7 +343,6 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
     }
 
     @MainActor
-    @MainActor
     func testNativeChatRendersSelectableMarkdownAndVisibleContextControls() throws {
         let controller = ImpressAINativeChatViewController()
         controller.loadViewIfNeeded()
@@ -365,6 +364,7 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertNotNil(text.attributedText)
     }
 
+    @MainActor
     func testNativeChatRestoresStableCardTranscriptAndUnsentDraft() async throws {
         let repository = try ReviewWCDBRepository(
             databasePath: temporaryPath(), calculator: FSRS6ReviewCalculator())
@@ -418,6 +418,7 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         let initial = try await repo.chatSessions(for: source)
         XCTAssertEqual(initial, [session])
         session.inputDraft = "Please shorten the example"
+        session.promptOverride = "A session-specific prompt"
         session.revision += 1
         session.updatedAt = created.addingTimeInterval(10)
         try await repo.saveChatSession(session, expectedRevision: 0)
