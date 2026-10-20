@@ -297,6 +297,26 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
     }
 
 
+    /// Standalone disposable File Provider fixture for end-to-end Chat +
+    /// original-card tests. Helpers in another XCTestCase are private and
+    /// deliberately must not be referenced across class boundaries.
+    private func createRoot() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "ImpressDuplexFixture-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    private func put(_ content: String, root: URL,
+                     path: String = "Notes/Topic.md") throws -> URL {
+        let target = root.appendingPathComponent(path)
+        try FileManager.default.createDirectory(
+            at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(content.utf8).write(to: target, options: .atomic)
+        return target
+    }
+
     private func temporaryPath() -> String {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("ImpressV3-" + UUID().uuidString, isDirectory: true)
