@@ -1508,13 +1508,14 @@ final class ImVaultSyncIntegrationTests: XCTestCase {
         let textViews = viewer.view.subviews.compactMap { $0 as? UITextView }
         XCTAssertEqual(textViews.count, 1)
         XCTAssertFalse(textViews[0].isEditable)
-        // The third action generates questions from the authorized, read-only
-        // document. Neither the viewer nor this navigation mutates source bytes.
-        XCTAssertEqual(viewer.navigationItem.rightBarButtonItems?.count, 4)
-        XCTAssertEqual(Set(viewer.navigationItem.rightBarButtonItems?
-            .compactMap(\.accessibilityIdentifier) ?? []),
-            Set(["impress.notes.draft", "impress.notes.source-toggle",
-                 "impress.notes.generate-questions", "impress.notes.linked-cards"]))
+        // The latest product contract groups secondary note actions under a
+        // single More menu; only the shared Chat entry remains directly visible.
+        // Reading or opening navigation must never mutate source Markdown bytes.
+        XCTAssertEqual(viewer.navigationItem.rightBarButtonItems?.count, 2)
+        XCTAssertEqual(viewer.navigationItem.rightBarButtonItems?.first?
+            .accessibilityIdentifier, "impress.notes.ai-discussion")
+        XCTAssertEqual(viewer.navigationItem.rightBarButtonItems?.last?
+            .accessibilityLabel, V3L("更多笔记操作"))
         XCTAssertEqual(try Data(contentsOf: file), original)
     }
 

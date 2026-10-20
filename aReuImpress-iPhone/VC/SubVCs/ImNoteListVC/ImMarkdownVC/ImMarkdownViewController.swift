@@ -1116,7 +1116,7 @@ enum ImVaultWriteReceiptText {
             let destination = testCopy
                 ? V3L("已写入独立测试副本") : V3L("源文件已在本机写入")
             return (destination,
-                    V3L("重新验证了原文件版本，写前已保留恢复副本，写后本机回读字节一致。File Provider 的本机写入成功不代表 iCloud 已完成同步。"))
+                    V3L("重新验证了原文件版本，写前已保留恢复副本，写后本机回读字节一致。File Provider 的本机写入成功不代表云端 iCloud 已完成同步。"))
         case .failure(let error):
             return (V3L("原文件未确认写入"),
                     error.localizedDescription + "\n" +
