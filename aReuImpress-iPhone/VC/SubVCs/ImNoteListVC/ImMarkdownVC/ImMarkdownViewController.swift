@@ -882,14 +882,6 @@ final class ImVaultDocumentController: UIViewController {
                 sourceKey: key, sourceVersion: document.digest,
                 noteIdentity: document.identity)
             navigationController?.pushViewController(chat, animated: true)
-            if !canShareWholeNote {
-                // Never pretend the full document is loaded into the model.
-                let notice = UIAlertController(title: V3L("笔记正文较长"),
-                    message: V3L("本次未附带笔记正文，只提供来源标识；请明确选取片段后再讨论。不会自动截取前半段。"),
-                    preferredStyle: .alert)
-                notice.addAction(UIAlertAction(title: V3L("确定"), style: .default))
-                chat.present(notice, animated: true)
-            }
         } catch {
             showVaultError(V3L("无法打开笔记讨论"), error: error)
         }

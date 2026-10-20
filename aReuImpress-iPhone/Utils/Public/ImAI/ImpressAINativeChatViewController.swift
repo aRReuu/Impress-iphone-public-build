@@ -56,6 +56,7 @@ final class ImpressAINativeChatViewController: UIViewController,
     private var restoring = false
     private var sending = false
     private var saveChain: Task<Void, Never>?
+    private var requestTask: Task<Void, Never>?
     private var draftDebounce: Task<Void, Never>?
 
     private var sourceIdentity: String? {
@@ -167,7 +168,9 @@ final class ImpressAINativeChatViewController: UIViewController,
         privacyLabel.numberOfLines = 2
         privacyLabel.textColor = ImpressV3Appearance.secondaryText
         privacyLabel.textAlignment = .center
-        privacyLabel.text = V3L("对话与草稿保存在本机；只有点击发送并确认材料后才会发送给服务商。不会自动写入 Obsidian。")
+        privacyLabel.text = noteIdentity != nil && sourceAnswer == nil
+            ? V3L("此笔记正文较长：当前未附带全文，只显示来源名称。请先选择所需片段；不会暗中截断或发送。")
+            : V3L("对话与草稿保存在本机；只有点击发送并确认材料后才会发送给服务商。不会自动写入 Obsidian。")
 
         messageInput.font = ImpressV3Appearance.Typography.body
         messageInput.adjustsFontForContentSizeCategory = true
@@ -195,7 +198,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         } else {
             sendButton.setImage(UIImage(systemName: "arrow.up"), for: .normal)
         }
-        sendButton.addTarget(self, action: #selector(submitMessage), for: .touchUpInside)
+        sendButton.addTarget(self, action: #selector(submitOrStopMessage), for: .touchUpInside)
         sendButton.accessibilityLabel = V3L("发送消息")
         sendButton.accessibilityIdentifier = "impress.ai.chat.send"
         sendButton.isEnabled = false
@@ -265,8 +268,10 @@ final class ImpressAINativeChatViewController: UIViewController,
 
     func textViewDidChange(_ textView: UITextView) {
         let content = textView.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        sendButton.isEnabled = !sending && !restoring && !content.isEmpty &&
-            content.utf8.count <= 12_000
+        sendButton.isEnabled = sending || (!restoring && !content.isEmpty &&
+            content.utf8.count <= 12_000)
+        sendButton.configuration?.image = UIImage(systemName: sending ? "stop.fill" : "arrow.up")
+        sendButton.accessibilityLabel = sending ? V3L("停止生成") : V3L("发送消息")
         guard !restoring else { return }
         draftDebounce?.cancel()
         draftDebounce = Task { [weak self] in
@@ -379,6 +384,16 @@ final class ImpressAINativeChatViewController: UIViewController,
         }
     }
 
+    @objc private func submitOrStopMessage() {
+        if sending {
+            // Cancels the in-flight Task/URLSession request; never executes a
+            // partial response or silently retries against a billed model.
+            requestTask?.cancel()
+            return
+        }
+        submitMessage()
+    }
+
     @objc private func submitMessage() {
         let text = messageInput.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf8.count <= 12_000,
@@ -429,7 +444,8 @@ final class ImpressAINativeChatViewController: UIViewController,
     private func chooseSourceContext(_ text: String,
                                      route: ImpressAIResolvedRoute) {
         if !contextChoiceMade, let question = sourceQuestion, !question.isEmpty {
-            let confirm = UIAlertController(title: V3L("是否附带当前卡片？"),
+            let confirm = UIAlertController(title: noteIdentity == nil
+                ? V3L("是否附带当前卡片？") : V3L("是否附带当前笔记材料？"),
                 message: noteIdentity == nil
                     ? V3L("只有确认后，才会发送当前卡片的问题与答案。")
                     : V3L("只有确认后，才会发送本次明确载入的笔记材料。过长笔记不会自动发送全文。"),
@@ -472,9 +488,11 @@ final class ImpressAINativeChatViewController: UIViewController,
         let modelName = route.model.identifier
         var system = prompt
         if includeCardContext, let question = sourceQuestion, !question.isEmpty {
-            system += "\n" + V3L("当前卡片的问题：") + question
+            system += "\n" + (noteIdentity == nil
+                ? V3L("当前卡片的问题：") : V3L("当前笔记来源：")) + question
             if let answer = sourceAnswer, !answer.isEmpty {
-                system += "\n" + V3L("当前卡片的参考答案：") + answer
+                system += "\n" + (noteIdentity == nil
+                    ? V3L("当前卡片的参考答案：") : V3L("本次已授权笔记正文：")) + answer
             }
         }
         let messageID = UUID()
@@ -484,13 +502,16 @@ final class ImpressAINativeChatViewController: UIViewController,
             modelIdentifier: modelName, promptSnapshot: prompt))
         messageInput.text = ""
         privacyLabel.text = V3L("正在请求模型…")
-        sendButton.isEnabled = false
+        sendButton.isEnabled = true
+        sendButton.configuration?.image = UIImage(systemName: "stop.fill")
+        sendButton.accessibilityLabel = V3L("停止生成")
         reloadAndScroll()
 
         let priorSave = saveChain
-        Task {
+        requestTask = Task {
             await priorSave?.value
             do {
+                try Task.checkCancellation()
                 // Re-check the authorized Vault and content SHA immediately
                 // before any note context is sent to a remote provider.
                 if self.includeCardContext, let noteID = self.noteIdentity,
@@ -528,6 +549,7 @@ final class ImpressAINativeChatViewController: UIViewController,
                 turns.append(ImpressAIChatTurn(role: .user, text: message))
                 let reply = try await ImpressAIHTTPClient.shared.converse(
                     route: route, system: system, turns: turns)
+                try Task.checkCancellation()
                 if let index = history.firstIndex(where: { $0.messageID == messageID }) {
                     history[index].status = .completed
                 }
@@ -539,19 +561,23 @@ final class ImpressAINativeChatViewController: UIViewController,
                 requestFailure = nil
                 privacyLabel.text = V3L("对话已保存至本机；更新内容仍需预览确认。")
             } catch {
+                let cancelled = Task.isCancelled || error is CancellationError
                 if let index = history.firstIndex(where: { $0.messageID == messageID }) {
-                    history[index].status = .failed
+                    history[index].status = cancelled ? .cancelled : .failed
                 }
-                requestFailure = error.localizedDescription
+                requestFailure = cancelled ? V3L("生成已停止") : error.localizedDescription
                 if messageInput.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     messageInput.text = message
                 }
-                privacyLabel.text = V3L("请求失败，输入内容已保留。")
-                showProblem(error)
+                privacyLabel.text = cancelled
+                    ? V3L("已停止生成；原始输入和历史仍保留在本机。")
+                    : V3L("请求失败，输入内容已保留。")
+                if !cancelled { showProblem(error) }
             }
             enqueuePersistence()
             await saveChain?.value
             sending = false
+            requestTask = nil
             textViewDidChange(messageInput)
             reloadAndScroll()
         }

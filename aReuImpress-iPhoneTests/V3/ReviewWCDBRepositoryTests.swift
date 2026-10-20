@@ -360,7 +360,8 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(30))
         }
         XCTAssertEqual(transcript.numberOfRows(inSection: 0), 1)
-        XCTAssertTrue(try await repository.chatSessions(for: "card:" + UUID().uuidString).isEmpty)
+        let unrelated = try await repository.chatSessions(for: "card:" + UUID().uuidString)
+        XCTAssertTrue(unrelated.isEmpty)
     }
 
     @MainActor
