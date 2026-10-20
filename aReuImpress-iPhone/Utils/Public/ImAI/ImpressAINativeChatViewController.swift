@@ -150,9 +150,12 @@ final class ImpressAINativeChatViewController: UIViewController,
     private let sendButton = UIButton(type: .system)
     private let inputBar = UIView()
     private let privacyLabel = UILabel()
-    private let contextBar = UIStackView()
-    private let promptButton = UIButton(type: .system)
     private let materialButton = UIButton(type: .system)
+    private let attachmentChip = UIButton(type: .system)
+    private let composerColumn = UIStackView()
+    private let composerRow = UIStackView()
+    private var messageHeight: NSLayoutConstraint?
+    private static let introductionKey = "ImpressV11ChatIntroductionSeen"
     private var sessionPromptOverride: String?
 
     init(question: String? = nil, answer: String? = nil,
@@ -201,30 +204,53 @@ final class ImpressAINativeChatViewController: UIViewController,
     }
 
     private func refreshModelPicker() {
-        let current = try? liveRoute()
-        navigationItem.prompt = current.map {
-            $0.connection.title + " · " + $0.model.identifier
-        } ?? V3L("请先配置可用的对话模型")
-        let model = UIBarButtonItem(title: V3L("模型"), style: .plain,
-            target: self, action: #selector(chooseConversationModel))
-        model.accessibilityIdentifier = "impress.ai.chat.model-picker"
-        let old = UIBarButtonItem(image: UIImage(systemName: "clock.arrow.circlepath"),
-            style: .plain, target: self, action: #selector(openDiscussionHistory))
-        old.accessibilityIdentifier = "impress.ai.chat.history"
-        old.accessibilityLabel = V3L("历史讨论")
+        navigationItem.prompt = nil
+        let more = UIBarButtonItem(image: UIImage(systemName: "ellipsis"),
+            style: .plain, target: self, action: #selector(openChatFeatures))
+        more.accessibilityIdentifier = "impress.ai.chat.features"
+        more.accessibilityLabel = V3L("对话功能")
         let fresh = UIBarButtonItem(image: UIImage(systemName: "square.and.pencil"),
             style: .plain, target: self, action: #selector(startNewDiscussion))
         fresh.accessibilityIdentifier = "impress.ai.chat.new-discussion"
         fresh.accessibilityLabel = V3L("新建讨论")
-        var buttons = [fresh, old, model]
-        if let p = pendingDuplex, !p.state.completed {
-            let pending = UIBarButtonItem(image: UIImage(systemName: "checklist"),
-                style: .plain, target: self, action: #selector(resumeDuplexReview))
-            pending.accessibilityIdentifier = "impress.ai.chat.pending-duplex"
-            pending.accessibilityLabel = V3L("待确认的笔记与原卡修改")
-            buttons.insert(pending, at: 0)
+        navigationItem.rightBarButtonItems = [fresh, more]
+    }
+
+    @objc private func openChatFeatures() {
+        var entries: [ImpressChatFeatureListViewController.Entry] = [
+            .init(title: V3L("模型"), symbol: "cpu", identifier: "model") {
+                [weak self] in self?.chooseConversationModel()
+            },
+            .init(title: V3L("历史讨论"), symbol: "clock.arrow.circlepath",
+                  identifier: "history") { [weak self] in self?.openDiscussionHistory() },
+            .init(title: V3L("提示词"), symbol: "text.alignleft",
+                  identifier: "prompt") { [weak self] in self?.openSessionPrompt() },
+            .init(title: V3L("本次材料"), symbol: "paperclip",
+                  identifier: "materials") { [weak self] in self?.reviewSessionMaterials() }
+        ]
+        if pendingDuplex != nil || !previousDuplex.isEmpty {
+            entries.append(.init(title: V3L("修订记录与回执"), symbol: "checklist",
+                identifier: "receipts") { [weak self] in self?.openDuplexReceipts() })
         }
-        navigationItem.rightBarButtonItems = buttons
+        entries.append(.init(title: V3L("使用说明"), symbol: "info.circle",
+            identifier: "introduction") { [weak self] in self?.showChatIntroduction() })
+        navigationController?.pushViewController(
+            ImpressChatFeatureListViewController(entries: entries), animated: true)
+    }
+
+    private func showChatIntroduction() {
+        let alert = UIAlertController(title: V3L("关于讨论"),
+            message: V3L("对话和草稿保存在本机。只有主动发送并确认材料后才会请求服务商；普通讨论不会自动修改笔记或卡片。"),
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("知道了"), style: .default))
+        present(alert, animated: true)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !UserDefaults.standard.bool(forKey: Self.introductionKey) else { return }
+        UserDefaults.standard.set(true, forKey: Self.introductionKey)
+        showChatIntroduction()
     }
 
     @objc private func chooseConversationModel() {
@@ -240,7 +266,7 @@ final class ImpressAINativeChatViewController: UIViewController,
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = V3L("AI 讨论")
+        title = ""
         view.backgroundColor = ImpressV3Appearance.page
         navigationItem.largeTitleDisplayMode = .never
 
@@ -294,70 +320,106 @@ final class ImpressAINativeChatViewController: UIViewController,
         sendButton.accessibilityIdentifier = "impress.ai.chat.send"
         sendButton.isEnabled = false
 
-        inputBar.backgroundColor = .clear
-        contextBar.axis = .horizontal
-        contextBar.distribution = .fillEqually
-        contextBar.spacing = ImpressV3Appearance.Metrics.rowSpacing
-        for (button, symbol, label, action) in [
-            (promptButton, "text.alignleft", V3L("提示词"), #selector(openSessionPrompt)),
-            (materialButton, "doc.on.doc", V3L("本次材料"), #selector(reviewSessionMaterials))
-        ] {
-            ImpressV3Appearance.styleQuietButton(button, title: label, symbol: symbol)
-            button.addTarget(self, action: action, for: .touchUpInside)
-            contextBar.addArrangedSubview(button)
-        }
-        promptButton.accessibilityIdentifier = "impress.ai.chat.prompt"
-        materialButton.accessibilityIdentifier = "impress.ai.chat.materials"
-        for element in [tableView, inputBar, privacyLabel, contextBar] {
+        inputBar.backgroundColor = ImpressV3Appearance.surface
+        inputBar.layer.cornerRadius = 24
+        inputBar.layer.borderColor = ImpressV3Appearance.secondaryText
+            .withAlphaComponent(0.14).cgColor
+        inputBar.layer.borderWidth = 0.5
+        composerColumn.axis = .vertical
+        composerColumn.spacing = 3
+        composerRow.axis = .horizontal
+        composerRow.alignment = .bottom
+        composerRow.spacing = 4
+        var add = UIButton.Configuration.plain()
+        add.image = UIImage(systemName: "plus")
+        add.baseForegroundColor = ImpressV3Appearance.primaryText
+        materialButton.configuration = add
+        materialButton.accessibilityLabel = V3L("添加材料")
+        materialButton.accessibilityIdentifier = "impress.ai.chat.add-material"
+        materialButton.addTarget(self, action: #selector(reviewSessionMaterials),
+                                 for: .touchUpInside)
+        attachmentChip.setTitle(V3L("查看已选材料"), for: .normal)
+        attachmentChip.setImage(UIImage(systemName: "paperclip"), for: .normal)
+        attachmentChip.titleLabel?.font = ImpressV3Appearance.Typography.caption
+        attachmentChip.contentHorizontalAlignment = .leading
+        attachmentChip.accessibilityIdentifier = "impress.ai.chat.attachment"
+        attachmentChip.addTarget(self, action: #selector(reviewSessionMaterials),
+                                 for: .touchUpInside)
+        attachmentChip.isHidden = true
+        for element in [tableView, inputBar] {
             element.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(element)
         }
-        for element in [messageInput, sendButton] {
+        composerColumn.translatesAutoresizingMaskIntoConstraints = false
+        inputBar.addSubview(composerColumn)
+        for element in [materialButton, messageInput, sendButton] {
             element.translatesAutoresizingMaskIntoConstraints = false
-            inputBar.addSubview(element)
         }
+        composerRow.addArrangedSubview(materialButton)
+        composerRow.addArrangedSubview(messageInput)
+        composerRow.addArrangedSubview(sendButton)
+        composerColumn.addArrangedSubview(attachmentChip)
+        composerColumn.addArrangedSubview(composerRow)
+        messageInput.isScrollEnabled = false
+        messageInput.backgroundColor = .clear
+        messageInput.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let dynamicHeight = messageInput.heightAnchor.constraint(equalToConstant: 44)
+        messageHeight = dynamicHeight
         NSLayoutConstraint.activate([
-            contextBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 4),
-            contextBar.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor,
-                constant: ImpressV3Appearance.Metrics.screenInset),
-            contextBar.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor,
-                constant: -ImpressV3Appearance.Metrics.screenInset),
-            contextBar.heightAnchor.constraint(greaterThanOrEqualToConstant: 38),
-            tableView.topAnchor.constraint(equalTo: contextBar.bottomAnchor, constant: 6),
+            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
-            tableView.bottomAnchor.constraint(equalTo: privacyLabel.topAnchor, constant: -6),
-
-            privacyLabel.leadingAnchor.constraint(
-                equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
-            privacyLabel.trailingAnchor.constraint(
-                equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
-            privacyLabel.bottomAnchor.constraint(equalTo: inputBar.topAnchor, constant: -6),
-
+            tableView.bottomAnchor.constraint(equalTo: inputBar.topAnchor, constant: -8),
             inputBar.leadingAnchor.constraint(
                 equalTo: view.safeAreaLayoutGuide.leadingAnchor,
                 constant: ImpressV3Appearance.Metrics.screenInset),
             inputBar.trailingAnchor.constraint(
                 equalTo: view.safeAreaLayoutGuide.trailingAnchor,
                 constant: -ImpressV3Appearance.Metrics.screenInset),
-            inputBar.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -8),
-            inputBar.heightAnchor.constraint(greaterThanOrEqualToConstant: 52),
-            inputBar.heightAnchor.constraint(lessThanOrEqualToConstant: 110),
-
-            messageInput.leadingAnchor.constraint(equalTo: inputBar.leadingAnchor),
-            messageInput.topAnchor.constraint(equalTo: inputBar.topAnchor),
-            messageInput.bottomAnchor.constraint(equalTo: inputBar.bottomAnchor),
-            sendButton.leadingAnchor.constraint(equalTo: messageInput.trailingAnchor, constant: 8),
-            sendButton.trailingAnchor.constraint(equalTo: inputBar.trailingAnchor),
-            sendButton.centerYAnchor.constraint(equalTo: messageInput.centerYAnchor),
-            sendButton.widthAnchor.constraint(equalToConstant: 48),
-            sendButton.heightAnchor.constraint(equalToConstant: 48),
-            messageInput.heightAnchor.constraint(greaterThanOrEqualToConstant: 52)
+            inputBar.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor,
+                                             constant: -8),
+            composerColumn.topAnchor.constraint(equalTo: inputBar.topAnchor, constant: 6),
+            composerColumn.bottomAnchor.constraint(equalTo: inputBar.bottomAnchor, constant: -6),
+            composerColumn.leadingAnchor.constraint(equalTo: inputBar.leadingAnchor, constant: 8),
+            composerColumn.trailingAnchor.constraint(equalTo: inputBar.trailingAnchor, constant: -8),
+            dynamicHeight,
+            materialButton.widthAnchor.constraint(equalToConstant: 44),
+            materialButton.heightAnchor.constraint(equalToConstant: 44),
+            sendButton.widthAnchor.constraint(equalToConstant: 44),
+            sendButton.heightAnchor.constraint(equalToConstant: 44),
+            attachmentChip.heightAnchor.constraint(greaterThanOrEqualToConstant: 26)
         ])
+        updateAttachmentPresentation()
         Task { await restoreLocalSession() }
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        updateComposerHeight()
+    }
+
+    private func updateComposerHeight() {
+        guard messageInput.bounds.width > 0 else { return }
+        let ideal = messageInput.sizeThatFits(
+            CGSize(width: messageInput.bounds.width,
+                   height: CGFloat.greatestFiniteMagnitude)).height
+        let limit = max(80, min(160, view.bounds.height * 0.34))
+        let height = max(44, min(limit, ideal))
+        if let constraint = messageHeight, abs(constraint.constant - height) > 1 {
+            constraint.constant = height
+        }
+        messageInput.isScrollEnabled = ideal > limit
+    }
+
+    private func updateAttachmentPresentation() {
+        let count = contextReferences.count
+        attachmentChip.isHidden = count == 0
+        attachmentChip.setTitle(V3L("已选材料") + " · " + String(count), for: .normal)
+    }
+
     func textViewDidChange(_ textView: UITextView) {
+        updateComposerHeight()
+        updateAttachmentPresentation()
         let content = textView.text.trimmingCharacters(in: .whitespacesAndNewlines)
         sendButton.isEnabled = sending || (!restoring && !content.isEmpty &&
             content.utf8.count <= 12_000)
@@ -418,7 +480,7 @@ final class ImpressAINativeChatViewController: UIViewController,
             self.present(editor, animated: true)
         })
         picker.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
-        picker.popoverPresentationController?.sourceView = promptButton
+        picker.popoverPresentationController?.sourceView = view
         present(picker, animated: true)
     }
 
@@ -484,6 +546,7 @@ final class ImpressAINativeChatViewController: UIViewController,
             self?.contextChoiceMade = true
             self?.contextConsentGranted = false
             self?.contextReferences = []
+            self?.updateAttachmentPresentation()
             self?.enqueuePersistence()
         })
         alert.addAction(UIAlertAction(title: V3L("下次发送时重新选择"),
@@ -550,6 +613,7 @@ final class ImpressAINativeChatViewController: UIViewController,
                         WCDBV3ChatContextReference(stableIdentity: key,
                             sourceRevision: current.digest, excerpt: $0.text)
                     }
+                    self.updateAttachmentPresentation()
                     // Drafting a set of materials is not consent to send it.
                     self.includeCardContext = false
                     self.contextChoiceMade = false
@@ -1180,6 +1244,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         }
         messageInput.text = session.inputDraft
         contextReferences = session.contextReferences
+        updateAttachmentPresentation()
         requestFailure = session.requestError
         contextConsentGranted = session.contextConsentGranted == true
         let approved = contextReferences.first(where: { $0.stableIdentity == sourceIdentity })
@@ -1341,6 +1406,50 @@ final class ImpressAINativeChatViewController: UIViewController,
             tableView.scrollToRow(at: IndexPath(row: history.count - 1, section: 0),
                                   at: .bottom, animated: false)
         }
+    }
+}
+
+@MainActor
+final class ImpressChatFeatureListViewController: UITableViewController {
+    struct Entry {
+        let title: String
+        let symbol: String
+        let identifier: String
+        let action: () -> Void
+    }
+    private let entries: [Entry]
+    init(entries: [Entry]) {
+        self.entries = entries
+        super.init(style: .insetGrouped)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = V3L("对话功能")
+        navigationItem.largeTitleDisplayMode = .never
+        tableView.backgroundColor = ImpressV3Appearance.page
+        tableView.accessibilityIdentifier = "impress.ai.chat.feature-list"
+    }
+    override func tableView(_ tableView: UITableView,
+                            numberOfRowsInSection section: Int) -> Int { entries.count }
+    override func tableView(_ tableView: UITableView,
+                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let entry = entries[indexPath.row]
+        let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+        var config = UIListContentConfiguration.cell()
+        config.text = entry.title
+        config.image = UIImage(systemName: entry.symbol)
+        cell.contentConfiguration = config
+        cell.accessoryType = .disclosureIndicator
+        cell.accessibilityIdentifier = "impress.ai.chat.feature." + entry.identifier
+        return cell
+    }
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        guard entries.indices.contains(indexPath.row) else { return }
+        let action = entries[indexPath.row].action
+        tableView.deselectRow(at: indexPath, animated: true)
+        navigationController?.popViewController(animated: false)
+        action()
     }
 }
 

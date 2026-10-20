@@ -84,6 +84,25 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         XCTAssertTrue(review.answerIsRevealed)
     }
 
+    @MainActor
+    func testMinimalChatChromeAndComposerStates() {
+        let chat = ImpressAINativeChatViewController()
+        chat.loadViewIfNeeded()
+        XCTAssertTrue(chat.title?.isEmpty ?? true)
+        XCTAssertNil(chat.navigationItem.prompt)
+        XCTAssertEqual(chat.navigationItem.rightBarButtonItems?
+            .compactMap(\.accessibilityIdentifier),
+            ["impress.ai.chat.new-discussion", "impress.ai.chat.features"])
+        func allViews(_ view: UIView) -> [UIView] {
+            [view] + view.subviews.flatMap { allViews($0) }
+        }
+        let ids = Set(allViews(chat.view).compactMap(\.accessibilityIdentifier))
+        XCTAssertTrue(ids.contains("impress.ai.chat.add-material"))
+        XCTAssertTrue(ids.contains("impress.ai.chat.input"))
+        XCTAssertFalse(ids.contains("impress.ai.chat.prompt"))
+        XCTAssertFalse(ids.contains("impress.ai.chat.materials"))
+    }
+
     private func makeRepository() throws -> ReviewWCDBRepository {
         let path = FileManager.default.temporaryDirectory
             .appendingPathComponent("V3Swipe-" + UUID().uuidString, isDirectory: true)
