@@ -1218,6 +1218,67 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(Set((first + second).map(\.cardID)).count, 3)
     }
 
+    func testDeleteConversationPreservesAppliedReceiptsAndDoesNotResurrect() async throws {
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
+            calculator: FSRS6ReviewCalculator())
+        var discussion = WCDBV3ChatSession(sourceIdentity: "card:" + UUID().uuidString)
+        discussion.messages = [
+            WCDBV3ChatMessage(role: .user, text: "How does this work?",
+                status: .completed),
+            WCDBV3ChatMessage(role: .assistant, text: "Verified explanation.",
+                status: .completed)
+        ]
+        discussion.inputDraft = "Unsent private text"
+        discussion.contextReferences = [
+            WCDBV3ChatContextReference(stableIdentity: discussion.sourceIdentity,
+                sourceRevision: "rev1", excerpt: "User-selected excerpt")
+        ]
+        var done = WCDBV3DuplexProposal(sourceMessageID: discussion.messages.last?.messageID,
+            noteIdentity: nil, noteBaseDigest: nil, noteEditedDigest: nil,
+            cardID: UUID(), cardReviewRevision: 0, cardContentRevision: 0,
+            cardBaseQuestion: "Q", cardBaseAnswer: "A",
+            cardEditedQuestion: "Improved Q", cardEditedAnswer: "Improved A",
+            state: ImDuplexApprovalState(noteSelected: false, cardSelected: true,
+                cardStatus: .applied))
+        done.cardReceipt = "Exact original card updated and reread"
+        discussion.duplexHistory = [done]
+        try await repo.saveChatSession(discussion, expectedRevision: nil)
+        XCTAssertEqual(try await repo.allChatSessions().count, 1)
+        try await repo.deleteChatSession(discussion.sessionID, expectedRevision: 0)
+        XCTAssertTrue(try await repo.allChatSessions().isEmpty)
+        XCTAssertTrue(try await repo.chatSessions(for: discussion.sourceIdentity).isEmpty)
+        let receipts = try await repo.retainedChatReceipts()
+        XCTAssertEqual(receipts.count, 1)
+        XCTAssertTrue(receipts[0].messages.isEmpty)
+        XCTAssertTrue(receipts[0].inputDraft.isEmpty)
+        XCTAssertTrue(receipts[0].contextReferences.isEmpty)
+        XCTAssertEqual(receipts[0].duplexHistory?.first?.cardReceipt, done.cardReceipt)
+        XCTAssertTrue(receipts[0].isDeleted == true)
+        discussion.inputDraft = "Delayed callback must never re-create this discussion"
+        discussion.updatedAt = Date()
+        discussion.revision = 1
+        do {
+            try await repo.saveChatSession(discussion, expectedRevision: 0)
+            XCTFail("An async draft save must never resurrect a deleted row")
+        } catch WCDBV3ChatStorageError.conflict { }
+        XCTAssertTrue(try await repo.allChatSessions().isEmpty)
+
+        var inFlight = WCDBV3ChatSession(sourceIdentity: "card:" + UUID().uuidString)
+        inFlight.pendingDuplex = WCDBV3DuplexProposal(
+            sourceMessageID: nil, noteIdentity: nil,
+            noteBaseDigest: nil, noteEditedDigest: nil,
+            cardID: UUID(), cardReviewRevision: 0, cardContentRevision: 0,
+            cardBaseQuestion: "Original", cardBaseAnswer: "Original",
+            cardEditedQuestion: "Changed", cardEditedAnswer: "Changed",
+            state: ImDuplexApprovalState(noteSelected: false, cardSelected: true,
+                cardStatus: .applying))
+        try await repo.saveChatSession(inFlight, expectedRevision: nil)
+        do {
+            try await repo.deleteChatSession(inFlight.sessionID, expectedRevision: 0)
+            XCTFail("Unknown in-flight content write must be reconciled")
+        } catch WCDBV3ChatStorageError.unsafeDeletion { }
+    }
+
     func testOneSourceSupportsTwoIndependentChatSessionsWithoutOverwritingHistory() async throws {
         let repo = try ReviewWCDBRepository(
             databasePath: temporaryPath(), calculator: FSRS6ReviewCalculator())

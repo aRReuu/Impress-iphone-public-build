@@ -383,6 +383,9 @@ public struct WCDBV3ChatSession: Codable, Equatable, Sendable {
     public var selectedChatModelID: UUID?
     /// Nil on historical rows: conservatively re-confirm before sending source context.
     public var contextConsentGranted: Bool?
+    /// Nil on legacy JSON. A deletion tombstone prevents a delayed request,
+    /// draft save or backup replay from creating a new visible discussion.
+    public var isDeleted: Bool?
 
     public init(sessionID: UUID = UUID(), sourceIdentity: String,
                 createdAt: Date = Date()) {
@@ -401,11 +404,12 @@ public struct WCDBV3ChatSession: Codable, Equatable, Sendable {
         self.promptOverride = nil
         self.selectedChatModelID = nil
         self.contextConsentGranted = false
+        self.isDeleted = false
     }
 }
 
 public enum WCDBV3ChatStorageError: Swift.Error, Equatable {
-    case conflict, invalidRecord, tooLarge
+    case conflict, invalidRecord, tooLarge, unsafeDeletion
 }
 
 /// An actor serializes the review transactions. The underlying WCDB connection
@@ -1117,27 +1121,118 @@ public actor ReviewWCDBRepository: ReviewRepository {
     /// Preserve complete local transcripts and resumable drafts/proposals.
     /// A model's request context window must be derived from this history
     /// without deleting earlier stored turns. No raw credentials belong here.
+    private func decodeChatRow(_ row: WCDBV3ChatSessionRow) throws -> WCDBV3ChatSession {
+        guard let bytes = row.record,
+              let id = row.sessionID,
+              let sessionID = UUID(uuidString: id) else {
+            throw WCDBV3ChatStorageError.invalidRecord
+        }
+        let session = try JSONDecoder().decode(WCDBV3ChatSession.self, from: bytes)
+        guard let storedUpdatedAt = row.updatedAt,
+              session.sessionID == sessionID,
+              session.sourceIdentity == row.sourceIdentity,
+              abs(session.updatedAt.timeIntervalSince(storedUpdatedAt)) < 0.002 else {
+            throw WCDBV3ChatStorageError.invalidRecord
+        }
+        return session
+    }
+
+    public func allChatSessions(includeDeleted: Bool = false) throws -> [WCDBV3ChatSession] {
+        let rows: [WCDBV3ChatSessionRow] = try database.getObjects(
+            fromTable: Self.chatSessionsTable,
+            orderBy: [WCDBV3ChatSessionRow.Properties.updatedAt.asOrder(by: .descending)])
+        return try rows.map(decodeChatRow).filter {
+            includeDeleted || $0.isDeleted != true
+        }
+    }
+
     public func chatSessions(for sourceIdentity: String) throws -> [WCDBV3ChatSession] {
         guard !sourceIdentity.isEmpty else { throw WCDBV3ChatStorageError.invalidRecord }
         let rows: [WCDBV3ChatSessionRow] = try database.getObjects(
             fromTable: Self.chatSessionsTable,
             where: WCDBV3ChatSessionRow.Properties.sourceIdentity == sourceIdentity,
             orderBy: [WCDBV3ChatSessionRow.Properties.updatedAt.asOrder(by: .descending)])
-        return try rows.map { row in
-            guard let bytes = row.record,
-                  let id = row.sessionID,
-                  let sessionID = UUID(uuidString: id) else {
-                throw WCDBV3ChatStorageError.invalidRecord
-            }
-            let session = try JSONDecoder().decode(WCDBV3ChatSession.self, from: bytes)
-            guard let storedUpdatedAt = row.updatedAt,
-                  session.sessionID == sessionID,
-                  session.sourceIdentity == row.sourceIdentity,
-                  abs(session.updatedAt.timeIntervalSince(storedUpdatedAt)) < 0.002 else {
-                throw WCDBV3ChatStorageError.invalidRecord
-            }
-            return session
+        return try rows.map(decodeChatRow).filter { $0.isDeleted != true }
+    }
+
+    /// Read applied knowledge receipts even after a discussion has been
+    /// deleted. Do not make a tombstone visible as a normal conversation.
+    public func retainedChatReceipts() throws -> [WCDBV3ChatSession] {
+        try allChatSessions(includeDeleted: true).filter { session in
+            session.isDeleted == true && (
+                session.pendingDuplex != nil || !(session.duplexHistory ?? []).isEmpty)
         }
+    }
+
+    /// True only for already executed or durable inverse facts. Merely
+    /// proposing an edit does not permanently retain its text on deletion.
+    private static func hasAppliedFact(_ proposal: WCDBV3DuplexProposal) -> Bool {
+        let statuses = [proposal.state.noteStatus, proposal.state.cardStatus]
+        return statuses.contains(where: { [.applied, .undoing, .reverted].contains($0) }) ||
+            proposal.noteReceipt != nil || proposal.cardReceipt != nil
+    }
+
+    public func deleteChatSession(_ sessionID: UUID, expectedRevision: Int) throws {
+        let tx = try database.getTransaction()
+        try tx.run(transaction: {
+            guard let row: WCDBV3ChatSessionRow = try tx.getObject(
+                fromTable: Self.chatSessionsTable,
+                where: WCDBV3ChatSessionRow.Properties.sessionID == sessionID.uuidString),
+                  let bytes = row.record else { throw WCDBV3ChatStorageError.invalidRecord }
+            let old = try JSONDecoder().decode(WCDBV3ChatSession.self, from: bytes)
+            guard old.sessionID == sessionID, old.isDeleted != true,
+                  old.revision == expectedRevision else {
+                throw WCDBV3ChatStorageError.conflict
+            }
+            let proposals = (old.pendingDuplex.map { [$0] } ?? []) +
+                (old.duplexHistory ?? [])
+            // A crashed/in-flight write has unknown side effects and must be
+            // reconciled before a destructive action can conceal its state.
+            for proposal in proposals {
+                let note = proposal.state.noteStatus
+                let card = proposal.state.cardStatus
+                if [.applying, .undoing].contains(note) ||
+                   [.applying, .undoing].contains(card) {
+                    throw WCDBV3ChatStorageError.unsafeDeletion
+                }
+                let pendingNote = proposal.state.noteSelected &&
+                    [.pending, .failed, .conflict].contains(note)
+                let pendingCard = proposal.state.cardSelected &&
+                    [.pending, .failed, .conflict].contains(card)
+                if Self.hasAppliedFact(proposal) && (pendingNote || pendingCard) {
+                    throw WCDBV3ChatStorageError.unsafeDeletion
+                }
+            }
+            var erased = old
+            erased.isDeleted = true
+            erased.messages = []
+            erased.inputDraft = ""
+            erased.contextReferences = []
+            erased.pendingProposal = nil
+            erased.requestError = nil
+            erased.promptOverride = nil
+            erased.selectedChatModelID = nil
+            erased.contextConsentGranted = false
+            erased.pendingDuplex = nil
+            var durable = (old.duplexHistory ?? []).filter(Self.hasAppliedFact)
+            if let pending = old.pendingDuplex, Self.hasAppliedFact(pending),
+               !durable.contains(where: { $0.proposalID == pending.proposalID }) {
+                durable.append(pending)
+            }
+            erased.duplexHistory = durable
+            erased.revision += 1
+            erased.updatedAt = max(Date(), old.updatedAt.addingTimeInterval(0.001))
+            var changed = row
+            changed.updatedAt = erased.updatedAt
+            changed.record = try JSONEncoder().encode(erased)
+            try tx.update(table: Self.chatSessionsTable,
+                on: [WCDBV3ChatSessionRow.Properties.updatedAt,
+                     WCDBV3ChatSessionRow.Properties.record],
+                with: changed,
+                where: WCDBV3ChatSessionRow.Properties.sessionID == sessionID.uuidString)
+            guard tx.changes == 1 else { throw WCDBV3ChatStorageError.conflict }
+        })
+        ImpressV3BackupCoordinator.markDataChanged()
     }
 
     public func saveChatSession(_ session: WCDBV3ChatSession,
@@ -1177,6 +1272,9 @@ public actor ReviewWCDBRepository: ReviewRepository {
                       decoded.sourceIdentity == session.sourceIdentity else {
                     throw WCDBV3ChatStorageError.invalidRecord
                 }
+                guard decoded.isDeleted != true, session.isDeleted != true else {
+                    throw WCDBV3ChatStorageError.conflict
+                }
                 if decoded == session { return } // idempotent same snapshot
                 guard let expectedRevision, decoded.revision == expectedRevision,
                       session.revision == expectedRevision + 1,
@@ -1191,7 +1289,8 @@ public actor ReviewWCDBRepository: ReviewRepository {
                 guard tx.changes == 1 else { throw WCDBV3ChatStorageError.conflict }
                 didChange = true
             } else {
-                guard expectedRevision == nil, session.revision == 0 else {
+                guard expectedRevision == nil, session.revision == 0,
+                      session.isDeleted != true else {
                     throw WCDBV3ChatStorageError.conflict
                 }
                 try tx.insert(objects: [row], intoTable: Self.chatSessionsTable)
