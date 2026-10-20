@@ -603,6 +603,118 @@ enum ImVaultPrivateStore {
         return draft
     }
 
+
+    // Immutable private approval snapshots. The per-note editable draft may be
+    // replaced by a new revision; an older Chat receipt still needs its exact
+    // preimage bytes and approved edit to support verification/undo.
+    private static func approvedURL(identity: ImVaultFileIdentity,
+                                    baseDigest: String,
+                                    editedDigest: String) throws -> URL {
+        let hex = "^[0-9a-f]{64}$"
+        guard baseDigest.range(of: hex, options: .regularExpression) != nil,
+              editedDigest.range(of: hex, options: .regularExpression) != nil,
+              baseDigest != editedDigest else { throw ImVaultCoreError.invalidDraft }
+        let scope = opaqueKey(identity) + ":" + baseDigest + ":" + editedDigest
+        return try directory("ApprovedDraft").appendingPathComponent(
+            ImVaultDigest.sha256(Data(scope.utf8)) + ".json")
+    }
+
+    private static func verifyApproved(_ draft: ImVaultDraft,
+                                       identity: ImVaultFileIdentity,
+                                       baseDigest: String,
+                                       editedDigest: String) throws {
+        try draft.validate()
+        guard draft.identity == identity, draft.hasChanges,
+              draft.baseDigest == baseDigest,
+              ImVaultDigest.sha256(draft.proposedBytes) == editedDigest else {
+            throw ImVaultCoreError.invalidDraft
+        }
+    }
+
+    /// Idempotent and immutable: never replace an existing mismatched record.
+    /// This keeps personal Markdown only in protected Application Support.
+    static func archiveApprovedDraft(_ draft: ImVaultDraft) throws {
+        let edited = ImVaultDigest.sha256(draft.proposedBytes)
+        try verifyApproved(draft, identity: draft.identity,
+                           baseDigest: draft.baseDigest, editedDigest: edited)
+        let url = try approvedURL(identity: draft.identity,
+                                  baseDigest: draft.baseDigest, editedDigest: edited)
+        draftLock.lock()
+        defer { draftLock.unlock() }
+        if FileManager.default.fileExists(atPath: url.path) {
+            let saved = try JSONDecoder().decode(ImVaultDraft.self,
+                from: Data(contentsOf: url))
+            try verifyApproved(saved, identity: draft.identity,
+                               baseDigest: draft.baseDigest, editedDigest: edited)
+            guard saved.baseRawData == draft.baseRawData,
+                  saved.proposedBytes == draft.proposedBytes else {
+                throw ImVaultCoreError.invalidDraft
+            }
+            return
+        }
+        try JSONEncoder().encode(draft).write(to: url, options: [
+            .atomic, .completeFileProtectionUntilFirstUserAuthentication
+        ])
+        protectPrivateFile(url)
+        let loaded = try JSONDecoder().decode(ImVaultDraft.self,
+            from: Data(contentsOf: url))
+        try verifyApproved(loaded, identity: draft.identity,
+                           baseDigest: draft.baseDigest, editedDigest: edited)
+        guard loaded.baseRawData == draft.baseRawData,
+              loaded.proposedBytes == draft.proposedBytes else {
+            throw ImVaultSyncFailure.verificationFailed
+        }
+    }
+
+    /// Only exact SHA-paired snapshots are usable. Historical records from
+    /// before this fix may use the active draft if it still matches exactly.
+    static func approvedDraft(identity: ImVaultFileIdentity,
+                              baseDigest: String?,
+                              editedDigest: String?) throws -> ImVaultDraft? {
+        guard let baseDigest, let editedDigest else { return nil }
+        let path = try approvedURL(identity: identity, baseDigest: baseDigest,
+                                   editedDigest: editedDigest)
+        if FileManager.default.fileExists(atPath: path.path) {
+            let saved = try JSONDecoder().decode(ImVaultDraft.self,
+                from: Data(contentsOf: path))
+            try verifyApproved(saved, identity: identity,
+                               baseDigest: baseDigest, editedDigest: editedDigest)
+            return saved
+        }
+        guard let legacy = try loadDraft(identity: identity),
+              legacy.baseDigest == baseDigest,
+              ImVaultDigest.sha256(legacy.proposedBytes) == editedDigest else {
+            return nil
+        }
+        try verifyApproved(legacy, identity: identity,
+                           baseDigest: baseDigest, editedDigest: editedDigest)
+        return legacy
+    }
+
+    /// New editable base ONLY after the previous proposed bytes have really
+    /// become the coordinated source. Preserve the old snapshot before the
+    /// active draft changes. A changed external source fails closed.
+    static func startFreshDraft(afterApplied old: ImVaultDraft,
+                                live: ImVaultRawDocument) throws -> ImVaultDraft {
+        try old.validate()
+        guard old.identity == live.identity, old.hasChanges,
+              old.baseDigest != live.digest,
+              ImVaultDigest.sha256(live.sourceBytes) == live.digest,
+              ImVaultDigest.sha256(old.proposedBytes) == live.digest else {
+            throw ImVaultSyncFailure.conflict
+        }
+        try archiveApprovedDraft(old)
+        let next = try ImVaultDraft(identity: live.identity,
+            baseText: live.markdown, baseRawData: live.sourceBytes)
+        try saveDraft(next)
+        guard let stored = try loadDraft(identity: live.identity),
+              stored.baseDigest == live.digest,
+              stored.baseRawData == live.sourceBytes else {
+            throw ImVaultSyncFailure.verificationFailed
+        }
+        return stored
+    }
+
     // Pending question candidates share the existing Vault private store.
     // This snapshot is NOT a second card database or a source Markdown backup.
     private static func questionPoolURL(_ identity: ImVaultFileIdentity) throws -> URL {

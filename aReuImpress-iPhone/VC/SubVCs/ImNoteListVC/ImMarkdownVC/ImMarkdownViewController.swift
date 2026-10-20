@@ -1089,15 +1089,7 @@ final class ImVaultDocumentController: UIViewController {
         withVerifiedLiveDocument { [weak self] latest in
             guard let self else { return }
             do {
-                // Preserve an unsent draft even when the Vault changed.
-                // If no draft exists, capture the verified current bytes
-                // instead of an old document-controller snapshot.
-                let draft = try ImVaultPrivateStore.loadDraft(identity: latest.identity)
-                    ?? ImVaultDraft(identity: latest.identity,
-                                    baseText: latest.markdown,
-                                    baseRawData: latest.sourceBytes)
-                self.navigationController?.pushViewController(
-                    ImVaultDraftEditorController(draft: draft), animated: true)
+                try ImVaultDraftEntry.open(live: latest, presenter: self)
             } catch { self.showVaultError(V3L("无法打开独立草稿"), error: error) }
         }
     }
@@ -1111,7 +1103,61 @@ final class ImVaultDocumentController: UIViewController {
     }
 }
 
-/// A low-weight, manual reverse check. Only records an explicit "unaffected"
+/
+@MainActor
+enum ImVaultDraftEntry {
+    /// One entry for Chat, note detail and duplex proposal. A second revision
+    /// requires an explicit choice; no automatic rewrite of stale draft bytes.
+    static func open(live: ImVaultRawDocument, presenter: UIViewController) throws {
+        let prior = try ImVaultPrivateStore.loadDraft(identity: live.identity)
+        func push(_ draft: ImVaultDraft) {
+            presenter.navigationController?.pushViewController(
+                ImVaultDraftEditorController(draft: draft), animated: true)
+        }
+        guard let prior else {
+            push(try ImVaultDraft(identity: live.identity,
+                baseText: live.markdown, baseRawData: live.sourceBytes))
+            return
+        }
+        guard prior.hasChanges, prior.baseDigest != live.digest,
+              ImVaultDigest.sha256(prior.proposedBytes) == live.digest else {
+            push(prior)
+            return
+        }
+        let picker = UIAlertController(title: V3L("已应用的笔记草稿"),
+            message: V3L("原草稿与当前来源一致。可查看旧草稿，或明确创建下一次修订；会保留旧批准快照与历史回执。"),
+            preferredStyle: .alert)
+        picker.addAction(UIAlertAction(title: V3L("查看旧草稿"), style: .default) { _ in
+            push(prior)
+        })
+        picker.addAction(UIAlertAction(title: V3L("建立下一版笔记草稿"),
+            style: .default) { _ in
+            // Re-read after the user confirms; the File Provider might have
+            // changed while the alert was displayed.
+            ImVaultReadSync.shared.read(live.identity) { result in
+                do {
+                    let latest = try result.get()
+                    guard latest.identity == live.identity,
+                          latest.digest == live.digest else {
+                        throw ImVaultSyncFailure.conflict
+                    }
+                    let fresh = try ImVaultPrivateStore.startFreshDraft(
+                        afterApplied: prior, live: latest)
+                    push(fresh)
+                } catch {
+                    let failed = UIAlertController(title: V3L("无法建立新草稿"),
+                        message: error.localizedDescription, preferredStyle: .alert)
+                    failed.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+                    presenter.present(failed, animated: true)
+                }
+            }
+        })
+        picker.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        presenter.present(picker, animated: true)
+    }
+}
+
+// A low-weight, manual reverse check. Only records an explicit "unaffected"
 /// decision for this original card. It does NOT modify Obsidian source, score
 /// a review, fabricate section-level linkage or silently mark other cards.
 @MainActor
@@ -1497,7 +1543,8 @@ final class ImVaultDiffController: UIViewController {
         text.layer.cornerRadius = ImpressV3Appearance.Radius.field
         // The user approves an exact Vault file and its observed source
         // revision. Display this even for a short one-line diff.
-        let targetHeader = V3L("目标文件：") + draft.identity.relativePath
+        let targetHeader = "Vault ID: " + draft.identity.vaultID +
+            "\n" + V3L("目标文件：") + draft.identity.relativePath
         let versionHeader = "SHA-256: " + draft.baseDigest
         text.text = targetHeader + "\n" + versionHeader + "\n\n" + summary
         text.accessibilityIdentifier = "impress.vault.diff.full-preview"
@@ -1548,7 +1595,8 @@ final class ImVaultDiffController: UIViewController {
         #else
         let qaCopyRequested = false
         #endif
-        let targetContext = V3L("目标文件：") + draft.identity.relativePath +
+        let targetContext = "Vault ID: " + draft.identity.vaultID +
+            "\n" + V3L("目标文件：") + draft.identity.relativePath +
             "\nSHA-256: " + draft.baseDigest + "\n\n"
         let alert = UIAlertController(
             title: qaCopyRequested ? V3L("确认修改独立测试副本？") :

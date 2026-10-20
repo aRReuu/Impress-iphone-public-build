@@ -225,3 +225,7 @@
 ### 2026-10-20 业务闭环补充：会话独立模型选择及目标身份
 
 新增 `WCDBV3ChatSession.selectedChatModelID`（可选字段，对旧 JSON 向后兼容）；`ImpressAINativeChatViewController` 选定模型立即加入本地 CAS 会话持久化，恢复失效选择时不静默切换服务商。无原卡/笔记的独立 Chat 使用专属 `chat:standalone:v1` 会话源；笔记兜底使用 Vault ID + 全路径哈希，不基于同名标题。批准、撤销、反向核查、历史回执明确显示 Vault ID/完整相对路径。新增两项原生 XCTest，必须由最新同 SHA CI 提供真实结果；不解除生产写回禁令。
+
+## 2026-10-20 · P0-03/05/07 多次原笔记修订原字节保存（待 CI）
+
+发现单个可变 `ImVaultDraft` 被二次修订覆盖后，旧双目标 Chat 回执可能不能精确还原当时的 Markdown 差异。已在原有私有 `ImVaultPrivateStore` 中增加不可变、SHA 双版本＋完整 Vault 身份索引的 `ApprovedDraft`：提案持久化前先固化、执行／预览／撤销从相同快照提取；旧版无快照时只能从完全一致的原活动草稿安全回退，否则拒绝覆盖。新的草稿必须经用户选择、源文协调回读，保护先前已应用的内容与历史。新增三项原生 XCTest（见 SMOKE）。不增加笔记数据库，不改变 WCDB/FSRS 权威和三 Tab/校准暂缓；真机/云端/生产门禁仍 BLOCKED。

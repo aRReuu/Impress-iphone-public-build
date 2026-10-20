@@ -811,18 +811,7 @@ final class ImpressAINativeChatViewController: UIViewController,
             switch result {
             case .success(let live):
                 do {
-                    let draft: ImVaultDraft
-                    if let existing = try ImVaultPrivateStore.loadDraft(identity: identity) {
-                        // Retain an older unsent draft even when Obsidian changed.
-                        // The existing Diff path detects a stale source and
-                        // refuses the write rather than silently discarding it.
-                        draft = existing
-                    } else {
-                        draft = try ImVaultDraft(identity: identity,
-                            baseText: live.markdown, baseRawData: live.sourceBytes)
-                    }
-                    self.navigationController?.pushViewController(
-                        ImVaultDraftEditorController(draft: draft), animated: true)
+                    try ImVaultDraftEntry.open(live: live, presenter: self)
                 } catch { self.showProblem(error) }
             case .failure(let error):
                 self.showProblem(error)
@@ -1667,7 +1656,13 @@ final class ImpressDuplexChangeController: UIViewController {
             guard ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID else {
                 throw ImVaultSyncFailure.wrongVault
             }
-            draft = try ImVaultPrivateStore.loadDraft(identity: identity)
+            if let pending, pending.noteIdentity == identity {
+                draft = try ImVaultPrivateStore.approvedDraft(identity: identity,
+                    baseDigest: pending.noteBaseDigest,
+                    editedDigest: pending.noteEditedDigest)
+            } else {
+                draft = try ImVaultPrivateStore.loadDraft(identity: identity)
+            }
             if let draft {
                 let diff = ImVaultDiff.summary(base: draft.baseText,
                     edited: draft.editedText, maximumLines: 200)
@@ -1700,11 +1695,7 @@ final class ImpressDuplexChangeController: UIViewController {
             switch result {
             case .success(let source):
                 do {
-                    let edit = try ImVaultPrivateStore.loadDraft(identity: identity)
-                        ?? ImVaultDraft(identity: identity, baseText: source.markdown,
-                                        baseRawData: source.sourceBytes)
-                    self.navigationController?.pushViewController(
-                        ImVaultDraftEditorController(draft: edit), animated: true)
+                    try ImVaultDraftEntry.open(live: source, presenter: self)
                 } catch { self.presentIssue(V3L("笔记草稿不可用"), error.localizedDescription) }
             case .failure(let error):
                 self.presentIssue(V3L("源笔记读取失败"), error.localizedDescription)
@@ -1758,6 +1749,13 @@ final class ImpressDuplexChangeController: UIViewController {
                 cardEditedAnswer: changedCard ? revisedA : nil,
                 state: ImDuplexApprovalState(noteSelected: changedNote,
                                              cardSelected: changedCard))
+            if changedNote, let candidate = self.draft {
+                do { try ImVaultPrivateStore.archiveApprovedDraft(candidate) }
+                catch {
+                    self.presentIssue(V3L("无法锁定笔记版本快照"), error.localizedDescription)
+                    return
+                }
+            }
             guard await self.saveProposal(p) else {
                 self.presentIssue(V3L("提案未保存"),
                     V3L("Chat 的原子版本检查失败；修改尚未得到保存确认，禁止执行。"))
@@ -2045,10 +2043,9 @@ final class ImpressDuplexApprovalController: UIViewController {
                           "\nSHA-256: " + (proposal.noteBaseDigest ?? "?") +
                           "\n" + V3L("状态：") + proposal.state.noteStatus.rawValue)
             do {
-                guard let draft = try ImVaultPrivateStore.loadDraft(identity: identity),
-                      draft.baseDigest == proposal.noteBaseDigest,
-                      ImVaultDigest.sha256(draft.proposedBytes) ==
-                          proposal.noteEditedDigest else {
+                guard let draft = try ImVaultPrivateStore.approvedDraft(
+                    identity: identity, baseDigest: proposal.noteBaseDigest,
+                    editedDigest: proposal.noteEditedDigest) else {
                     throw ImVaultSyncFailure.conflict
                 }
                 let diff = ImVaultDiff.summary(base: draft.baseText,
@@ -2143,10 +2140,9 @@ final class ImpressDuplexApprovalController: UIViewController {
             }
             do {
                 guard let id = proposal.noteIdentity,
-                      let draft = try ImVaultPrivateStore.loadDraft(identity: id),
-                      draft.baseDigest == proposal.noteBaseDigest,
-                      ImVaultDigest.sha256(draft.proposedBytes) ==
-                          proposal.noteEditedDigest,
+                      let draft = try ImVaultPrivateStore.approvedDraft(
+                          identity: id, baseDigest: proposal.noteBaseDigest,
+                          editedDigest: proposal.noteEditedDigest),
                       ImVaultDiff.summary(base: draft.baseText, edited: draft.editedText,
                                           maximumLines: 200).complete else {
                     throw ImVaultSyncFailure.conflict
@@ -2296,7 +2292,9 @@ final class ImpressDuplexApprovalController: UIViewController {
             switch target {
             case .note:
                 guard let id = proposal.noteIdentity,
-                      let existing = try ImVaultPrivateStore.loadDraft(identity: id) else {
+                      let existing = try ImVaultPrivateStore.approvedDraft(
+                          identity: id, baseDigest: proposal.noteBaseDigest,
+                          editedDigest: proposal.noteEditedDigest) else {
                     throw ImVaultSyncFailure.conflict
                 }
                 let inverse = try ImpressDuplexUndoGate.inverseDraft(existing,
@@ -2377,7 +2375,9 @@ final class ImpressDuplexApprovalController: UIViewController {
         case .note:
             guard [.applied, .undoing].contains(proposal.state.noteStatus),
                   let id = proposal.noteIdentity,
-                  let existing = try ImVaultPrivateStore.loadDraft(identity: id) else {
+                  let existing = try ImVaultPrivateStore.approvedDraft(
+                      identity: id, baseDigest: proposal.noteBaseDigest,
+                      editedDigest: proposal.noteEditedDigest) else {
                 throw ImVaultSyncFailure.conflict
             }
             let inverse = try ImpressDuplexUndoGate.inverseDraft(existing,

@@ -143,3 +143,11 @@ Record final Git SHA, Actions run URL, each job conclusion, **total native XCTes
 ### 2026-10-20 后续：原生目标身份与未发送 Chat 模型
 
 新增 `testDuplexDiffPreviewDisplaysExactVaultIDAndSourcePath`、`testUnsentChatModelAndPromptSurviveColdStartAndLegacyJSON`。分别覆盖笔记+原卡统一预览中 Vault ID/全相对路径/实际来源 SHA 的可见性，以及只选择模型未发送消息时，模型、提示词和草稿在已有 WCDB 会话冷启动后的保留。过去 Chat JSON 缺少可选新字段时仍可读取。仅有对应 exact SHA XCTest 成功才可标记自动化 PASS；iPhone13/真实 Vault/在线模型仍不可直接推定。
+
+## 2026-10-20 · P0 同笔记多次批准快照测试（待此 SHA CI）
+
+- `testTwoApprovedNoteRevisionsRemainIndependentAndUndoInReverseOrder`：独立 QA Vault 中 BOM、CRLF、WikiLink 笔记连续两次写入；批准快照按 Vault 身份及双 SHA 持久化；旧撤销不能覆盖后来修改，按逆序撤销逐字节恢复。
+- `testNewDraftAfterExternalEditCannotOverwriteOldPendingWork`：外部修改冲突不得丢旧草稿、跨 Vault 不匹配。
+- `testHistoricalDuplexPreviewKeepsOldDiffAfterLaterNoteDraft`：新草稿不影响历史 Chat 收据中的旧差异。
+
+笔记详情、Chat、双目标编辑器共用显式草稿版本选择；开始下一版之前重新回读当前源文并保存旧批准快照。均为临时 fixture 自动化测试，不能冒充 iPhone13/File Provider/生产 Vault 验收；正式写入门禁保持 false。

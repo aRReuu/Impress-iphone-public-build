@@ -755,6 +755,128 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(decoded.inputDraft, conversation.inputDraft)
     }
 
+
+    @MainActor
+    func testTwoApprovedNoteRevisionsRemainIndependentAndUndoInReverseOrder() throws {
+        let root = try createRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = try ImVaultFileIdentity(vaultID: UUID().uuidString,
+            relativePath: "Notes/Sequential.md")
+        let firstBytes = Data([0xEF, 0xBB, 0xBF]) +
+            Data("# Concept\r\nOriginal\r\n[[Link]]\r\n".utf8)
+        let file = try put("# placeholder", root: root, path: id.relativePath)
+        try firstBytes.write(to: file, options: .atomic)
+        let raw = try ImVaultReadSync.load(root: root, identity: id)
+        var first = try ImVaultDraft(identity: id, baseText: raw.markdown,
+            baseRawData: raw.sourceBytes)
+        try first.update("# Concept\nFirst correction\n[[Link]]\n")
+        try ImVaultPrivateStore.saveDraft(first)
+        try ImVaultPrivateStore.archiveApprovedDraft(first)
+        guard case .written = try ImVaultGuardedWrite.commitFixture(
+            root: root, draft: first, userConfirmedDiff: true) else {
+            XCTFail("Expected first QA write"); return
+        }
+        let afterFirst = try ImVaultReadSync.load(root: root, identity: id)
+        let next = try ImVaultPrivateStore.startFreshDraft(afterApplied: first,
+            live: afterFirst)
+        XCTAssertFalse(next.hasChanges)
+        var second = next
+        try second.update("# Concept\nSecond correction\n[[Link]]\n")
+        try ImVaultPrivateStore.saveDraft(second)
+        try ImVaultPrivateStore.archiveApprovedDraft(second)
+        guard case .written = try ImVaultGuardedWrite.commitFixture(
+            root: root, draft: second, userConfirmedDiff: true) else {
+            XCTFail("Expected second QA write"); return
+        }
+        let oldReceipt = try XCTUnwrap(ImVaultPrivateStore.approvedDraft(
+            identity: id, baseDigest: first.baseDigest,
+            editedDigest: ImVaultDigest.sha256(first.proposedBytes)))
+        let newReceipt = try XCTUnwrap(ImVaultPrivateStore.approvedDraft(
+            identity: id, baseDigest: second.baseDigest,
+            editedDigest: ImVaultDigest.sha256(second.proposedBytes)))
+        XCTAssertEqual(oldReceipt.baseRawData, firstBytes)
+        XCTAssertEqual(oldReceipt.proposedBytes, afterFirst.sourceBytes)
+        XCTAssertEqual(newReceipt.baseRawData, afterFirst.sourceBytes)
+        XCTAssertEqual(newReceipt.proposedBytes, try Data(contentsOf: file))
+        let undoOld = try ImpressDuplexUndoGate.inverseDraft(oldReceipt,
+            expectedBaseDigest: first.baseDigest,
+            expectedAppliedDigest: ImVaultDigest.sha256(first.proposedBytes))
+        XCTAssertEqual(undoOld.decision(against: try Data(contentsOf: file)), .conflict)
+        let undoNew = try ImpressDuplexUndoGate.inverseDraft(newReceipt,
+            expectedBaseDigest: second.baseDigest,
+            expectedAppliedDigest: ImVaultDigest.sha256(second.proposedBytes))
+        guard case .written = try ImVaultGuardedWrite.commitFixture(
+            root: root, draft: undoNew, userConfirmedDiff: true) else {
+            XCTFail("Second approval must undo safely"); return
+        }
+        XCTAssertEqual(try Data(contentsOf: file), afterFirst.sourceBytes)
+        guard case .written = try ImVaultGuardedWrite.commitFixture(
+            root: root, draft: undoOld, userConfirmedDiff: true) else {
+            XCTFail("First approval must restore original"); return
+        }
+        XCTAssertEqual(try Data(contentsOf: file), firstBytes)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    @MainActor
+    func testNewDraftAfterExternalEditCannotOverwriteOldPendingWork() throws {
+        let root = try createRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = try ImVaultFileIdentity(vaultID: UUID().uuidString,
+            relativePath: "Notes/Safe.md")
+        let url = try put("# Initial", root: root, path: id.relativePath)
+        let live = try ImVaultReadSync.load(root: root, identity: id)
+        var unsent = try ImVaultDraft(identity: id, baseText: live.markdown,
+            baseRawData: live.sourceBytes)
+        try unsent.update("# Unsent correction")
+        try ImVaultPrivateStore.saveDraft(unsent)
+        try Data("# Third-party edit".utf8).write(to: url, options: .atomic)
+        let changed = try ImVaultReadSync.load(root: root, identity: id)
+        XCTAssertThrowsError(try ImVaultPrivateStore.startFreshDraft(
+            afterApplied: unsent, live: changed))
+        XCTAssertEqual(try ImVaultPrivateStore.loadDraft(identity: id)?.editedText,
+            unsent.editedText)
+        let stranger = try ImVaultFileIdentity(vaultID: "other-vault",
+            relativePath: id.relativePath)
+        XCTAssertNil(try ImVaultPrivateStore.approvedDraft(identity: stranger,
+            baseDigest: unsent.baseDigest,
+            editedDigest: ImVaultDigest.sha256(unsent.proposedBytes)))
+        XCTAssertEqual(try Data(contentsOf: url), changed.sourceBytes)
+    }
+
+    @MainActor
+    func testHistoricalDuplexPreviewKeepsOldDiffAfterLaterNoteDraft() throws {
+        let id = try ImVaultFileIdentity(vaultID: UUID().uuidString,
+            relativePath: "Notes/History.md")
+        var former = try ImVaultDraft(identity: id, baseText: "# Before\n[[Keep]]\n")
+        try former.update("# After\n[[Keep]]\n")
+        try ImVaultPrivateStore.saveDraft(former)
+        try ImVaultPrivateStore.archiveApprovedDraft(former)
+        let proposal = WCDBV3DuplexProposal(sourceMessageID: nil,
+            noteIdentity: id, noteBaseDigest: former.baseDigest,
+            noteEditedDigest: ImVaultDigest.sha256(former.proposedBytes),
+            cardID: nil, cardReviewRevision: nil, cardContentRevision: nil,
+            cardBaseQuestion: nil, cardBaseAnswer: nil,
+            cardEditedQuestion: nil, cardEditedAnswer: nil,
+            state: ImDuplexApprovalState(noteSelected: true,
+                cardSelected: false, noteStatus: .applied))
+        var later = try ImVaultDraft(identity: id, baseText: "# After\n[[Keep]]\n")
+        try later.update("# Later update\n[[Keep]]\n")
+        try ImVaultPrivateStore.saveDraft(later)
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
+            calculator: FSRS6ReviewCalculator())
+        let page = ImpressDuplexApprovalController(
+            repository: repo, proposal: proposal) { _ in true }
+        page.loadViewIfNeeded()
+        let view = try XCTUnwrap(page.view.subviews.compactMap {
+            $0 as? UITextView
+        }.first(where: { $0.accessibilityIdentifier == "impress.duplex.full-diff" }))
+        XCTAssertTrue(view.text.contains("- # Before"))
+        XCTAssertTrue(view.text.contains("+ # After"))
+        XCTAssertFalse(view.text.contains("Later update"))
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
     /// Standalone disposable File Provider fixture for end-to-end Chat +
     /// original-card tests. Helpers in another XCTestCase are private and
     /// deliberately must not be referenced across class boundaries.

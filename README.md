@@ -46,3 +46,7 @@ The feature-branch app and test targets now require **iOS 26.0**; the Podfile pl
 在 `feature/impress-duplex-loop-v1` 中追加一个独立临时测试 Vault → Markdown 章节候选卡 → WCDB 原卡 → FSRS 评分 → Chat 多会话与双目标批准 → QA fixture 文件协调写入 / 回读 → 原卡 CAS → 来源变化核查 → 逆向撤销 → 冷启动恢复的 XCTest 回归（`testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS`）。同时修复在合法 FSRS 评分后批准内容更新发生虚假调度冲突、以及意外取消正在进行的安全撤销记录的问题。详见本分支 `SMOKE_TEST_MATRIX.md` 与 `REQUIREMENT_EXECUTION_MATRIX_20261020.md`。
 
 **验收级别严格分开：** 该测试使用合成文本和临时 SQLite，不代表远端大模型、真机 iPhone13、iCloud 同步或用户 Vault 已验证。必须以此代码 SHA 的全套 CI 实际完成为自动化 PASS 依据；正式写入仍为 `ImVaultGuardedWrite.productionWriteEnabled = false`。原始图标与正式签名限制不变；无签名 IPA 仅是 QA 候选。
+
+## Duplex approved note revision retention (2026-10-20)
+
+Original and proposed Markdown bytes of each approved note edit are now kept as an immutable, protected `ImVaultPrivateStore/ApprovedDraft` record keyed by Vault ID, full relative path, base SHA-256 and proposed SHA-256. Starting a new revision after an already-applied QA edit requires explicit user selection and a fresh coordinated source read; old Chat receipts must never read the newer mutable working draft. A missing legacy source snapshot fails closed. This is local private storage only: it is not an encrypted external backup or verified iCloud sync, and a device reinstall can lack prior draft bytes. The production Vault write switch remains `false`. See SMOKE_TEST_MATRIX for 2-revision/undo fixture tests and remaining iPhone13 validation.
