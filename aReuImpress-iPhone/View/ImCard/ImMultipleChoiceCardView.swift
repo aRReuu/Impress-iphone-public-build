@@ -40,6 +40,9 @@ class ImMultipleChoiceCardView: UIView {
     // V3 review can contain up to 12 answers. Scroll inside the card instead
     // of squeezing equal-height options until content clips off-screen.
     private let optionsScrollView = UIScrollView()
+    private let explanationColumn = UIStackView()
+    private let explanationLabel = UILabel()
+    private var hasExplanation = false
     
     private var model: ImCardModel
     private let usesNativeOptionButtons: Bool
@@ -80,8 +83,24 @@ class ImMultipleChoiceCardView: UIView {
             // the same scrollable content column, not fight for card height.
             // Tinder's protectsVerticalContentScroll retains vertical reading.
             let metrics = ImpressV3Appearance.Metrics.self
+            let explanationTitle = UILabel()
+            explanationTitle.text = V3L("解析")
+            explanationTitle.font = ImpressV3Appearance.Typography.supporting
+            explanationTitle.textColor = ImpressV3Appearance.secondaryText
+            explanationTitle.adjustsFontForContentSizeCategory = true
+            explanationLabel.numberOfLines = 0
+            explanationLabel.font = ImpressV3Appearance.Typography.body
+            explanationLabel.textColor = ImpressV3Appearance.primaryText
+            explanationLabel.adjustsFontForContentSizeCategory = true
+            explanationLabel.accessibilityIdentifier = "impress.review.choice-explanation"
+            explanationColumn.axis = .vertical
+            explanationColumn.spacing = metrics.rowSpacing
+            explanationColumn.addArrangedSubview(explanationTitle)
+            explanationColumn.addArrangedSubview(explanationLabel)
+            explanationColumn.isHidden = true
+            explanationColumn.accessibilityElementsHidden = true
             let contentColumn = UIStackView(arrangedSubviews: [
-                questionLabel, optionsStackView
+                questionLabel, optionsStackView, explanationColumn
             ])
             contentColumn.axis = .vertical
             contentColumn.distribution = .fill
@@ -133,6 +152,20 @@ class ImMultipleChoiceCardView: UIView {
     
     func configure(with model: ImCardModel) {
         if usesNativeOptionButtons {
+            let labels = (model.choices ?? "").components(separatedBy: "\n")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            let correct = Set((model.correctAnswerIndices ?? "").split(separator: ",")
+                .compactMap { Int($0) })
+            let correctLabels = labels.enumerated().compactMap {
+                correct.contains($0.offset) ? $0.element : nil
+            }.joined(separator: "、")
+            let explanation = ImpressV3ChoiceExplanation.decode(
+                model.answer ?? "", correctLabels: correctLabels)
+            hasExplanation = !explanation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            explanationLabel.attributedText = MarkdownKitRenderer()
+                .parseMarkdown(explanation) ?? NSAttributedString(string: explanation)
+            explanationColumn.isHidden = true
+            explanationColumn.accessibilityElementsHidden = true
             questionLabel.attributedText = MarkdownKitRenderer().parseMarkdown(model.question ?? "")
                 ?? NSAttributedString(string: model.question ?? "")
         } else {
@@ -254,6 +287,10 @@ class ImMultipleChoiceCardView: UIView {
     func showAnswer() {
         guard !isAnswerShown else { return }
         isAnswerShown = true
+        if usesNativeOptionButtons && hasExplanation {
+            explanationColumn.isHidden = false
+            explanationColumn.accessibilityElementsHidden = false
+        }
         onAnswerRevealed?()
 
         // 关键修复：即使 correctIndicesString 为 nil，也继续执行，确保有视觉反馈

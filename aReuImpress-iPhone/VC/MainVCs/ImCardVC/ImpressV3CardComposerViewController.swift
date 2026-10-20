@@ -6,6 +6,23 @@ import ImageIO
 // R04.2: V3 owns its editor, rather than mutating the legacy generic
 // ImSubmitViewController used by chat drafts and older card workflows.
 // Switching the selected type never destroys question/answer/image drafts.
+/// Legacy choice answerText stored only the labels of correct options.
+/// correctIndices remains authoritative; this reversible suffix stores optional
+/// explanation without rewriting existing WCDB records.
+enum ImpressV3ChoiceExplanation {
+    static let separator = "\n\n解析：\n"
+    static func encode(correctLabels: String, explanation: String) -> String {
+        let edited = explanation.trimmingCharacters(in: .whitespacesAndNewlines)
+        return edited.isEmpty ? correctLabels : correctLabels + separator + edited
+    }
+    static func decode(_ stored: String, correctLabels: String) -> String {
+        if stored == correctLabels { return "" }
+        let prefix = correctLabels + separator
+        if stored.hasPrefix(prefix) { return String(stored.dropFirst(prefix.count)) }
+        return stored // Preserve unknown legacy/imported content without data loss.
+    }
+}
+
 struct ImpressV3CardDraft {
     struct Choice: Equatable {
         let id: UUID
@@ -50,7 +67,9 @@ struct ImpressV3CardDraft {
             guard allowsMultipleCorrect || correct.count == 1
             else { throw ValidationError.singleCorrectOnly }
             return WCDBV3CardInput(cardID: cardID, question: prompt,
-                                  answerText: correct.map { labels[$0] }.joined(separator: "、"),
+                                  answerText: ImpressV3ChoiceExplanation.encode(
+                                       correctLabels: correct.map { labels[$0] }.joined(separator: "、"),
+                                       explanation: answer),
                                   choices: labels.joined(separator: "\n"),
                                   correctIndices: correct.map(String.init).joined(separator: ","),
                                   cardType: CardType.multipleChoice.rawValue,
@@ -91,6 +110,9 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
     private let typePicker = UISegmentedControl(items: [V3L("问答"), V3L("选择题"), V3L("图片")])
     private let questionView = UITextView()
     private let answerView = UITextView()
+    private var standardAnswerDraft: String
+    private var choiceExplanationDraft: String
+    private var answerTitleLabel: UILabel?
     private let qaSection = UIStackView()
     private let choiceSection = UIStackView()
     private let photoSection = UIStackView()
@@ -115,6 +137,13 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         self.editingCardID = editingCardID
         self.originalDraft = draft
         self.currentType = draft.kind
+        self.standardAnswerDraft = draft.kind == .standard ? draft.answer : ""
+        let correctLabels = draft.choices.filter { $0.isCorrect }
+            .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .joined(separator: "、")
+        self.choiceExplanationDraft = draft.kind == .multipleChoice
+            ? ImpressV3ChoiceExplanation.decode(draft.answer, correctLabels: correctLabels)
+            : ""
         self.choiceDrafts = draft.choices
         self.imageData = draft.imageData
         super.init(nibName: nil, bundle: nil)
@@ -237,12 +266,15 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         answerView.font = ImpressV3Appearance.Typography.body
         answerView.adjustsFontForContentSizeCategory = true
         answerView.textColor = ImpressV3Appearance.primaryText
-        answerView.text = originalDraft.answer
+        answerView.text = currentType == .multipleChoice
+            ? choiceExplanationDraft : standardAnswerDraft
         answerView.textContainerInset = UIEdgeInsets(top: ImpressV3Appearance.Metrics.fieldPadding, left: ImpressV3Appearance.Metrics.fieldPadding, bottom: ImpressV3Appearance.Metrics.fieldPadding, right: ImpressV3Appearance.Metrics.fieldPadding)
         answerView.heightAnchor.constraint(greaterThanOrEqualToConstant: ImpressV3Appearance.Metrics.answerEditorMinHeight).isActive = true
         ImpressSpeechAccessory.install(on: answerView)
         answerView.accessibilityLabel = V3L("答案")
-        qaSection.addArrangedSubview(makeLabeledGroup(V3L("答案"), child: answerView))
+        let answerGroup = makeLabeledGroup(V3L("答案"), child: answerView)
+        answerTitleLabel = answerGroup.arrangedSubviews.first as? UILabel
+        qaSection.addArrangedSubview(answerGroup)
     }
 
     private func configureChoices() {
@@ -287,17 +319,26 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
     }
 
     @objc private func typeDidChange() {
+        switch currentType {
+        case .standard: standardAnswerDraft = answerView.text ?? ""
+        case .multipleChoice: choiceExplanationDraft = answerView.text ?? ""
+        case .image: break
+        }
         switch typePicker.selectedSegmentIndex {
         case 1: currentType = .multipleChoice
         case 2: currentType = .image
         default: currentType = .standard
         }
-        // The three editors remain alive even when hidden; no data loss.
+        answerView.text = currentType == .multipleChoice
+            ? choiceExplanationDraft : standardAnswerDraft
         updateVisibleType()
     }
 
     private func updateVisibleType() {
-        qaSection.isHidden = currentType != .standard
+        qaSection.isHidden = currentType == .image
+        answerTitleLabel?.text = currentType == .multipleChoice
+            ? V3L("解析（可选）") : V3L("答案")
+        answerView.accessibilityLabel = answerTitleLabel?.text
         choiceSection.isHidden = currentType != .multipleChoice
         photoSection.isHidden = currentType != .image
     }
@@ -365,9 +406,11 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
     private func draft() -> ImpressV3CardDraft {
         // This reads form controls without changing any stored business data.
         syncOptionEdits()
+        let currentAnswer = currentType == .image
+            ? standardAnswerDraft : (answerView.text ?? "")
         return ImpressV3CardDraft(kind: currentType,
                                   question: questionView.text,
-                                  answer: answerView.text,
+                                  answer: currentAnswer,
                                   choices: choiceDrafts,
                                   allowsMultipleCorrect: choiceMode.selectedSegmentIndex == 1,
                                   imageData: imageData,

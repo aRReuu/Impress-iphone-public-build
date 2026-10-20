@@ -795,6 +795,8 @@ final class ImpressR042AppearanceTests: XCTestCase {
         model.cardType = CardType.multipleChoice.rawValue
         model.choices = (1...12).map { "选项 \($0)" }.joined(separator: "\n")
         model.correctAnswerIndices = "0,4"
+        model.answer = "选项 1、选项 5\n\n解析：\n## 解析标题\n**原因**：" +
+            String(repeating: "详细解释。", count: 70)
         let view = ImMultipleChoiceCardView(
             model: model, usesNativeOptionButtons: true)
         view.frame = CGRect(x: 0, y: 0, width: 350, height: 420)
@@ -817,9 +819,16 @@ final class ImpressR042AppearanceTests: XCTestCase {
         XCTAssertTrue(options.allSatisfy {
             $0.configuration?.background.backgroundColor == ImpressV3Appearance.optionSurface
         })
+        let explanation = descendants(view, UILabel.self).first {
+            $0.accessibilityIdentifier == "impress.review.choice-explanation"
+        }
+        XCTAssertNotNil(explanation)
+        XCTAssertTrue(explanation?.superview?.isHidden == true)
         XCTAssertFalse(view.answerIsRevealed)
         view.showAnswer()
         XCTAssertTrue(view.answerIsRevealed)
+        XCTAssertFalse(explanation?.superview?.isHidden ?? true)
+        XCTAssertTrue(explanation?.attributedText?.string.contains("解析标题") == true)
         XCTAssertFalse(options[0].isUserInteractionEnabled)
         XCTAssertTrue(options[0].isEnabled) // no dimmed correct-answer text
         XCTAssertEqual(options[0].configuration?.background.backgroundColor,
@@ -850,6 +859,25 @@ final class ImpressR042CardComposerTests: XCTestCase {
         XCTAssertEqual(input.choices, "李世民\n李渊\n李白")
         XCTAssertEqual(input.correctIndices, "1")
         XCTAssertEqual(input.answerText, "李渊")
+    }
+
+    func testChoiceExplanationIsIndependentFromCorrectIndicesAndSurvivesLegacyReads() throws {
+        var draft = ImpressV3CardDraft()
+        draft.kind = .multipleChoice
+        draft.question = "解释这个答案"
+        draft.choices = [
+            .init(text: "A", isCorrect: true),
+            .init(text: "B", isCorrect: false)
+        ]
+        draft.answer = "## 理由\n不因为它更长。"
+        let input = try draft.validatedInput()
+        XCTAssertEqual(input.correctIndices, "0")
+        XCTAssertEqual(input.answerText, "A\n\n解析：\n## 理由\n不因为它更长。")
+        XCTAssertEqual(ImpressV3ChoiceExplanation.decode(
+            try XCTUnwrap(input.answerText), correctLabels: "A"), draft.answer)
+        XCTAssertEqual(ImpressV3ChoiceExplanation.decode("A", correctLabels: "A"), "")
+        XCTAssertEqual(ImpressV3ChoiceExplanation.decode("原有导入解析",
+            correctLabels: "A"), "原有导入解析")
     }
 
     func testMultipleAnswerSerializesSortedIndicesAndSourcePath() throws {
