@@ -40,6 +40,9 @@ final class ImpressAINativeChatViewController: UIViewController,
     private let sourceCardID: UUID?
     private let sourceContentRevision: Int?
     private let injectedRepository: ReviewWCDBRepository?
+    private let explicitSourceKey: String?
+    private let sourceVersionToken: String?
+    private let noteIdentity: ImVaultFileIdentity?
     private var chatRepository: ReviewWCDBRepository?
     private var storedSession: WCDBV3ChatSession?
     private var contextReferences: [WCDBV3ChatContextReference] = []
@@ -56,7 +59,10 @@ final class ImpressAINativeChatViewController: UIViewController,
     private var draftDebounce: Task<Void, Never>?
 
     private var sourceIdentity: String? {
-        sourceCardID.map { "card:" + $0.uuidString }
+        explicitSourceKey ?? sourceCardID.map { "card:" + $0.uuidString }
+    }
+    private var currentSourceVersion: String {
+        sourceVersionToken ?? String(sourceContentRevision ?? -1)
     }
 
     private let tableView = UITableView(frame: .zero, style: .plain)
@@ -71,7 +77,12 @@ final class ImpressAINativeChatViewController: UIViewController,
 
     init(question: String? = nil, answer: String? = nil,
          cardID: UUID? = nil, contentRevision: Int? = nil,
-         repository: ReviewWCDBRepository? = nil) {
+         repository: ReviewWCDBRepository? = nil,
+         sourceKey: String? = nil, sourceVersion: String? = nil,
+         noteIdentity: ImVaultFileIdentity? = nil) {
+        self.explicitSourceKey = sourceKey
+        self.sourceVersionToken = sourceVersion
+        self.noteIdentity = noteIdentity
         self.sourceQuestion = question
         self.sourceAnswer = answer
         self.sourceCardID = cardID
@@ -419,7 +430,9 @@ final class ImpressAINativeChatViewController: UIViewController,
                                      route: ImpressAIResolvedRoute) {
         if !contextChoiceMade, let question = sourceQuestion, !question.isEmpty {
             let confirm = UIAlertController(title: V3L("是否附带当前卡片？"),
-                message: V3L("只有你确认后，本次讨论才会将卡片问题与参考答案一起发送给所选的 API 服务商。"),
+                message: noteIdentity == nil
+                    ? V3L("只有确认后，才会发送当前卡片的问题与答案。")
+                    : V3L("只有确认后，才会发送本次明确载入的笔记材料。过长笔记不会自动发送全文。"),
                 preferredStyle: .alert)
             confirm.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
             confirm.addAction(UIAlertAction(title: V3L("仅发送输入内容"),
@@ -430,7 +443,8 @@ final class ImpressAINativeChatViewController: UIViewController,
                 contextReferences = []
                 performSend(text, route: route)
             })
-            confirm.addAction(UIAlertAction(title: V3L("附带当前卡片"),
+            confirm.addAction(UIAlertAction(title: noteIdentity == nil
+                ? V3L("附带当前卡片") : V3L("附带本次笔记材料"),
                                             style: .default) { [weak self] _ in
                 guard let self else { return }
                 contextChoiceMade = true
@@ -438,7 +452,7 @@ final class ImpressAINativeChatViewController: UIViewController,
                 if let identity = sourceIdentity {
                     contextReferences = [WCDBV3ChatContextReference(
                         stableIdentity: identity,
-                        sourceRevision: String(sourceContentRevision ?? -1),
+                        sourceRevision: currentSourceVersion,
                         excerpt: question + "\n" + (sourceAnswer ?? ""))]
                 }
                 performSend(text, route: route)
@@ -477,6 +491,20 @@ final class ImpressAINativeChatViewController: UIViewController,
         Task {
             await priorSave?.value
             do {
+                // Re-check the authorized Vault and content SHA immediately
+                // before any note context is sent to a remote provider.
+                if self.includeCardContext, let noteID = self.noteIdentity,
+                   let expectedSHA = self.sourceVersionToken {
+                    let current: ImVaultRawDocument = try await withCheckedThrowingContinuation {
+                        (continuation: CheckedContinuation<ImVaultRawDocument, Error>) in
+                        ImVaultReadSync.shared.read(noteID) { result in
+                            continuation.resume(with: result)
+                        }
+                    }
+                    guard current.digest == expectedSHA else {
+                        throw ChatFlowError.sourceChanged
+                    }
+                }
                 // The current card can change while this controller is open.
                 // Never transmit or grade using a stale identity/revision.
                 if let id = sourceCardID, let revision = sourceContentRevision {
@@ -563,7 +591,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         contextReferences = session.contextReferences
         requestFailure = session.requestError
         let approved = contextReferences.first(where: { $0.stableIdentity == sourceIdentity })
-        let stillCurrent = approved?.sourceRevision == String(sourceContentRevision ?? -1)
+        let stillCurrent = approved?.sourceRevision == currentSourceVersion
         includeCardContext = approved != nil && stillCurrent
         contextChoiceMade = includeCardContext
         if approved != nil && !stillCurrent {

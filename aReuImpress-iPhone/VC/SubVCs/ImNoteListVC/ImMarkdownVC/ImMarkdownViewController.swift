@@ -661,10 +661,6 @@ final class ImVaultDocumentController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         pathLabel.text = V3L("只读") + " · " + document.identity.relativePath
-        navigationItem.rightBarButtonItems?.first?.accessibilityLabel = V3L("编辑独立草稿")
-        if let actions = navigationItem.rightBarButtonItems, actions.count >= 2 {
-            actions[1].accessibilityLabel = V3L("切换 Markdown 源码")
-        }
     }
 
 
@@ -742,7 +738,30 @@ final class ImVaultDocumentController: UIViewController {
             style: .plain, target: self, action: #selector(openLinkedCards))
         links.accessibilityLabel = V3L("关联卡片")
         links.accessibilityIdentifier = "impress.notes.linked-cards"
-        navigationItem.rightBarButtonItems = [draft, source, generate, links]
+        let discussion = UIBarButtonItem(image: UIImage(systemName: "bubble.left.and.bubble.right"),
+            style: .plain, target: self, action: #selector(openNativeNoteDiscussion))
+        discussion.accessibilityLabel = V3L("AI 讨论")
+        discussion.accessibilityIdentifier = "impress.notes.ai-discussion"
+        let more = UIBarButtonItem(image: UIImage(systemName: "ellipsis.circle"),
+            style: .plain, target: nil, action: nil)
+        more.accessibilityLabel = V3L("更多笔记操作")
+        more.menu = UIMenu(children: [
+            UIAction(title: V3L("编辑独立草稿"),
+                image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in self?.editDraft() },
+            UIAction(title: V3L("查看 Markdown 源码"),
+                image: UIImage(systemName: "chevron.left.forwardslash.chevron.right")) {
+                    [weak self] _ in self?.toggleSource()
+                },
+            UIAction(title: V3L("根据笔记生成卡片"),
+                image: UIImage(systemName: "questionmark.square")) {
+                    [weak self] _ in self?.generateAIQuestions()
+                },
+            UIAction(title: V3L("关联卡片"),
+                image: UIImage(systemName: "rectangle.stack")) {
+                    [weak self] _ in self?.openLinkedCards()
+                }
+        ])
+        navigationItem.rightBarButtonItems = [discussion, more]
         renderBody()
         // Replaces only explicitly referenced local image embeds with bounded
         // in-memory data URIs. Never reads outside this authorized Vault.
@@ -843,6 +862,37 @@ final class ImVaultDocumentController: UIViewController {
     @objc private func generateAIQuestions() {
         navigationController?.pushViewController(
             ImpressAIQuestionGenerationViewController(document: document), animated: true)
+    }
+
+    @objc private func openNativeNoteDiscussion() {
+        guard ImVaultReadOnlyProbe.shared.authorizedVaultID == document.identity.vaultID else {
+            showVaultError(V3L("Vault 授权已失效"), error: ImVaultCoreError.invalidVaultIdentity)
+            return
+        }
+        do {
+            let repository = try ImpressV3ReviewEnvironment.repository()
+            // Stable Vault+path, NOT content digest: editing a note must not
+            // silently orphan the discussion history.
+            let key = "note:" + (try ImpressBatchSourceKey.encode(document.identity))
+            let canShareWholeNote = document.markdown.utf8.count <= 8_000
+            let chat = ImpressAINativeChatViewController(
+                question: V3L("来源笔记：") + document.identity.relativePath,
+                answer: canShareWholeNote ? document.markdown : nil,
+                repository: repository,
+                sourceKey: key, sourceVersion: document.digest,
+                noteIdentity: document.identity)
+            navigationController?.pushViewController(chat, animated: true)
+            if !canShareWholeNote {
+                // Never pretend the full document is loaded into the model.
+                let notice = UIAlertController(title: V3L("笔记正文较长"),
+                    message: V3L("本次未附带笔记正文，只提供来源标识；请明确选取片段后再讨论。不会自动截取前半段。"),
+                    preferredStyle: .alert)
+                notice.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+                chat.present(notice, animated: true)
+            }
+        } catch {
+            showVaultError(V3L("无法打开笔记讨论"), error: error)
+        }
     }
 
     @objc private func openLinkedCards() {

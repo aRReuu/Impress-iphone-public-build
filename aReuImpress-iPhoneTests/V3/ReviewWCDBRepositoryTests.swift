@@ -343,6 +343,27 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
     }
 
     @MainActor
+    func testNoteScopedChatRestoresWithoutLeakingAcrossCardSource() async throws {
+        let repository = try ReviewWCDBRepository(
+            databasePath: temporaryPath(), calculator: FSRS6ReviewCalculator())
+        let source = "note:qa-vault-identity"
+        var saved = WCDBV3ChatSession(sourceIdentity: source)
+        saved.messages = [WCDBV3ChatMessage(role: .user,
+            text: "My note discussion", status: .completed)]
+        try await repository.saveChatSession(saved, expectedRevision: nil)
+        let chat = ImpressAINativeChatViewController(question: "Note", answer: nil,
+            repository: repository, sourceKey: source, sourceVersion: "sha256")
+        chat.loadViewIfNeeded()
+        let transcript = try XCTUnwrap(chat.view.subviews
+            .compactMap { $0 as? UITableView }.first)
+        for _ in 0..<100 where transcript.numberOfRows(inSection: 0) != 1 {
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        XCTAssertEqual(transcript.numberOfRows(inSection: 0), 1)
+        XCTAssertTrue(try await repository.chatSessions(for: "card:" + UUID().uuidString).isEmpty)
+    }
+
+    @MainActor
     func testNativeChatRendersSelectableMarkdownAndVisibleContextControls() throws {
         let controller = ImpressAINativeChatViewController()
         controller.loadViewIfNeeded()
