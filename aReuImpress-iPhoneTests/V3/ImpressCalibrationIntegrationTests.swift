@@ -18,6 +18,8 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
         XCTAssertTrue((tabs[1] as? UINavigationController)?.viewControllers.first
                       is ImpressNoteListTableViewController)
         XCTAssertTrue((tabs[2] as? UINavigationController)?.viewControllers.first
+                      is ImpressCalibrationViewController)
+        XCTAssertTrue((tabs[3] as? UINavigationController)?.viewControllers.first
                       is ImpressV3SettingsHubViewController)
         let review = try XCTUnwrap((tabs[0] as? UINavigationController)?
             .viewControllers.first as? ImpressV3ReviewViewController)

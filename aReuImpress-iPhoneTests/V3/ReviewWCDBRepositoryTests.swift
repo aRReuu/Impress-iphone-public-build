@@ -22,6 +22,10 @@ private struct FailingReviewCalculator: WCDBReviewCalculating {
 }
 
 final class ReviewWCDBRepositoryTests: XCTestCase {
+    @MainActor private func allSubviews(_ view: UIView) -> [UIView] {
+        [view] + view.subviews.flatMap { allSubviews($0) }
+    }
+
 
     @MainActor
     func testOriginalCardOffersVerifiedSourceSectionWithoutReplacingFullNote() throws {
@@ -966,6 +970,46 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
 
 
     @MainActor
+    @MainActor
+    func testMarkdownMaterialRangesPreserveSourceUTF8AndRejectForgedOffsets() throws {
+        let identity = try ImVaultFileIdentity(vaultID: "qa-structure",
+            relativePath: "Notes/Mixed.md")
+        let raw = "\u{FEFF}# Topic\r\n父节\r\n## 子节\r\n文本 🌿\n# Next\nA"
+        let data = Data(raw.utf8)
+        let digest = ImVaultDigest.sha256(data)
+        let doc = ImVaultRawDocument(identity: identity,
+            sourceBytes: data, markdown: raw, digest: digest)
+        let sections = ImpressAISectionExtractor.sections(in: raw)
+        XCTAssertEqual(sections.map(\.heading), ["Topic", "子节", "Next"])
+        let selected = try XCTUnwrap(sections.first { $0.heading == "子节" })
+        let ref = WCDBV3ChatContextReference(stableIdentity: "note:fixture",
+            sourceRevision: digest, excerpt: selected.text,
+            sourceStartUTF8: selected.startUTF8, sourceEndUTF8: selected.endUTF8,
+            sourceFormat: "markdown")
+        XCTAssertNoThrow(try ImpressChatNoteUploadGate.validate(
+            document: doc, expectedIdentity: identity,
+            expectedDigest: digest, conversationKey: "note:fixture", excerpts: [ref]))
+        let wrongSpan = WCDBV3ChatContextReference(stableIdentity: "note:fixture",
+            sourceRevision: digest, excerpt: selected.text,
+            sourceStartUTF8: selected.startUTF8 + 1, sourceEndUTF8: selected.endUTF8,
+            sourceFormat: "markdown")
+        XCTAssertThrowsError(try ImpressChatNoteUploadGate.validate(
+            document: doc, expectedIdentity: identity,
+            expectedDigest: digest, conversationKey: "note:fixture",
+            excerpts: [wrongSpan]))
+        let halfSpan = WCDBV3ChatContextReference(stableIdentity: "note:fixture",
+            sourceRevision: digest, excerpt: selected.text,
+            sourceStartUTF8: selected.startUTF8, sourceEndUTF8: nil,
+            sourceFormat: "markdown")
+        XCTAssertThrowsError(try ImpressChatNoteUploadGate.validate(
+            document: doc, expectedIdentity: identity,
+            expectedDigest: digest, conversationKey: "note:fixture",
+            excerpts: [halfSpan]))
+        let effective = ImpressAISectionExtractor.effectiveSelection(sections,
+            selectedIDs: Set(sections.map(\.id)))
+        XCTAssertEqual(effective.map(\.heading), ["Topic", "Next"])
+    }
+
     func testChatNoteMaterialGateRejectsStaleForgedAndOversizedExcerpts() throws {
         let identity = try ImVaultFileIdentity(vaultID: "qa-vault",
             relativePath: "Lessons/Mechanics.md")
@@ -1232,6 +1276,7 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         b.messages = [WCDBV3ChatMessage(role: .user, text: "Review other note",
             status: .completed), target]
         b.promptOverride = "One local prompt"
+        b.sourceDisplayName = "Research/Concepts/Thought.md"
         b.inputDraft = "A completely separate draft"
         try await repo.saveChatSession(a, expectedRevision: nil)
         try await repo.saveChatSession(b, expectedRevision: nil)
@@ -1253,7 +1298,7 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             didSelectRowAt: IndexPath(row: 0, section: 0))
         XCTAssertEqual(selected, b.sessionID)
         XCTAssertEqual(selectedMessage, target.messageID)
-        search.searchBar.text = "note:another-vault"
+        search.searchBar.text = "Thought.md"
         history.updateSearchResults(for: search)
         XCTAssertEqual(history.tableView(history.tableView, numberOfRowsInSection: 0), 1)
     }
@@ -1480,6 +1525,15 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
 
     @MainActor
     func testNativeChatUIListsAndPreservesMultipleSessions() async throws {
+        let priorIntro = UserDefaults.standard.object(forKey: "ImpressV11ChatIntroductionSeen")
+        UserDefaults.standard.set(true, forKey: "ImpressV11ChatIntroductionSeen")
+        defer {
+            if let priorIntro {
+                UserDefaults.standard.set(priorIntro, forKey: "ImpressV11ChatIntroductionSeen")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "ImpressV11ChatIntroductionSeen")
+            }
+        }
         let repo = try ReviewWCDBRepository(
             databasePath: temporaryPath(), calculator: FSRS6ReviewCalculator())
         let id = UUID(), source = "card:" + id.uuidString
@@ -1501,7 +1555,7 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
         chat.loadViewIfNeeded()
-        let input = try XCTUnwrap(chat.view.subviews.flatMap { [$0] + $0.subviews }
+        let input = try XCTUnwrap(allSubviews(chat.view)
             .compactMap { $0 as? UITextView }
             .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.input" }))
         for _ in 0..<100 where input.text != "Old draft" {
@@ -1509,12 +1563,16 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         }
         XCTAssertEqual(input.text, "Old draft")
         let bars = try XCTUnwrap(chat.navigationItem.rightBarButtonItems)
-        let history = try XCTUnwrap(bars.first(where: {
-            $0.accessibilityIdentifier == "impress.ai.chat.history" }))
+        let features = try XCTUnwrap(bars.first(where: {
+            $0.accessibilityIdentifier == "impress.ai.chat.features" }))
         let add = try XCTUnwrap(bars.first(where: {
             $0.accessibilityIdentifier == "impress.ai.chat.new-discussion" }))
-        _ = UIApplication.shared.sendAction(try XCTUnwrap(history.action),
-                                           to: history.target, from: history, for: nil)
+        _ = UIApplication.shared.sendAction(try XCTUnwrap(features.action),
+                                           to: features.target, from: features, for: nil)
+        let featureList = try XCTUnwrap(nav.topViewController
+            as? ImpressChatFeatureListViewController)
+        featureList.tableView(featureList.tableView,
+            didSelectRowAt: IndexPath(row: 1, section: 0))
         for _ in 0..<100 where !(nav.topViewController is ImpressChatSessionHistoryViewController) {
             try await Task.sleep(for: .milliseconds(30))
         }
@@ -1634,14 +1692,21 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
     }
 
     @MainActor
-    func testNativeChatRendersSelectableMarkdownAndVisibleContextControls() throws {
+    func testNativeChatRendersSelectableMarkdownWithSecondaryFeatures() throws {
         let controller = ImpressAINativeChatViewController()
         controller.loadViewIfNeeded()
-        let elements = controller.view.subviews.flatMap { [$0] + $0.subviews }
-        XCTAssertNotNil(elements.compactMap { $0 as? UIButton }
-            .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.prompt" }))
-        XCTAssertNotNil(elements.compactMap { $0 as? UIButton }
-            .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.materials" }))
+        let elements = allSubviews(controller.view)
+        let buttons = elements.compactMap { $0 as? UIButton }
+        XCTAssertNil(buttons.first(where: {
+            $0.accessibilityIdentifier == "impress.ai.chat.prompt" ||
+            $0.accessibilityIdentifier == "impress.ai.chat.materials"
+        }))
+        XCTAssertNotNil(buttons.first(where: {
+            $0.accessibilityIdentifier == "impress.ai.chat.add-material"
+        }))
+        XCTAssertEqual(controller.navigationItem.rightBarButtonItems?
+            .compactMap(\.accessibilityIdentifier),
+            ["impress.ai.chat.new-discussion", "impress.ai.chat.features"])
         let cell = ImpressChatMessageCell(style: .default, reuseIdentifier: "QA")
         cell.configure(WCDBV3ChatMessage(role: .assistant,
             text: "# Heading\n\n**Markdown** and long text",
@@ -1674,7 +1739,7 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             question: "Q", answer: "A", cardID: cardID,
             contentRevision: 0, repository: repository)
         chat.loadViewIfNeeded()
-        let input = try XCTUnwrap(chat.view.subviews.flatMap { [$0] + $0.subviews }
+        let input = try XCTUnwrap(allSubviews(chat.view)
             .compactMap { $0 as? UITextView }
             .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.input" }))
         let transcript = try XCTUnwrap(chat.view.subviews
@@ -3355,17 +3420,23 @@ final class ImpressAICustomAPIUITests: XCTestCase {
     func testNativeChatHasPrivacyDisclosureAndSendIsInitiallyDisabled() {
         let conversation = ImpressAINativeChatViewController()
         conversation.loadViewIfNeeded()
-        XCTAssertEqual(conversation.title, V3L("AI 讨论"))
-        let sendButton = conversation.view.subviews
-            .flatMap { $0.subviews }
-            .compactMap { $0 as? UIButton }
-            .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.send" })
-        XCTAssertNotNil(sendButton)
-        XCTAssertFalse(sendButton?.isEnabled ?? true)
-        let prompt = conversation.view.subviews
-            .compactMap { $0 as? UILabel }
-            .first { $0.text == V3L("对话与草稿保存在本机；只有点击发送并确认材料后才会发送给服务商。不会自动写入 Obsidian。") }
-        XCTAssertNotNil(prompt)
+        XCTAssertTrue(conversation.title?.isEmpty ?? true)
+        XCTAssertNil(conversation.navigationItem.prompt)
+        func descendants(_ view: UIView) -> [UIView] {
+            [view] + view.subviews.flatMap { descendants($0) }
+        }
+        let elements = descendants(conversation.view)
+        let send = elements.compactMap { $0 as? UIButton }.first {
+            $0.accessibilityIdentifier == "impress.ai.chat.send"
+        }
+        XCTAssertNotNil(send)
+        XCTAssertFalse(send?.isEnabled ?? true)
+        XCTAssertNotNil(elements.compactMap { $0 as? UIButton }.first {
+            $0.accessibilityIdentifier == "impress.ai.chat.add-material"
+        })
+        XCTAssertFalse(elements.compactMap { $0 as? UILabel }.contains {
+            $0.text == V3L("对话与草稿保存在本机；只有点击发送并确认材料后才会发送给服务商。不会自动写入 Obsidian。")
+        })
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 

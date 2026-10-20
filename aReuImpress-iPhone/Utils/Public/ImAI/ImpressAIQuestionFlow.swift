@@ -5,48 +5,42 @@ struct ImpressAISectionItem {
     let id: String
     let heading: String
     let text: String
+    /// Exact original file offsets; the rendered text is only a projection.
+    let startUTF8: Int
+    let endUTF8: Int
+    let level: Int
+    let parentID: String?
 }
 
-// Reads only a previously authorized, coordinated Vault document.
-// Headings inside fenced code are ignored; duplicate headings remain distinct
-// because IDs derive from sequence position rather than heading strings.
+/// Exactly one structural parser is shared by Notes and Chat. Older
+/// section-N IDs remain valid for ordinary flat ATX documents. Never infer
+/// a changed/moved section from an identical title.
 enum ImpressAISectionExtractor {
     static func sections(in markdown: String) -> [ImpressAISectionItem] {
-        let lines = markdown.replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-            .components(separatedBy: "\n")
-        var sections: [ImpressAISectionItem] = []
-        var buffer: [String] = []
-        var current = "全文"
-        var fenced: Character?
-        func flush() {
-            let text = buffer.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty {
-                sections.append(ImpressAISectionItem(id: "section-\(sections.count)", heading: current, text: text))
-            }
-            buffer.removeAll()
+        ImpressMarkdownStructure.sections(in: markdown).map { section in
+            ImpressAISectionItem(id: section.id, heading: section.heading,
+                text: section.text, startUTF8: section.startUTF8,
+                endUTF8: section.endUTF8, level: section.level,
+                parentID: section.parentID)
         }
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("```") {
-                fenced = fenced == "`" ? nil : "`"
-            } else if trimmed.hasPrefix("~~~") {
-                fenced = fenced == "~" ? nil : "~"
-            }
-            if fenced == nil && trimmed.hasPrefix("#") &&
-                trimmed.firstIndex(where: { $0 != "#" }) != nil {
-                let stripped = trimmed.drop(while: { $0 == "#" })
-                if stripped.first == " " {
-                    flush()
-                    current = String(stripped.dropFirst()).trimmingCharacters(in: .whitespaces)
-                    buffer.append(line)
-                    continue
-                }
-            }
-            buffer.append(line)
+    }
+
+    /// Deduplicate overlapping parent/child spans *before* computing the
+    /// outbound payload size. Explicit child-only selection remains narrow.
+    static func effectiveSelection(_ sections: [ImpressAISectionItem],
+                                   selectedIDs: Set<String>) -> [ImpressAISectionItem] {
+        let selected = sections.filter { selectedIDs.contains($0.id) }.sorted {
+            if $0.startUTF8 != $1.startUTF8 { return $0.startUTF8 < $1.startUTF8 }
+            return $0.endUTF8 > $1.endUTF8
         }
-        flush()
-        return sections
+        var effective: [ImpressAISectionItem] = []
+        for section in selected {
+            if effective.contains(where: {
+                $0.startUTF8 <= section.startUTF8 && section.endUTF8 <= $0.endUTF8
+            }) { continue }
+            effective.append(section)
+        }
+        return effective
     }
 }
 
@@ -217,7 +211,8 @@ final class ImpressAIQuestionGenerationViewController: UITableViewController {
         } else {
             let item = sections[indexPath.row]
             var ui = UIListContentConfiguration.subtitleCell()
-            ui.text = item.heading.isEmpty ? V3L("未命名章节") : item.heading
+            ui.text = String(repeating: "  ", count: max(0, item.level - 1)) +
+                (item.heading.isEmpty ? V3L("未命名章节") : item.heading)
             ui.secondaryText = "\(item.text.count) \(V3L("字符"))"
             ui.textProperties.font = ImpressV3Appearance.Typography.body
             cell.contentConfiguration = ui
@@ -241,7 +236,8 @@ final class ImpressAIQuestionGenerationViewController: UITableViewController {
         let resolved: ImpressAIResolvedRoute
         do { resolved = try config.resolve(.questionGeneration) }
         catch { showFailure(error); return }
-        let chosen = sections.filter { selected.contains($0.id) }
+        let chosen = ImpressAISectionExtractor.effectiveSelection(
+            sections, selectedIDs: selected)
         guard !chosen.isEmpty else { showFailure(ImpressAIContractError.invalidRequest); return }
         let source = ImpressAISource(vaultID: document.identity.vaultID,
                 relativePath: document.identity.relativePath,

@@ -73,9 +73,23 @@ enum ImpressChatNoteUploadGate {
             }
             guard item.stableIdentity == conversationKey,
                   item.sourceRevision == expectedDigest,
-                  !item.excerpt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  item.excerpt == document.markdown ||
-                  sections.contains(where: { $0.text == item.excerpt }) else {
+                  (item.sourceFormat == nil || item.sourceFormat == "markdown"),
+                  !item.excerpt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw ImVaultSyncFailure.conflict
+            }
+            // Legacy v1-v3 selections had no byte span. Preserve exact-text
+            // compatibility; V1.1 selections must additionally match both
+            // source byte boundaries of the current authorized document.
+            let matched = sections.contains { section in
+                guard section.text == item.excerpt else { return false }
+                if let start = item.sourceStartUTF8, let end = item.sourceEndUTF8 {
+                    return section.startUTF8 == start && section.endUTF8 == end
+                }
+                return item.sourceStartUTF8 == nil && item.sourceEndUTF8 == nil
+            }
+            let legacyFullDocument = item.sourceStartUTF8 == nil &&
+                item.sourceEndUTF8 == nil && item.excerpt == document.markdown
+            guard matched || legacyFullDocument else {
                 throw ImVaultSyncFailure.conflict
             }
         }
@@ -145,6 +159,16 @@ final class ImpressAINativeChatViewController: UIViewController,
         guard let storedSession else { return false }
         return storedSession.sourceIdentity != entrySourceIdentity
     }
+    private var entrySourceDisplayName: String {
+        if let note = noteIdentity ?? linkedNoteIdentity {
+            return note.relativePath
+        }
+        if let question = sourceQuestion, !question.isEmpty {
+            return String(question.prefix(160))
+        }
+        return V3L("独立讨论")
+    }
+
     private var currentSourceVersion: String {
         sourceVersionToken ?? String(sourceContentRevision ?? -1)
     }
@@ -158,6 +182,8 @@ final class ImpressAINativeChatViewController: UIViewController,
     private let inputBar = UIView()
     private let privacyLabel = UILabel()
     private let materialButton = UIButton(type: .system)
+    private let speechButton = UIButton(type: .system)
+    private var statusTask: Task<Void, Never>?
     private let attachmentChip = UIButton(type: .system)
     private let composerColumn = UIStackView()
     private let composerRow = UIStackView()
@@ -296,9 +322,13 @@ final class ImpressAINativeChatViewController: UIViewController,
         privacyLabel.numberOfLines = 2
         privacyLabel.textColor = ImpressV3Appearance.secondaryText
         privacyLabel.textAlignment = .center
-        privacyLabel.text = noteIdentity != nil && sourceAnswer == nil
-            ? V3L("此笔记正文较长：当前未附带全文，只显示来源名称。请先选择所需片段；不会暗中截断或发送。")
-            : V3L("对话与草稿保存在本机；只有点击发送并确认材料后才会发送给服务商。不会自动写入 Obsidian。")
+        // Explanatory privacy text is a one-time introduction; this label is
+        // reserved for exceptional transient status, never an empty-state banner.
+        privacyLabel.text = nil
+        privacyLabel.backgroundColor = ImpressV3Appearance.surface
+        privacyLabel.layer.cornerRadius = 10
+        privacyLabel.layer.masksToBounds = true
+        privacyLabel.isHidden = true
 
         messageInput.font = ImpressV3Appearance.Typography.body
         messageInput.adjustsFontForContentSizeCategory = true
@@ -313,7 +343,8 @@ final class ImpressAINativeChatViewController: UIViewController,
         messageInput.delegate = self
         messageInput.accessibilityLabel = V3L("消息内容")
         messageInput.accessibilityIdentifier = "impress.ai.chat.input"
-        ImpressSpeechAccessory.install(on: messageInput)
+        // Chat keeps its native speech-to-text workflow accessible directly
+        // in the compact composer. Other text editors retain keyboard access.
 
         if #available(iOS 15.0, *) {
             var config = UIButton.Configuration.filled()
@@ -349,6 +380,14 @@ final class ImpressAINativeChatViewController: UIViewController,
         materialButton.accessibilityIdentifier = "impress.ai.chat.add-material"
         materialButton.addTarget(self, action: #selector(reviewSessionMaterials),
                                  for: .touchUpInside)
+        var dictation = UIButton.Configuration.plain()
+        dictation.image = UIImage(systemName: "mic")
+        dictation.baseForegroundColor = ImpressV3Appearance.primaryText
+        speechButton.configuration = dictation
+        speechButton.accessibilityLabel = V3L("语音输入转文字")
+        speechButton.accessibilityIdentifier = "impress.ai.chat.speech-input"
+        speechButton.addTarget(self, action: #selector(openSpeechInput), for: .touchUpInside)
+
         attachmentChip.setTitle(V3L("查看已选材料"), for: .normal)
         attachmentChip.setImage(UIImage(systemName: "paperclip"), for: .normal)
         attachmentChip.titleLabel?.font = ImpressV3Appearance.Typography.caption
@@ -357,17 +396,18 @@ final class ImpressAINativeChatViewController: UIViewController,
         attachmentChip.addTarget(self, action: #selector(reviewSessionMaterials),
                                  for: .touchUpInside)
         attachmentChip.isHidden = true
-        for element in [tableView, inputBar] {
+        for element in [tableView, inputBar, privacyLabel] {
             element.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(element)
         }
         composerColumn.translatesAutoresizingMaskIntoConstraints = false
         inputBar.addSubview(composerColumn)
-        for element in [materialButton, messageInput, sendButton] {
+        for element in [materialButton, messageInput, speechButton, sendButton] {
             element.translatesAutoresizingMaskIntoConstraints = false
         }
         composerRow.addArrangedSubview(materialButton)
         composerRow.addArrangedSubview(messageInput)
+        composerRow.addArrangedSubview(speechButton)
         composerRow.addArrangedSubview(sendButton)
         composerColumn.addArrangedSubview(attachmentChip)
         composerColumn.addArrangedSubview(composerRow)
@@ -381,6 +421,12 @@ final class ImpressAINativeChatViewController: UIViewController,
             tableView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: inputBar.topAnchor, constant: -8),
+            privacyLabel.leadingAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
+            privacyLabel.trailingAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+            privacyLabel.bottomAnchor.constraint(equalTo: inputBar.topAnchor, constant: -10),
+            privacyLabel.heightAnchor.constraint(lessThanOrEqualToConstant: 64),
             inputBar.leadingAnchor.constraint(
                 equalTo: view.safeAreaLayoutGuide.leadingAnchor,
                 constant: ImpressV3Appearance.Metrics.screenInset),
@@ -396,12 +442,32 @@ final class ImpressAINativeChatViewController: UIViewController,
             dynamicHeight,
             materialButton.widthAnchor.constraint(equalToConstant: 44),
             materialButton.heightAnchor.constraint(equalToConstant: 44),
+            speechButton.widthAnchor.constraint(equalToConstant: 44),
+            speechButton.heightAnchor.constraint(equalToConstant: 44),
             sendButton.widthAnchor.constraint(equalToConstant: 44),
             sendButton.heightAnchor.constraint(equalToConstant: 44),
             attachmentChip.heightAnchor.constraint(greaterThanOrEqualToConstant: 26)
         ])
         updateAttachmentPresentation()
+        refreshModelPicker() // Header is valid before appearance and after cold start.
         Task { await restoreLocalSession() }
+    }
+
+    @objc private func openSpeechInput() {
+        guard !sending && !restoring else { return }
+        ImpressSpeechAccessory.present(for: messageInput)
+    }
+
+    private func showTransientStatus(_ text: String) {
+        statusTask?.cancel()
+        privacyLabel.text = text
+        privacyLabel.isHidden = false
+        view.bringSubviewToFront(privacyLabel)
+        statusTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            self?.privacyLabel.isHidden = true
+        }
     }
 
     override func viewDidLayoutSubviews() {
@@ -623,7 +689,10 @@ final class ImpressAINativeChatViewController: UIViewController,
                     guard let self, let key = self.sourceIdentity else { return }
                     self.contextReferences = items.map {
                         WCDBV3ChatContextReference(stableIdentity: key,
-                            sourceRevision: current.digest, excerpt: $0.text)
+                            sourceRevision: current.digest, excerpt: $0.text,
+                            sourceStartUTF8: $0.startUTF8,
+                            sourceEndUTF8: $0.endUTF8,
+                            sourceFormat: "markdown")
                     }
                     self.updateAttachmentPresentation()
                     // Drafting a set of materials is not consent to send it.
@@ -1280,7 +1349,7 @@ final class ImpressAINativeChatViewController: UIViewController,
                 if history != latest.messages { enqueuePersistence() }
             }
         } catch {
-            privacyLabel.text = V3L("本地聊天恢复失败。请保留当前页面，不要覆盖历史。")
+            showTransientStatus(V3L("本地聊天恢复失败。请保留当前页面，不要覆盖历史。"))
         }
     }
 
@@ -1309,7 +1378,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         if isForeignSession {
             privacyLabel.text = V3L("已恢复该来源的消息、模型、提示词和材料记录。进入其他来源的讨论不会自动批准或发送当前卡片的附件。")
         } else if approved != nil && !stillCurrent {
-            privacyLabel.text = V3L("来源内容有更新；发送前请重新确认引用范围。")
+            showTransientStatus(V3L("来源内容有更新；发送前请重新确认引用范围。"))
         }
         activeProviderID = history.reversed().compactMap(\.providerID).first
         selectedModelID = session.selectedChatModelID
@@ -1396,7 +1465,8 @@ final class ImpressAINativeChatViewController: UIViewController,
                 return
             }
             do {
-                let fresh = WCDBV3ChatSession(sourceIdentity: identity)
+                var fresh = WCDBV3ChatSession(sourceIdentity: identity)
+                fresh.sourceDisplayName = self.entrySourceDisplayName
                 try await repository.saveChatSession(fresh, expectedRevision: nil)
                 self.activateSession(fresh)
                 self.privacyLabel.text = V3L("新讨论已创建。旧会话仍可从历史讨论打开。")
@@ -1453,6 +1523,7 @@ final class ImpressAINativeChatViewController: UIViewController,
            sessionPromptOverride == nil { return true }
         let base = storedSession ?? WCDBV3ChatSession(sourceIdentity: identity)
         if storedSession != nil && base.messages == history &&
+           (base.sourceDisplayName != nil || isForeignSession) &&
            base.inputDraft == messageInput.text &&
            base.contextReferences == contextReferences &&
            base.requestError == requestFailure &&
@@ -1462,6 +1533,9 @@ final class ImpressAINativeChatViewController: UIViewController,
            (base.duplexHistory ?? []) == previousDuplex &&
            (base.contextConsentGranted == true) == contextConsentGranted { return true }
         var next = base
+        if next.sourceDisplayName == nil && !isForeignSession {
+            next.sourceDisplayName = entrySourceDisplayName
+        }
         next.messages = history
         next.inputDraft = messageInput.text ?? ""
         next.contextReferences = contextReferences
@@ -1479,12 +1553,13 @@ final class ImpressAINativeChatViewController: UIViewController,
             storedSession = next
             return true
         } catch {
-            privacyLabel.text = V3L("本地聊天保存失败。未能确认草稿或对话已保存。")
+            showTransientStatus(V3L("本地聊天保存失败。未能确认草稿或对话已保存。"))
             return false
         }
     }
 
     private func showProblem(_ error: Error) {
+        showTransientStatus(error.localizedDescription)
         let alert = UIAlertController(title: V3L("AI 对话失败"),
             message: error.localizedDescription, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
@@ -1606,6 +1681,7 @@ final class ImpressChatSessionHistoryViewController: UITableViewController,
             let title = displayTitle(for: session)
             if title.localizedCaseInsensitiveContains(term) ||
                session.sourceIdentity.localizedCaseInsensitiveContains(term) ||
+               (session.sourceDisplayName?.localizedCaseInsensitiveContains(term) ?? false) ||
                session.inputDraft.localizedCaseInsensitiveContains(term) {
                 next.append(Hit(session: session, messageID: nil, preview: title))
             } else if let message = session.messages.first(where: {
@@ -1652,7 +1728,7 @@ final class ImpressChatSessionHistoryViewController: UITableViewController,
             ?? UITableViewCell(style: .subtitle, reuseIdentifier: "chat.history")
         var config = UIListContentConfiguration.subtitleCell()
         config.text = hit.preview
-        config.secondaryText = session.sourceIdentity + " · " +
+        config.secondaryText = (session.sourceDisplayName ?? session.sourceIdentity) + " · " +
             DateFormatter.localizedString(from: session.updatedAt,
                 dateStyle: .short, timeStyle: .short)
         config.textProperties.numberOfLines = 2
@@ -1821,7 +1897,7 @@ final class ImpressChatNoteSectionPicker: UITableViewController {
         let cell = tableView.dequeueReusableCell(withIdentifier: "chat.section")
             ?? UITableViewCell(style: .subtitle, reuseIdentifier: "chat.section")
         var config = UIListContentConfiguration.subtitleCell()
-        config.text = item.heading
+        config.text = String(repeating: "  ", count: max(0, item.level - 1)) + item.heading
         config.secondaryText = String(item.text.utf8.count) + " bytes"
         config.textProperties.numberOfLines = 2
         cell.contentConfiguration = config
@@ -1834,13 +1910,14 @@ final class ImpressChatNoteSectionPicker: UITableViewController {
         let id = sections[indexPath.row].id
         if selected.contains(id) { selected.remove(id) } else { selected.insert(id) }
         tableView.reloadRows(at: [indexPath], with: .none)
-        let size = sections.filter { selected.contains($0.id) }
-            .reduce(0) { $0 + $1.text.utf8.count }
+        let size = ImpressAISectionExtractor.effectiveSelection(
+            sections, selectedIDs: selected).reduce(0) { $0 + $1.text.utf8.count }
         navigationItem.rightBarButtonItem?.isEnabled = !selected.isEmpty && size <= 8_000
     }
 
     @objc private func acceptSelection() {
-        let selection = sections.filter { selected.contains($0.id) }
+        let selection = ImpressAISectionExtractor.effectiveSelection(
+            sections, selectedIDs: selected)
         let size = selection.reduce(0) { $0 + $1.text.utf8.count }
         guard !selection.isEmpty, size <= 8_000 else { return }
         onApply?(selection)

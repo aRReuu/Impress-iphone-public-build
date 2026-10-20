@@ -98,6 +98,7 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         }
         let ids = Set(allViews(chat.view).compactMap(\.accessibilityIdentifier))
         XCTAssertTrue(ids.contains("impress.ai.chat.add-material"))
+        XCTAssertTrue(ids.contains("impress.ai.chat.speech-input"))
         XCTAssertTrue(ids.contains("impress.ai.chat.input"))
         XCTAssertFalse(ids.contains("impress.ai.chat.prompt"))
         XCTAssertFalse(ids.contains("impress.ai.chat.materials"))

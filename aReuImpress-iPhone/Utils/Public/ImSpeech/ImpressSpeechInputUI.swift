@@ -118,7 +118,9 @@ enum ImpressSpeechAccessory {
         return bar
     }
 
-    private static func present(for field: UIView) {
+    // The same safe dictation panel can be invoked by an in-composer button,
+    // not only the keyboard accessory toolbar.
+    static func present(for field: UIView) {
         guard let binding = ImpressSpeechTextBinding(view: field) else { return }
         var current: UIResponder? = field
         var owner: UIViewController?

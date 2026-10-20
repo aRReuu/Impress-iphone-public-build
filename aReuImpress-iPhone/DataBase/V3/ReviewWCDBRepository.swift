@@ -289,10 +289,20 @@ public struct WCDBV3ChatContextReference: Codable, Equatable, Sendable {
     public let stableIdentity: String
     public let sourceRevision: String
     public let excerpt: String
-    public init(stableIdentity: String, sourceRevision: String, excerpt: String) {
+    /// Present only for V1.1 structural selection; nil for old Chat JSON.
+    /// These are original UTF-8 byte offsets, not UTF-16 or rendered indices.
+    public let sourceStartUTF8: Int?
+    public let sourceEndUTF8: Int?
+    public let sourceFormat: String?
+    public init(stableIdentity: String, sourceRevision: String, excerpt: String,
+                sourceStartUTF8: Int? = nil, sourceEndUTF8: Int? = nil,
+                sourceFormat: String? = nil) {
         self.stableIdentity = stableIdentity
         self.sourceRevision = sourceRevision
         self.excerpt = excerpt
+        self.sourceStartUTF8 = sourceStartUTF8
+        self.sourceEndUTF8 = sourceEndUTF8
+        self.sourceFormat = sourceFormat
     }
 }
 
@@ -363,6 +373,9 @@ public struct WCDBV3DuplexProposal: Codable, Equatable, Sendable {
 public struct WCDBV3ChatSession: Codable, Equatable, Sendable {
     public let sessionID: UUID
     public let sourceIdentity: String
+    /// Display-only local history hint, never a source authority.
+    /// Optional to preserve existing serialized session rows.
+    public var sourceDisplayName: String?
     public let createdAt: Date
     public var updatedAt: Date
     /// Optimistic locking token; increment once per durable edit.
@@ -391,6 +404,7 @@ public struct WCDBV3ChatSession: Codable, Equatable, Sendable {
                 createdAt: Date = Date()) {
         self.sessionID = sessionID
         self.sourceIdentity = sourceIdentity
+        self.sourceDisplayName = nil
         self.createdAt = createdAt
         self.updatedAt = createdAt
         self.revision = 0
