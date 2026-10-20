@@ -124,72 +124,6 @@ enum ImVaultListPresentation {
     }
 }
 
-@MainActor
-private final class ImVaultFolderPickerViewController:
-    UITableViewController, UISearchResultsUpdating {
-    private let folders: [String]
-    private var filteredFolders: [String]
-    private let onChoose: (String?) -> Void
-
-    init(folders: [String], onChoose: @escaping (String?) -> Void) {
-        self.folders = folders
-        self.filteredFolders = folders
-        self.onChoose = onChoose
-        super.init(style: .insetGrouped)
-    }
-
-    required init?(coder: NSCoder) { fatalError("Use init(folders:onChoose:)") }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        title = V3L("按文件夹浏览")
-        navigationItem.largeTitleDisplayMode = .never
-        ImpressV3Appearance.styleGroupedTable(tableView)
-        let search = UISearchController(searchResultsController: nil)
-        search.searchResultsUpdater = self
-        search.obscuresBackgroundDuringPresentation = false
-        search.searchBar.placeholder = V3L("搜索笔记或文件夹")
-        navigationItem.searchController = search
-        navigationItem.hidesSearchBarWhenScrolling = false
-    }
-
-    func updateSearchResults(for searchController: UISearchController) {
-        let query = searchController.searchBar.text?.trimmingCharacters(
-            in: .whitespacesAndNewlines) ?? ""
-        filteredFolders = query.isEmpty ? folders : folders.filter {
-            $0.localizedCaseInsensitiveContains(query)
-        }
-        tableView.reloadData()
-    }
-
-    override func tableView(_ tableView: UITableView,
-                            numberOfRowsInSection section: Int) -> Int {
-        filteredFolders.count + 1
-    }
-
-    override func tableView(_ tableView: UITableView,
-                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "folder-path")
-            ?? UITableViewCell(style: .default, reuseIdentifier: "folder-path")
-        var configuration = UIListContentConfiguration.cell()
-        configuration.text = indexPath.row == 0 ? V3L("全部文档") : filteredFolders[indexPath.row - 1]
-        configuration.textProperties.numberOfLines = 2
-        configuration.image = UIImage(systemName: indexPath.row == 0
-                                      ? "square.grid.2x2" : "folder")
-        configuration.textProperties.font = ImpressV3Appearance.Typography.body
-        cell.contentConfiguration = configuration
-        ImpressV3Appearance.styleGroupedCell(cell)
-        cell.accessoryType = .disclosureIndicator
-        return cell
-    }
-
-    override func tableView(_ tableView: UITableView,
-                            didSelectRowAt indexPath: IndexPath) {
-        onChoose(indexPath.row == 0 ? nil : filteredFolders[indexPath.row - 1])
-        navigationController?.popViewController(animated: true)
-    }
-}
-
 class ImpressNoteListTableViewController: ImBaseViewController
 {
     private var cancellables = Set<AnyCancellable>()
@@ -203,7 +137,6 @@ class ImpressNoteListTableViewController: ImBaseViewController
     private var externalMode = true
     private var externalNotes: [ImVaultIndexNote] = []
     private var externalSearchText = ""
-    private var selectedVaultFolder: String?
     private var visibleExternalRows: [ImVaultListPresentation.OutlineRow] = []
     private var expandedExternalFolders = Set<String>()
     private var totalExternalRowCount = 0
@@ -215,7 +148,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
     private var externalReadGate = ImVaultAsyncReadGate()
     private var externalError: String?
 
-    private var hasMoreExternalNotes: Bool {
+    private var hasMoreExternalRows: Bool {
         visibleExternalRows.count < totalExternalRowCount
     }
 
@@ -239,20 +172,6 @@ class ImpressNoteListTableViewController: ImBaseViewController
         updateVaultEmptyState()
     }
 
-    private func showVaultFolderPicker() {
-        let paths = ImVaultListPresentation.folders(in: externalNotes)
-        let picker = ImVaultFolderPickerViewController(folders: paths) { [weak self] folder in
-            guard let self else { return }
-            self.selectedVaultFolder = folder
-            self.externalVisibleLimit = ImVaultListPresentation.pageSize
-            self.rebuildExternalRows()
-            self.tableView.reloadData()
-            self.updateVaultEmptyState()
-        }
-        navigationController?.pushViewController(picker, animated: true)
-    }
-    
-    
     private var selectedNoteID : Int?
     
     /// 默认为不可自动滑动到指定位置
@@ -366,8 +285,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
             self.externalMode = true
             self.externalNotes = []
             self.externalSearchText = ""
-            self.selectedVaultFolder = nil
-            expandedExternalFolders.removeAll()
+            self.expandedExternalFolders.removeAll()
             self.externalVisibleLimit = ImVaultListPresentation.pageSize
             self.showingCachedIndex = false
             self.showingPartialIndex = false
@@ -445,7 +363,6 @@ class ImpressNoteListTableViewController: ImBaseViewController
             if externalReadGate.changeSource(to: vaultID) {
                 externalLoading = false
                 externalNotes = []
-                selectedVaultFolder = nil
             expandedExternalFolders.removeAll()
                 externalVisibleLimit = ImVaultListPresentation.pageSize
                 showingCachedIndex = false
@@ -510,7 +427,6 @@ class ImpressNoteListTableViewController: ImBaseViewController
             externalLoading = false
             externalMode = true
             externalNotes = []
-            selectedVaultFolder = nil
             expandedExternalFolders.removeAll()
             showingCachedIndex = false
             showingPartialIndex = false
@@ -666,7 +582,7 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
 
     func tableView(_ tableView: UITableView,
                    numberOfRowsInSection section: Int) -> Int {
-        externalMode ? visibleExternalRows.count + (hasMoreExternalNotes ? 1 : 0) : 1
+        externalMode ? visibleExternalRows.count + (hasMoreExternalRows ? 1 : 0) : 1
     }
 
     func tableView(_ tableView: UITableView,
@@ -678,7 +594,7 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
     func tableView(_ tableView: UITableView,
                    cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         if externalMode {
-            if hasMoreExternalNotes && indexPath.row == visibleExternalRows.count {
+            if hasMoreExternalRows && indexPath.row == visibleExternalRows.count {
                 let cell = tableView.dequeueReusableCell(withIdentifier: "vault-more")
                     ?? UITableViewCell(style: .default, reuseIdentifier: "vault-more")
                 var content = UIListContentConfiguration.cell()
@@ -706,6 +622,7 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
                 (expanded || !externalSearchText.isEmpty) ? "chevron.down" : "chevron.right")
             content.imageProperties.tintColor = ImpressV3Appearance.secondaryText
             content.imageToTextPadding = 8
+            content.axesPreservingSuperviewLayoutMargins = []
             content.directionalLayoutMargins = NSDirectionalEdgeInsets(
                 top: 9, leading: 12 + CGFloat(row.depth) * 19 +
                     (folder == nil ? 22 : 0),
@@ -743,7 +660,7 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
     {
         tableView.deselectRow(at: indexPath, animated: false)
         if externalMode {
-            if hasMoreExternalNotes && indexPath.row == visibleExternalRows.count {
+            if hasMoreExternalRows && indexPath.row == visibleExternalRows.count {
                 externalVisibleLimit += ImVaultListPresentation.pageSize
                 rebuildExternalRows()
                 tableView.reloadData()
