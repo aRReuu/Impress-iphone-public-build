@@ -50,6 +50,8 @@ jobs:
           assert not re.search(r"productionWriteEnabled\s*=\s*true\b", guard)
           print("PUBLIC_SOURCE_POLICY PASS | files:", len(files))
           PY
+      - name: Verify current product contract (static checks; NOT device acceptance)
+        run: python3 .github/scripts/verify_product_contract.py
       - name: Swift toolchain
         run: swift --version
       - name: Execute portable Swift tests
