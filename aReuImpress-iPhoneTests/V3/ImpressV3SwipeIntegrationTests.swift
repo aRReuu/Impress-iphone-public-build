@@ -49,7 +49,7 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
 
     @MainActor
     func testV3LongMarkdownQuestionAndAnswerHaveIndependentScrollRegions() async throws {
-        let card = ImCardModel()
+        var card = ImCardModel()
         card.cardType = CardType.standard.rawValue
         card.question = "# Heading\\n\\n" +
             String(repeating: "## Subheading\\nLong question with **emphasis**.\\n", count: 100)
