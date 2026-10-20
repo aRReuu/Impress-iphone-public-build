@@ -6,13 +6,13 @@ import ImpressReviewCore
 
 final class ImpressCalibrationIntegrationTests: XCTestCase {
     @MainActor
-    func testOnlyFlashcardsNotesSettingsArePrimaryTabs() throws {
+    func testFourTabsOpenExistingCalibrationWithoutRewritingScores() throws {
         let root = ImTabBarViewController()
         root.loadViewIfNeeded()
         let tabs = try XCTUnwrap(root.viewControllers)
-        XCTAssertEqual(tabs.count, 3)
+        XCTAssertEqual(tabs.count, 4)
         XCTAssertEqual(tabs.compactMap { $0.tabBarItem.title },
-                       ["闪卡", "笔记", "设置"])
+                       ["闪卡", "笔记", "校准器", "设置"])
         XCTAssertTrue((tabs[0] as? UINavigationController)?.viewControllers.first
                       is ImpressV3ReviewViewController)
         XCTAssertTrue((tabs[1] as? UINavigationController)?.viewControllers.first
@@ -40,23 +40,23 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
         let notes = try XCTUnwrap(notesNav.viewControllers.first as? ImpressNoteListTableViewController)
         review.loadViewIfNeeded()
         notes.loadViewIfNeeded()
-        XCTAssertEqual(tabs.viewControllers?.count, 3)
+        XCTAssertEqual(tabs.viewControllers?.count, 4)
         XCTAssertEqual(cardNav.viewControllers.count, 1)
         XCTAssertEqual(notesNav.viewControllers.count, 1)
     }
 
     @MainActor
-    func testCalibrationNotificationRoutesToSettingsDetail() throws {
+    func testCalibrationNotificationRoutesToPrimaryCalibration() throws {
         let tab = ImTabBarViewController()
         tab.loadViewIfNeeded()
         let inbox = ImpressCalibrationNotificationRouteInbox.shared
         inbox.enqueue()
         XCTAssertTrue(inbox.deliverIfPossible(in: tab))
         XCTAssertEqual(tab.selectedIndex, 2)
-        let settings = try XCTUnwrap(tab.viewControllers?[2] as? UINavigationController)
-        XCTAssertTrue(settings.viewControllers.first is ImpressV3SettingsHubViewController)
-        XCTAssertTrue(settings.topViewController is ImpressCalibrationViewController)
-        XCTAssertEqual(settings.viewControllers.count, 2)
+        let calibration = try XCTUnwrap(tab.viewControllers?[2] as? UINavigationController)
+        XCTAssertTrue(calibration.viewControllers.first is ImpressCalibrationViewController)
+        XCTAssertTrue(calibration.topViewController is ImpressCalibrationViewController)
+        XCTAssertEqual(calibration.viewControllers.count, 1)
         XCTAssertFalse(inbox.pending)
         XCTAssertFalse(inbox.deliverIfPossible(in: tab))
     }
@@ -73,7 +73,7 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
             $0.accessibilityIdentifier == "impress.review.calibration-week"
         })
         XCTAssertEqual(flashcardNav.viewControllers.count, 1)
-        let settingsNav = try XCTUnwrap(tabs.viewControllers?[2] as? UINavigationController)
+        let settingsNav = try XCTUnwrap(tabs.viewControllers?[3] as? UINavigationController)
         let settings = try XCTUnwrap(settingsNav.viewControllers.first
                                     as? ImpressV3SettingsHubViewController)
         settings.loadViewIfNeeded()
@@ -87,7 +87,7 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
     func testSettingsDailyCalibrationUsesSameFullDetailClass() throws {
         let tabs = ImTabBarViewController()
         tabs.loadViewIfNeeded()
-        let settingsNav = try XCTUnwrap(tabs.viewControllers?[2] as? UINavigationController)
+        let settingsNav = try XCTUnwrap(tabs.viewControllers?[3] as? UINavigationController)
         let hub = try XCTUnwrap(settingsNav.viewControllers.first
                                 as? ImpressV3SettingsHubViewController)
         hub.loadViewIfNeeded()
@@ -102,7 +102,7 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
     func testCalibrationEntryIsAvailableUnderLearningRhythm() throws {
         let tabs = ImTabBarViewController()
         tabs.loadViewIfNeeded()
-        let settings = try XCTUnwrap(tabs.viewControllers?[2] as? UINavigationController)
+        let settings = try XCTUnwrap(tabs.viewControllers?[3] as? UINavigationController)
         let hub = try XCTUnwrap(settings.viewControllers.first as? ImpressV3SettingsHubViewController)
         hub.loadViewIfNeeded()
         let cell = hub.tableView(hub.tableView,

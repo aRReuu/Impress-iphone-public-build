@@ -60,13 +60,18 @@ final class ImpressCalibrationNotificationRouteInbox {
     func deliverIfPossible(in root: UIViewController?) -> Bool {
         guard pending, let tabs = root as? UITabBarController,
               tabs.presentedViewController == nil,
+              // Resolve the actual destination by controller type, never by an
+              // index belonging to an older Tab configuration.
               let nav = tabs.viewControllers?.compactMap({ $0 as? UINavigationController })
-                .first(where: { $0.viewControllers.first is ImpressV3SettingsHubViewController }),
+                .first(where: { $0.viewControllers.first is ImpressCalibrationViewController }),
               nav.presentedViewController == nil else { return false }
         tabs.selectedViewController = nav
-        if !(nav.topViewController is ImpressCalibrationViewController) {
-            nav.popToRootViewController(animated: false)
-            nav.pushViewController(ImpressCalibrationViewController(), animated: false)
+        if let calibration = nav.viewControllers.first(where: {
+            $0 is ImpressCalibrationViewController
+        }) {
+            nav.popToViewController(calibration, animated: false)
+        } else {
+            return false
         }
         pending = false
         return true
