@@ -13,7 +13,7 @@
 
 | 编号 | 需求（原文简述） | 当前状态 | 源码／核验入口 | 自动化证据 | 尚缺门禁 |
 | --- | --- | --- | --- | --- | --- |
-| NAV-01 | 一级 Tab 保持“闪卡／笔记／设置”。Chat 重要但不新增第四个 Tab。 | CODE_DONE | `aReuImpress-iPhone/Base/ImTabBarViewController.swift` | 候选：ImpressV3ReviewUsesExplicitRevealAndKeepsFourDirectionSwipeStack / 三 Tab 结构回归 | 代码存在；不得自动推断 CI/真机 |
+| NAV-01 | 一级 Tab 保持“闪卡／笔记／设置”。Chat 重要但不新增第四个 Tab。 | CODE_DONE | `aReuImpress-iPhone/Base/ImTabBarViewController.swift` | 候选：testV3ReviewUsesExplicitRevealAndKeepsFourDirectionSwipeStack / 三 Tab 结构回归 | 代码存在；不得自动推断 CI/真机 |
 | NAV-02 | 平时复习链路保持短：看问题→自行回忆→查看答案→评分→下一张。Chat、整理笔记、校准均非必经步骤。 | CODE_DONE | `aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3ReviewViewController.swift` | 候选：ImpressV3SwipeIntegrationTests（须逐项确认覆盖） | 代码存在；不得自动推断 CI/真机 |
 | NAV-03 | 首页保留新增卡片和卡片集的职责区分；当前卡片的编辑／来源入口属于当前对象，不与全局功能混放。 | IN_PROGRESS | `aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3ReviewViewController.swift` | 候选：ImpressV3SwipeIntegrationTests（须逐项确认覆盖） | 需要精确场景与证据 |
 | NAV-04 | 删除闪卡上方常驻的完整校准周图，不让图表挤占问题／答案阅读空间。 | CODE_DONE | `aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3ReviewViewController.swift` | 候选：ImpressV3SwipeIntegrationTests（须逐项确认覆盖） | 代码存在；不得自动推断 CI/真机 |
