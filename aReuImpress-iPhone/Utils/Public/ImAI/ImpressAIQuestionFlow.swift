@@ -89,6 +89,31 @@ enum ImpressAINoteCardLink {
     }
 }
 
+/// Must run after the user confirms the exact material range but before
+/// the HTTP request. Selection UI is not authorization to upload a stale
+/// source snapshot from an Obsidian File Provider.
+enum ImpressAIQuestionSendGate {
+    static func validate(source: ImpressAISource,
+                         excerpts: [ImpressAIExcerpt],
+                         live: ImVaultRawDocument) throws {
+        guard live.identity.vaultID == source.vaultID,
+              live.identity.relativePath == source.relativePath,
+              live.digest == source.documentSHA256,
+              !excerpts.isEmpty else {
+            throw ImVaultSyncFailure.conflict
+        }
+        let sections = ImpressAISectionExtractor.sections(in: live.markdown)
+        guard excerpts.allSatisfy({ reference in
+            reference.source == source &&
+                sections.contains(where: { $0.id == reference.id &&
+                    $0.heading == (reference.sectionHeading ?? "") &&
+                    $0.text == reference.text })
+        }) else {
+            throw ImVaultSyncFailure.conflict
+        }
+    }
+}
+
 @MainActor
 final class ImpressAIQuestionGenerationViewController: UITableViewController {
     private let document: ImVaultRawDocument
@@ -250,6 +275,24 @@ final class ImpressAIQuestionGenerationViewController: UITableViewController {
                 title = V3L("生成综合问题")
             }
             do {
+                // A stale note, lost File Provider authorization or changed
+                // selected section MUST NOT be sent to a remote model.
+                guard ImVaultReadOnlyProbe.shared.authorizedVaultID ==
+                      document.identity.vaultID else {
+                    throw ImVaultSyncFailure.wrongVault
+                }
+                let live: ImVaultRawDocument = try await withCheckedThrowingContinuation {
+                    (continuation: CheckedContinuation<ImVaultRawDocument, Error>) in
+                    ImVaultReadSync.shared.read(document.identity) { read in
+                        continuation.resume(with: read)
+                    }
+                }
+                guard ImVaultReadOnlyProbe.shared.authorizedVaultID ==
+                      document.identity.vaultID else {
+                    throw ImVaultSyncFailure.wrongVault
+                }
+                try ImpressAIQuestionSendGate.validate(
+                    source: source, excerpts: excerpts, live: live)
                 let prompt = ImpressAIQuestionPrompt.system(count: Int(stepper.value))
                 let content = try ImpressAIQuestionPrompt.input(excerpts)
                 let response = try await ImpressAIHTTPClient.shared.complete(

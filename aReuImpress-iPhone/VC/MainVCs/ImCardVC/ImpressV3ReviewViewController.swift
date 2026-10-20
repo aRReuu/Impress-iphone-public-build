@@ -572,26 +572,46 @@ final class ImpressV3ReviewViewController: UIViewController {
     @objc private func openCurrentSourceNote() {
         guard !isLoading, pending == nil,
               let item = items[safe: currentIndex],
-              let identity = sourceLinks[item.cardID] else { return }
+              let identity = sourceLinks[item.cardID],
+              let expectedContentVersion = contentRevisions[item.cardID] else { return }
         guard ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID else {
             displayFailure(ImVaultSyncFailure.wrongVault)
             return
         }
-        ImVaultReadSync.shared.read(identity) { [weak self] result in
-            guard let self, self.pending == nil,
-                  self.items[safe: self.currentIndex]?.cardID == item.cardID,
-                  ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID else { return }
-            switch result {
-            case let .success(document):
-                guard document.identity == identity else {
-                    self.displayFailure(ImVaultSyncFailure.wrongVault)
-                    return
+        // Use the ORIGINAL card's currently verified source key and
+        // content revision, not a title or a previously cached menu entry.
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let repo = try self.repository ?? ImpressV3ReviewEnvironment.repository()
+                guard let card = try await repo.content(for: item.cardID),
+                      card.contentRevision == expectedContentVersion,
+                      let link = card.sourceNotePath,
+                      let linkedIdentity = try ImpressBatchSourceKey.decode(link),
+                      linkedIdentity == identity else {
+                    throw ReviewWCDBError.contentConflict
                 }
-                self.navigationController?.pushViewController(
-                    ImVaultDocumentController(document: document), animated: true)
-            case let .failure(error):
-                self.displayFailure(error)
-            }
+                let anchoredSection = try ImpressBatchSourceKey.sectionDigest(for: link)
+                ImVaultReadSync.shared.read(identity) { [weak self] result in
+                    guard let self, self.pending == nil,
+                          self.items[safe: self.currentIndex]?.cardID == item.cardID,
+                          ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID
+                    else { return }
+                    switch result {
+                    case let .success(document):
+                        guard document.identity == identity else {
+                            self.displayFailure(ImVaultSyncFailure.wrongVault)
+                            return
+                        }
+                        self.navigationController?.pushViewController(
+                            ImVaultDocumentController(
+                                document: document,
+                                sourceSectionDigest: anchoredSection), animated: true)
+                    case let .failure(error):
+                        self.displayFailure(error)
+                    }
+                }
+            } catch { self.displayFailure(error) }
         }
     }
 

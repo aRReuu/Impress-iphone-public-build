@@ -645,6 +645,7 @@ extension ImMarkdownViewController: UISearchBarDelegate
 @MainActor
 final class ImVaultDocumentController: UIViewController {
     private var document: ImVaultRawDocument
+    private let sourceSectionDigest: String?
     private var hasAppearedOnce = false
     private var latestReadSerial = 0
     private let readingView = UITextView()
@@ -654,8 +655,9 @@ final class ImVaultDocumentController: UIViewController {
     private var isSourceMode = false
     private let renderer = MarkdownKitRenderer()
 
-    init(document: ImVaultRawDocument) {
+    init(document: ImVaultRawDocument, sourceSectionDigest: String? = nil) {
         self.document = document
+        self.sourceSectionDigest = sourceSectionDigest
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError("init(document:) required") }
@@ -820,6 +822,16 @@ final class ImVaultDocumentController: UIViewController {
                     [weak self] _ in self?.checkLinkedCardChanges()
                 }
         ])
+        if sourceSectionDigest != nil {
+            // Only a single verified section anchor may be offered. When
+            // the section has moved or changed, the action fails closed
+            // instead of guessing a similarly titled paragraph.
+            let section = UIAction(title: V3L("查看核实过的来源片段"),
+                                   image: UIImage(systemName: "text.magnifyingglass")) {
+                [weak self] _ in self?.openVerifiedSourceSection()
+            }
+            more.menu = UIMenu(children: (more.menu?.children ?? []) + [section])
+        }
         navigationItem.rightBarButtonItems = [discussion, more]
         renderBody()
         // Replaces only explicitly referenced local image embeds with bounded
@@ -863,6 +875,53 @@ final class ImVaultDocumentController: UIViewController {
     @objc private func toggleSource() {
         isSourceMode.toggle()
         renderBody()
+    }
+
+    private func openVerifiedSourceSection() {
+        guard let digest = sourceSectionDigest else { return }
+        withVerifiedLiveDocument { [weak self] latest in
+            guard let self else { return }
+            let matches = ImpressAISectionExtractor.sections(in: latest.markdown).filter {
+                ImVaultDigest.sha256(Data($0.text.utf8)) == digest
+            }
+            guard matches.count == 1, let match = matches.first else {
+                // Old/changed/duplicate sections are not precise locators.
+                // The complete note is still available; do not force a
+                // made-up heading or try to restore removed text from Chat.
+                self.showVaultError(V3L("来源片段无法可靠定位"),
+                                    error: ImVaultSyncFailure.conflict)
+                return
+            }
+            let page = UIViewController()
+            page.title = V3L("已核实来源片段")
+            page.view.backgroundColor = ImpressV3Appearance.page
+            let view = UITextView()
+            view.translatesAutoresizingMaskIntoConstraints = false
+            view.backgroundColor = ImpressV3Appearance.surface
+            view.textColor = ImpressV3Appearance.primaryText
+            view.font = ImpressV3Appearance.Typography.body
+            view.adjustsFontForContentSizeCategory = true
+            view.isEditable = false
+            view.isSelectable = true
+            view.accessibilityIdentifier = "impress.notes.verified-source-section"
+            // Excerpt content is the current, authorized source Markdown
+            // itself, not a model paraphrase or a truncated heading match.
+            view.text = V3L("来源笔记：") + latest.identity.relativePath +
+                "\n" + V3L("章节：") + match.heading +
+                "\nSHA-256: " + digest + "\n\n" + match.text
+            page.view.addSubview(view)
+            NSLayoutConstraint.activate([
+                view.topAnchor.constraint(
+                    equalTo: page.view.safeAreaLayoutGuide.topAnchor),
+                view.bottomAnchor.constraint(
+                    equalTo: page.view.safeAreaLayoutGuide.bottomAnchor),
+                view.leadingAnchor.constraint(
+                    equalTo: page.view.safeAreaLayoutGuide.leadingAnchor),
+                view.trailingAnchor.constraint(
+                    equalTo: page.view.safeAreaLayoutGuide.trailingAnchor)
+            ])
+            self.navigationController?.pushViewController(page, animated: true)
+        }
     }
 
     private func followWikiLink(_ rawTarget: String) {

@@ -718,6 +718,10 @@ enum ImpressV3Language: String, CaseIterable {
     }
 
     private static let translations: [String: (traditional: String, english: String)] = [
+        "查看核实过的来源片段": ("查看核實過的來源片段", "View Verified Source Excerpt"),
+        "来源片段无法可靠定位": ("來源片段無法可靠定位", "Source Excerpt Cannot Be Reliably Located"),
+        "已核实来源片段": ("已核實來源片段", "Verified Source Excerpt"),
+        "章节：": ("章節：", "Section: "),
         "核对撤销内容": ("核對撤銷內容", "Review Reversal"),
         "确认按当前版本撤销": ("確認按目前版本撤銷", "Confirm Safe Reversal"),
         "确认撤销这个目标？": ("確認撤銷這個目標？", "Revert This Target?"),

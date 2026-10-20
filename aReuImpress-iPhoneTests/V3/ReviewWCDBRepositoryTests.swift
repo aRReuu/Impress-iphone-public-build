@@ -24,6 +24,77 @@ private struct FailingReviewCalculator: WCDBReviewCalculating {
 final class ReviewWCDBRepositoryTests: XCTestCase {
 
     @MainActor
+    func testOriginalCardOffersVerifiedSourceSectionWithoutReplacingFullNote() throws {
+        let markdown = "# Mechanics\nNet force is mass times acceleration.\n\n" +
+            "# History\nAn unrelated earlier development.\n"
+        let identity = try ImVaultFileIdentity(vaultID: "qa-read-only",
+            relativePath: "Notes/Mechanics.md")
+        let doc = ImVaultRawDocument(identity: identity,
+            sourceBytes: Data(markdown.utf8), markdown: markdown,
+            digest: ImVaultDigest.sha256(Data(markdown.utf8)))
+        let sections = ImpressAISectionExtractor.sections(in: markdown)
+        let anchor = ImVaultDigest.sha256(Data(sections[0].text.utf8))
+        let linked = ImVaultDocumentController(
+            document: doc, sourceSectionDigest: anchor)
+        linked.loadViewIfNeeded()
+        let menu = try XCTUnwrap(linked.navigationItem.rightBarButtonItems?.last?.menu)
+        let options = menu.children.compactMap { $0 as? UIAction }
+        XCTAssertTrue(options.contains(where: {
+            $0.title == V3L("查看核实过的来源片段")
+        }))
+        // An ordinary v1/v2 source always opens the normal full note without
+        // claiming precise fragment localization.
+        let legacy = ImVaultDocumentController(document: doc)
+        legacy.loadViewIfNeeded()
+        let oldMenu = try XCTUnwrap(legacy.navigationItem.rightBarButtonItems?.last?.menu)
+        XCTAssertFalse(oldMenu.children.compactMap { $0 as? UIAction }.contains {
+            $0.title == V3L("查看核实过的来源片段")
+        })
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    @MainActor
+    func testAIQuestionMaterialRequiresExactLiveSourceBeforeHTTP() throws {
+        let identity = try ImVaultFileIdentity(vaultID: "QA-Vault",
+            relativePath: "Learning/Concepts.md")
+        let original = "# Study\nOriginal evidence for this question.\n\n" +
+            "# Practice\nAn unrelated exercise.\n"
+        let bytes = Data(original.utf8)
+        let digest = ImVaultDigest.sha256(bytes)
+        let source = ImpressAISource(vaultID: identity.vaultID,
+            relativePath: identity.relativePath, documentSHA256: digest,
+            heading: "Study")
+        let firstSection = try XCTUnwrap(ImpressAISectionExtractor.sections(in: original).first)
+        let selected = ImpressAIExcerpt(id: firstSection.id, source: source,
+            text: firstSection.text, sectionHeading: firstSection.heading)
+        let verified = ImVaultRawDocument(identity: identity,
+            sourceBytes: bytes, markdown: original, digest: digest)
+        XCTAssertNoThrow(try ImpressAIQuestionSendGate.validate(
+            source: source, excerpts: [selected], live: verified))
+        // A source edited after consent must fail CLOSED: do not submit old
+        // excerpts or pretend the model saw current source material.
+        let changed = original.replacingOccurrences(of: "Original evidence",
+            with: "Corrected evidence")
+        let altered = ImVaultRawDocument(identity: identity,
+            sourceBytes: Data(changed.utf8), markdown: changed,
+            digest: ImVaultDigest.sha256(Data(changed.utf8)))
+        XCTAssertThrowsError(try ImpressAIQuestionSendGate.validate(
+            source: source, excerpts: [selected], live: altered))
+        let foreign = try ImVaultFileIdentity(vaultID: "Foreign-Vault",
+            relativePath: identity.relativePath)
+        let foreignDocument = ImVaultRawDocument(identity: foreign,
+            sourceBytes: bytes, markdown: original, digest: digest)
+        XCTAssertThrowsError(try ImpressAIQuestionSendGate.validate(
+            source: source, excerpts: [selected], live: foreignDocument))
+        var poisoned = selected
+        poisoned.text = "Text was changed after the scope was reviewed."
+        XCTAssertThrowsError(try ImpressAIQuestionSendGate.validate(
+            source: source, excerpts: [poisoned], live: verified))
+        XCTAssertThrowsError(try ImpressAIQuestionSendGate.validate(
+            source: source, excerpts: [], live: verified))
+    }
+
+    @MainActor
     func testNoteQuestionGenerationAnchorsOnlyUniqueEvidenceAndSkipsUnrelatedChanges() throws {
         let identity = try ImVaultFileIdentity(
             vaultID: "signed-test-vault", relativePath: "Courses/Mechanics.md")
