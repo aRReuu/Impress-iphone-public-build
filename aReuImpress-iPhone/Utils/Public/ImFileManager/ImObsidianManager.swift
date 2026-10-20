@@ -804,7 +804,7 @@ enum ImVaultGuardedWrite {
                     // ABORTS before the first attempt to write source content.
                     let backup = try ImVaultPrivateStore.backupBeforeWrite(
                         identity: draft.identity, data: current)
-                    let bytes = Data(draft.editedText.utf8)
+                    let bytes = draft.proposedBytes
                     try bytes.write(to: coordinatedFile, options: .atomic)
                     guard try Data(contentsOf: coordinatedFile) == bytes else {
                         throw ImVaultSyncFailure.verificationFailed

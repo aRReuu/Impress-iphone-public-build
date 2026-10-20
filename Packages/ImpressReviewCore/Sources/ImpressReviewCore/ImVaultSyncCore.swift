@@ -87,14 +87,46 @@ public struct ImVaultDraft: Codable, Equatable, Sendable {
         guard newValue.utf8.count <= 8 * 1024 * 1024 else {
             throw ImVaultCoreError.oversizedFile
         }
+        // Allow at most 8MB of the *actual* bytes written (BOM included).
+        // Keep the old draft intact if this edit would exceed the limit.
+        let previous = editedText
         editedText = newValue
+        guard proposedBytes.count <= 8 * 1024 * 1024 else {
+            editedText = previous
+            throw ImVaultCoreError.oversizedFile
+        }
         updatedAt = date
+    }
+
+    /// Preserve the original UTF-8 BOM and uniform line-ending convention.
+    /// UIKit's UITextView may normalize CRLF to LF while editing. A harmless
+    /// normalization must not rewrite every line or silently strip a BOM.
+    /// Mixed-line-ending sources remain byte-sensitive; never claim they have
+    /// been normalized without an observable modification.
+    public var proposedBytes: Data {
+        var rendered = editedText
+        let withoutCRLF = baseText.replacingOccurrences(of: "\r\n", with: "")
+        if baseText.contains("\r\n") &&
+           !withoutCRLF.contains("\r") && !withoutCRLF.contains("\n") {
+            rendered = rendered.replacingOccurrences(of: "\r\n", with: "\n")
+                               .replacingOccurrences(of: "\n", with: "\r\n")
+        } else if baseText.contains("\r") && !baseText.contains("\n") {
+            rendered = rendered.replacingOccurrences(of: "\r\n", with: "\n")
+                               .replacingOccurrences(of: "\n", with: "\r")
+        }
+        let prefix: [UInt8] = [0xEF, 0xBB, 0xBF]
+        if baseRawData.starts(with: prefix) {
+            var result = Data(prefix)
+            result.append(contentsOf: rendered.utf8)
+            return result
+        }
+        return Data(rendered.utf8)
     }
 
     public func validate() throws {
         guard ImVaultDigest.sha256(baseRawData) == baseDigest,
               String(data: baseRawData, encoding: .utf8) == baseText,
-              editedText.utf8.count <= 8 * 1024 * 1024 else {
+              proposedBytes.count <= 8 * 1024 * 1024 else {
             throw ImVaultCoreError.invalidDraft
         }
     }
@@ -102,10 +134,10 @@ public struct ImVaultDraft: Codable, Equatable, Sendable {
     public func decision(against source: Data) -> ImVaultWriteDecision {
         ImVaultVersionGate.decide(baseDigest: baseDigest,
             currentDigest: ImVaultDigest.sha256(source),
-            proposedDigest: ImVaultDigest.sha256(Data(editedText.utf8)))
+            proposedDigest: ImVaultDigest.sha256(proposedBytes))
     }
 
-    public var hasChanges: Bool { baseText != editedText }
+    public var hasChanges: Bool { proposedBytes != baseRawData }
 }
 
 public enum ImVaultDiff {

@@ -1586,7 +1586,7 @@ final class ImpressDuplexChangeController: UIViewController {
                 noteIdentity: changedNote ? self.noteIdentity : nil,
                 noteBaseDigest: changedNote ? self.draft?.baseDigest : nil,
                 noteEditedDigest: changedNote ? self.draft.map {
-                    ImVaultDigest.sha256(Data($0.editedText.utf8))
+                    ImVaultDigest.sha256($0.proposedBytes)
                 } : nil,
                 cardID: changedCard ? self.cardID : nil,
                 cardReviewRevision: changedCard ? self.reviewRevision : nil,
@@ -1757,7 +1757,7 @@ final class ImpressDuplexApprovalController: UIViewController {
             do {
                 guard let draft = try ImVaultPrivateStore.loadDraft(identity: identity),
                       draft.baseDigest == proposal.noteBaseDigest,
-                      ImVaultDigest.sha256(Data(draft.editedText.utf8)) ==
+                      ImVaultDigest.sha256(draft.proposedBytes) ==
                           proposal.noteEditedDigest else {
                     throw ImVaultSyncFailure.conflict
                 }
@@ -1846,7 +1846,7 @@ final class ImpressDuplexApprovalController: UIViewController {
                 guard let id = proposal.noteIdentity,
                       let draft = try ImVaultPrivateStore.loadDraft(identity: id),
                       draft.baseDigest == proposal.noteBaseDigest,
-                      ImVaultDigest.sha256(Data(draft.editedText.utf8)) ==
+                      ImVaultDigest.sha256(draft.proposedBytes) ==
                           proposal.noteEditedDigest,
                       ImVaultDiff.summary(base: draft.baseText, edited: draft.editedText,
                                           maximumLines: 200).complete else {

@@ -141,6 +141,43 @@ struct ImVaultSyncCoreTests {
         #expect(short.text.contains("禁止提交"))
         #expect(ImVaultDiff.summary(base: a,edited: b,maximumLines: 4000).complete)
     }
+    @Test func utf8BOMAndCRLFRemainUntouchedWhenUITextViewNormalizesNewlines() throws {
+        let identity = try ImVaultFileIdentity(vaultID: "qa",
+            relativePath: "Study/CRLF.md")
+        let raw = Data([0xEF, 0xBB, 0xBF]) +
+            Data("# Topic\r\n- First\r\n- Second\r\n".utf8)
+        let initialText = try #require(String(data: raw, encoding: .utf8))
+        var draft = try ImVaultDraft(identity: identity, baseText: initialText,
+                                    baseRawData: raw)
+        #expect(draft.proposedBytes == raw)
+        #expect(!draft.hasChanges)
+        try draft.update("# Topic\n- First\n- Second\n")
+        #expect(!draft.hasChanges,
+                "UIKit newline normalization is not a user edit")
+        #expect(draft.decision(against: raw) == .unchanged)
+        try draft.update("# Topic\n- First\n- Revised\n")
+        #expect(draft.hasChanges)
+        #expect(draft.proposedBytes.starts(with: [0xEF, 0xBB, 0xBF]))
+        #expect(draft.proposedBytes == Data([0xEF, 0xBB, 0xBF]) +
+            Data("# Topic\r\n- First\r\n- Revised\r\n".utf8))
+        #expect(draft.decision(against: raw) == .safeToWrite)
+        #expect(draft.decision(against: draft.proposedBytes) == .alreadyApplied)
+        let restored = try JSONDecoder().decode(ImVaultDraft.self,
+            from: JSONEncoder().encode(draft))
+        #expect(restored.proposedBytes == draft.proposedBytes)
+    }
+    @Test func uniformClassicMacNewlinesRemainConsistent() throws {
+        let identity = try ImVaultFileIdentity(vaultID: "qa",
+            relativePath: "Legacy.md")
+        let bytes = Data("A\rB\r".utf8)
+        var draft = try ImVaultDraft(identity: identity,
+            baseText: "A\rB\r", baseRawData: bytes)
+        try draft.update("A\nB\n")
+        #expect(!draft.hasChanges)
+        try draft.update("A\nCorrected\n")
+        #expect(draft.proposedBytes == Data("A\rCorrected\r".utf8))
+    }
+
     @Test func draftDetectsModifiedBaseline() throws {
         let id = try ImVaultFileIdentity(vaultID: "v",relativePath: "A.md")
         let initial = try ImVaultDraft(identity: id, baseText: "A")
