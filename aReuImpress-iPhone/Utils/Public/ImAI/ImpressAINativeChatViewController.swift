@@ -64,6 +64,10 @@ final class ImpressAINativeChatViewController: UIViewController,
     private let sendButton = UIButton(type: .system)
     private let inputBar = UIView()
     private let privacyLabel = UILabel()
+    private let contextBar = UIStackView()
+    private let promptButton = UIButton(type: .system)
+    private let materialButton = UIButton(type: .system)
+    private var sessionPromptOverride: String?
 
     init(question: String? = nil, answer: String? = nil,
          cardID: UUID? = nil, contentRevision: Int? = nil,
@@ -139,6 +143,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         navigationItem.largeTitleDisplayMode = .never
 
         tableView.dataSource = self
+        tableView.register(ImpressChatMessageCell.self, forCellReuseIdentifier: "chat.message")
         tableView.backgroundColor = .clear
         tableView.separatorStyle = .none
         tableView.rowHeight = UITableView.automaticDimension
@@ -185,7 +190,20 @@ final class ImpressAINativeChatViewController: UIViewController,
         sendButton.isEnabled = false
 
         inputBar.backgroundColor = .clear
-        for element in [tableView, inputBar, privacyLabel] {
+        contextBar.axis = .horizontal
+        contextBar.distribution = .fillEqually
+        contextBar.spacing = ImpressV3Appearance.Metrics.rowSpacing
+        for (button, symbol, label, action) in [
+            (promptButton, "text.alignleft", V3L("提示词"), #selector(openSessionPrompt)),
+            (materialButton, "doc.on.doc", V3L("本次材料"), #selector(reviewSessionMaterials))
+        ] {
+            ImpressV3Appearance.styleQuietButton(button, title: label, symbol: symbol)
+            button.addTarget(self, action: action, for: .touchUpInside)
+            contextBar.addArrangedSubview(button)
+        }
+        promptButton.accessibilityIdentifier = "impress.ai.chat.prompt"
+        materialButton.accessibilityIdentifier = "impress.ai.chat.materials"
+        for element in [tableView, inputBar, privacyLabel, contextBar] {
             element.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(element)
         }
@@ -194,7 +212,13 @@ final class ImpressAINativeChatViewController: UIViewController,
             inputBar.addSubview(element)
         }
         NSLayoutConstraint.activate([
-            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            contextBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 4),
+            contextBar.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor,
+                constant: ImpressV3Appearance.Metrics.screenInset),
+            contextBar.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor,
+                constant: -ImpressV3Appearance.Metrics.screenInset),
+            contextBar.heightAnchor.constraint(greaterThanOrEqualToConstant: 38),
+            tableView.topAnchor.constraint(equalTo: contextBar.bottomAnchor, constant: 6),
             tableView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: privacyLabel.topAnchor, constant: -6),
@@ -247,24 +271,89 @@ final class ImpressAINativeChatViewController: UIViewController,
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath)
         -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "turn")
-            ?? UITableViewCell(style: .subtitle, reuseIdentifier: "turn")
-        let turn = history[indexPath.row]
-        var content = UIListContentConfiguration.subtitleCell()
-        content.text = turn.role == .user ? V3L("我") : V3L("AI")
-        content.secondaryText = turn.status == .failed
-            ? turn.text + "\n" + V3L("发送未完成 · 可重新尝试")
-            : turn.text
-        content.textProperties.font = ImpressV3Appearance.Typography.caption
-        content.textProperties.color = ImpressV3Appearance.secondaryText
-        content.secondaryTextProperties.font = ImpressV3Appearance.Typography.body
-        content.secondaryTextProperties.color = ImpressV3Appearance.primaryText
-        content.secondaryTextProperties.numberOfLines = 0
-        cell.contentConfiguration = content
-        cell.backgroundColor = turn.role == .user
-            ? ImpressV3Appearance.reviewActionSurface : ImpressV3Appearance.surface
-        cell.selectionStyle = .none
+        let cell = tableView.dequeueReusableCell(withIdentifier: "chat.message", for: indexPath)
+            as! ImpressChatMessageCell
+        cell.configure(history[indexPath.row])
         return cell
+    }
+
+    @objc private func openSessionPrompt() {
+        guard !sending && !restoring else { return }
+        let picker = UIAlertController(title: V3L("本次讨论提示词"),
+            message: V3L("选择只影响当前讨论的后续消息，不会覆盖全局模板。"),
+            preferredStyle: .actionSheet)
+        picker.addAction(UIAlertAction(title: V3L("默认：第一性原理 + 奥卡姆剃刀"),
+            style: .default) { [weak self] _ in
+            self?.sessionPromptOverride = nil
+            self?.enqueuePersistence()
+        })
+        for item in ImpressV3PromptLibrary.load() {
+            picker.addAction(UIAlertAction(title: item.title, style: .default) { [weak self] _ in
+                self?.previewPrompt(title: item.title, text: item.content)
+            })
+        }
+        picker.addAction(UIAlertAction(title: V3L("编辑本次提示词"),
+            style: .default) { [weak self] _ in
+            guard let self else { return }
+            let editor = UIAlertController(title: V3L("临时提示词"),
+                message: V3L("仅在本次讨论使用。可在设置的提示词库长期编辑模板。"),
+                preferredStyle: .alert)
+            editor.addTextField { $0.text = self.sessionPromptOverride ??
+                ImpressAIChatPromptSelection.systemText() }
+            editor.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            editor.addAction(UIAlertAction(title: V3L("本次使用"), style: .default) { [weak self, weak editor] _ in
+                let value = editor?.textFields?.first?.text?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                guard !value.isEmpty else { return }
+                self?.sessionPromptOverride = value
+                self?.enqueuePersistence()
+            })
+            self.present(editor, animated: true)
+        })
+        picker.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        picker.popoverPresentationController?.sourceView = promptButton
+        present(picker, animated: true)
+    }
+
+    private func previewPrompt(title: String, text: String) {
+        let alert = UIAlertController(title: title,
+            message: String(text.prefix(1000)), preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("本次使用"), style: .default) {
+            [weak self] _ in
+            self?.sessionPromptOverride = text
+            self?.enqueuePersistence()
+        })
+        present(alert, animated: true)
+    }
+
+    @objc private func reviewSessionMaterials() {
+        guard !sending && !restoring else { return }
+        let preview = contextReferences.map {
+            $0.stableIdentity + "\n" + String($0.excerpt.prefix(350))
+        }.joined(separator: "\n\n")
+        let alert = UIAlertController(title: V3L("本次引用材料"),
+            message: preview.isEmpty
+                ? V3L("没有选中材料。打开对话不自动上传私人内容；首次发送可选择当前卡片。")
+                : preview,
+            preferredStyle: .actionSheet)
+        alert.addAction(UIAlertAction(title: V3L("移除引用材料"),
+            style: .destructive) { [weak self] _ in
+            self?.includeCardContext = false
+            self?.contextChoiceMade = true
+            self?.contextReferences = []
+            self?.enqueuePersistence()
+        })
+        alert.addAction(UIAlertAction(title: V3L("下次发送时重新选择"),
+            style: .default) { [weak self] _ in
+            self?.includeCardContext = false
+            self?.contextChoiceMade = false
+            self?.contextReferences = []
+            self?.enqueuePersistence()
+        })
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        alert.popoverPresentationController?.sourceView = materialButton
+        present(alert, animated: true)
     }
 
     private enum ChatFlowError: LocalizedError {
@@ -364,7 +453,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         guard !sending, !restoring else { return }
         draftDebounce?.cancel()
         sending = true
-        let prompt = ImpressAIChatPromptSelection.systemText()
+        let prompt = sessionPromptOverride ?? ImpressAIChatPromptSelection.systemText()
         let providerID = route.connection.id
         let modelName = route.model.identifier
         var system = prompt
@@ -679,5 +768,62 @@ final class ImpressChatSessionHistoryViewController: UITableViewController {
         guard sessions.indices.contains(indexPath.row) else { return }
         onSelect?(sessions[indexPath.row].sessionID)
         tableView.deselectRow(at: indexPath, animated: true)
+    }
+}
+
+@MainActor
+final class ImpressChatMessageCell: UITableViewCell {
+    private let roleLabel = UILabel()
+    private let bodyView = UITextView()
+    private let stateLabel = UILabel()
+    private let column = UIStackView()
+
+    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+        super.init(style: style, reuseIdentifier: reuseIdentifier)
+        column.axis = .vertical
+        column.spacing = ImpressV3Appearance.Metrics.rowSpacing
+        column.translatesAutoresizingMaskIntoConstraints = false
+        roleLabel.font = ImpressV3Appearance.Typography.caption
+        roleLabel.textColor = ImpressV3Appearance.secondaryText
+        bodyView.backgroundColor = .clear
+        bodyView.isEditable = false
+        bodyView.isSelectable = true
+        bodyView.isScrollEnabled = false
+        bodyView.textContainerInset = .zero
+        bodyView.textContainer.lineFragmentPadding = 0
+        bodyView.font = ImpressV3Appearance.Typography.body
+        bodyView.textColor = ImpressV3Appearance.primaryText
+        bodyView.adjustsFontForContentSizeCategory = true
+        bodyView.accessibilityIdentifier = "impress.ai.chat.message-body"
+        stateLabel.font = ImpressV3Appearance.Typography.caption
+        stateLabel.textColor = ImpressV3Appearance.secondaryText
+        stateLabel.numberOfLines = 0
+        for item in [roleLabel, bodyView, stateLabel] {
+            column.addArrangedSubview(item)
+        }
+        contentView.addSubview(column)
+        let margins = contentView.layoutMarginsGuide
+        NSLayoutConstraint.activate([
+            column.topAnchor.constraint(equalTo: margins.topAnchor, constant: 4),
+            column.bottomAnchor.constraint(equalTo: margins.bottomAnchor, constant: -4),
+            column.leadingAnchor.constraint(equalTo: margins.leadingAnchor),
+            column.trailingAnchor.constraint(equalTo: margins.trailingAnchor)
+        ])
+        selectionStyle = .none
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    func configure(_ message: WCDBV3ChatMessage) {
+        roleLabel.text = message.role == .user ? V3L("我") : V3L("AI")
+        let rendered = MarkdownKitRenderer().parseMarkdown(message.text)
+            ?? NSAttributedString(string: message.text)
+        bodyView.attributedText = rendered
+        bodyView.isSelectable = true
+        stateLabel.text = message.status == .failed ? V3L("请求失败，可重新发送") :
+            (message.status == .cancelled ? V3L("请求已取消") :
+             (message.status == .pending ? V3L("正在生成…") : nil))
+        stateLabel.isHidden = stateLabel.text == nil
+        backgroundColor = message.role == .user
+            ? ImpressV3Appearance.reviewActionSurface : ImpressV3Appearance.surface
     }
 }

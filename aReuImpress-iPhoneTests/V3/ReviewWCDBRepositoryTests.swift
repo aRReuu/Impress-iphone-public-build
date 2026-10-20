@@ -343,6 +343,28 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
     }
 
     @MainActor
+    @MainActor
+    func testNativeChatRendersSelectableMarkdownAndVisibleContextControls() throws {
+        let controller = ImpressAINativeChatViewController()
+        controller.loadViewIfNeeded()
+        let elements = controller.view.subviews.flatMap { [$0] + $0.subviews }
+        XCTAssertNotNil(elements.compactMap { $0 as? UIButton }
+            .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.prompt" }))
+        XCTAssertNotNil(elements.compactMap { $0 as? UIButton }
+            .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.materials" }))
+        let cell = ImpressChatMessageCell(style: .default, reuseIdentifier: "QA")
+        cell.configure(WCDBV3ChatMessage(role: .assistant,
+            text: "# Heading\\n\\n**Markdown** and long text",
+            status: .completed))
+        let text = try XCTUnwrap(cell.contentView.subviews
+            .compactMap { $0 as? UIStackView }.first?.arrangedSubviews
+            .compactMap { $0 as? UITextView }.first)
+        XCTAssertTrue(text.isSelectable)
+        XCTAssertFalse(text.isEditable)
+        XCTAssertFalse(text.isScrollEnabled)
+        XCTAssertNotNil(text.attributedText)
+    }
+
     func testNativeChatRestoresStableCardTranscriptAndUnsentDraft() async throws {
         let repository = try ReviewWCDBRepository(
             databasePath: temporaryPath(), calculator: FSRS6ReviewCalculator())
