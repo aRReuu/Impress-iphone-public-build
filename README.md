@@ -1,3 +1,5 @@
+> **PRODUCT SOURCE NOTICE · 2026-10-20**：此前说明为历史内容，可能与当前已确认需求冲突。唯一产品要求与工作范围以 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md) 为准；执行差距与验收见 [IMPLEMENTATION_GAP_AUDIT_20261020.md](IMPLEMENTATION_GAP_AUDIT_20261020.md)。当前工作分支：`feature/impress-duplex-loop-v1`。完整校准周图必须移除，修改历史必须移入编辑器；旧文档中相反指示均已被替代。CI 成功≠产品完工。
+
 # Impress V3.2 — Public iPhone Development Branch
 
 This **public repository** is the active source authority for Impress V3.2 development on `feature/impress-vault-device-write-qa` (the only development branch alongside stable `main`). It originated as a sanitized independent-history build mirror; historical private upstream SHA references in `SOURCE_MANIFEST.json` remain provenance **only**, not an instruction to modify the private repository.

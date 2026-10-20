@@ -1,3 +1,5 @@
+> **PRODUCT SOURCE NOTICE · 2026-10-20**：此前说明为历史内容，可能与当前已确认需求冲突。唯一产品要求与工作范围以 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md) 为准；执行差距与验收见 [IMPLEMENTATION_GAP_AUDIT_20261020.md](IMPLEMENTATION_GAP_AUDIT_20261020.md)。当前工作分支：`feature/impress-duplex-loop-v1`。完整校准周图必须移除，修改历史必须移入编辑器；旧文档中相反指示均已被替代。CI 成功≠产品完工。
+
 # Impress 知识生命周期 V1 — 三 Tab 与卡片 → Chat → 结构化笔记（2026-10-19）
 
 > **唯一产品规则基线；分阶段实现，非已交付声明。** 仓库：`aRReuu/Impress-iphone-public-build`，仅在现有 `feature/impress-vault-device-write-qa` 开发，不合并 main、不操作私有仓库。本文件覆盖 2026-10-18 旧版中互相冲突的「首页 + 快速记录」「校准独立 Tab」「闪卡顶栏笔记入口」「新增理解/修订答案强制选择」「Chat 永远临时」等规则。其他真实设备、数据安全、免费 API 与发布门禁继续有效。
