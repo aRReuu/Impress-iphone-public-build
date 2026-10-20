@@ -130,13 +130,18 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
                             answerText: "Updated answer"),
             expectedRevision: 0, expectedContentRevision: 0)
         review.viewWillAppear(false)
+        func labels(in root: UIView) -> [UILabel] {
+            let own = (root as? UILabel).map { [$0] } ?? []
+            return own + root.subviews.flatMap { labels(in: $0) }
+        }
         let reset = try await eventually {
             let newContent = stack.topCard?.content as? ImMemoryCardView
-            return !(newContent?.answerIsRevealed ?? true) &&
-                   !(stack.topCard?.panGestureRecognizer.isEnabled ?? true) &&
-                   descendants(review.view, UILabel.self).contains {
-                       $0.text == V3L("先回忆，再查看答案")
-                   }
+            let hidden = !(newContent?.answerIsRevealed ?? true)
+            let swipeDisabled = !(stack.topCard?.panGestureRecognizer.isEnabled ?? true)
+            let requiresReveal = labels(in: review.view).contains {
+                $0.text == V3L("先回忆，再查看答案")
+            }
+            return hidden && swipeDisabled && requiresReveal
         }
         XCTAssertTrue(reset)
         let refreshed = try await store.content(for: id)
