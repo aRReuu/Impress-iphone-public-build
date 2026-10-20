@@ -126,6 +126,23 @@ struct ImVaultSyncCoreTests {
         }
     }
 
+    @Test func renderedDiffUsesActualProposedBOMAndNewlineBytes() throws {
+        let original = "\u{FEFF}# Heading\r\nOriginal\r\n"
+        let id = try ImVaultFileIdentity(vaultID: "qa-bom",
+            relativePath: "Notes/Original.md")
+        var draft = try ImVaultDraft(identity: id, baseText: original,
+            baseRawData: Data(original.utf8))
+        try draft.update("# Heading\nRevised\n")
+        #expect(draft.byteFaithfulEditedText ==
+            "\u{FEFF}# Heading\r\nRevised\r\n")
+        #expect(draft.proposedBytes ==
+            Data(draft.byteFaithfulEditedText.utf8))
+        let diff = ImVaultDiff.summary(base: draft.baseText,
+            edited: draft.byteFaithfulEditedText, maximumLines: 200)
+        #expect(diff.complete)
+        #expect(diff.text.contains("Revised"))
+    }
+
     @Test func draftPreservesOriginalMarkdown() throws {
         let text = "---\ntags: [demo]\n---\n# Heading\n![[image.png]]\n[[Linked]]\n"
         let id = try ImVaultFileIdentity(vaultID: "v",relativePath: "notes/test.md")

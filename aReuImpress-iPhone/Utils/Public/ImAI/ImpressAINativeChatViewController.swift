@@ -957,11 +957,21 @@ final class ImpressAINativeChatViewController: UIViewController,
     private func showDuplexEditor(repository: ReviewWCDBRepository, cardID: UUID?,
                                   contentRevision: Int?, messageID: UUID?,
                                   recovering: WCDBV3DuplexProposal?) {
+        // A suggestion may originate only from the exact completed
+        // assistant turn the user selected. An unrelated historic message
+        // is never allowed to become an executable patch.
+        let candidate = messageID.flatMap { target in
+            history.first(where: {
+                $0.messageID == target && $0.role == .assistant &&
+                $0.status == .completed
+            })?.text
+        }
         let editor = ImpressDuplexChangeController(
             repository: repository, cardID: cardID,
             sourceContentRevision: contentRevision,
             noteIdentity: recovering?.noteIdentity ?? noteDraftTarget,
-            sourceMessageID: messageID, pending: recovering) { [weak self] changed in
+            sourceMessageID: messageID, pending: recovering,
+            suggestedText: candidate) { [weak self] changed in
                 guard let self else { return false }
                 await self.saveChain?.value
                 if let index = self.previousDuplex.firstIndex(where: {
@@ -2032,6 +2042,9 @@ final class ImpressDuplexChangeController: UIViewController {
     private let sourceContentRevision: Int?
     private let noteIdentity: ImVaultFileIdentity?
     private let sourceMessageID: UUID?
+    private let suggestedText: String?
+    private let suggestionReadOnly = UITextView()
+    private let applySuggestionButton = UIButton(type: .system)
     private let saveProposal: SaveProposal
     private var pending: WCDBV3DuplexProposal?
     private var card: WCDBV3CardContent?
@@ -2049,13 +2062,14 @@ final class ImpressDuplexChangeController: UIViewController {
     init(repository: ReviewWCDBRepository, cardID: UUID?,
          sourceContentRevision: Int?, noteIdentity: ImVaultFileIdentity?,
          sourceMessageID: UUID?, pending: WCDBV3DuplexProposal?,
-         saveProposal: @escaping SaveProposal) {
+         suggestedText: String? = nil, saveProposal: @escaping SaveProposal) {
         self.repository = repository
         self.cardID = cardID
         self.sourceContentRevision = sourceContentRevision
         self.noteIdentity = noteIdentity
         self.sourceMessageID = sourceMessageID
         self.pending = pending
+        self.suggestedText = suggestedText
         self.saveProposal = saveProposal
         super.init(nibName: nil, bundle: nil)
     }
@@ -2104,6 +2118,23 @@ final class ImpressDuplexChangeController: UIViewController {
         }
         configure(questionInput, identifier: "impress.duplex.question", height: 114)
         configure(answerInput, identifier: "impress.duplex.answer", height: 160)
+        suggestionReadOnly.font = ImpressV3Appearance.Typography.body
+        suggestionReadOnly.adjustsFontForContentSizeCategory = true
+        suggestionReadOnly.textColor = ImpressV3Appearance.primaryText
+        suggestionReadOnly.backgroundColor = ImpressV3Appearance.surface
+        suggestionReadOnly.layer.cornerRadius = ImpressV3Appearance.Radius.field
+        suggestionReadOnly.isEditable = false
+        suggestionReadOnly.isSelectable = true
+        suggestionReadOnly.text = suggestedText ?? ""
+        suggestionReadOnly.accessibilityIdentifier = "impress.duplex.assistant-suggestion"
+        suggestionReadOnly.heightAnchor.constraint(equalToConstant: 145).isActive = true
+        ImpressV3Appearance.styleQuietButton(applySuggestionButton,
+            title: V3L("采用选定 AI 回复作为原卡答案候选"),
+            symbol: "arrow.down.doc")
+        applySuggestionButton.accessibilityIdentifier = "impress.duplex.use-suggestion"
+        applySuggestionButton.addTarget(self, action: #selector(adoptSuggestion),
+                                         for: .touchUpInside)
+        applySuggestionButton.isEnabled = false
         ImpressV3Appearance.styleQuietButton(editNoteButton,
             title: V3L("修改对应笔记的私有草稿"), symbol: "square.and.pencil")
         editNoteButton.addTarget(self, action: #selector(editNote), for: .touchUpInside)
@@ -2113,6 +2144,11 @@ final class ImpressDuplexChangeController: UIViewController {
         previewButton.addTarget(self, action: #selector(preparePreview), for: .touchUpInside)
         previewButton.accessibilityIdentifier = "impress.duplex.preview"
         previewButton.isEnabled = false
+        if let suggestedText, !suggestedText.isEmpty {
+            stack.addArrangedSubview(label(V3L("选定的 AI 回复 · 只读建议，尚未修改任何对象")))
+            stack.addArrangedSubview(suggestionReadOnly)
+            stack.addArrangedSubview(applySuggestionButton)
+        }
         stack.addArrangedSubview(label(V3L("原卡 · 编辑题目与答案")))
         stack.addArrangedSubview(cardInfo)
         stack.addArrangedSubview(label(V3L("题目")))
@@ -2171,6 +2207,10 @@ final class ImpressDuplexChangeController: UIViewController {
                 answerInput.isEditable = canEditStandard && pending == nil
                 questionInput.text = pending?.cardEditedQuestion ?? item.question
                 answerInput.text = pending?.cardEditedAnswer ?? item.answerText ?? ""
+                applySuggestionButton.isEnabled = canEditStandard &&
+                    pending == nil && suggestedText != nil &&
+                    !(suggestedText ?? "").isEmpty &&
+                    (suggestedText?.utf8.count ?? 0) <= 40_000
                 cardInfo.text = "cardID: " + cardID.uuidString +
                     "\nContent revision: " + String(item.contentRevision) +
                     (canEditStandard ? "" :
@@ -2209,7 +2249,7 @@ final class ImpressDuplexChangeController: UIViewController {
             }
             if let draft {
                 let diff = ImVaultDiff.summary(base: draft.baseText,
-                    edited: draft.editedText, maximumLines: 200)
+                    edited: draft.byteFaithfulEditedText, maximumLines: 200)
                 noteInfo.text = "Vault ID: " + identity.vaultID +
                     "\n" + V3L("目标：") + identity.relativePath +
                     "\nSHA-256: " + draft.baseDigest +
@@ -2230,6 +2270,36 @@ final class ImpressDuplexChangeController: UIViewController {
 
     @objc private func editNote() {
         guard pending == nil, let identity = noteIdentity,
+              identity.documentFormat == .markdown,
+              ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID else {
+            presentIssue(V3L("来源身份已失效"), ImVaultSyncFailure.wrongVault.localizedDescription)
+            return
+        }
+        if let suggestion = suggestedText, !suggestion.isEmpty {
+            let choice = UIAlertController(title: V3L("选择笔记修订方式"),
+                message: V3L("选定 AI 回复只能成为可编辑建议，不能直接覆写原笔记。请选择指定章节或继续手动编辑草稿。"),
+                preferredStyle: .actionSheet)
+            choice.addAction(UIAlertAction(title: V3L("指定原章节并编辑 AI 建议"),
+                style: .default) { [weak self] _ in
+                self?.openNoteDraftEditor(useAIResponse: true)
+            })
+            choice.addAction(UIAlertAction(title: V3L("手动编辑独立草稿"),
+                style: .default) { [weak self] _ in
+                self?.openNoteDraftEditor(useAIResponse: false)
+            })
+            choice.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            choice.popoverPresentationController?.sourceView = view
+            choice.popoverPresentationController?.sourceRect = CGRect(
+                x: view.bounds.midX, y: view.bounds.midY, width: 1, height: 1)
+            present(choice, animated: true)
+        } else {
+            openNoteDraftEditor(useAIResponse: false)
+        }
+    }
+
+    private func openNoteDraftEditor(useAIResponse: Bool) {
+        guard pending == nil, let identity = noteIdentity,
+              identity.documentFormat == .markdown,
               ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID else {
             presentIssue(V3L("来源身份已失效"), ImVaultSyncFailure.wrongVault.localizedDescription)
             return
@@ -2238,13 +2308,45 @@ final class ImpressDuplexChangeController: UIViewController {
             guard let self else { return }
             switch result {
             case .success(let source):
+                guard source.identity == identity,
+                      ImVaultReadOnlyProbe.shared.authorizedVaultID ==
+                          identity.vaultID else {
+                    self.presentIssue(V3L("来源已变化"),
+                        ImVaultSyncFailure.wrongVault.localizedDescription)
+                    return
+                }
                 do {
-                    try ImVaultDraftEntry.open(live: source, presenter: self)
-                } catch { self.presentIssue(V3L("笔记草稿不可用"), error.localizedDescription) }
+                    if useAIResponse, let suggestion = self.suggestedText {
+                        let picker = ImpressDuplexNoteSectionTargetController(
+                            live: source, proposedText: suggestion) { [weak self] in
+                            guard let self else { return }
+                            self.navigationController?.popToViewController(
+                                self, animated: true)
+                        }
+                        self.navigationController?.pushViewController(
+                            picker, animated: true)
+                    } else {
+                        try ImVaultDraftEntry.open(live: source, presenter: self)
+                    }
+                } catch {
+                    self.presentIssue(V3L("笔记草稿不可用"), error.localizedDescription)
+                }
             case .failure(let error):
                 self.presentIssue(V3L("源笔记读取失败"), error.localizedDescription)
             }
         }
+    }
+
+    @objc private func adoptSuggestion() {
+        guard loaded, pending == nil, card?.cardType == 0,
+              let suggestion = suggestedText,
+              !suggestion.isEmpty, suggestion.utf8.count <= 40_000 else {
+            return
+        }
+        // Explicit user operation changes ONLY the editor field. No FSRS
+        // mutation, Vault write, proposal or network request happens here.
+        answerInput.text = suggestion
+        answerInput.becomeFirstResponder()
     }
 
     @objc private func preparePreview() {
@@ -2271,7 +2373,7 @@ final class ImpressDuplexChangeController: UIViewController {
                 return
             }
             if changedNote, let d = self.draft {
-                guard ImVaultDiff.summary(base: d.baseText, edited: d.editedText,
+                guard ImVaultDiff.summary(base: d.baseText, edited: d.byteFaithfulEditedText,
                                           maximumLines: 200).complete else {
                     self.presentIssue(V3L("修改预览过长"),
                         V3L("请把笔记修改缩小到可完整核对的范围。"))
@@ -2594,7 +2696,7 @@ final class ImpressDuplexApprovalController: UIViewController {
                     throw ImVaultSyncFailure.conflict
                 }
                 let diff = ImVaultDiff.summary(base: draft.baseText,
-                    edited: draft.editedText, maximumLines: 200)
+                    edited: draft.byteFaithfulEditedText, maximumLines: 200)
                 notePreviewValid = diff.complete
                 pieces.append(diff.text)
             } catch {
@@ -2688,7 +2790,7 @@ final class ImpressDuplexApprovalController: UIViewController {
                       let draft = try ImVaultPrivateStore.approvedDraft(
                           identity: id, baseDigest: proposal.noteBaseDigest,
                           editedDigest: proposal.noteEditedDigest),
-                      ImVaultDiff.summary(base: draft.baseText, edited: draft.editedText,
+                      ImVaultDiff.summary(base: draft.baseText, edited: draft.byteFaithfulEditedText,
                                           maximumLines: 200).complete else {
                     throw ImVaultSyncFailure.conflict
                 }
@@ -2865,7 +2967,7 @@ final class ImpressDuplexApprovalController: UIViewController {
                     throw ImVaultSyncFailure.conflict
                 }
                 let diff = ImVaultDiff.summary(
-                    base: inverse.baseText, edited: inverse.editedText, maximumLines: 200)
+                    base: inverse.baseText, edited: inverse.byteFaithfulEditedText, maximumLines: 200)
                 guard diff.complete else { throw ImVaultSyncFailure.previewTruncated }
                 details = V3L("撤销笔记改动") + "\nVault ID: " + id.vaultID +
                     "\n" + id.relativePath +
@@ -3040,5 +3142,239 @@ final class ImpressDuplexApprovalController: UIViewController {
                                       preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
         present(alert, animated: true)
+    }
+}
+
+
+// MARK: - V1.1 AI-response-to-exact-source-range draft proposal
+
+/// This helper never writes an Obsidian source. It constructs a private draft
+/// only after the caller selected one authenticated file + original section.
+/// Real file writes still require the independent production-disabled gate.
+@MainActor
+enum ImpressDuplexScopedDraftBuilder {
+    static func proposed(live: ImVaultRawDocument,
+                         section: ImpressMarkdownSection,
+                         replacement: String) throws -> ImVaultDraft {
+        guard live.identity.documentFormat == .markdown,
+              live.digest == ImVaultDigest.sha256(live.sourceBytes),
+              String(data: live.sourceBytes, encoding: .utf8) == live.markdown,
+              section.startUTF8 >= 0, section.endUTF8 > section.startUTF8,
+              section.endUTF8 <= live.sourceBytes.count,
+              ImpressMarkdownStructure.sections(in: live.markdown).contains(where: {
+                  $0.id == section.id && $0.startUTF8 == section.startUTF8 &&
+                  $0.endUTF8 == section.endUTF8 && $0.rawUTF8 == section.rawUTF8
+              }) else { throw ImVaultSyncFailure.conflict }
+        let bytes = Array(live.sourceBytes)
+        let raw = Array(section.rawUTF8.utf8)
+        guard Array(bytes[section.startUTF8..<section.endUTF8]) == raw else {
+            throw ImVaultSyncFailure.conflict
+        }
+        var changed = Data(bytes[..<section.startUTF8])
+        changed.append(contentsOf: replacement.utf8)
+        changed.append(contentsOf: bytes[section.endUTF8...])
+        guard changed.count <= 8 * 1024 * 1024,
+              let value = String(data: changed, encoding: .utf8) else {
+            throw ImVaultSyncFailure.tooLarge
+        }
+        var draft = try ImVaultDraft(identity: live.identity,
+            baseText: live.markdown, baseRawData: live.sourceBytes)
+        // An original BOM belongs to the file byte prefix, never to the
+        // UITextView replacement payload. The shared draft writer restores
+        // exactly one BOM and does not normalize mixed newlines invisibly.
+        let edited = value.hasPrefix("\u{FEFF}") ? String(value.dropFirst()) : value
+        try draft.update(edited)
+        try draft.validate()
+        guard draft.hasChanges else { throw ImVaultSyncFailure.approvalMissing }
+        guard ImVaultDiff.summary(base: draft.baseText,
+            edited: draft.byteFaithfulEditedText, maximumLines: 200).complete else {
+            throw ImVaultSyncFailure.previewTruncated
+        }
+        return draft
+    }
+}
+
+@MainActor
+final class ImpressDuplexNoteSectionTargetController: UITableViewController {
+    private let live: ImVaultRawDocument
+    private let proposedText: String
+    private let sections: [ImpressMarkdownSection]
+    private let onSaved: () -> Void
+
+    init(live: ImVaultRawDocument, proposedText: String,
+         onSaved: @escaping () -> Void) {
+        self.live = live
+        self.proposedText = proposedText
+        self.sections = ImpressMarkdownStructure.sections(in: live.markdown)
+        self.onSaved = onSaved
+        super.init(style: .insetGrouped)
+    }
+    required init?(coder: NSCoder) { fatalError("init(live:) unsupported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = V3L("选择原笔记的目标章节")
+        tableView.backgroundColor = ImpressV3Appearance.page
+        tableView.accessibilityIdentifier = "impress.duplex.note-section-picker"
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            numberOfRowsInSection section: Int) -> Int {
+        sections.count
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let section = sections[indexPath.row]
+        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        var content = UIListContentConfiguration.subtitleCell()
+        content.text = String(repeating: "  ", count: max(0, section.level - 1)) +
+            (section.heading.isEmpty ? V3L("无标题段落") : section.heading)
+        content.secondaryText = String(section.byteCount) + " bytes · " +
+            String(section.startUTF8) + "–" + String(section.endUTF8)
+        cell.contentConfiguration = content
+        cell.accessoryType = .disclosureIndicator
+        cell.accessibilityIdentifier = "impress.duplex.note-section-row"
+        return cell
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        guard sections.indices.contains(indexPath.row) else { return }
+        let page = ImpressDuplexNoteReplacementController(
+            live: live, section: sections[indexPath.row],
+            proposedText: proposedText, onSaved: onSaved)
+        navigationController?.pushViewController(page, animated: true)
+    }
+}
+
+@MainActor
+final class ImpressDuplexNoteReplacementController: UIViewController {
+    private let live: ImVaultRawDocument
+    private let section: ImpressMarkdownSection
+    private let onSaved: () -> Void
+    private let editor = UITextView()
+    private let original = UITextView()
+
+    init(live: ImVaultRawDocument, section: ImpressMarkdownSection,
+         proposedText: String, onSaved: @escaping () -> Void) {
+        self.live = live
+        self.section = section
+        self.onSaved = onSaved
+        super.init(nibName: nil, bundle: nil)
+        // Preserve the original section's trailing line boundary visibly in
+        // the editable proposal; otherwise the following heading may join
+        // the suggestion into an unintended paragraph.
+        let suffix = section.rawUTF8.hasSuffix("\r\n") ? "\r\n" :
+            (section.rawUTF8.hasSuffix("\n") ? "\n" :
+             (section.rawUTF8.hasSuffix("\r") ? "\r" : ""))
+        editor.text = suffix.isEmpty || proposedText.hasSuffix(suffix)
+            ? proposedText : proposedText + suffix
+    }
+    required init?(coder: NSCoder) { fatalError("init(live:section:) unsupported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = V3L("核对原文与局部建议")
+        view.backgroundColor = ImpressV3Appearance.page
+
+        let scroll = UIScrollView()
+        let stack = UIStackView()
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.axis = .vertical
+        stack.spacing = ImpressV3Appearance.Metrics.rowSpacing
+        stack.isLayoutMarginsRelativeArrangement = true
+        stack.directionalLayoutMargins = NSDirectionalEdgeInsets(
+            top: 14, leading: 16, bottom: 24, trailing: 16)
+
+        original.isEditable = false
+        original.isSelectable = true
+        original.text = section.rawUTF8
+        original.accessibilityIdentifier = "impress.duplex.section-original"
+        editor.accessibilityIdentifier = "impress.duplex.section-replacement"
+        editor.isEditable = true
+        for field in [original, editor] {
+            field.font = ImpressV3Appearance.Typography.body
+            field.adjustsFontForContentSizeCategory = true
+            field.backgroundColor = ImpressV3Appearance.surface
+            field.textColor = ImpressV3Appearance.primaryText
+            field.layer.cornerRadius = ImpressV3Appearance.Radius.field
+            field.heightAnchor.constraint(equalToConstant: 190).isActive = true
+        }
+        ImpressSpeechAccessory.install(on: editor)
+        func info(_ text: String) -> UILabel {
+            let label = UILabel()
+            label.font = ImpressV3Appearance.Typography.supporting
+            label.numberOfLines = 0
+            label.adjustsFontForContentSizeCategory = true
+            label.textColor = ImpressV3Appearance.secondaryText
+            label.text = text
+            return label
+        }
+        stack.addArrangedSubview(info("Vault ID: " + live.identity.vaultID +
+            "\n" + live.identity.relativePath + "\nSHA-256: " + live.digest +
+            "\nUTF-8: " + String(section.startUTF8) + "–" + String(section.endUTF8)))
+        stack.addArrangedSubview(info(V3L("原文范围 · 只读")))
+        stack.addArrangedSubview(original)
+        stack.addArrangedSubview(info(V3L("建议替换文本 · 可编辑；不会直接写入 Vault")))
+        stack.addArrangedSubview(editor)
+        view.addSubview(scroll)
+        scroll.addSubview(stack)
+        NSLayoutConstraint.activate([
+            scroll.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
+            stack.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor)
+        ])
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: V3L("预览并保存私有草稿"),
+            style: .done, target: self, action: #selector(saveScopedDraft))
+        navigationItem.rightBarButtonItem?.accessibilityIdentifier =
+            "impress.duplex.save-section-draft"
+    }
+
+    @objc private func saveScopedDraft() {
+        let proposal = editor.text ?? ""
+        // Resolve another coordinated read before constructing any draft:
+        // stale note sections cannot overwrite new legitimate Vault edits.
+        ImVaultReadSync.shared.read(live.identity) { [weak self] result in
+            guard let self else { return }
+            do {
+                let current = try result.get()
+                guard current.identity == self.live.identity,
+                      current.digest == self.live.digest,
+                      ImVaultReadOnlyProbe.shared.authorizedVaultID ==
+                          current.identity.vaultID else {
+                    throw ImVaultSyncFailure.conflict
+                }
+                if let existing = try ImVaultPrivateStore.loadDraft(
+                    identity: current.identity), existing.hasChanges {
+                    throw ImVaultSyncFailure.conflict
+                }
+                let draft = try ImpressDuplexScopedDraftBuilder.proposed(
+                    live: current, section: self.section, replacement: proposal)
+                try ImVaultPrivateStore.saveDraft(draft)
+                guard let persisted = try ImVaultPrivateStore.loadDraft(
+                    identity: current.identity),
+                      persisted.baseDigest == draft.baseDigest,
+                      persisted.proposedBytes == draft.proposedBytes else {
+                    throw ImVaultSyncFailure.verificationFailed
+                }
+                self.onSaved()
+            } catch {
+                let alert = UIAlertController(title: V3L("无法保存局部草稿"),
+                    message: error.localizedDescription,
+                    preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+                self.present(alert, animated: true)
+            }
+        }
     }
 }

@@ -1353,6 +1353,112 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
     }
 
     @MainActor
+    func testScopedAIDraftChangesExactSectionButPreservesOtherBytes() throws {
+        let base = "\u{FEFF}# 上层\r\n保留前文\r\n## Section\r\n原始内容 🌱\r\n# Ending\r\nKeep"
+        let identity = try ImVaultFileIdentity(vaultID: "qa-section",
+            relativePath: "Knowledge/Mixed.md")
+        let source = Data(base.utf8)
+        let live = ImVaultRawDocument(identity: identity,
+            sourceBytes: source, markdown: base,
+            digest: ImVaultDigest.sha256(source))
+        let parts = ImpressMarkdownStructure.sections(in: base)
+        let scoped = try XCTUnwrap(parts.first(where: { $0.heading == "Section" }))
+        let draft = try ImpressDuplexScopedDraftBuilder.proposed(
+            live: live, section: scoped, replacement: "## Section\r\n更新的候选解释 🌱\r\n")
+        XCTAssertTrue(draft.hasChanges)
+        XCTAssertEqual(draft.identity, identity)
+        XCTAssertEqual(draft.baseRawData, source)
+        XCTAssertEqual(draft.baseDigest, live.digest)
+        let modified = try XCTUnwrap(String(data: draft.proposedBytes, encoding: .utf8))
+        XCTAssertTrue(modified.hasPrefix("\u{FEFF}# 上层\r\n保留前文\r\n"))
+        XCTAssertTrue(modified.contains("## Section\r\n更新的候选解释 🌱\r\n"))
+        XCTAssertTrue(modified.hasSuffix("# Ending\r\nKeep"))
+        XCTAssertFalse(modified.contains("原始内容"))
+        XCTAssertTrue(ImVaultDiff.summary(base: draft.baseText,
+            edited: draft.editedText, maximumLines: 200).complete)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    @MainActor
+    func testScopedAIDraftRejectsStaleSourceAndNonMarkdownIdentity() throws {
+        let body = "# Target\nOriginal\n# Unrelated\nUntouched"
+        let original = Data(body.utf8)
+        let id = try ImVaultFileIdentity(vaultID: "qa-target",
+            relativePath: "Notes/Original.md")
+        let selection = try XCTUnwrap(ImpressMarkdownStructure.sections(in: body).first)
+        let changed = body.replacingOccurrences(of: "Original", with: "Later")
+        let updated = Data(changed.utf8)
+        let stale = ImVaultRawDocument(identity: id,
+            sourceBytes: updated, markdown: changed,
+            digest: ImVaultDigest.sha256(updated))
+        XCTAssertThrowsError(try ImpressDuplexScopedDraftBuilder.proposed(
+            live: stale, section: selection, replacement: "# Target\nSuggestion\n"))
+        let valid = ImVaultRawDocument(identity: id,
+            sourceBytes: original, markdown: body,
+            digest: ImVaultDigest.sha256(original))
+        XCTAssertThrowsError(try ImpressDuplexScopedDraftBuilder.proposed(
+            live: valid, section: selection, replacement: selection.rawUTF8))
+        let canvasID = try ImVaultFileIdentity(vaultID: "qa-target",
+            relativePath: "Notes/Graph.canvas")
+        let invalid = ImVaultRawDocument(identity: canvasID,
+            sourceBytes: original, markdown: body,
+            digest: ImVaultDigest.sha256(original))
+        XCTAssertThrowsError(try ImpressDuplexScopedDraftBuilder.proposed(
+            live: invalid, section: selection, replacement: "Not an authorized edit"))
+    }
+
+    @MainActor
+    func testSelectedAIReplyOffersEditableCardSuggestionWithoutAutoApplying() async throws {
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
+            calculator: FSRS6ReviewCalculator())
+        let cardID = UUID()
+        let now = Date()
+        try await repo.insertNewCard(WCDBV3CardInput(
+            cardID: cardID, question: "Original question",
+            answerText: "Original answer"),
+            initial: FSRS6ReviewCalculator().newCardSnapshot(id: cardID, now: now),
+            now: now)
+        let suggestion = "A revised explanation from the selected completed AI reply."
+        let editor = ImpressDuplexChangeController(repository: repo,
+            cardID: cardID, sourceContentRevision: 0, noteIdentity: nil,
+            sourceMessageID: UUID(), pending: nil,
+            suggestedText: suggestion) { _ in
+                XCTFail("Opening an AI suggestion must not persist a proposal")
+                return false
+            }
+        editor.loadViewIfNeeded()
+        func views(_ root: UIView) -> [UIView] {
+            [root] + root.subviews.flatMap { views($0) }
+        }
+        let proposal = try XCTUnwrap(views(editor.view).compactMap {
+            $0 as? UITextView
+        }.first(where: {
+            $0.accessibilityIdentifier == "impress.duplex.assistant-suggestion"
+        }))
+        XCTAssertFalse(proposal.isEditable)
+        XCTAssertEqual(proposal.text, suggestion)
+        let button = try XCTUnwrap(views(editor.view).compactMap {
+            $0 as? UIButton
+        }.first(where: { $0.accessibilityIdentifier == "impress.duplex.use-suggestion" }))
+        let answer = try XCTUnwrap(views(editor.view).compactMap {
+            $0 as? UITextView
+        }.first(where: { $0.accessibilityIdentifier == "impress.duplex.answer" }))
+        for _ in 0..<80 where !button.isEnabled {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertTrue(button.isEnabled)
+        XCTAssertEqual(answer.text, "Original answer")
+        let beforeAdopting = try await repo.content(for: cardID)
+        XCTAssertEqual(beforeAdopting?.answerText, "Original answer")
+        button.sendActions(for: .touchUpInside)
+        XCTAssertEqual(answer.text, suggestion)
+        let persisted = try await repo.content(for: cardID)
+        XCTAssertEqual(persisted?.answerText, "Original answer")
+        let events = try await repo.reviewHistory(for: cardID)
+        XCTAssertTrue(events.isEmpty)
+    }
+
+    @MainActor
     func testCanvasChatScopeCannotSubstituteUnselectedNodeOrOldRevision() throws {
         let json = """
         {"nodes":[

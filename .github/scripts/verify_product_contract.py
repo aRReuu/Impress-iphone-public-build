@@ -83,6 +83,22 @@ assert "ImVaultPrivateStore.archiveApprovedDraft" in chat
 assert "ImpressSourceImpactCardRevisionGate.refreshedInput" in notes
 assert "ImpressChatNoteUploadGate.validate" in chat
 assert "ImpressChatProviderConsentGate.needsReapproval" in chat
+# Static presence is not an E2E or visual-pass claim. These tripwires keep
+# reviewed source-scope boundaries attached to the shipped implementation.
+canvas = source("Packages/ImpressReviewCore/Sources/ImpressReviewCore/ImpressCanvasDocument.swift")
+markdown_structure = source("Packages/ImpressReviewCore/Sources/ImpressReviewCore/ImpressMarkdownStructure.swift")
+excalidraw = source("Packages/ImpressReviewCore/Sources/ImpressReviewCore/ImpressExcalidrawScene.swift")
+assert "ImpressCanvasNativeView" in notes and "impress.canvas.material-preview" in notes
+assert "selectedCanvasNodeIDs" in repo and "json-canvas" in chat
+assert "ImpressCanvasDocument.parse" in chat and "sourceRevision == expectedDigest" in chat
+assert "ImpressCanvasSelection" in canvas and "selectedIDs" in notes
+assert "public enum ImpressMarkdownStructure" in markdown_structure and "public static func sections(" in markdown_structure
+assert "ImpressDuplexScopedDraftBuilder" in chat
+assert "ImVaultPrivateStore.saveDraft" in chat and "popToViewController" in chat
+assert "byteFaithfulEditedText" in chat and "byteFaithfulEditedText" in vault
+assert "compressedDataUnsupported" in excalidraw, "Unsupported compressed drawings must fail visibly"
+assert "allowsGenericMarkdownDraft" in vault, "Complex drawing formats must remain read-only"
+
 smoke = source("SMOKE_TEST_MATRIX.md")
 native_tests = source("aReuImpress-iPhoneTests/V3/ReviewWCDBRepositoryTests.swift")
 for acceptance_id in expected_acceptance:

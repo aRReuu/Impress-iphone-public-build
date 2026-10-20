@@ -884,7 +884,7 @@ enum ImVaultGuardedWrite {
         }
         guard userConfirmedDiff else { throw ImVaultSyncFailure.approvalMissing }
         let preview = ImVaultDiff.summary(base: draft.baseText,
-                                          edited: draft.editedText, maximumLines: 200)
+                                          edited: draft.byteFaithfulEditedText, maximumLines: 200)
         guard preview.complete else { throw ImVaultSyncFailure.previewTruncated }
         guard draft.hasChanges else { return .unchanged }
 

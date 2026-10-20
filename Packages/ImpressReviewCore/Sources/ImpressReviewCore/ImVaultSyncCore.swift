@@ -164,6 +164,13 @@ public struct ImVaultDraft: Codable, Equatable, Sendable {
     }
 
     public var hasChanges: Bool { proposedBytes != baseRawData }
+
+    /// Exact UTF-8 content that would be committed after BOM/newline handling.
+    /// The editor's raw text can differ from these bytes even when they look
+    /// visually identical. Approval and verification diffs MUST use this.
+    public var byteFaithfulEditedText: String {
+        String(data: proposedBytes, encoding: .utf8) ?? editedText
+    }
 }
 
 public enum ImVaultDiff {

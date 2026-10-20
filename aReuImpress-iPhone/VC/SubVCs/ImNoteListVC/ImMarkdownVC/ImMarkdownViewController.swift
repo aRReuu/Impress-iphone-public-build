@@ -1803,7 +1803,7 @@ final class ImVaultDraftEditorController: UIViewController, UITextViewDelegate {
                     return
                 }
                 let changes = ImVaultDiff.summary(
-                    base: self.draft.baseText, edited: self.draft.editedText,
+                    base: self.draft.baseText, edited: self.draft.byteFaithfulEditedText,
                     maximumLines: 200)
                 self.navigationController?.pushViewController(
                     ImVaultDiffController(draft: self.draft, summary: changes.text,
