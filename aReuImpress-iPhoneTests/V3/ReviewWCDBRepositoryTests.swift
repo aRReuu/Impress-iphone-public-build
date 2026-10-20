@@ -365,6 +365,36 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
     }
 
     @MainActor
+    func testNoteSectionSelectionPreservesFullBodyAndRequiresExplicitChoice() throws {
+        let input = "# First\nText\n\n" +
+            "~~~swift\n# not a heading\n~~~\n\n## Second\nAnother block"
+        let items = ImpressAISectionExtractor.sections(in: input)
+        XCTAssertEqual(items.count, 2)
+        XCTAssertTrue(items[0].text.contains("not a heading"))
+        XCTAssertTrue(items[1].text.contains("Another block"))
+        let picker = ImpressChatNoteSectionPicker(sections: items)
+        picker.loadViewIfNeeded()
+        XCTAssertFalse(picker.navigationItem.rightBarButtonItem?.isEnabled ?? true)
+        picker.tableView(picker.tableView,
+            didSelectRowAt: IndexPath(row: 1, section: 0))
+        XCTAssertTrue(picker.navigationItem.rightBarButtonItem?.isEnabled ?? false)
+    }
+
+    @MainActor
+    func testLegacyChatRowsRequireRenewedContextConsent() async throws {
+        let store = try ReviewWCDBRepository(
+            databasePath: temporaryPath(), calculator: FSRS6ReviewCalculator())
+        let source = "card:" + UUID().uuidString
+        var older = WCDBV3ChatSession(sourceIdentity: source)
+        older.contextReferences = [WCDBV3ChatContextReference(
+            stableIdentity: source, sourceRevision: "0", excerpt: "Private context")]
+        try await store.saveChatSession(older, expectedRevision: nil)
+        let reloaded = try await store.chatSessions(for: source)
+        XCTAssertEqual(reloaded.count, 1)
+        XCTAssertFalse(reloaded[0].contextConsentGranted == true)
+    }
+
+    @MainActor
     func testNativeChatRendersSelectableMarkdownAndVisibleContextControls() throws {
         let controller = ImpressAINativeChatViewController()
         controller.loadViewIfNeeded()
@@ -375,7 +405,7 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.materials" }))
         let cell = ImpressChatMessageCell(style: .default, reuseIdentifier: "QA")
         cell.configure(WCDBV3ChatMessage(role: .assistant,
-            text: "# Heading\\n\\n**Markdown** and long text",
+            text: "# Heading\n\n**Markdown** and long text",
             status: .completed))
         let text = try XCTUnwrap(cell.contentView.subviews
             .compactMap { $0 as? UIStackView }.first?.arrangedSubviews

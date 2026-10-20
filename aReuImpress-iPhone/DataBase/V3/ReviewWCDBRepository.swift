@@ -330,6 +330,8 @@ public struct WCDBV3ChatSession: Codable, Equatable, Sendable {
     public var requestError: String?
     /// Optional per-discussion prompt; legacy rows decode to nil.
     public var promptOverride: String?
+    /// Nil on historical rows: conservatively re-confirm before sending source context.
+    public var contextConsentGranted: Bool?
 
     public init(sessionID: UUID = UUID(), sourceIdentity: String,
                 createdAt: Date = Date()) {
@@ -344,6 +346,7 @@ public struct WCDBV3ChatSession: Codable, Equatable, Sendable {
         self.pendingProposal = nil
         self.requestError = nil
         self.promptOverride = nil
+        self.contextConsentGranted = false
     }
 }
 

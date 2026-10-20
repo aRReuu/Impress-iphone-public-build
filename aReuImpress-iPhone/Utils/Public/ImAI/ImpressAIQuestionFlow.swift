@@ -1,7 +1,7 @@
 import UIKit
 import ImpressReviewCore
 
-private struct ImpressAISectionItem {
+struct ImpressAISectionItem {
     let id: String
     let heading: String
     let text: String
@@ -10,7 +10,7 @@ private struct ImpressAISectionItem {
 // Reads only a previously authorized, coordinated Vault document.
 // Headings inside fenced code are ignored; duplicate headings remain distinct
 // because IDs derive from sequence position rather than heading strings.
-private enum ImpressAISectionExtractor {
+enum ImpressAISectionExtractor {
     static func sections(in markdown: String) -> [ImpressAISectionItem] {
         let lines = markdown.components(separatedBy: .newlines)
         var sections: [ImpressAISectionItem] = []

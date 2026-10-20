@@ -51,10 +51,10 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
     func testV3LongMarkdownQuestionAndAnswerHaveIndependentScrollRegions() async throws {
         var card = ImCardModel()
         card.cardType = CardType.standard.rawValue
-        card.question = "# Heading\\n\\n" +
-            String(repeating: "## Subheading\\nLong question with **emphasis**.\\n", count: 100)
-        card.answer = "# Answer\\n\\n" +
-            String(repeating: "A long structured answer with **bold** and lists.\\n", count: 130)
+        card.question = "# Heading\n\n" +
+            String(repeating: "## Subheading\nLong question with **emphasis**.\n", count: 100)
+        card.answer = "# Answer\n\n" +
+            String(repeating: "A long structured answer with **bold** and lists.\n", count: 130)
         let review = ImMemoryCardView(model: card, v3Style: true)
         let host = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 650))
         review.frame = host.bounds

@@ -52,6 +52,7 @@ final class ImpressAINativeChatViewController: UIViewController,
     /// An override belongs only to this Chat; global task defaults remain intact.
     private var selectedModelID: UUID?
     private var contextChoiceMade = false
+    private var contextConsentGranted = false
     private var includeCardContext = false
     private var restoring = false
     private var sending = false
@@ -350,13 +351,19 @@ final class ImpressAINativeChatViewController: UIViewController,
         }.joined(separator: "\n\n")
         let alert = UIAlertController(title: V3L("本次引用材料"),
             message: preview.isEmpty
-                ? V3L("没有选中材料。打开对话不自动上传私人内容；首次发送可选择当前卡片。")
-                : preview,
+                ? V3L("暂无引用。选择材料不会自动发送到云端。")
+                : preview + (contextConsentGranted ? "\n\n" + V3L("已确认发送范围")
+                             : "\n\n" + V3L("尚未确认发送范围")),
             preferredStyle: .actionSheet)
+        if noteIdentity != nil {
+            alert.addAction(UIAlertAction(title: V3L("选择笔记章节"),
+                style: .default) { [weak self] _ in self?.openNoteSectionPicker() })
+        }
         alert.addAction(UIAlertAction(title: V3L("移除引用材料"),
             style: .destructive) { [weak self] _ in
             self?.includeCardContext = false
             self?.contextChoiceMade = true
+            self?.contextConsentGranted = false
             self?.contextReferences = []
             self?.enqueuePersistence()
         })
@@ -364,12 +371,50 @@ final class ImpressAINativeChatViewController: UIViewController,
             style: .default) { [weak self] _ in
             self?.includeCardContext = false
             self?.contextChoiceMade = false
+            self?.contextConsentGranted = false
             self?.contextReferences = []
             self?.enqueuePersistence()
         })
         alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
         alert.popoverPresentationController?.sourceView = materialButton
         present(alert, animated: true)
+    }
+
+    private func openNoteSectionPicker() {
+        guard !sending && !restoring, let identity = noteIdentity else { return }
+        ImVaultReadSync.shared.read(identity) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case let .success(current):
+                guard current.identity == identity,
+                      current.digest == self.sourceVersionToken else {
+                    let alert = UIAlertController(title: V3L("来源笔记已变化"),
+                        message: V3L("当前 Chat 的来源版本已过期。请返回笔记，刷新后再进入讨论。"),
+                        preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+                    self.present(alert, animated: true)
+                    return
+                }
+                let selector = ImpressChatNoteSectionPicker(
+                    sections: ImpressAISectionExtractor.sections(in: current.markdown))
+                selector.onApply = { [weak self] items in
+                    guard let self, let key = self.sourceIdentity else { return }
+                    self.contextReferences = items.map {
+                        WCDBV3ChatContextReference(stableIdentity: key,
+                            sourceRevision: current.digest, excerpt: $0.text)
+                    }
+                    // Drafting a set of materials is not consent to send it.
+                    self.includeCardContext = false
+                    self.contextChoiceMade = false
+                    self.contextConsentGranted = false
+                    self.enqueuePersistence()
+                    self.navigationController?.popViewController(animated: true)
+                }
+                self.navigationController?.pushViewController(selector, animated: true)
+            case let .failure(error):
+                self.showProblem(error)
+            }
+        }
     }
 
     private enum ChatFlowError: LocalizedError {
@@ -454,24 +499,44 @@ final class ImpressAINativeChatViewController: UIViewController,
             confirm.addAction(UIAlertAction(title: V3L("仅发送输入内容"),
                                             style: .default) { [weak self] _ in
                 guard let self else { return }
-                contextChoiceMade = true
-                includeCardContext = false
-                contextReferences = []
-                performSend(text, route: route)
+                self.contextChoiceMade = true
+                self.contextConsentGranted = false
+                self.includeCardContext = false
+                self.contextReferences = []
+                self.performSend(text, route: route)
             })
             confirm.addAction(UIAlertAction(title: noteIdentity == nil
                 ? V3L("附带当前卡片") : V3L("附带本次笔记材料"),
                                             style: .default) { [weak self] _ in
                 guard let self else { return }
-                contextChoiceMade = true
-                includeCardContext = true
-                if let identity = sourceIdentity {
-                    contextReferences = [WCDBV3ChatContextReference(
-                        stableIdentity: identity,
-                        sourceRevision: currentSourceVersion,
-                        excerpt: question + "\n" + (sourceAnswer ?? ""))]
+                if let key = self.sourceIdentity {
+                    if self.noteIdentity != nil && self.sourceAnswer == nil &&
+                       self.contextReferences.isEmpty {
+                        self.openNoteSectionPicker()
+                        return // Keep draft; choose sections without sending.
+                    }
+                    if !self.contextReferences.allSatisfy({
+                        $0.stableIdentity == key &&
+                        $0.sourceRevision == self.currentSourceVersion
+                    }) {
+                        self.contextReferences = []
+                        self.contextConsentGranted = false
+                        self.openNoteSectionPicker()
+                        return
+                    }
+                    if self.contextReferences.isEmpty {
+                        let excerpt = self.noteIdentity == nil
+                            ? question + "\n" + (self.sourceAnswer ?? "")
+                            : (self.sourceAnswer ?? "")
+                        self.contextReferences = [WCDBV3ChatContextReference(
+                            stableIdentity: key,
+                            sourceRevision: self.currentSourceVersion, excerpt: excerpt)]
+                    }
                 }
-                performSend(text, route: route)
+                self.contextChoiceMade = true
+                self.contextConsentGranted = true
+                self.includeCardContext = true
+                self.performSend(text, route: route)
             })
             present(confirm, animated: true)
         } else {
@@ -488,11 +553,16 @@ final class ImpressAINativeChatViewController: UIViewController,
         let modelName = route.model.identifier
         var system = prompt
         if includeCardContext, let question = sourceQuestion, !question.isEmpty {
-            system += "\n" + (noteIdentity == nil
-                ? V3L("当前卡片的问题：") : V3L("当前笔记来源：")) + question
-            if let answer = sourceAnswer, !answer.isEmpty {
-                system += "\n" + (noteIdentity == nil
-                    ? V3L("当前卡片的参考答案：") : V3L("本次已授权笔记正文：")) + answer
+            if noteIdentity != nil {
+                system += "\n" + V3L("当前笔记来源：") + question
+                for reference in contextReferences {
+                    system += "\n" + V3L("本次明确批准的章节或摘录：") + reference.excerpt
+                }
+            } else {
+                system += "\n" + V3L("当前卡片的问题：") + question
+                if let answer = sourceAnswer, !answer.isEmpty {
+                    system += "\n" + V3L("当前卡片的参考答案：") + answer
+                }
             }
         }
         let messageID = UUID()
@@ -616,9 +686,10 @@ final class ImpressAINativeChatViewController: UIViewController,
         messageInput.text = session.inputDraft
         contextReferences = session.contextReferences
         requestFailure = session.requestError
+        contextConsentGranted = session.contextConsentGranted == true
         let approved = contextReferences.first(where: { $0.stableIdentity == sourceIdentity })
         let stillCurrent = approved?.sourceRevision == currentSourceVersion
-        includeCardContext = approved != nil && stillCurrent
+        includeCardContext = contextConsentGranted && approved != nil && stillCurrent
         contextChoiceMade = includeCardContext
         if approved != nil && !stillCurrent {
             privacyLabel.text = V3L("来源内容有更新；发送前请重新确认引用范围。")
@@ -731,13 +802,15 @@ final class ImpressAINativeChatViewController: UIViewController,
            base.inputDraft == messageInput.text &&
            base.contextReferences == contextReferences &&
            base.requestError == requestFailure &&
-           base.promptOverride == sessionPromptOverride { return true }
+           base.promptOverride == sessionPromptOverride &&
+           (base.contextConsentGranted == true) == contextConsentGranted { return true }
         var next = base
         next.messages = history
         next.inputDraft = messageInput.text ?? ""
         next.contextReferences = contextReferences
         next.requestError = requestFailure
         next.promptOverride = sessionPromptOverride
+        next.contextConsentGranted = contextConsentGranted
         next.updatedAt = Date()
         next.revision = storedSession == nil ? 0 : base.revision + 1
         do {
@@ -882,5 +955,63 @@ final class ImpressChatMessageCell: UITableViewCell {
         stateLabel.isHidden = stateLabel.text == nil
         backgroundColor = message.role == .user
             ? ImpressV3Appearance.reviewActionSurface : ImpressV3Appearance.surface
+    }
+}
+
+@MainActor
+final class ImpressChatNoteSectionPicker: UITableViewController {
+    private let sections: [ImpressAISectionItem]
+    private var selected: Set<String> = []
+    var onApply: (([ImpressAISectionItem]) -> Void)?
+
+    init(sections: [ImpressAISectionItem]) {
+        self.sections = sections
+        super.init(style: .insetGrouped)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = V3L("选择笔记章节")
+        tableView.backgroundColor = ImpressV3Appearance.page
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: V3L("使用所选"), style: .done,
+            target: self, action: #selector(acceptSelection))
+        navigationItem.rightBarButtonItem?.accessibilityIdentifier =
+            "impress.ai.chat.section-confirm"
+        navigationItem.rightBarButtonItem?.isEnabled = false
+    }
+    override func numberOfSections(in tableView: UITableView) -> Int { 1 }
+    override func tableView(_ tableView: UITableView,
+                            numberOfRowsInSection section: Int) -> Int { sections.count }
+    override func tableView(_ tableView: UITableView,
+                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let item = sections[indexPath.row]
+        let cell = tableView.dequeueReusableCell(withIdentifier: "chat.section")
+            ?? UITableViewCell(style: .subtitle, reuseIdentifier: "chat.section")
+        var config = UIListContentConfiguration.subtitleCell()
+        config.text = item.heading
+        config.secondaryText = String(item.text.utf8.count) + " bytes"
+        config.textProperties.numberOfLines = 2
+        cell.contentConfiguration = config
+        cell.accessoryType = selected.contains(item.id) ? .checkmark : .none
+        cell.backgroundColor = ImpressV3Appearance.surface
+        return cell
+    }
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        let id = sections[indexPath.row].id
+        if selected.contains(id) { selected.remove(id) } else { selected.insert(id) }
+        tableView.reloadRows(at: [indexPath], with: .none)
+        let size = sections.filter { selected.contains($0.id) }
+            .reduce(0) { $0 + $1.text.utf8.count }
+        navigationItem.rightBarButtonItem?.isEnabled = !selected.isEmpty && size <= 8_000
+    }
+
+    @objc private func acceptSelection() {
+        let selection = sections.filter { selected.contains($0.id) }
+        let size = selection.reduce(0) { $0 + $1.text.utf8.count }
+        guard !selection.isEmpty, size <= 8_000 else { return }
+        onApply?(selection)
     }
 }
