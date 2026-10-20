@@ -100,6 +100,45 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         return predicate()
     }
 
+    func testQuickEditAndVerifiedSourceVisibleBeforeAnswerWithoutScoring() async throws {
+        let store = try makeRepository()
+        let id = UUID()
+        let vault = try ImVaultFileIdentity(vaultID: "disposable-test-vault",
+                                            relativePath: "Notes/Example.md")
+        let source = try ImpressBatchSourceKey.encode(vault)
+        let now = Date()
+        try await store.insertNewCard(
+            WCDBV3CardInput(cardID: id, question: "What is the original source?",
+                            answerText: "The linked Markdown note.", sourceNotePath: source),
+            initial: FSRS6ReviewCalculator().newCardSnapshot(id: id, now: now),
+            now: now)
+        let review = ImpressV3ReviewViewController(repository: store)
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        window.rootViewController = UINavigationController(rootViewController: review)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        review.loadViewIfNeeded()
+        func controls(in root: UIView) -> [UIButton] {
+            (root as? UIButton).map { [$0] } ?? root.subviews.flatMap(controls(in:))
+        }
+        let ready = try await eventually {
+            controls(in: review.view).contains {
+                $0.accessibilityIdentifier == "impress.review.quick-edit" &&
+                !$0.isHidden
+            }
+        }
+        XCTAssertTrue(ready)
+        XCTAssertTrue(controls(in: review.view).contains {
+            $0.accessibilityIdentifier == "impress.review.source-note" && !$0.isHidden
+        })
+        let stack = try XCTUnwrap(review.view.subviews.compactMap {
+            $0 as? SwipeCardStack
+        }.first)
+        XCTAssertFalse(stack.topCard?.panGestureRecognizer.isEnabled ?? true)
+        let events = try await store.reviewHistory(for: id)
+        XCTAssertTrue(events.isEmpty)
+    }
+
     func testActualTinderSwipeSavesOneFSRSEventOnlyAfterRevealingAnswer() async throws {
         let repository = try makeRepository()
         let cardID = UUID()

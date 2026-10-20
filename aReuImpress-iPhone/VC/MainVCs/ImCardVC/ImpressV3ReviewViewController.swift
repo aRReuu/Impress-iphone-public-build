@@ -18,6 +18,7 @@ final class ImpressV3ReviewViewController: UIViewController {
     private var session: ReviewSessionCoordinator?
     private var items: [ReviewQueueItem] = []
     private var models: [UUID: ImCardModel] = [:]
+    private var sourceLinks: [UUID: ImVaultFileIdentity] = [:]
     private var currentIndex = 0
     private var pending: PendingSwipe?
     private var isLoading = false
@@ -28,6 +29,9 @@ final class ImpressV3ReviewViewController: UIViewController {
     private let revealButton = UIButton(type: .system)
     private let answerTools = UIStackView()
     private let statusLabel = UILabel()
+    private let currentCardActions = UIStackView()
+    private let quickEditButton = UIButton(type: .system)
+    private let sourceNoteButton = UIButton(type: .system)
     private let completionLabel = UILabel()
     private let repeatButton = UIButton(type: .system)
     private let busyIndicator = UIActivityIndicatorView(style: .medium)
@@ -108,6 +112,31 @@ final class ImpressV3ReviewViewController: UIViewController {
         revealButton.translatesAutoresizingMaskIntoConstraints = false
         answerTools.translatesAutoresizingMaskIntoConstraints = false
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        currentCardActions.translatesAutoresizingMaskIntoConstraints = false
+        currentCardActions.axis = .horizontal
+        currentCardActions.alignment = .center
+        currentCardActions.spacing = ImpressV3Appearance.Metrics.rowSpacing
+        currentCardActions.isHidden = true
+        for (button, icon, label, action) in [
+            (quickEditButton, "square.and.pencil", V3L("编辑当前卡片"), #selector(editCurrentCard)),
+            (sourceNoteButton, "doc.text", V3L("打开来源笔记"), #selector(openCurrentSourceNote))
+        ] {
+            var configuration = UIButton.Configuration.plain()
+            configuration.image = UIImage(systemName: icon)
+            configuration.baseForegroundColor = ImpressV3Appearance.accent
+            button.configuration = configuration
+            button.accessibilityLabel = label
+            button.addTarget(self, action: action, for: .touchUpInside)
+            button.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                button.widthAnchor.constraint(greaterThanOrEqualToConstant: 40),
+                button.heightAnchor.constraint(greaterThanOrEqualToConstant: 40)
+            ])
+            currentCardActions.addArrangedSubview(button)
+        }
+        quickEditButton.accessibilityIdentifier = "impress.review.quick-edit"
+        sourceNoteButton.accessibilityIdentifier = "impress.review.source-note"
+        sourceNoteButton.isHidden = true
         answerTools.axis = .horizontal
         answerTools.distribution = .fillEqually
         answerTools.spacing = ImpressV3Appearance.Metrics.rowSpacing
@@ -157,6 +186,8 @@ final class ImpressV3ReviewViewController: UIViewController {
         statusLabel.adjustsFontForContentSizeCategory = true
         statusLabel.textColor = ImpressV3Appearance.secondaryText
         statusLabel.textAlignment = .left
+        statusLabel.numberOfLines = 0
+        statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         statusLabel.text = V3L("正在准备复习…")
 
         completionLabel.font = ImpressV3Appearance.Typography.body
@@ -171,6 +202,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         repeatButton.isHidden = true
 
         view.addSubview(statusLabel)
+        view.addSubview(currentCardActions)
         view.addSubview(cardStack)
         view.addSubview(revealButton)
         view.addSubview(answerTools)
@@ -180,7 +212,10 @@ final class ImpressV3ReviewViewController: UIViewController {
         NSLayoutConstraint.activate([
             statusLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
             statusLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            statusLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            statusLabel.trailingAnchor.constraint(lessThanOrEqualTo: currentCardActions.leadingAnchor, constant: -8),
+            statusLabel.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            currentCardActions.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            currentCardActions.centerYAnchor.constraint(equalTo: statusLabel.centerYAnchor),
             cardStack.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 8),
             cardStack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
             cardStack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
@@ -282,6 +317,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         repeatButton.isHidden = true
         revealButton.isHidden = true
         answerTools.isHidden = true
+        currentCardActions.isHidden = true
 
         Task { [weak self] in
             guard let self = self else { return }
@@ -290,6 +326,7 @@ final class ImpressV3ReviewViewController: UIViewController {
                 let candidates = try await repo.fetchQueueCandidates()
                 let queue = ReviewQueueBuilder.makeQueue(from: candidates, now: Date())
                 var prepared: [UUID: ImCardModel] = [:]
+                var verifiedSources: [UUID: ImVaultFileIdentity] = [:]
                 // At most six cards: read each image only when selected for THIS round.
                 for selected in queue {
                     guard let row = try await repo.content(for: selected.cardID) else {
@@ -302,11 +339,16 @@ final class ImpressV3ReviewViewController: UIViewController {
                     model.imageData = row.imageData
                     model.choices = row.choices
                     model.correctAnswerIndices = row.correctIndices
+                    if let saved = row.sourceNotePath,
+                       let identity = try? ImpressBatchSourceKey.decode(saved) {
+                        verifiedSources[selected.cardID] = identity
+                    }
                     prepared[selected.cardID] = model
                 }
                 self.repository = repo
                 self.items = queue
                 self.models = prepared
+                self.sourceLinks = verifiedSources
                 self.currentIndex = 0
                 self.pending = nil
                 self.session = ReviewSessionCoordinator(items: queue, repository: repo)
@@ -318,6 +360,7 @@ final class ImpressV3ReviewViewController: UIViewController {
                 self.isLoading = false
                 self.busyIndicator.stopAnimating()
                 self.cardStack.isHidden = true
+                self.currentCardActions.isHidden = true
                 self.statusLabel.text = V3L("无法读取 V3 复习数据")
                 self.displayFailure(error)
             }
@@ -327,6 +370,7 @@ final class ImpressV3ReviewViewController: UIViewController {
     private func showCurrent() {
         updateNavigationActions()
         guard currentIndex < items.count else {
+            currentCardActions.isHidden = true
             cardStack.isHidden = true
             completionLabel.isHidden = false
             repeatButton.isHidden = false
@@ -337,6 +381,8 @@ final class ImpressV3ReviewViewController: UIViewController {
             statusLabel.text = V3L("本轮完成")
             return
         }
+        currentCardActions.isHidden = false
+        sourceNoteButton.isHidden = sourceLinks[items[currentIndex].cardID] == nil
         cardStack.isHidden = false
         completionLabel.isHidden = true
         repeatButton.isHidden = true
@@ -465,6 +511,10 @@ final class ImpressV3ReviewViewController: UIViewController {
         model.choices = value.choices
         model.correctAnswerIndices = value.correctIndices
         models[reviewItem.cardID] = model
+        sourceLinks[reviewItem.cardID] = value.sourceNotePath.flatMap {
+            try? ImpressBatchSourceKey.decode($0)
+        }
+        sourceNoteButton.isHidden = sourceLinks[reviewItem.cardID] == nil
         // Replace ONLY the top card's view. SwipeCardStack indexes and the
         // coordinator remain unchanged, so a save cannot restart this round.
         let refreshed = cardStack(cardStack, cardForIndexAt: currentIndex)
@@ -473,6 +523,34 @@ final class ImpressV3ReviewViewController: UIViewController {
         answerTools.isHidden = true
         revealButton.isHidden = false
         statusLabel.text = V3L("先回忆，再查看答案")
+    }
+
+    /// Resolve only this card's stable Vault identity; never search by title.
+    /// A read does not grant write access or modify the original Markdown.
+    @objc private func openCurrentSourceNote() {
+        guard !isLoading, pending == nil,
+              let item = items[safe: currentIndex],
+              let identity = sourceLinks[item.cardID] else { return }
+        guard ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID else {
+            displayFailure(ImVaultSyncFailure.wrongVault)
+            return
+        }
+        ImVaultReadSync.shared.read(identity) { [weak self] result in
+            guard let self, self.pending == nil,
+                  self.items[safe: self.currentIndex]?.cardID == item.cardID,
+                  ImVaultReadOnlyProbe.shared.authorizedVaultID == identity.vaultID else { return }
+            switch result {
+            case let .success(document):
+                guard document.identity == identity else {
+                    self.displayFailure(ImVaultSyncFailure.wrongVault)
+                    return
+                }
+                self.navigationController?.pushViewController(
+                    ImVaultDocumentController(document: document), animated: true)
+            case let .failure(error):
+                self.displayFailure(error)
+            }
+        }
     }
 
     @objc private func openContentHistory() {
