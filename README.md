@@ -40,3 +40,9 @@ The feature-branch app and test targets now require **iOS 26.0**; the Podfile pl
 - Speech partial results are provisional, final text is inserted only after explicit completion and checked against the original editor text and UTF-16 caret selection. No audio is written to disk, logged, or uploaded. No FSRS/Calibration schemas are changed.
 - New UIKit tests cover volatile phrase replacement, Unicode ranges, stale editor rejection, one-change callback and settings navigation. CI validates an explicit mic purpose string and checks that no legacy/cloud speech code or private audio persistence path exists.
 - Full iPhone 13 audio permission, model download, spontaneous speech accuracy, microphone interruptions, language availability and UI/keyboard acceptance remain **device PENDING** until physical testing. Old MarkdownKit/MarkdownView dependency modernization is a separate protected gate, not falsely claimed as complete.
+
+## 2026-10-20 · 双向闭环测试补强（仍非发布认证）
+
+在 `feature/impress-duplex-loop-v1` 中追加一个独立临时测试 Vault → Markdown 章节候选卡 → WCDB 原卡 → FSRS 评分 → Chat 多会话与双目标批准 → QA fixture 文件协调写入 / 回读 → 原卡 CAS → 来源变化核查 → 逆向撤销 → 冷启动恢复的 XCTest 回归（`testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS`）。同时修复在合法 FSRS 评分后批准内容更新发生虚假调度冲突、以及意外取消正在进行的安全撤销记录的问题。详见本分支 `SMOKE_TEST_MATRIX.md` 与 `REQUIREMENT_EXECUTION_MATRIX_20261020.md`。
+
+**验收级别严格分开：** 该测试使用合成文本和临时 SQLite，不代表远端大模型、真机 iPhone13、iCloud 同步或用户 Vault 已验证。必须以此代码 SHA 的全套 CI 实际完成为自动化 PASS 依据；正式写入仍为 `ImVaultGuardedWrite.productionWriteEnabled = false`。原始图标与正式签名限制不变；无签名 IPA 仅是 QA 候选。

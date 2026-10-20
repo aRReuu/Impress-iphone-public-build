@@ -123,3 +123,19 @@ Record final Git SHA, Actions run URL, each job conclusion, **total native XCTes
 - **SOURCE-SEG-01**：从关联原卡打开来源笔记时先回读原 cardID/contentRevision/Vault 身份，v3 锚点提供完整当前章节原文只读阅读，用户仍可返回整篇笔记。来源章节移动但内容唯一时仍可定位；章节删除或重复出现则明确说明无法精确定位，不查同名其他 Vault。
 - **AI-UPLOAD-01**：在用户勾选特定笔记章节并确认模型后、请求发送前模拟外部 Obsidian 修改选中章节，拒绝云端发送；修改未选章节仍由于全文 SHA 改变而拒绝发送，需重新确认最新版本。无授权/不同 Vault/材料篡改均不得发送。
 - **AI-UPLOAD-02**：用户仅打开 Chat、候选池、来源/片段阅读、草稿和预览，不上传正文；实际发送前告知此次源版本与材料范围，不自动扩大发送上下文或转用付费模型。
+
+## 2026-10-20 · 新增端到端模拟业务冒烟目标（未执行不标 PASS）
+
+| 场景 | 证据测试（本次新增） | 自动化现态 | 真机现态 |
+| --- | --- | --- | --- |
+| ACCEPT-01/02 | `testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS`：独立 Vault 笔记选章节→审定单候选→真实 WCDB cardID/来源锚点；跨 Vault 不匹配 | PENDING：需本次 exact SHA CI | BLOCKED |
+| ACCEPT-03 | 原生长 Markdown / 手势系列原有测试，尚无本次 iPhone13 长文交互证据 | PENDING 全套原生测试 | BLOCKED |
+| ACCEPT-04/05 | 同测试：内容 CAS、卡片原地版本/FSRS 插入评分后继续编辑 | PENDING | BLOCKED |
+| ACCEPT-06 | 同测试：Chat 多会话/历史/草稿/提案跨数据库冷启动恢复 | PENDING | BLOCKED |
+| ACCEPT-07 | `testAIQuestionMaterialRequiresExactLiveSourceBeforeHTTP`、现有上下文同意测试，不调用真实云端 | PENDING | BLOCKED |
+| ACCEPT-08 | 现有 `testDuplexProposalPersistsAcrossChatColdStartWithoutReplayingWrites` 与 Diff 测试；完整交互 UI 尚缺设备认证 | PENDING | BLOCKED |
+| ACCEPT-09/10 | 同测试：本地 QA fixture 源文件实际协调写、回读、备份、二次操作幂等、分对象回执；故障注入另见 `testDuplexPartialReceiptDoesNotReapplyWrittenQAFileOnCardConflict` | PENDING | BLOCKED |
+| ACCEPT-11 | 同测试：章节无关变动不打扰、相关变动仍需人工核查；现有 `testSourceRevisionAcknowledgementKeepsOriginalCardAndReviewSchedule` | PENDING | BLOCKED |
+| ACCEPT-12 | 同测试：逆向安全撤销、保留 FSRS/内容历史与会话、冷启动再读 | PENDING | BLOCKED |
+
+旧 A02 已被最新产品契约取消，不恢复首页周校准图。无线上模型、iPhone13、生产文件写回的真实验证不在这次模拟运行中。

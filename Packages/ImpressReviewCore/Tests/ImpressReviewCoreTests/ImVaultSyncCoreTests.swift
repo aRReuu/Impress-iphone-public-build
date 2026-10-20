@@ -275,7 +275,7 @@ struct ImVaultSyncCoreTests {
         #expect(restored.needsCardUndo)
         #expect(!restored.needsNoteAction && !restored.needsCardAction)
         #expect(!restored.completed)
-        restored.noteStatus == .undoing ? #expect(true) : #expect(false)
+        #expect(restored.noteStatus == .undoing)
     }
 
     @Test func reverseCardEditUsesFreshCASAndRejectsInterveningRevision() {

@@ -213,3 +213,11 @@
 - 笔记指定章节 AI 出题在用户选择材料与模型、点击最终生成后，HTTP 请求前再次使用 File Provider 协调读取真实原文；核验 Vault 身份、全文 SHA、每个选定章节 ID/标题/全文与用户确认快照均一致。外部笔记被修改、权限撤销或材料变动即停止发送，不使用旧截图/本地过期材料，也不在验证失败时收费重试。
 - 新增 iOS XCTest 使用无凭据、无网络、无真实 Vault 的临时 fixture，检查来源片段菜单和 v1/v2 兼容，以及 AI 出题发送前身份/全文/片段失败门禁。真实用户 Keychain、云端 API、iCloud 远端回读、iPhone 13 实机访问仍须另外验证。
 - 所有更改仅在 `feature/impress-duplex-loop-v1`；正式 `ImVaultGuardedWrite.productionWriteEnabled = false` 不改变；不能把 Debug 测试副本回读误报为生产 Vault 写回。
+
+## 2026-10-20 · 全业务可丢弃 Fixture 联调与安全修复（验收待最终 CI）
+
+> **证据分级：代码/测试新增，不自动记为 PASS。** 仅在本仓库 `feature/impress-duplex-loop-v1`。新增 `ReviewWCDBRepositoryTests.testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS`（需最新同 SHA CI 成功）使用 TemporaryDirectory 独立 Markdown、WCDB、带 BOM/CRLF 原件、安全草稿、核实章节、候选卡、FSRS、两条独立 Chat、双目标逐项修改、写前备份与回读、来源差异核对、幂等、逆向撤销及数据库冷启动恢复。**不使用用户 Vault、付费 API、Keychain 或 iCloud。**
+
+**修正源文件：** `ImVaultSyncCore.swift` 持久 `undoing` 即使旧错误快照取消选择仍不能变成“已完成”；`ImpressAINativeChatViewController.swift` 不再允许“放弃未完成项”篡改撤销中的目标，双目标原卡正向 CAS 依据最新 FSRS revision 与原 contentRevision 而不是已过时调度快照；`ImMarkdownViewController.swift` 反向“无影响”确认同样以最新 FSRS revision 且保持内容/来源 CAS。Portable 回归 `ImVaultSyncCoreTests.deselectionCannotErasePendingUndoAfterCrash`。
+
+**分层证据：** 新代码构建/Portable/iOS XCTest 均需后续实际 CI Run 和 exact commit SHA；真实 iPhone 13、真实 Files/iCloud Provider、在线模型推理、用户 Keychain 和正式 Vault 写回 **BLOCKED（外部设备或独立授权）**。十二项 ACCEPT **不能**因这个测试一次成功而全部标记 PASS；该测试覆盖部分 P0 数据链与故障分支，不执行完整触屏 UI / 真机操作。

@@ -478,11 +478,12 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
     func testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS() async throws {
         let root = try createRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let original = Data([0xEF, 0xBB, 0xBF]) + Data(
-            "---\r\\ntitle: Duplex QA\r\\n---\r\\n# Theory\r\\n" +
-            "F = ma.\r\\n- [[Dynamics]]\r\\n\r\\n# Practice\r\\n" +
-            "Check units.\r\\n```swift\r\\nlet value = 1\r\\n```\r\\n"
-            .utf8)
+        let fixtureMarkdown = [
+            "---\r\ntitle: Duplex QA\r\n---\r\n# Theory\r\n",
+            "F = ma.\r\n- [[Dynamics]]\r\n\r\n# Practice\r\n",
+            "Check units.\r\n```swift\r\nlet value = 1\r\n```\r\n"
+        ].joined()
+        let original = Data([0xEF, 0xBB, 0xBF]) + Data(fixtureMarkdown.utf8)
         let file = try put("disposable", root: root, path: "Notes/Duplex.md")
         try original.write(to: file, options: .atomic)
         let identity = try ImVaultFileIdentity(vaultID: UUID().uuidString,
@@ -515,14 +516,16 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         let created = Date(timeIntervalSince1970: 1_726_000_000)
         let input = WCDBV3CardInput(question: confirmed[0].question,
             answerText: confirmed[0].answer, sourceNotePath: link)
-        XCTAssertEqual(try await repository.insertBatchCards([(
+        let inserted = try await repository.insertBatchCards([(
             input, try calculator.newCardSnapshot(id: input.cardID, now: created)
-        )], now: created), 1)
+        )], now: created)
+        XCTAssertEqual(inserted, 1)
         let related = try await repository.listRelatedCards(for: identity)
         XCTAssertEqual(related.map(\.cardID), [input.cardID])
         let otherVault = try ImVaultFileIdentity(vaultID: "other-vault",
             relativePath: identity.relativePath)
-        XCTAssertTrue(try await repository.listRelatedCards(for: otherVault).isEmpty)
+        let foreignCards = try await repository.listRelatedCards(for: otherVault)
+        XCTAssertTrue(foreignCards.isEmpty)
 
         let sourceToken = "card:" + input.cardID.uuidString
         var chat = WCDBV3ChatSession(sourceIdentity: sourceToken)
@@ -541,8 +544,11 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
 
         var draft = try ImVaultDraft(identity: identity,
             baseText: sourceDocument.markdown, baseRawData: original)
-        try draft.update(sourceDocument.markdown.replacingOccurrences(
-            of: "F = ma.", with: "Net force is F = ma."))
+        let editedMarkdown = sourceDocument.markdown.replacingOccurrences(
+            of: "F = ma.", with: "Net force is F = ma.")
+        // Never prepend an additional BOM when UIKit normalizes editable text.
+        try draft.update(editedMarkdown.hasPrefix("\u{feff}")
+            ? String(editedMarkdown.dropFirst()) : editedMarkdown)
         XCTAssertTrue(ImVaultDiff.summary(base: draft.baseText,
             edited: draft.editedText, maximumLines: 200).complete)
         XCTAssertTrue(draft.proposedBytes.starts(with: [0xEF, 0xBB, 0xBF]))
@@ -550,9 +556,12 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
 
         // The approval records the OLD FSRS revision intentionally. Reviewing
         // after approval must not turn a valid CONTENT-only edit into conflict.
-        let originalContent = try XCTUnwrap(try await repository.content(for: input.cardID))
-        let originalQueue = try XCTUnwrap(try await repository.fetchQueueCandidates()
-            .first(where: { $0.cardID == input.cardID }))
+        let storedOriginal = try await repository.content(for: input.cardID)
+        let originalContent = try XCTUnwrap(storedOriginal)
+        let initialCandidates = try await repository.fetchQueueCandidates()
+        let originalQueue = try XCTUnwrap(initialCandidates.first(where: {
+            $0.cardID == input.cardID
+        }))
         var proposal = WCDBV3DuplexProposal(sourceMessageID: chat.messages.last?.messageID,
             noteIdentity: identity, noteBaseDigest: draft.baseDigest,
             noteEditedDigest: ImVaultDigest.sha256(draft.proposedBytes),
@@ -570,8 +579,10 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         _ = try await repository.commit(ReviewSubmission(eventID: UUID(),
             cardID: input.cardID, expectedRevision: originalQueue.revision,
             rating: .good, reviewedAt: created.addingTimeInterval(2)))
-        let afterReview = try XCTUnwrap(try await repository.fetchQueueCandidates()
-            .first(where: { $0.cardID == input.cardID }))
+        let ratedCandidates = try await repository.fetchQueueCandidates()
+        let afterReview = try XCTUnwrap(ratedCandidates.first(where: {
+            $0.cardID == input.cardID
+        }))
         XCTAssertEqual(afterReview.revision, originalQueue.revision + 1)
         XCTAssertEqual(ImDuplexCardVersionGate.decide(
             expectedContentRevision: originalContent.contentRevision,
@@ -608,13 +619,16 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         chat.revision += 1
         chat.updatedAt = Date()
         try await repository.saveChatSession(chat, expectedRevision: 2)
-        let updatedContent = try XCTUnwrap(try await repository.content(for: input.cardID))
+        let storedUpdated = try await repository.content(for: input.cardID)
+        let updatedContent = try XCTUnwrap(storedUpdated)
         XCTAssertEqual(updatedContent.cardID, input.cardID)
         XCTAssertEqual(updatedContent.contentRevision, originalContent.contentRevision + 1)
-        XCTAssertEqual((try await repository.reviewHistory(for: input.cardID)).count, 1)
-        XCTAssertEqual(try await repository.fetchQueueCandidates()
-            .first(where: { $0.cardID == input.cardID })?.revision,
-            afterReview.revision)
+        let ratedEvents = try await repository.reviewHistory(for: input.cardID)
+        XCTAssertEqual(ratedEvents.count, 1)
+        let queueAfterContentEdit = try await repository.fetchQueueCandidates()
+        XCTAssertEqual(queueAfterContentEdit.first(where: {
+            $0.cardID == input.cardID
+        })?.revision, afterReview.revision)
         guard case .alreadyApplied = try ImVaultGuardedWrite.commitFixture(
             root: root, draft: draft, userConfirmedDiff: true) else {
             XCTFail("A resumed note operation must not append twice")
@@ -632,8 +646,10 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
 
         // Reverse each applied target with a NEW CAS revision; never erase
         // history or replay a forward write from a persisted receipt.
-        let updatedQueue = try XCTUnwrap(try await repository.fetchQueueCandidates()
-            .first(where: { $0.cardID == input.cardID }))
+        let queueBeforeUndo = try await repository.fetchQueueCandidates()
+        let updatedQueue = try XCTUnwrap(queueBeforeUndo.first(where: {
+            $0.cardID == input.cardID
+        }))
         try await repository.updateManagedCard(WCDBV3CardInput(
             cardID: input.cardID, question: originalContent.question,
             answerText: originalContent.answerText, sourceNotePath: link),
@@ -669,13 +685,16 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             $0.sessionID == secondChat.sessionID &&
             $0.inputDraft == "Another independent discussion"
         }))
-        let restored = try XCTUnwrap(try await coldStart.content(for: input.cardID))
+        let reopenedCard = try await coldStart.content(for: input.cardID)
+        let restored = try XCTUnwrap(reopenedCard)
         XCTAssertEqual(restored.cardID, input.cardID)
         XCTAssertEqual(restored.question, originalContent.question)
         XCTAssertEqual(restored.answerText, originalContent.answerText)
         XCTAssertEqual(restored.contentRevision, originalContent.contentRevision + 2)
-        XCTAssertEqual((try await coldStart.contentHistory(for: input.cardID)).count, 3)
-        XCTAssertEqual((try await coldStart.reviewHistory(for: input.cardID)).count, 1)
+        let snapshots = try await coldStart.contentHistory(for: input.cardID)
+        let preservedRatings = try await coldStart.reviewHistory(for: input.cardID)
+        XCTAssertEqual(snapshots.count, 3)
+        XCTAssertEqual(preservedRatings.count, 1)
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 

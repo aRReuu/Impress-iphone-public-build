@@ -36,3 +36,9 @@
 - `testSessionDraftRestoreAfterReopen`：退出重开保存草稿、消息与来源版本。
 - `testApprovedFixtureProposalWriteReadbackAndPartialRecovery`：独立可丢弃 Vault；禁止正式 Vault。
 - 重复保存、并发 CAS、失效权限、iCloud 未完成、退回原卡、深浅色/三语言以及 iPhone13 触底阅读。
+
+## 2026-10-20 · 原闭环提交之后的可复核缺口与新修复
+
+源代码复核发现：双目标原卡更新和“来源不影响”确认曾同时要求 **FSRS 调度 revision 等于打开页面时的旧值**，即用户正常评分也会让无内容冲突的已批准提案失败。修复使用写入瞬间的 FSRS revision CAS，同时继续要求原卡 contentRevision、原卡身份及来源身份精确一致；并新增真正评分后再批准编辑的临时数据库一体化 XCTest 场景。此外，“放弃剩余修改”曾可取消 `undoing` 目标，导致重启后把未完成撤销误判完成；修复状态机以及 UI 取消逻辑，Portable 验证旧坏快照仍维持待人工恢复。
+
+**仍未完整验收：** ACCEPT-01～12 的完整原生交互、iPhone13 操作、真实 File Provider/iCloud/Keychain 与真实用户授权；正式写入始终 `false`。源代码实现和新增测试未经过最新 SHA CI 前，不得将上述修复标记 PASS。仍需按新 SMOKE 附表逐项判定。
