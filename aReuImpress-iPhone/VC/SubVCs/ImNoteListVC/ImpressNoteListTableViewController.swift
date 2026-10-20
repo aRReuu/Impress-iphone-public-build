@@ -38,8 +38,89 @@ enum ImVaultListPresentation {
         }
     }
 
-    static func page(_ notes: [ImVaultIndexNote], limit: Int) -> [ImVaultIndexNote] {
-        Array(notes.prefix(max(0, limit)))
+    static func page<T>(_ values: [T], limit: Int) -> [T] {
+        Array(values.prefix(max(0, limit)))
+    }
+
+    /// Read-only tree projection; the index's full Vault identity is retained.
+    struct OutlineRow {
+        enum Item {
+            case folder(String)
+            case document(ImVaultIndexNote)
+        }
+        let item: Item
+        let title: String
+        let depth: Int
+        var folderPath: String? {
+            if case let .folder(path) = item { return path }
+            return nil
+        }
+        var note: ImVaultIndexNote? {
+            if case let .document(value) = item { return value }
+            return nil
+        }
+    }
+
+    private enum OutlineNode {
+        case folder(String)
+        case document(ImVaultIndexNote)
+        var path: String {
+            switch self {
+            case let .folder(path): return path
+            case let .document(note): return note.identity.relativePath
+            }
+        }
+        var title: String {
+            switch self {
+            case let .folder(path): return String(path.split(separator: "/").last ?? "")
+            case let .document(note): return note.title
+            }
+        }
+        var folder: Bool {
+            if case .folder = self { return true }
+            return false
+        }
+    }
+
+    static func outlineRows(in notes: [ImVaultIndexNote], query: String,
+                            expandedFolders: Set<String>) -> [OutlineRow] {
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matching = term.isEmpty ? notes : matched(notes, query: term, folder: nil)
+        var seen = Set<ImVaultFileIdentity>()
+        let unique = matching.filter { seen.insert($0.identity).inserted }
+        var children: [String: [OutlineNode]] = [:]
+        for folder in folders(in: unique) {
+            let parent = folder.split(separator: "/").dropLast().joined(separator: "/")
+            children[parent, default: []].append(.folder(folder))
+        }
+        for note in unique {
+            let parent = note.identity.relativePath.split(separator: "/")
+                .dropLast().joined(separator: "/")
+            children[parent, default: []].append(.document(note))
+        }
+        var result: [OutlineRow] = []
+        func visit(_ parent: String, _ depth: Int) {
+            let siblings = (children[parent] ?? []).sorted { lhs, rhs in
+                if lhs.folder != rhs.folder { return lhs.folder }
+                let order = lhs.title.localizedStandardCompare(rhs.title)
+                return order == .orderedSame ? lhs.path < rhs.path : order == .orderedAscending
+            }
+            for node in siblings {
+                switch node {
+                case let .folder(path):
+                    result.append(OutlineRow(item: .folder(path),
+                        title: node.title, depth: depth))
+                    if !term.isEmpty || expandedFolders.contains(path) {
+                        visit(path, depth + 1)
+                    }
+                case let .document(note):
+                    result.append(OutlineRow(item: .document(note),
+                        title: note.title, depth: depth))
+                }
+            }
+        }
+        visit("", 0)
+        return result
     }
 }
 
@@ -67,7 +148,7 @@ private final class ImVaultFolderPickerViewController:
         let search = UISearchController(searchResultsController: nil)
         search.searchResultsUpdater = self
         search.obscuresBackgroundDuringPresentation = false
-        search.searchBar.placeholder = V3L("搜索相对路径")
+        search.searchBar.placeholder = V3L("搜索笔记或文件夹")
         navigationItem.searchController = search
         navigationItem.hidesSearchBarWhenScrolling = false
     }
@@ -123,7 +204,9 @@ class ImpressNoteListTableViewController: ImBaseViewController
     private var externalNotes: [ImVaultIndexNote] = []
     private var externalSearchText = ""
     private var selectedVaultFolder: String?
-    private var visibleExternalNotes: [ImVaultIndexNote] = []
+    private var visibleExternalRows: [ImVaultListPresentation.OutlineRow] = []
+    private var expandedExternalFolders = Set<String>()
+    private var totalExternalRowCount = 0
     private var matchedExternalCount = 0
     private var externalVisibleLimit = ImVaultListPresentation.pageSize
     private var externalLoading = false
@@ -133,15 +216,27 @@ class ImpressNoteListTableViewController: ImBaseViewController
     private var externalError: String?
 
     private var hasMoreExternalNotes: Bool {
-        visibleExternalNotes.count < matchedExternalCount
+        visibleExternalRows.count < totalExternalRowCount
     }
 
     private func rebuildExternalRows() {
-        let matching = ImVaultListPresentation.matched(
-            externalNotes, query: externalSearchText, folder: selectedVaultFolder)
-        matchedExternalCount = matching.count
-        visibleExternalNotes = ImVaultListPresentation.page(
-            matching, limit: externalVisibleLimit)
+        matchedExternalCount = ImVaultListPresentation.matched(
+            externalNotes, query: externalSearchText, folder: nil).count
+        let rows = ImVaultListPresentation.outlineRows(
+            in: externalNotes, query: externalSearchText,
+            expandedFolders: expandedExternalFolders)
+        totalExternalRowCount = rows.count
+        visibleExternalRows = ImVaultListPresentation.page(
+            rows, limit: externalVisibleLimit)
+    }
+
+    private func setAllFoldersExpanded(_ expanded: Bool) {
+        expandedExternalFolders = expanded
+            ? Set(ImVaultListPresentation.folders(in: externalNotes)) : []
+        externalVisibleLimit = ImVaultListPresentation.pageSize
+        rebuildExternalRows()
+        tableView.reloadData()
+        updateVaultEmptyState()
     }
 
     private func showVaultFolderPicker() {
@@ -190,7 +285,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         title = V3L("笔记")
-        navigationItem.searchController?.searchBar.placeholder = V3L("搜索相对路径")
+        navigationItem.searchController?.searchBar.placeholder = V3L("搜索笔记或文件夹")
         setupNavigationBarItems()
         tableView.reloadData()
         navigationItem.largeTitleDisplayMode = .always
@@ -217,10 +312,14 @@ class ImpressNoteListTableViewController: ImBaseViewController
 
         // P0-1: explicit read-only external Vault probe. The old importer
         // is still available only as a first-time, NON-overwriting local copy.
-        let browseFolders = UIAction(title: V3L("按文件夹浏览"),
-                                     image: UIImage(systemName: "folder.fill")) { [weak self] _ in
-            self?.showVaultFolderPicker()
-        }
+        let expandFolders = UIAction(title: V3L("全部展开"),
+            image: UIImage(systemName: "chevron.down")) { [weak self] _ in
+                self?.setAllFoldersExpanded(true)
+            }
+        let collapseFolders = UIAction(title: V3L("全部折叠"),
+            image: UIImage(systemName: "chevron.right")) { [weak self] _ in
+                self?.setAllFoldersExpanded(false)
+            }
         let connectVault = UIAction(title: V3L("选择 Obsidian Vault（只读）"),
                                     image: UIImage(systemName: "folder.badge.plus")) { [weak self] _ in
             self?.chooseReadOnlyVault()
@@ -236,7 +335,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
         let vaultItem = UIBarButtonItem(image: UIImage(systemName: "folder"),
                                          style: .plain, target: nil, action: nil)
         vaultItem.menu = UIMenu(title: V3L("Vault · 只读"), children: [
-            browseFolders, connectVault, inspectSaved, disconnectVault
+            expandFolders, collapseFolders, connectVault, inspectSaved, disconnectVault
         ])
         vaultItem.accessibilityLabel = V3L("Vault · 只读")
         navigationItem.rightBarButtonItem = vaultItem
@@ -268,6 +367,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
             self.externalNotes = []
             self.externalSearchText = ""
             self.selectedVaultFolder = nil
+            expandedExternalFolders.removeAll()
             self.externalVisibleLimit = ImVaultListPresentation.pageSize
             self.showingCachedIndex = false
             self.showingPartialIndex = false
@@ -346,6 +446,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
                 externalLoading = false
                 externalNotes = []
                 selectedVaultFolder = nil
+            expandedExternalFolders.removeAll()
                 externalVisibleLimit = ImVaultListPresentation.pageSize
                 showingCachedIndex = false
                 showingPartialIndex = false
@@ -410,6 +511,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
             externalMode = true
             externalNotes = []
             selectedVaultFolder = nil
+            expandedExternalFolders.removeAll()
             showingCachedIndex = false
             showingPartialIndex = false
             externalVisibleLimit = ImVaultListPresentation.pageSize
@@ -423,7 +525,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
 
     private func updateVaultEmptyState() {
         guard externalMode else { tableView.backgroundView = nil; return }
-        if !visibleExternalNotes.isEmpty { tableView.backgroundView = nil; return }
+        if !visibleExternalRows.isEmpty { tableView.backgroundView = nil; return }
         let container = UIView()
         let contents = UIStackView()
         contents.axis = .vertical
@@ -433,8 +535,9 @@ class ImpressNoteListTableViewController: ImBaseViewController
         let message = UILabel()
         message.text = externalError ??
             (externalLoading ? V3L("正在分批读取 Obsidian 文档…") :
+             !externalSearchText.isEmpty ? V3L("没有符合搜索条件的笔记") :
              ImVaultReadOnlyProbe.shared.hasAuthorizedBookmark
-                ? V3L("此位置没有可读取的 Markdown 文档")
+                ? V3L("此位置没有可读取的文档")
                 : V3L("连接 Obsidian Vault 后查看笔记"))
         message.numberOfLines = 0
         message.textColor = ImpressV3Appearance.secondaryText
@@ -473,7 +576,7 @@ extension ImpressNoteListTableViewController: UISearchBarDelegate
     private func searchControllerSetting()
     {
         let controller = UISearchController.init(searchResultsController: nil)
-        controller.searchBar.placeholder = V3L("搜索相对路径")
+        controller.searchBar.placeholder = V3L("搜索笔记或文件夹")
         controller.searchBar.delegate = self
         controller.searchBar.tintColor = ImpressV3ReviewEnvironment.pilotEnabled
             ? ImpressV3Appearance.accent : titleColor
@@ -563,28 +666,24 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
 
     func tableView(_ tableView: UITableView,
                    numberOfRowsInSection section: Int) -> Int {
-        externalMode ? visibleExternalNotes.count + (hasMoreExternalNotes ? 1 : 0) : 1
+        externalMode ? visibleExternalRows.count + (hasMoreExternalNotes ? 1 : 0) : 1
     }
 
     func tableView(_ tableView: UITableView,
                    titleForHeaderInSection section: Int) -> String? {
-        externalMode
-            ? ((showingCachedIndex || showingPartialIndex)
-               ? V3L("Vault 索引预览 · 正在验证")
-               : "Obsidian · " + (selectedVaultFolder ?? V3L("全部文档"))
-                   + " · " + String(matchedExternalCount) + " 篇（只读）")
-            : nil
+        externalMode && (showingCachedIndex || showingPartialIndex)
+            ? V3L("Vault 索引预览 · 正在验证") : nil
     }
 
     func tableView(_ tableView: UITableView,
                    cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         if externalMode {
-            if hasMoreExternalNotes && indexPath.row == visibleExternalNotes.count {
+            if hasMoreExternalNotes && indexPath.row == visibleExternalRows.count {
                 let cell = tableView.dequeueReusableCell(withIdentifier: "vault-more")
                     ?? UITableViewCell(style: .default, reuseIdentifier: "vault-more")
                 var content = UIListContentConfiguration.cell()
-                content.text = "加载更多 · 已显示 " + String(visibleExternalNotes.count)
-                    + " / " + String(matchedExternalCount)
+                content.text = V3L("加载更多") + " · " + String(visibleExternalRows.count)
+                    + " / " + String(totalExternalRowCount)
                 content.textProperties.color = ImpressV3Appearance.accent
                 content.textProperties.font = ImpressV3Appearance.Typography.supporting
                 cell.contentConfiguration = content
@@ -592,41 +691,44 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
                 cell.accessibilityIdentifier = "impress.notes.load-more"
                 return cell
             }
-            guard visibleExternalNotes.indices.contains(indexPath.row) else {
+            guard visibleExternalRows.indices.contains(indexPath.row) else {
                 return UITableViewCell()
             }
-            let note = visibleExternalNotes[indexPath.row]
-            let identifier = "vault-note-row"
-            let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
-                ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
-            var content = UIListContentConfiguration.subtitleCell()
-            content.text = note.title
-            content.secondaryText = note.identity.relativePath
-            content.image = UIImage(systemName: "doc.text")
-            content.imageProperties.tintColor = ImpressV3Appearance.accent
-            content.textProperties.numberOfLines = 2
+            let row = visibleExternalRows[indexPath.row]
+            let folder = row.folderPath
+            let expanded = folder.map { expandedExternalFolders.contains($0) } ?? false
+            let cell = tableView.dequeueReusableCell(withIdentifier: "vault-outline")
+                ?? UITableViewCell(style: .default, reuseIdentifier: "vault-outline")
+            var content = UIListContentConfiguration.cell()
+            content.text = row.title
+            // The only symbol is the necessary expand/collapse disclosure.
+            content.image = folder == nil ? nil : UIImage(systemName:
+                (expanded || !externalSearchText.isEmpty) ? "chevron.down" : "chevron.right")
+            content.imageProperties.tintColor = ImpressV3Appearance.secondaryText
+            content.imageToTextPadding = 8
+            content.directionalLayoutMargins = NSDirectionalEdgeInsets(
+                top: 9, leading: 12 + CGFloat(row.depth) * 19 +
+                    (folder == nil ? 22 : 0),
+                bottom: 9, trailing: 12)
             content.textProperties.font = ImpressV3Appearance.Typography.body
-            content.secondaryTextProperties.font = ImpressV3Appearance.Typography.supporting
-            content.secondaryTextProperties.color = ImpressV3Appearance.secondaryText
-            content.secondaryTextProperties.numberOfLines = 2
+            content.textProperties.numberOfLines = 1
             cell.contentConfiguration = content
             ImpressV3Appearance.styleGroupedCell(cell)
-            cell.accessoryType = .disclosureIndicator
+            cell.accessoryType = .none
+            cell.accessibilityLabel = row.title
+            cell.accessibilityIdentifier = folder == nil
+                ? "impress.notes.file-row" : "impress.notes.folder-row"
+            cell.accessibilityValue = folder == nil ? nil :
+                ((expanded || !externalSearchText.isEmpty)
+                    ? V3L("已展开") : V3L("已折叠"))
             return cell
         }
         let cell = tableView.dequeueReusableCell(withIdentifier: reuseID)
             ?? UITableViewCell(style: .subtitle, reuseIdentifier: reuseID)
         if let note = viewModel.getCurrentNote(indexPath: indexPath) {
-            var content = UIListContentConfiguration.subtitleCell()
+            var content = UIListContentConfiguration.cell()
             content.text = note.mainTitle ?? V3L("无标题")
-            let excerpt = (note.markdownText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let directory = (note.directoryPath ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let preview = excerpt.isEmpty ? "无内容" : String(excerpt.prefix(160))
-            content.secondaryText = directory.isEmpty ? preview : directory + " · " + preview
-            content.image = UIImage(systemName: excerpt.isEmpty ? "doc.text" : "doc.text.fill")
-            content.imageProperties.tintColor = ImpressV3Appearance.accent
-            content.textProperties.numberOfLines = 2
-            content.secondaryTextProperties.numberOfLines = 3
+            content.textProperties.font = ImpressV3Appearance.Typography.body
             cell.contentConfiguration = content
             cell.accessoryType = .disclosureIndicator
             if ImpressV3ReviewEnvironment.pilotEnabled {
@@ -641,14 +743,26 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
     {
         tableView.deselectRow(at: indexPath, animated: false)
         if externalMode {
-            if hasMoreExternalNotes && indexPath.row == visibleExternalNotes.count {
+            if hasMoreExternalNotes && indexPath.row == visibleExternalRows.count {
                 externalVisibleLimit += ImVaultListPresentation.pageSize
                 rebuildExternalRows()
                 tableView.reloadData()
                 return
             }
-            guard visibleExternalNotes.indices.contains(indexPath.row) else { return }
-            let item = visibleExternalNotes[indexPath.row]
+            guard visibleExternalRows.indices.contains(indexPath.row) else { return }
+            let row = visibleExternalRows[indexPath.row]
+            if let path = row.folderPath {
+                // Search is an expanded projection, not a mutation of normal fold state.
+                guard externalSearchText.isEmpty else { return }
+                if !expandedExternalFolders.insert(path).inserted {
+                    expandedExternalFolders.remove(path)
+                }
+                rebuildExternalRows()
+                tableView.reloadData()
+                updateVaultEmptyState()
+                return
+            }
+            guard let item = row.note else { return }
             ImVaultReadSync.shared.read(item.identity) { [weak self] result in
                 guard let self = self,
                       self.externalMode,

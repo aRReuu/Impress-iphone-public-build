@@ -51,6 +51,7 @@ composer = source("aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3CardComposerV
 chat = source("aReuImpress-iPhone/Utils/Public/ImAI/ImpressAINativeChatViewController.swift")
 repo = source("aReuImpress-iPhone/DataBase/V3/ReviewWCDBRepository.swift")
 notes = source("aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift")
+note_list = source("aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImpressNoteListTableViewController.swift")
 vault = source("aReuImpress-iPhone/Utils/Public/ImFileManager/ImObsidianManager.swift")
 workflow = source(".github/workflows/public-ios-build.yml")
 
@@ -70,6 +71,10 @@ assert "switchDiscussion(to" in chat and "flushBeforeSwitch()" in chat
 assert "impress_v3_chat_session" in repo, "Chat local history authority missing"
 assert "saveChatSession" in repo and "chatSessions(for sourceIdentity:" in repo
 assert "impress.notes.ai-discussion" in notes, "Notes no longer opens shared Chat"
+assert "UI-03.a" in contract and "outlineRows(" in note_list, "Notes outline requirement or implementation missing"
+assert "expandedExternalFolders" in note_list and "impress.notes.folder-row" in note_list
+assert "impress.notes.file-row" in note_list and "content.secondaryText = note.identity.relativePath" not in note_list
+assert "ImVaultReadSync.shared.read(item.identity)" in note_list, "Original Vault read gate bypassed by outline"
 assert re.search(r"productionWriteEnabled\s*=\s*false\b", vault)
 assert not re.search(r"productionWriteEnabled\s*=\s*true\b", vault)
 assert "private" in contract.lower() or "私有" in contract

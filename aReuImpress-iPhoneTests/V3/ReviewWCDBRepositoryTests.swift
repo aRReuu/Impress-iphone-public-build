@@ -2400,6 +2400,61 @@ final class ImVaultSafetyTests: XCTestCase {
         return root
     }
 
+    func testObsidianOutlineFoldsAndSearchesWithoutLosingSourceIdentity() throws {
+        let names = ["Notes/One.md", "Notes/Physics/One.md",
+                     "Reading/One.md", "Root.md", "Notes/Physics/Diagram.md"]
+        let records = try names.map { name in
+            ImVaultIndexNote(identity: try ImVaultFileIdentity(
+                vaultID: "synthetic-vault", relativePath: name),
+                bytes: 24, modified: nil)
+        }
+
+        let collapsed = ImVaultListPresentation.outlineRows(
+            in: records, query: "", expandedFolders: [])
+        XCTAssertEqual(collapsed.map(\.title), ["Notes", "Reading", "Root"])
+        XCTAssertEqual(collapsed.map(\.depth), [0, 0, 0])
+        XCTAssertNotNil(collapsed.first?.folderPath)
+        XCTAssertNil(collapsed.last?.folderPath)
+
+        let oneFolder = ImVaultListPresentation.outlineRows(
+            in: records, query: "", expandedFolders: ["Notes"])
+        XCTAssertEqual(oneFolder.map(\.title),
+                       ["Notes", "Physics", "One", "Reading", "Root"])
+        XCTAssertEqual(oneFolder.map(\.depth), [0, 1, 1, 0, 0])
+        XCTAssertEqual(oneFolder[1].folderPath, "Notes/Physics")
+
+        let deep = ImVaultListPresentation.outlineRows(
+            in: records, query: "", expandedFolders: ["Notes", "Notes/Physics"])
+        let duplicateTitles = deep.compactMap(\.note)
+            .filter { $0.title == "One" }
+        XCTAssertEqual(duplicateTitles.count, 2)
+        XCTAssertEqual(Set(duplicateTitles.map(\.identity.relativePath)),
+                       Set(["Notes/One.md", "Notes/Physics/One.md"]))
+
+        // Search projects matching descendants and ancestors without altering
+        // the saved fold state. Do not show complete paths as row titles.
+        let search = ImVaultListPresentation.outlineRows(
+            in: records, query: "Notes/Physics/One", expandedFolders: [])
+        XCTAssertEqual(search.map(\.title), ["Notes", "Physics", "One"])
+        XCTAssertEqual(search.map(\.depth), [0, 1, 2])
+        XCTAssertEqual(search.last?.note?.identity.relativePath,
+                       "Notes/Physics/One.md")
+        XCTAssertEqual(ImVaultListPresentation.outlineRows(
+            in: records, query: "", expandedFolders: []).map(\.title),
+                       collapsed.map(\.title))
+        XCTAssertEqual(ImVaultListPresentation.page(deep, limit: 2).count, 2)
+
+        let otherVault = try ImVaultIndexNote(identity: ImVaultFileIdentity(
+            vaultID: "other-vault", relativePath: "Notes/One.md"),
+            bytes: 12, modified: nil)
+        let crossVault = ImVaultListPresentation.outlineRows(
+            in: [records[0], otherVault], query: "One",
+            expandedFolders: [])
+        XCTAssertEqual(crossVault.compactMap(\.note).count, 2)
+        XCTAssertEqual(Set(crossVault.compactMap(\.note).map(\.identity.vaultID)),
+                       Set(["synthetic-vault", "other-vault"]))
+    }
+
     func testVaultFolderBrowsingAndBoundedPagesKeepDistinctPathIdentities() throws {
         let names = ["Notes/One.md", "Notes/Physics/One.md",
                      "Reading/One.md", "Root.md"]
