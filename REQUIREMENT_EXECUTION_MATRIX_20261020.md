@@ -221,3 +221,7 @@
 **修正源文件：** `ImVaultSyncCore.swift` 持久 `undoing` 即使旧错误快照取消选择仍不能变成“已完成”；`ImpressAINativeChatViewController.swift` 不再允许“放弃未完成项”篡改撤销中的目标，双目标原卡正向 CAS 依据最新 FSRS revision 与原 contentRevision 而不是已过时调度快照；`ImMarkdownViewController.swift` 反向“无影响”确认同样以最新 FSRS revision 且保持内容/来源 CAS。Portable 回归 `ImVaultSyncCoreTests.deselectionCannotErasePendingUndoAfterCrash`。
 
 **分层证据：** 新代码构建/Portable/iOS XCTest 均需后续实际 CI Run 和 exact commit SHA；真实 iPhone 13、真实 Files/iCloud Provider、在线模型推理、用户 Keychain 和正式 Vault 写回 **BLOCKED（外部设备或独立授权）**。十二项 ACCEPT **不能**因这个测试一次成功而全部标记 PASS；该测试覆盖部分 P0 数据链与故障分支，不执行完整触屏 UI / 真机操作。
+
+### 2026-10-20 业务闭环补充：会话独立模型选择及目标身份
+
+新增 `WCDBV3ChatSession.selectedChatModelID`（可选字段，对旧 JSON 向后兼容）；`ImpressAINativeChatViewController` 选定模型立即加入本地 CAS 会话持久化，恢复失效选择时不静默切换服务商。无原卡/笔记的独立 Chat 使用专属 `chat:standalone:v1` 会话源；笔记兜底使用 Vault ID + 全路径哈希，不基于同名标题。批准、撤销、反向核查、历史回执明确显示 Vault ID/完整相对路径。新增两项原生 XCTest，必须由最新同 SHA CI 提供真实结果；不解除生产写回禁令。

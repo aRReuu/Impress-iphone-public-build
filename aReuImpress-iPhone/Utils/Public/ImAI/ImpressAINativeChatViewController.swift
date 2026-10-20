@@ -66,7 +66,13 @@ final class ImpressAINativeChatViewController: UIViewController,
     private var draftDebounce: Task<Void, Never>?
 
     private var sourceIdentity: String? {
-        explicitSourceKey ?? sourceCardID.map { "card:" + $0.uuidString }
+        if let explicitSourceKey { return explicitSourceKey }
+        if let sourceCardID { return "card:" + sourceCardID.uuidString }
+        if let note = noteIdentity ?? linkedNoteIdentity {
+            let scoped = note.vaultID + "\n" + note.relativePath
+            return "note:" + ImVaultDigest.sha256(Data(scoped.utf8))
+        }
+        return "chat:standalone:v1"
     }
     private var currentSourceVersion: String {
         sourceVersionToken ?? String(sourceContentRevision ?? -1)
@@ -163,6 +169,7 @@ final class ImpressAINativeChatViewController: UIViewController,
             selectedOverrideID: selectedModelID) { [weak self] picked in
                 self?.selectedModelID = picked
                 self?.refreshModelPicker()
+                self?.enqueuePersistence() // Preserve model before Send.
             }
         navigationController?.pushViewController(picker, animated: true)
     }
@@ -580,7 +587,8 @@ final class ImpressAINativeChatViewController: UIViewController,
         text.backgroundColor = ImpressV3Appearance.surface
         text.accessibilityIdentifier = "impress.duplex.receipt-detail"
         text.text = V3L("提案 ID：") + receipt.proposalID.uuidString +
-            "\n\n" + V3L("笔记：") + (receipt.noteIdentity?.relativePath ??
+            "\n\nVault ID: " + (receipt.noteIdentity?.vaultID ?? "-") +
+            "\n" + V3L("笔记：") + (receipt.noteIdentity?.relativePath ??
                 V3L("笔记未选择")) +
             "\nSHA-256: " + (receipt.noteBaseDigest ?? "-") +
             "\n" + V3L("状态：") + receipt.state.noteStatus.rawValue +
@@ -1102,10 +1110,13 @@ final class ImpressAINativeChatViewController: UIViewController,
             privacyLabel.text = V3L("来源内容有更新；发送前请重新确认引用范围。")
         }
         activeProviderID = history.reversed().compactMap(\.providerID).first
-        selectedModelID = nil
-        if let prior = history.reversed().first(where: {
-            $0.providerID != nil && $0.modelIdentifier != nil
-        }), let connectionID = prior.providerID, let modelName = prior.modelIdentifier {
+        selectedModelID = session.selectedChatModelID
+        // Older conversations may infer the last used model. Explicitly
+        // stored but unavailable models must NOT auto-switch providers.
+        if selectedModelID == nil,
+           let prior = history.reversed().first(where: {
+               $0.providerID != nil && $0.modelIdentifier != nil
+           }), let connectionID = prior.providerID, let modelName = prior.modelIdentifier {
             let registry = ImpressAIConfigStore.shared.registry
             selectedModelID = registry.models.first(where: { item in
                 item.identifier == modelName && registry.connections.contains(where: {
@@ -1210,6 +1221,7 @@ final class ImpressAINativeChatViewController: UIViewController,
            base.contextReferences == contextReferences &&
            base.requestError == requestFailure &&
            base.promptOverride == sessionPromptOverride &&
+           base.selectedChatModelID == selectedModelID &&
            base.pendingDuplex == pendingDuplex &&
            (base.duplexHistory ?? []) == previousDuplex &&
            (base.contextConsentGranted == true) == contextConsentGranted { return true }
@@ -1219,6 +1231,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         next.contextReferences = contextReferences
         next.requestError = requestFailure
         next.promptOverride = sessionPromptOverride
+        next.selectedChatModelID = selectedModelID
         next.pendingDuplex = pendingDuplex
         next.duplexHistory = previousDuplex
         next.contextConsentGranted = contextConsentGranted
@@ -1658,14 +1671,16 @@ final class ImpressDuplexChangeController: UIViewController {
             if let draft {
                 let diff = ImVaultDiff.summary(base: draft.baseText,
                     edited: draft.editedText, maximumLines: 200)
-                noteInfo.text = V3L("目标：") + identity.relativePath +
+                noteInfo.text = "Vault ID: " + identity.vaultID +
+                    "\n" + V3L("目标：") + identity.relativePath +
                     "\nSHA-256: " + draft.baseDigest +
                     "\n" + (draft.hasChanges
                         ? (diff.complete ? V3L("已有局部修订草稿，可预览与选择写回。") :
                            V3L("修改范围超过预览上限，禁止确认笔记写回。"))
                         : V3L("草稿未修改；可只更新原卡。"))
             } else {
-                noteInfo.text = V3L("目标：") + identity.relativePath +
+                noteInfo.text = "Vault ID: " + identity.vaultID +
+                    "\n" + V3L("目标：") + identity.relativePath +
                     "\n" + V3L("尚无笔记修订草稿；打开编辑器增量修改原文。")
             }
         } catch {
@@ -2025,7 +2040,8 @@ final class ImpressDuplexApprovalController: UIViewController {
         var pieces = [V3L("文件与数据库不是同一个事务；按对象保留回执、冲突与重试。"),
                       V3L("必须逐项核对下方完整差异；无确认不会写入。")]
         if let identity = proposal.noteIdentity {
-            pieces.append("\n" + V3L("笔记：") + identity.relativePath +
+            pieces.append("\nVault ID: " + identity.vaultID +
+                          "\n" + V3L("笔记：") + identity.relativePath +
                           "\nSHA-256: " + (proposal.noteBaseDigest ?? "?") +
                           "\n" + V3L("状态：") + proposal.state.noteStatus.rawValue)
             do {
@@ -2091,7 +2107,8 @@ final class ImpressDuplexApprovalController: UIViewController {
         selected.state.noteSelected = noteChosen
         selected.state.cardSelected = cardChosen
         let targets = [
-            noteChosen ? (V3L("笔记：") + (selected.noteIdentity?.relativePath ?? "")) : nil,
+            noteChosen ? ("Vault ID: " + (selected.noteIdentity?.vaultID ?? "") +
+                "\n" + V3L("笔记：") + (selected.noteIdentity?.relativePath ?? "")) : nil,
             cardChosen ? (V3L("原卡：") + (selected.cardID?.uuidString ?? "")) : nil
         ].compactMap { $0 }.joined(separator: "\n")
         let consent = UIAlertController(title: V3L("确认这两个目标的所选修改？"),
@@ -2307,7 +2324,8 @@ final class ImpressDuplexApprovalController: UIViewController {
                 let diff = ImVaultDiff.summary(
                     base: inverse.baseText, edited: inverse.editedText, maximumLines: 200)
                 guard diff.complete else { throw ImVaultSyncFailure.previewTruncated }
-                details = V3L("撤销笔记改动") + "\n" + id.relativePath +
+                details = V3L("撤销笔记改动") + "\nVault ID: " + id.vaultID +
+                    "\n" + id.relativePath +
                     "\nExpected SHA-256: " + (proposal.noteEditedDigest ?? "?") +
                     "\n" + V3L("目标恢复 SHA-256：") + (proposal.noteBaseDigest ?? "?") +
                     "\n\n" + diff.text

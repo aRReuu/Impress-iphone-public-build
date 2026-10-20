@@ -139,3 +139,7 @@ Record final Git SHA, Actions run URL, each job conclusion, **total native XCTes
 | ACCEPT-12 | 同测试：逆向安全撤销、保留 FSRS/内容历史与会话、冷启动再读 | PENDING | BLOCKED |
 
 旧 A02 已被最新产品契约取消，不恢复首页周校准图。无线上模型、iPhone13、生产文件写回的真实验证不在这次模拟运行中。
+
+### 2026-10-20 后续：原生目标身份与未发送 Chat 模型
+
+新增 `testDuplexDiffPreviewDisplaysExactVaultIDAndSourcePath`、`testUnsentChatModelAndPromptSurviveColdStartAndLegacyJSON`。分别覆盖笔记+原卡统一预览中 Vault ID/全相对路径/实际来源 SHA 的可见性，以及只选择模型未发送消息时，模型、提示词和草稿在已有 WCDB 会话冷启动后的保留。过去 Chat JSON 缺少可选新字段时仍可读取。仅有对应 exact SHA XCTest 成功才可标记自动化 PASS；iPhone13/真实 Vault/在线模型仍不可直接推定。

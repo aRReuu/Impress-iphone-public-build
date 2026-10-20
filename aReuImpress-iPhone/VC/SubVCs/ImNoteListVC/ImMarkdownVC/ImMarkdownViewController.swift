@@ -1189,7 +1189,8 @@ final class ImpressNoteSourceImpactController: UIViewController {
             observedRevision = card.contentRevision
             originalSourceKey = key
             reading.text = V3L("仅能确认文件级来源变化；请阅读当前完整笔记及原卡，再决定是否受影响。") +
-                "\n\n" + V3L("来源：") + document.identity.relativePath +
+                "\n\nVault ID: " + document.identity.vaultID +
+                "\n" + V3L("来源：") + document.identity.relativePath +
                 "\n" + V3L("原来源 SHA-256：") + previousDigest +
                 "\n" + V3L("新来源 SHA-256：") + document.digest +
                 "\n\ncardID: " + cardID.uuidString +

@@ -379,6 +379,8 @@ public struct WCDBV3ChatSession: Codable, Equatable, Sendable {
     public var requestError: String?
     /// Optional per-discussion prompt; legacy rows decode to nil.
     public var promptOverride: String?
+    /// Per-session model even without a completed AI message; nil in old rows.
+    public var selectedChatModelID: UUID?
     /// Nil on historical rows: conservatively re-confirm before sending source context.
     public var contextConsentGranted: Bool?
 
@@ -397,6 +399,7 @@ public struct WCDBV3ChatSession: Codable, Equatable, Sendable {
         self.duplexHistory = []
         self.requestError = nil
         self.promptOverride = nil
+        self.selectedChatModelID = nil
         self.contextConsentGranted = false
     }
 }

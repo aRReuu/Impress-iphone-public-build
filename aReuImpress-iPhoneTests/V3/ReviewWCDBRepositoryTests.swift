@@ -698,6 +698,63 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 
+
+    @MainActor
+    func testDuplexDiffPreviewDisplaysExactVaultIDAndSourcePath() throws {
+        let id = try ImVaultFileIdentity(vaultID: UUID().uuidString,
+            relativePath: "Lessons/Mechanics/Notes.md")
+        var draft = try ImVaultDraft(identity: id, baseText: "# Original\n[[Link]]\n")
+        try draft.update("# Revised\n[[Link]]\n")
+        try ImVaultPrivateStore.saveDraft(draft)
+        let p = WCDBV3DuplexProposal(sourceMessageID: nil, noteIdentity: id,
+            noteBaseDigest: draft.baseDigest,
+            noteEditedDigest: ImVaultDigest.sha256(draft.proposedBytes),
+            cardID: nil, cardReviewRevision: nil, cardContentRevision: nil,
+            cardBaseQuestion: nil, cardBaseAnswer: nil,
+            cardEditedQuestion: nil, cardEditedAnswer: nil,
+            state: ImDuplexApprovalState(noteSelected: true, cardSelected: false))
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
+            calculator: FSRS6ReviewCalculator())
+        let controller = ImpressDuplexApprovalController(
+            repository: repo, proposal: p) { _ in true }
+        controller.loadViewIfNeeded()
+        let preview = try XCTUnwrap(controller.view.subviews.compactMap {
+            $0 as? UITextView
+        }.first(where: { $0.accessibilityIdentifier == "impress.duplex.full-diff" }))
+        XCTAssertTrue(preview.text.contains(id.vaultID))
+        XCTAssertTrue(preview.text.contains(id.relativePath))
+        XCTAssertTrue(preview.text.contains(draft.baseDigest))
+        XCTAssertTrue(preview.text.contains("Original"))
+        XCTAssertTrue(preview.text.contains("Revised"))
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    func testUnsentChatModelAndPromptSurviveColdStartAndLegacyJSON() async throws {
+        let path = temporaryPath()
+        let repo = try ReviewWCDBRepository(databasePath: path,
+            calculator: FSRS6ReviewCalculator())
+        let model = UUID()
+        var conversation = WCDBV3ChatSession(sourceIdentity: "chat:standalone:v1")
+        conversation.selectedChatModelID = model
+        conversation.promptOverride = "First principles."
+        conversation.inputDraft = "Unsent question"
+        try await repo.saveChatSession(conversation, expectedRevision: nil)
+        let reopened = try ReviewWCDBRepository(databasePath: path,
+            calculator: FSRS6ReviewCalculator())
+        let sessions = try await reopened.chatSessions(for: "chat:standalone:v1")
+        let stored = try XCTUnwrap(sessions.first)
+        XCTAssertEqual(stored.selectedChatModelID, model)
+        XCTAssertEqual(stored.promptOverride, conversation.promptOverride)
+        XCTAssertEqual(stored.inputDraft, conversation.inputDraft)
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(conversation)) as? [String: Any])
+        legacy.removeValue(forKey: "selectedChatModelID")
+        let decoded = try JSONDecoder().decode(WCDBV3ChatSession.self,
+            from: JSONSerialization.data(withJSONObject: legacy))
+        XCTAssertNil(decoded.selectedChatModelID)
+        XCTAssertEqual(decoded.inputDraft, conversation.inputDraft)
+    }
+
     /// Standalone disposable File Provider fixture for end-to-end Chat +
     /// original-card tests. Helpers in another XCTestCase are private and
     /// deliberately must not be referenced across class boundaries.
