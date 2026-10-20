@@ -318,6 +318,7 @@ final class ImVaultReadOnlyProbe: NSObject, UIDocumentPickerDelegate {
 enum ImVaultSyncFailure: LocalizedError {
     case wrongVault, unsafePath, unavailable, notDownloaded, tooLarge, notUTF8, incompleteIndex
     case conflict, previewTruncated, approvalMissing, writesLocked, verificationFailed, deviceTestVaultRequired
+    case unsupportedComplexWrite
     var errorDescription: String? {
         switch self {
         case .wrongVault: return "Vault 与草稿身份不匹配，拒绝操作。"
@@ -333,6 +334,7 @@ enum ImVaultSyncFailure: LocalizedError {
         case .writesLocked: return "真实 Vault 写回尚未通过设备安全 Gate；草稿已保留。"
         case .deviceTestVaultRequired: return "只允许在 Debug QA 中操作通过「文件」选定、名称为 Impress-Write-Test-Vault 的独立测试副本。真实 Vault 保持只读；草稿已保留。"
         case .verificationFailed: return "备份或写后回读验证失败，保留草稿以供恢复。"
+        case .unsupportedComplexWrite: return "Excalidraw 与 Canvas 只允许阅读和选材，不可由通用 Markdown 写入器覆盖。"
         }
     }
 }
@@ -874,6 +876,12 @@ enum ImVaultGuardedWrite {
     private static func commitVerified(root: URL, draft: ImVaultDraft,
                               userConfirmedDiff: Bool) throws -> ImVaultCommitOutcome {
         try draft.validate()
+        // A .excalidraw.md document contains structured drawing data. Protect
+        // both temporary QA and any future production path from generic edits.
+        guard !draft.identity.relativePath.lowercased()
+            .hasSuffix(".excalidraw.md") else {
+            throw ImVaultSyncFailure.unsupportedComplexWrite
+        }
         guard userConfirmedDiff else { throw ImVaultSyncFailure.approvalMissing }
         let preview = ImVaultDiff.summary(base: draft.baseText,
                                           edited: draft.editedText, maximumLines: 200)

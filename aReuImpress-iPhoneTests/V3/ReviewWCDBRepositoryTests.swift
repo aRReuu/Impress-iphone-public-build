@@ -1258,6 +1258,30 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(history.tableView(history.tableView, numberOfRowsInSection: 0), 1)
     }
 
+    func testExcalidrawMarkdownCannotBeModifiedByGenericSourceWriter() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "Impress-Excalidraw-QA-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("Drawing.excalidraw.md")
+        let original = "---\nexcalidraw-plugin: parsed\n---\n# Drawing\n"
+        try Data(original.utf8).write(to: file)
+        let identity = try ImVaultFileIdentity(vaultID: "test-only",
+            relativePath: "Drawing.excalidraw.md")
+        var draft = try ImVaultDraft(identity: identity,
+            baseText: original, baseRawData: Data(original.utf8))
+        try draft.update(original + "An invalid edit to structured data.\n")
+        XCTAssertThrowsError(try ImVaultGuardedWrite.commitFixture(
+            root: root, draft: draft, userConfirmedDiff: true)) { error in
+                guard case ImVaultSyncFailure.unsupportedComplexWrite = error else {
+                    XCTFail("The common writer must reject Excalidraw"); return
+                }
+        }
+        XCTAssertEqual(try Data(contentsOf: file), Data(original.utf8))
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
     func testDeleteConversationPreservesAppliedReceiptsAndDoesNotResurrect() async throws {
         let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
             calculator: FSRS6ReviewCalculator())

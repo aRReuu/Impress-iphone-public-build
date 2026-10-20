@@ -239,6 +239,10 @@ final class ImpressAINativeChatViewController: UIViewController,
             entries.append(.init(title: V3L("修订记录与回执"), symbol: "checklist",
                 identifier: "receipts") { [weak self] in self?.openDuplexReceipts() })
         }
+        entries.append(.init(title: V3L("已删除会话修订回执"), symbol: "archivebox",
+            identifier: "archived-receipts") { [weak self] in
+                self?.openArchivedDuplexReceipts()
+        })
         entries.append(.init(title: V3L("使用说明"), symbol: "info.circle",
             identifier: "introduction") { [weak self] in self?.showChatIntroduction() })
         navigationController?.pushViewController(
@@ -709,7 +713,8 @@ final class ImpressAINativeChatViewController: UIViewController,
         navigationController?.pushViewController(page, animated: true)
     }
 
-    private func showDuplexReceipt(_ receipt: WCDBV3DuplexProposal) {
+    private func showDuplexReceipt(_ receipt: WCDBV3DuplexProposal,
+                                   allowUndo: Bool = true) {
         let page = UIViewController()
         page.title = V3L("修订回执详情")
         page.view.backgroundColor = ImpressV3Appearance.page
@@ -748,8 +753,9 @@ final class ImpressAINativeChatViewController: UIViewController,
         // Historical receipts are read-only unless their exact completed
         // proposal has a reversible target. Undo is a separate explicit
         // full-diff, CAS-protected operation, never a tap on old message text.
-        if [.applied, .undoing].contains(receipt.state.noteStatus) ||
-           [.applied, .undoing].contains(receipt.state.cardStatus) {
+        if allowUndo && (
+            [.applied, .undoing].contains(receipt.state.noteStatus) ||
+            [.applied, .undoing].contains(receipt.state.cardStatus)) {
             let action = UIAction(title: V3L("安全撤销"),
                                   image: UIImage(systemName: "arrow.uturn.backward")) {
                 [weak self] _ in
@@ -761,6 +767,31 @@ final class ImpressAINativeChatViewController: UIViewController,
             page.navigationItem.rightBarButtonItem = UIBarButtonItem(primaryAction: action)
         }
         navigationController?.pushViewController(page, animated: true)
+    }
+
+    @objc private func openArchivedDuplexReceipts() {
+        guard let repository = chatRepository else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let sessions = try await repository.retainedChatReceipts()
+                let receipts = sessions.flatMap { $0.duplexHistory ?? [] }
+                guard !receipts.isEmpty else {
+                    let alert = UIAlertController(title: V3L("暂无保留回执"),
+                        message: V3L("当前没有已删除会话保留的执行记录。"),
+                        preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+                    self.present(alert, animated: true)
+                    return
+                }
+                let page = ImpressDuplexReceiptHistoryController(records: receipts)
+                page.onSelect = { [weak self] entry in
+                    self?.showDuplexReceipt(entry, allowUndo: false)
+                }
+                page.onRefresh = { receipts }
+                self.navigationController?.pushViewController(page, animated: true)
+            } catch { self.showProblem(error) }
+        }
     }
 
     @objc private func resumeDuplexReview() {
@@ -1414,6 +1445,12 @@ final class ImpressAINativeChatViewController: UIViewController,
         guard let identity = sourceIdentity, let repository = chatRepository else {
             return sourceIdentity == nil
         }
+        // A queued save after deletion must not create an empty new record.
+        if storedSession == nil && history.isEmpty &&
+           messageInput.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+           contextReferences.isEmpty && pendingDuplex == nil &&
+           previousDuplex.isEmpty && selectedModelID == nil &&
+           sessionPromptOverride == nil { return true }
         let base = storedSession ?? WCDBV3ChatSession(sourceIdentity: identity)
         if storedSession != nil && base.messages == history &&
            base.inputDraft == messageInput.text &&
