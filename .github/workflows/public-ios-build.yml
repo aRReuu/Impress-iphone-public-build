@@ -95,7 +95,7 @@ jobs:
         run: |
           set -euo pipefail
           cd Scripts/DiagramReader
-          npm install --no-audit --no-fund --ignore-scripts --omit=optional
+          npm install --no-audit --no-fund --ignore-scripts
           npm run build
           test -s ../../aReuImpress-iPhone/Resources/DiagramReader/reader.js
           cp ../../aReuImpress-iPhone/Resources/DiagramReader/manifest.json ../../out/diagram-engine-manifest.json
