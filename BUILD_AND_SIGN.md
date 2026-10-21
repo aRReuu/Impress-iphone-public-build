@@ -2,8 +2,10 @@
 
 **2026-10-19 knowledge-workflow candidate:** run current [KNOWLEDGE_LIFECYCLE_V1.md](KNOWLEDGE_LIFECYCLE_V1.md) requirements and [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md) on the exact final head. Old run artifacts do not attest to G0–G6. A QA unsigned IPA, if created, remains non-release and does not establish Keychain/real provider/Obsidian device permissions.
 
-## Current executable workflow
-For active V3.2 use `feature/impress-vault-device-write-qa` and `.github/workflows/r04-2-privacy-retirement-validation.yml`. Other older R03/main or calibration-v01 workflows have different trigger rules and must not be treated as sign-off of the active branch.
+## Current executable workflow (2026-10-22 V1.1)
+**唯一有效的施工分支**为 `feature/impress-duplex-loop-v1`，完整 iOS 构建与 Native XCTest / XCUITest / unsigned ARM64 + Widget IPA 工作流为 `.github/workflows/public-ios-build.yml`。每次通过该分支最新 HEAD 的 Actions Run 检查所有测试层级，并将产物内 `IPA_SHA256.txt` 与安装前文件的 SHA-256 对照；历史 V3.2 / R03 的原分支与工作流不是本轮交付权威。
+
+Last known stable CI before new UI E2E expansion: `738a333d8a6ccd656117e0316bac6396ccf9f262`, [Actions #39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39648988015), 191/191 Native XCTest and 8/8 XCUITest PASS. It produced `Impress-V3.1-P0P2-738a333d8a6c-unsigned.ipa`, SHA-256 `0323cf20e93104272f8cc5e72b32b0949878c0938b99d70aa4797f0bc5b6d628`; newer HEADs must pass independently. A future successful run only proves simulator + unsigned package, not iPhone13 or App Group entitlements.
 
 GitHub Actions installs pinned CocoaPods, runs all portable Swift Core tests (including calibration), audits retired native Chat and public Git history for credentials, compiles the Simulator app, runs full UIKit XCTest, compiles the `aReuImpress-iPhone-AltStore` iPhoneOS ARM64 app with `CODE_SIGNING_ALLOWED=NO`, verifies executable, unsigned state, ZIP and SHA-256, and uploads the testing Artifact.
 

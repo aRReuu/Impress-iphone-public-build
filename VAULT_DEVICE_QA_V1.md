@@ -60,3 +60,17 @@ Chat无AI讨论标题/模型说明/常驻隐私段落；功能列表/新建顺�
 Excalidraw 仅从当前授权文档读取合法受限数据，外部图片、SVG、脚本和插件不执行；内嵌 PNG/JPEG 按尺寸/字节数上限读取，Chat 只收到经审查的结构范围。中断应用核验只回读批准快照和精确 SHA / cardID 内容版本，不重复文件或 WCDB 写入。测试写权限仍严格限定临时 Fixture 或明确授权的独立 Debug QA Vault；`ImVaultGuardedWrite.productionWriteEnabled = false` 永久不变。
 
 四 Tab/冷启动 XCUITest 不证明真实 Files/iCloud、设备 Keychain、签名、STT、提供商 HTTP 或 iPhone13 UI 性能。上述继续标记 DEVICE_BLOCKED/NOT_RUN，待具备明确的设备授权后独立验收；本轮无真实日常 Vault 文件写入。
+
+## 2026-10-22 · W01–W15 校准器 Widget 真机签名与桌面验证
+
+这是**必须由具备实际 iPhone13、签名权限及系统 Widget UI 的执行者完成**的外部门禁，不能用 CI 模拟器通过、静态 entitlement plist 或改掉 Widget 空态字样代替。App 与 Widget 复用同一 `CalibrationCartesianTrendRenderer`，账本仅为主 App 的 `checkins-v1.json`；App Group 里的 `calibration-widget-v1.json` 是最小只读投影而非第二份业务数据库。
+
+1. 在 GitHub Actions 选择 `feature/impress-duplex-loop-v1` **最后一个完整成功 SHA** 的 `impress-v3-p0p2-unsigned-iphoneos-and-evidence` Artifact，校对 `build-evidence.json`、`IPA_SHA256.txt`、IPA 文件与打包内 `PlugIns/ImpressCalibrationWidgets.appex/ImpressCalibrationWidgets` 的存在和 arm64。不得拿旧 SHA 的包验收新 UI。
+2. **对主 App 和 Widget Extension 分别签名**。分发 profile/签名必须分别具备合法有效的相同 App Group `group.areu.impress`，且 Widget Bundle ID 与扩展的嵌入关系匹配。只在源代码的两个 `.entitlements` 文件里写同一个字符串并不能证明重签名后的 IPA 真的获得 iOS 授权。部分免费 Personal Team / 侧载配置可能不支持这一能力；若被剥离，只能记 `DEVICE_BLOCKED / SIGNING_ENTITLEMENT_MISSING`，**不能在 App 层改为跨沙箱读取、关掉签名检查或伪造图表**。
+3. 具备受信 Mac 的验收者可以解压**已重签名**的 IPA，通过 `codesign -d --entitlements :-` 分别查看 `Payload/aReuImpress-iPhone.app` 与 `Payload/aReuImpress-iPhone.app/PlugIns/ImpressCalibrationWidgets.appex` 的真实签名 entitlement，再查看对应有效 provisioning profile 的授权 App Group。不具备 Mac 的 Windows 侧载验收应使用签名工具自身提供的 Extension/Entitlement 报告和设备运行证据；无法读取签名不能冒充已核查。
+4. 真机安装后，打开「校准器」而不是只打开 Widget，观察是否出现“桌面组件无法访问共享存储”的诊断。若出现，先处理上述合法签名/App Group 问题。若快照缺失，则重新进入校准器触发权威账本投影和 Widget Timeline 刷新；系统调度更新并不承诺同步瞬时完成。
+5. 不删除真实旧数据的前提下，使用无隐私的独立测试数据完成五指标中其中一项的明确评估，记录主 App 的今日覆盖率；依次添加周/月/年各 Small、Medium 共**六个原生桌面 Widget**。每种实际查看二维坐标轴、Y 零线、灰色净分/蓝色均线、未评估日期断线、文字不溢出、今日 `x/5` / 月天数 / 年月覆盖，分别截图 Light/Dark 及简繁英组合。空数据可显示 `0/5` 与空坐标，不得变成负分或捏造数据。
+6. 点击周/月/年组件，确认**进入同一个校准器 Tab 且保持对应周期**；返回桌面、杀进程重启、跨本地零点/时区测试合法刷新与路由。之后再分开验证备份恢复后重新投影、文件授权撤销以及通知不互相劫持。
+7. 逐项记录用户授权设备的 iOS 版本、实际签名配置、主 App/Extension entitlement（**不要贴私钥/完整 profile**）、Git SHA、IPA 文件 SHA-256、测试日期、六布局原生截图、复现步骤和结果。没有这些证据时 W01–W15 只能 `CODE_DONE` 或 `SIMULATOR_PASS`，不能升 `DEVICE_PASS`。
+
+真实 iPhone13 的 STT 麦克风、Files/iCloud 实际权限、Keychain/OpenCode Free HTTPS 和正式 Vault 安全限制仍是其它独立验收项；不能因为 Widget 恢复显示就一并标绿。

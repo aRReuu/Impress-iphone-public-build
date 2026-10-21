@@ -592,6 +592,44 @@ final class ImpressV11NavigationUITests: XCTestCase {
         let persistedSession = sessions.cells["impress.ai.chat.history-row"].firstMatch
         XCTAssertTrue(persistedSession.waitForExistence(timeout: 20),
             "Completed discussion must remain in persisted local history")
+
+        // P0-B step 13/18: return from the same persisted Chat session to the
+        // same reviewed original card (after approved note edit + card undo).
+        // A swipe is the only normal route to an FSRS event, and MUST require
+        // a fresh answer reveal. We never grade by calling repository methods.
+        tabs.buttons.element(boundBy: 0).tap()
+        let newReveal = app.buttons["impress.review.reveal-answer"]
+        XCTAssertTrue(newReveal.waitForExistence(timeout: 30),
+            "Original restored card must remain in the actual due queue")
+        let guardedActions = app.buttons["impress.review.ai-discussion"]
+        XCTAssertFalse(guardedActions.exists,
+            "An old Chat/undo cannot silently expose the answer on return")
+        newReveal.tap()
+        XCTAssertTrue(guardedActions.waitForExistence(timeout: 12),
+            "Only an explicitly revealed current answer may enable grading")
+        let stack = app.otherElements["impress.review.swipe-stack"]
+        XCTAssertTrue(stack.waitForExistence(timeout: 15))
+        // Horizontal rating avoids scrolling the revealed long answer.
+        stack.swipeRight()
+        let completed = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "本轮复习完成")).firstMatch
+        XCTAssertTrue(completed.waitForExistence(timeout: 30),
+            "One visible Tinder swipe must produce a completed FSRS review")
+        let rated = XCTAttachment(screenshot: app.screenshot())
+        rated.name = "Impress-V1.1-original-card-restored-then-FSRS-scored"
+        rated.lifetime = .keepAlways
+        add(rated)
+
+        // Restart again without recreating or resetting the same WCDB:
+        // graded new card should not be due for a second immediate review.
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(tabs.waitForExistence(timeout: 30))
+        tabs.buttons.element(boundBy: 0).tap()
+        let noDue = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "暂无到期卡片")).firstMatch
+        XCTAssertTrue(noDue.waitForExistence(timeout: 30),
+            "A restarted session must not re-grade a just-scheduled card")
     }
 
     private func tapVisible(_ element: XCUIElement, in app: XCUIApplication) {

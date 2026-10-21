@@ -240,3 +240,10 @@ Run `39586231838` / SHA `e6b77b2430c9f3ca6568d4471c3a1e327cfd054a`：**Portable 
 Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39648988015) / SHA `738a333d8a6ccd656117e0316bac6396ccf9f262` 已确认所有 Jobs SUCCESS：Native XCTest **191/191**、真实进程 XCUITest **8/8**，Portable Core、Debug/Release Simulator、unsigned arm64 + Widget Extension、ZIP 自检通过。IPA `Impress-V3.1-P0P2-738a333d8a6c-unsigned.ipa`（7,467,517 bytes，SHA256 `0323cf20e93104272f8cc5e72b32b0949878c0938b99d70aa4797f0bc5b6d628`）。**这是有效的自动化成功基线，但不是 U01–U12、18 步、F01–F13、真机 Widget 的整体验收成功。**
 
 从该成功基线增量增加 `testNativeVaultOutlineFoldAndDocumentTitleWithoutPathBanner`：真实 UIKit 进入测试 Vault → 折叠状态核验 → 系统展开 → 子文件出现 → 折叠移除子文件 → 重新展开 → 阅读器显示实际文件标题而无完整路径栏 → 原生屏幕证据。新测试只有取得本次新 SHA 对应工作流通过才可记为 XCUITEST_PASS。
+
+### 2026-10-22 · 最新笔记树真实 UI 成功基线 / FSRS 连续评分新门禁
+
+- **确切 SHA** `36a494f3075ac3e3d4f8dcdaf40651024e078b4c` / [Actions #39654471424](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39654471424)：两个 Jobs **SUCCESS**；Portable Swift Core PASS，原生 XCTest **191/191 PASS**，真实进程 XCUITest **9/9 PASS**（新增 `testNativeVaultOutlineFoldAndDocumentTitleWithoutPathBanner` PASS），Debug/Release Simulator、unsigned iPhoneOS arm64 与嵌入 Widget.appex、IPA ZIP 完整性均 PASS。Artifact [#12372587204](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39654471424/artifacts/12372587204)。IPA `Impress-V3.1-P0P2-36a494f3075a-unsigned.ipa`，7,467,512 bytes，SHA256 `38823e5b8d3985c21e04dcba169bfc91135554b0fcf90bb112f94e79e7437c58`；仍为 **UNSIGNED**。
+- **U06/U07：XCUITEST_PASS（本测试覆盖范围）**。实际合成测试 Vault 文件夹原生展开／折叠／重新展开、打开文档名、详情不含完整路径栏的可见路径；不等于 120 项分页、全部字号/语言及真机交互视觉已经完整验证。
+- 下一轮 `P0-B` 连续可见 UI 扩展在该成功工作流结束后才进行：从本地历史讨论返回已经审批、已独立撤销的原卡，先验揭示锁，再明确揭示并使用真实卡片水平滑动执行 FSRS，冷启动确认不会立刻重复到期。**新增断言的 SOURCE/TEST_ONLY，此处不是 PASS；只有其自身新 SHA 的 CI 结果可认证。**
+- 真正的完整 18 步 UI（备份 ZIP 恢复、外部并发合法修改冲突）、完整 F01–F13、iPhone 13 六布局 SpringBoard、主 App/Extension 同一有效 App Group 签名、Files/iCloud、Keychain/真实 provider HTTP 仍分别 NOT_RUN 或 DEVICE_BLOCKED。CAL-01–15/LOCAL-01–03 共18项 DEFERRED 不解冻；`productionWriteEnabled=false` 不变。
