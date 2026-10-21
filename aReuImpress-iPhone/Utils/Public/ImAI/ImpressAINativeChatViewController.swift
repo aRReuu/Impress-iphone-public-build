@@ -2991,7 +2991,7 @@ final class ImpressDuplexApprovalController: UIViewController {
                let base = result.cardBaseQuestion,
                let proposed = result.cardEditedQuestion {
                 do {
-                    let current = try await repository.content(for: id)
+                    let current = try await self.repository.content(for: id)
                     if let status = ImDuplexInterruptedRecovery.cardStatus(
                         currentContentRevision: current?.contentRevision,
                         expectedContentRevision: revision,
@@ -3010,8 +3010,10 @@ final class ImpressDuplexApprovalController: UIViewController {
             let changed = result.state != self.proposal.state ||
                 result.noteReceipt != self.proposal.noteReceipt ||
                 result.cardReceipt != self.proposal.cardReceipt
-            if changed && await self.saveProposal(result) {
-                self.proposal = result
+            if changed {
+                if await self.saveProposal(result) {
+                    self.proposal = result
+                }
             }
             self.committing = false
             self.refreshPreview()
