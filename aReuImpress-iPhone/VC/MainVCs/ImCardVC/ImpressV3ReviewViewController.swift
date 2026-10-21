@@ -30,6 +30,8 @@ final class ImpressV3ReviewViewController: UIViewController {
     private let revealButton = UIButton(type: .system)
     private let statusLabel = UILabel()
     private let currentCardActions = UIStackView()
+    /// Dedicated tag for the card-local edit/discussion row; not a separate toolbar.
+    private static let cardActionRowTag = 941226
     private let sourceNoteButton = UIButton(type: .system)
     private let completionLabel = UILabel()
     private let repeatButton = UIButton(type: .system)
@@ -87,6 +89,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         cardStack.isUserInteractionEnabled = false
         revealButton.isEnabled = false
         setRatingGesturesEnabled(false)
+        setCurrentCardActionsRevealed(false)
         Task { [weak self] in
             guard let self else { return }
             do {
@@ -103,11 +106,13 @@ final class ImpressV3ReviewViewController: UIViewController {
                 self.cardStack.isUserInteractionEnabled = true
                 self.revealButton.isEnabled = true
                 self.setRatingGesturesEnabled(self.canRateCurrentCard)
+                self.setCurrentCardActionsRevealed(self.canRateCurrentCard)
             } catch {
                 // Fail closed: never score an answer whose source cannot be verified.
                 self.cardStack.isUserInteractionEnabled = false
                 self.revealButton.isEnabled = false
                 self.setRatingGesturesEnabled(false)
+                self.setCurrentCardActionsRevealed(false)
                 self.displayFailure(error)
             }
         }
@@ -390,12 +395,22 @@ final class ImpressV3ReviewViewController: UIViewController {
         revealButton.isEnabled = true
         cardStack.isUserInteractionEnabled = true
         setRatingGesturesEnabled(false)
+        setCurrentCardActionsRevealed(false)
     }
 
     private func setRatingGesturesEnabled(_ enabled: Bool) {
         cardStack.shouldRecognizeHorizontalDrag = enabled
         cardStack.shouldRecognizeVerticalDrag = enabled
         cardStack.topCard?.panGestureRecognizer.isEnabled = enabled
+    }
+
+    /// Hiding the container removes both the hit region and accessibility children.
+    /// Each queued card starts hidden and only its currently revealed front face can show it.
+    private func setCurrentCardActionsRevealed(_ revealed: Bool) {
+        guard let actions = cardStack.topCard?.viewWithTag(Self.cardActionRowTag) else { return }
+        actions.isHidden = !revealed
+        actions.isUserInteractionEnabled = revealed
+        actions.accessibilityElementsHidden = !revealed
     }
 
     private func answerChanged(cardID: UUID, revealed: Bool) {
@@ -413,7 +428,11 @@ final class ImpressV3ReviewViewController: UIViewController {
                           (!revealed && phase != .question(cardID)) {
                     return
                 }
+                // The queued card may have changed during an async phase transition.
+                guard self.pending == nil,
+                      self.items[safe: self.currentIndex]?.cardID == cardID else { return }
                 self.setRatingGesturesEnabled(revealed)
+                self.setCurrentCardActionsRevealed(revealed && self.canRateCurrentCard)
                 self.revealButton.isHidden = revealed
                         self.statusLabel.text = revealed
                     ? V3L("← 困难   ↑ 良好   → 容易   ↓ 重来")
@@ -421,6 +440,7 @@ final class ImpressV3ReviewViewController: UIViewController {
                 self.updateNavigationActions()
             } catch {
                 self.setRatingGesturesEnabled(false)
+                self.setCurrentCardActionsRevealed(false)
             }
         }
     }
@@ -440,7 +460,7 @@ final class ImpressV3ReviewViewController: UIViewController {
 
     /// A direct editor; neither a knowledge-capture detour nor a new FSRS session.
     @objc private func editCurrentCard() {
-        guard pending == nil, !isLoading,
+        guard pending == nil, !isLoading, canRateCurrentCard,
               let item = items[safe: currentIndex] else { return }
         Task { [weak self] in
             guard let self else { return }
@@ -449,6 +469,9 @@ final class ImpressV3ReviewViewController: UIViewController {
                 guard let stored = try await repo.content(for: item.cardID) else {
                     throw ReviewWCDBError.missingCard
                 }
+                guard self.pending == nil,
+                      self.items[safe: self.currentIndex]?.cardID == item.cardID,
+                      self.canRateCurrentCard else { return }
                 let correct = Set((stored.correctIndices ?? "")
                     .split(separator: ",").compactMap { Int($0) })
                 let choices: [ImpressV3CardDraft.Choice] =
@@ -518,6 +541,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         let refreshed = cardStack(cardStack, cardForIndexAt: currentIndex)
         cardStack.topCard?.content = refreshed.content
         setRatingGesturesEnabled(false)
+        setCurrentCardActionsRevealed(false)
         revealButton.isHidden = false
         statusLabel.text = V3L("先回忆，再查看答案")
     }
@@ -625,14 +649,15 @@ final class ImpressV3ReviewViewController: UIViewController {
     @objc private func closeFullQuestion() { dismiss(animated: true) }
 
     @objc private func openAIDiscussion() {
-        guard pending == nil, !isLoading,
+        guard pending == nil, !isLoading, canRateCurrentCard,
               let item = items[safe: currentIndex] else { return }
         Task { [weak self] in
             guard let self else { return }
             do {
                 let repo = try repository ?? ImpressV3ReviewEnvironment.repository()
                 guard let latest = try await repo.content(for: item.cardID),
-                      pending == nil, items[safe: currentIndex]?.cardID == item.cardID else {
+                      pending == nil, items[safe: currentIndex]?.cardID == item.cardID,
+                      self.canRateCurrentCard else {
                     return
                 }
                 // Explicitly prepare only THIS card's effective content;
@@ -897,6 +922,10 @@ extension ImpressV3ReviewViewController: SwipeCardStackDataSource, SwipeCardStac
         actions.axis = .horizontal
         actions.spacing = 4
         actions.translatesAutoresizingMaskIntoConstraints = false
+        actions.tag = Self.cardActionRowTag
+        actions.isHidden = true
+        actions.isUserInteractionEnabled = false
+        actions.accessibilityElementsHidden = true
         actions.backgroundColor = ImpressV3Appearance.surface
         actions.layer.cornerRadius = 14
         let cardButtons: [(String, String, String, Selector)] = [

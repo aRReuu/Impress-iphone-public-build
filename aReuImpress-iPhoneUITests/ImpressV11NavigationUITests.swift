@@ -329,7 +329,11 @@ final class ImpressV11NavigationUITests: XCTestCase {
         // database, title matching, or source inference is used.
         tabs.buttons.element(boundBy: 0).tap()
         let discuss = app.buttons["impress.review.ai-discussion"]
-        XCTAssertTrue(discuss.waitForExistence(timeout: 20))
+        XCTAssertFalse(discuss.exists, "Discussion is intentionally hidden before answer reveal")
+        let reveal = app.buttons["impress.review.reveal-answer"]
+        XCTAssertTrue(reveal.waitForExistence(timeout: 20))
+        reveal.tap()
+        XCTAssertTrue(discuss.waitForExistence(timeout: 15))
         let source = app.buttons["impress.review.source-note"]
         XCTAssertTrue(source.waitForExistence(timeout: 20))
         source.tap()

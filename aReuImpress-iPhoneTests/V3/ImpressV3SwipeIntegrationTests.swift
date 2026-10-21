@@ -160,10 +160,13 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
             let newContent = stack.topCard?.content as? ImMemoryCardView
             let hidden = !(newContent?.answerIsRevealed ?? true)
             let swipeDisabled = !(stack.topCard?.panGestureRecognizer.isEnabled ?? true)
+            let buttonsHidden = stack.topCard?.subviews.compactMap { $0 as? UIStackView }.contains {
+                $0.arrangedSubviews.contains { $0.accessibilityIdentifier == "impress.review.quick-edit" } && $0.isHidden
+            } == true
             let requiresReveal = labels(in: review.view).contains {
                 $0.text == V3L("先回忆，再查看答案")
             }
-            return hidden && swipeDisabled && requiresReveal
+            return hidden && swipeDisabled && buttonsHidden && requiresReveal
         }
         XCTAssertTrue(reset)
         let refreshed = try await store.content(for: id)
@@ -173,7 +176,7 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         XCTAssertTrue(events.isEmpty)
     }
 
-    func testQuickEditAndVerifiedSourceVisibleBeforeAnswerWithoutScoring() async throws {
+    func testCardActionsRequireRevealedAnswerWhileSourceRemainsAvailableWithoutScoring() async throws {
         let store = try makeRepository()
         let id = UUID()
         let vault = try ImVaultFileIdentity(vaultID: "disposable-test-vault",
@@ -194,9 +197,6 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         func controls(in root: UIView) -> [UIButton] {
             (root as? UIButton).map { [$0] } ?? root.subviews.flatMap(controls(in:))
         }
-        // The controls exist during initial layout while their parent stack
-        // remains hidden. Wait for async WCDB queue reload, not for a local
-        // UIButton.isHidden flag (which ignores hidden ancestors).
         let stack = try XCTUnwrap(review.view.subviews.compactMap {
             $0 as? SwipeCardStack
         }.first)
@@ -205,19 +205,49 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
             let edit = elements.first {
                 $0.accessibilityIdentifier == "impress.review.quick-edit"
             }
+            let discussion = elements.first {
+                $0.accessibilityIdentifier == "impress.review.ai-discussion"
+            }
             let source = elements.first {
                 $0.accessibilityIdentifier == "impress.review.source-note"
             }
             return stack.topCard?.content is ImMemoryCardView &&
-                edit?.superview?.isHidden == false &&
+                edit?.superview?.isHidden == true &&
+                discussion?.superview?.isHidden == true &&
+                edit?.superview?.accessibilityElementsHidden == true &&
                 source?.superview?.isHidden == false &&
                 source?.isHidden == false &&
                 stack.topCard?.panGestureRecognizer.isEnabled == false
         }
-        XCTAssertTrue(ready, "The loaded current card exposes edit and exact-source buttons")
-        XCTAssertFalse(stack.topCard?.panGestureRecognizer.isEnabled ?? true)
+        XCTAssertTrue(ready, "Unrevealed edit and discussion must be hidden; verified source remains reachable")
+        let content = try XCTUnwrap(stack.topCard?.content as? ImMemoryCardView)
+        content.revealAnswerIfNeeded()
+        let revealed = try await eventually {
+            let elements = controls(in: review.view)
+            let edit = elements.first { $0.accessibilityIdentifier == "impress.review.quick-edit" }
+            let discussion = elements.first { $0.accessibilityIdentifier == "impress.review.ai-discussion" }
+            return edit?.superview?.isHidden == false &&
+                discussion?.superview?.isHidden == false &&
+                edit?.superview?.accessibilityElementsHidden == false &&
+                stack.topCard?.panGestureRecognizer.isEnabled == true
+        }
+        XCTAssertTrue(revealed, "Both actions are available only after answer reveal")
         let events = try await store.reviewHistory(for: id)
-        XCTAssertTrue(events.isEmpty)
+        XCTAssertTrue(events.isEmpty, "Revealing and showing actions never grades the card")
+    }
+
+    func testComposerSaveUsesNavigationCheckmarkWithAccessibleSaveName() throws {
+        let composer = ImpressV3CardComposerViewController()
+        composer.loadViewIfNeeded()
+        let save = try XCTUnwrap(composer.navigationItem.rightBarButtonItem)
+        XCTAssertNil(save.title, "Save is a native symbol, not a text button")
+        XCTAssertTrue(save.image?.isSymbolImage == true)
+        XCTAssertEqual(save.accessibilityIdentifier, "impress.composer.save")
+        XCTAssertEqual(save.accessibilityLabel, V3L("保存"))
+        XCTAssertEqual(save.style, .plain)
+        let navigation = ImNavigationViewController(rootViewController: composer)
+        navigation.loadViewIfNeeded()
+        XCTAssertEqual(navigation.navigationBar.tintColor, ImpressV3Appearance.accent)
     }
 
     func testActualTinderSwipeSavesOneFSRSEventOnlyAfterRevealingAnswer() async throws {

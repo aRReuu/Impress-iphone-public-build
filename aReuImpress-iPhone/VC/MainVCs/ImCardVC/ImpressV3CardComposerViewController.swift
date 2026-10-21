@@ -164,8 +164,11 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         view.backgroundColor = ImpressV3Appearance.page
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
-        let save = UIBarButtonItem(title: V3L("保存"), style: .done,
+        // Match the other system navigation actions (not a custom filled save pill).
+        let save = UIBarButtonItem(image: UIImage(systemName: "checkmark"), style: .plain,
                                    target: self, action: #selector(saveCard))
+        save.accessibilityLabel = V3L("保存")
+        save.accessibilityIdentifier = "impress.composer.save"
         navigationItem.rightBarButtonItem = save
         saveItem = save
         if editingCardID != nil && onOpenContentHistory != nil {
