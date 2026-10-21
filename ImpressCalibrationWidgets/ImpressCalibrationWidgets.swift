@@ -273,6 +273,12 @@ private struct CalibrationWidgetView: View {
 
 private struct CalibrationPeriodWidget: Widget {
     let period: CalibrationWidgetPeriod
+
+    // Xcode 27 / WidgetKit requires Widget.init() even for multi-kind bundles.
+    // The bundle explicitly selects .week / .month / .year via init(period:).
+    init() { self.period = .week }
+    init(period: CalibrationWidgetPeriod) { self.period = period }
+
     var body: some WidgetConfiguration {
         StaticConfiguration(
             kind: "impress.calibration.\(period.rawValue)",
