@@ -112,6 +112,19 @@ for symbol in (
     "testLongChatWarnsAboutRemoteWindowWithoutDiscardingLocalHistory",
 ):
     assert symbol in native_tests, f"Missing P0 native regression: {symbol}"
+
+# WidgetKit MUST NOT introduce a parallel or status-matrix substitute for the
+# native Cartesian chart. These source checks complement actual Core/XCUITest
+# cases and a device screenshot comparison; they do not imply visual QA PASS.
+calibration_view = source("aReuImpress-iPhone/VC/MainVCs/ImCalibrationVC/ImpressCalibrationViewController.swift")
+widget = source("ImpressCalibrationWidgets/ImpressCalibrationWidgets.swift")
+shared_chart = source("Packages/ImpressReviewCore/Sources/ImpressReviewCore/CalibrationCartesianTrendRenderer.swift")
+plot_source = source("Packages/ImpressReviewCore/Sources/ImpressReviewCore/CalibrationWidgetCartesianPlot.swift")
+assert "CalibrationCartesianTrendRenderer.draw(" in calibration_view
+assert "CalibrationCartesianTrendRenderer.image(" in widget
+assert "private struct StatusDot" not in widget and "LazyVGrid(" not in widget
+assert "public enum CalibrationCartesianTrendRenderer" in shared_chart
+assert "static func cartesianPlot(" in plot_source
 assert "xcode-27" in workflow, "iOS 26+ Xcode SDK regression"
 print(f"PRODUCT_CONTRACT_STATIC_PASS: {len(ledger_ids)} requirements, "
       f"{len(acceptance)} acceptances, {len(open_issues)} open decisions")

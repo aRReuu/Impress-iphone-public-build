@@ -161,4 +161,69 @@ final class CalibrationWidgetProjectionTests: XCTestCase {
     }
 
 
+    func testCartesianWeekAndMonthUseRealScoresAndExactTrailingSevenCivilDays() throws {
+        let now = date(2026, 10, 21)
+        var positive = try entry("2026-10-20", allExcused: true, mood: true)
+        try positive.setOutcome(.completed, for: .sleep)
+        var negative = try entry("2026-10-21", allExcused: true, mood: true)
+        try negative.setOutcome(.missed, for: .sleep)
+        let snapshot = CalibrationWidgetProjection.snapshot(
+            from: [positive, negative], at: now, calendar: calendar)
+        let week = try XCTUnwrap(CalibrationWidgetProjection.cartesianPlot(
+            from: snapshot, period: .week, at: now, calendar: calendar))
+        XCTAssertEqual(week.values.count, 7)
+        XCTAssertEqual(week.values[5], 1)
+        XCTAssertEqual(week.values[6], -1)
+        XCTAssertEqual(week.smooth[5], 1)
+        XCTAssertEqual(week.smooth[6], 0, "0 is a real mean, not an invented missed-day score")
+        XCTAssertNil(week.values[4])
+        XCTAssertNil(week.smooth[4], "Blank dates must break both line segments")
+        XCTAssertEqual(week.tickLabels[6], "10-21")
+
+        let month = try XCTUnwrap(CalibrationWidgetProjection.cartesianPlot(
+            from: snapshot, period: .month, at: now, calendar: calendar))
+        XCTAssertEqual(month.values.count, 30)
+        XCTAssertEqual(month.values.suffix(2).compactMap { $0 }, [1, -1])
+        XCTAssertNil(month.values[0])
+    }
+
+    func testCartesianYearUsesExistingMonthlyNetAverageAndThreeMonthMean() throws {
+        let now = date(2026, 10, 21)
+        var january = try entry("2026-01-15", allExcused: true, mood: true)
+        try january.setOutcome(.completed, for: .sleep)
+        var february = try entry("2026-02-15", allExcused: true, mood: true)
+        try february.setOutcome(.missed, for: .sleep)
+        let march = try entry("2026-03-15", allExcused: true, mood: true)
+        let snapshot = CalibrationWidgetProjection.snapshot(
+            from: [january, february, march], at: now, calendar: calendar)
+        let year = try XCTUnwrap(CalibrationWidgetProjection.cartesianPlot(
+            from: snapshot, period: .year, at: now, calendar: calendar))
+        XCTAssertEqual(year.values.count, 12)
+        XCTAssertEqual(year.values[0], 1)
+        XCTAssertEqual(year.values[1], -1)
+        XCTAssertEqual(year.smooth[0], 1)
+        XCTAssertEqual(year.smooth[1], 0)
+        XCTAssertNil(year.values[2], "All excused is assessed but not a numerical zero")
+        XCTAssertNil(year.smooth[2])
+        XCTAssertNil(year.values[11], "Future months are gaps, not recorded negatives")
+        XCTAssertEqual(year.tickLabels.first, "1月")
+    }
+
+    func testCartesianEmptyAndInvalidSnapshotsNeverFabricateScorePoints() throws {
+        let now = date(2026, 10, 21)
+        let recordedWithoutScore = try entry("2026-10-21", allExcused: true, mood: true)
+        let snapshot = CalibrationWidgetProjection.snapshot(
+            from: [recordedWithoutScore], at: now, calendar: calendar)
+        for period in CalibrationWidgetPeriod.allCases {
+            let plot = try XCTUnwrap(CalibrationWidgetProjection.cartesianPlot(
+                from: snapshot, period: period, at: now, calendar: calendar))
+            XCTAssertTrue(plot.values.allSatisfy { $0 == nil })
+            XCTAssertTrue(plot.smooth.allSatisfy { $0 == nil })
+        }
+        var invalidZone = calendar
+        invalidZone.timeZone = TimeZone(secondsFromGMT: 3600)!
+        XCTAssertNil(CalibrationWidgetProjection.cartesianPlot(
+            from: snapshot, period: .week, at: now, calendar: invalidZone))
+    }
+
 }

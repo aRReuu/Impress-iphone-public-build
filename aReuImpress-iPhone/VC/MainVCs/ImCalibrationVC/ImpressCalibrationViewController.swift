@@ -436,73 +436,14 @@ private final class ImpressCalibrationTrendChart: UIView {
 
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
-        let box = CGRect(x: 32, y: 12, width: max(1, rect.width - 44),
-                         height: max(1, rect.height - 40))
-        let all = (values + smooth).compactMap { $0 }
-        let ceiling = max(1.0, ceil(all.map(abs).max() ?? 1.0))
-        let y: (Double) -> CGFloat = { value in
-            box.midY - CGFloat(value / ceiling) * box.height * 0.46
-        }
-        let axis = ImpressV3Appearance.divider.resolvedColor(with: traitCollection)
-        let muted = ImpressV3Appearance.secondaryText.resolvedColor(with: traitCollection)
-        let textAttributes: [NSAttributedString.Key: Any] = [
-            .font: ImpressV3Appearance.Typography.micro,
-            .foregroundColor: muted
-        ]
-        // Explicit Cartesian axes and simple positive/zero/negative y ticks.
-        context.setLineWidth(1)
-        context.setStrokeColor(axis.cgColor)
-        context.move(to: CGPoint(x: box.minX, y: box.minY))
-        context.addLine(to: CGPoint(x: box.minX, y: box.maxY))
-        context.addLine(to: CGPoint(x: box.maxX, y: box.maxY))
-        context.strokePath()
-        for number in [-ceiling, 0, ceiling] {
-            let lineY = y(number)
-            context.setStrokeColor(axis.withAlphaComponent(number == 0 ? 0.8 : 0.4).cgColor)
-            context.move(to: CGPoint(x: box.minX, y: lineY))
-            context.addLine(to: CGPoint(x: box.maxX, y: lineY))
-            context.strokePath()
-            let string = String(format: "%+.0f", number) as NSString
-            string.draw(at: CGPoint(x: 0, y: lineY - 7), withAttributes: textAttributes)
-        }
-        if !tickLabels.isEmpty {
-            let candidates = Array(Set([0, tickLabels.count/2, tickLabels.count-1])).sorted()
-            for index in candidates {
-                let value = tickLabels[index] as NSString
-                let size = value.size(withAttributes: textAttributes)
-                let x = box.minX + box.width * CGFloat(index) /
-                    CGFloat(max(1, tickLabels.count-1))
-                let origin = CGPoint(x: min(rect.width - size.width, max(0, x - size.width/2)),
-                                     y: box.maxY + 5)
-                value.draw(at: origin, withAttributes: textAttributes)
-            }
-        }
-        func plot(_ data: [Double?], color: UIColor, width: CGFloat) {
-            context.setStrokeColor(color.resolvedColor(with: traitCollection).cgColor)
-            context.setLineWidth(width)
-            context.setLineCap(.round)
-            context.setLineJoin(.round)
-            var continuing = false
-            for index in data.indices {
-                guard let value = data[index] else { continuing = false; continue }
-                let x = box.minX + box.width * CGFloat(index) /
-                    CGFloat(max(1, data.count - 1))
-                let point = CGPoint(x: x, y: y(value))
-                if continuing { context.addLine(to: point) }
-                else { context.move(to: point) }
-                continuing = true
-            }
-            context.strokePath()
-        }
-        plot(values, color: ImpressV3Appearance.secondaryText, width: 1.4)
-        plot(smooth, color: ImpressV3Appearance.accent, width: 2.8)
-        if values.compactMap({ $0 }).count == 1,
-           let index = values.firstIndex(where: { $0 != nil }),
-           let value = values[index] {
-            let x = box.minX + box.width * CGFloat(index) /
-                CGFloat(max(1, values.count - 1))
-            context.setFillColor(ImpressV3Appearance.accent.resolvedColor(with: traitCollection).cgColor)
-            context.fillEllipse(in: CGRect(x: x-3, y: y(value)-3, width: 6, height: 6))
-        }
+        CalibrationCartesianTrendRenderer.draw(
+            in: rect, context: context,
+            values: values, smooth: smooth, tickLabels: tickLabels,
+            palette: CalibrationCartesianPalette(
+                axis: ImpressV3Appearance.divider,
+                secondary: ImpressV3Appearance.secondaryText,
+                accent: ImpressV3Appearance.accent),
+            font: ImpressV3Appearance.Typography.micro,
+            traitCollection: traitCollection)
     }
 }

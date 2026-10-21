@@ -1,5 +1,6 @@
 import SwiftUI
 import WidgetKit
+import UIKit
 import ImpressReviewCore
 
 private enum WidgetWords {
@@ -34,27 +35,18 @@ private enum WidgetWords {
     static var lastUpdate: String { tr("快照", "快照", "Snapshot") }
 }
 
-private extension CalibrationWidgetDayState {
-    var color: Color {
-        switch self {
-        case .finalized: return .green
-        case .partial: return .orange
-        case .unrecorded: return Color.secondary.opacity(0.25)
-        }
-    }
-}
-
 private struct CalibrationEntry: TimelineEntry {
     let date: Date
     let period: CalibrationWidgetPeriod
     let overview: CalibrationWidgetOverview?
+    let plot: CalibrationWidgetCartesianPlot?
 }
 
 private struct CalibrationProvider: TimelineProvider {
     let period: CalibrationWidgetPeriod
 
     func placeholder(in context: Context) -> CalibrationEntry {
-        CalibrationEntry(date: Date(), period: period, overview: nil)
+        CalibrationEntry(date: Date(), period: period, overview: nil, plot: nil)
     }
 
     func getSnapshot(in context: Context,
@@ -81,25 +73,44 @@ private struct CalibrationProvider: TimelineProvider {
                 CalibrationWidgetSnapshot.self, from: data),
               let overview = CalibrationWidgetProjection.overview(
                 from: snapshot, at: now, calendar: Calendar.current)
-        else { return CalibrationEntry(date: now, period: period, overview: nil) }
-        return CalibrationEntry(date: now, period: period, overview: overview)
+        else { return CalibrationEntry(date: now, period: period, overview: nil, plot: nil) }
+        let plot = CalibrationWidgetProjection.cartesianPlot(
+            from: snapshot, period: period, at: now, calendar: Calendar.current)
+        return CalibrationEntry(date: now, period: period, overview: overview, plot: plot)
     }
 }
 
-private struct StatusDot: View {
-    let state: CalibrationWidgetDayState
+/// SwiftUI only embeds a snapshot produced by the SAME UIKit/CoreGraphics
+/// renderer invoked in ImpressCalibrationTrendChart.draw().
+private struct SharedCartesianChart: View {
+    @Environment(\.colorScheme) private var scheme
+    let plot: CalibrationWidgetCartesianPlot
+    let period: CalibrationWidgetPeriod
+
     var body: some View {
-        RoundedRectangle(cornerRadius: 4)
-            .fill(state.color)
-            .frame(maxWidth: .infinity)
-            .frame(height: 11)
-            .accessibilityLabel({
-                switch state {
-                case .finalized: return WidgetWords.completed
-                case .partial: return WidgetWords.partial
-                case .unrecorded: return WidgetWords.unknown
-                }
-            }())
+        GeometryReader { geometry in
+            if geometry.size.width >= 48 && geometry.size.height >= 48 {
+                let labels = period == .year
+                    ? plot.tickLabels.map {
+                        $0.replacingOccurrences(
+                            of: "月", with: WidgetWords.tr("月", "月", "m"))
+                    } : plot.tickLabels
+                Image(uiImage: CalibrationCartesianTrendRenderer.image(
+                    size: geometry.size, values: plot.values,
+                    smooth: plot.smooth, tickLabels: labels,
+                    palette: .semantic,
+                    font: UIFont.preferredFont(forTextStyle: .caption2),
+                    traitCollection: UITraitCollection(
+                        userInterfaceStyle: scheme == .dark ? .dark : .light)))
+                    .resizable()
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(WidgetWords.tr(
+            "二维净分趋势：灰色每日／月均分，蓝色均线；空白日期无分数",
+            "二維淨分趨勢：灰色每日／月均分、藍色均線；空白日期無分數",
+            "Cartesian net-score trend: gray values and blue moving average; gaps are unscored"))
     }
 }
 
@@ -107,26 +118,36 @@ private struct CalibrationWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: CalibrationEntry
 
-    private func ratioText(_ days: [CalibrationWidgetDay]) -> String {
-        "\(CalibrationWidgetOverview.assessedDays(days))/\(days.count)"
-    }
+    private var small: Bool { family == .systemSmall }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+        VStack(alignment: .leading, spacing: small ? 3 : 5) {
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Text(WidgetWords.widgetName)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
-                Spacer(minLength: 4)
+                Spacer(minLength: 2)
                 Text(WidgetWords.title(entry.period))
                     .font(.caption.weight(.semibold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                    .minimumScaleFactor(0.8)
             }
-            if let data = entry.overview {
-                content(for: data)
+            if let overview = entry.overview, let plot = entry.plot {
+                primaryAssessment(overview)
+                SharedCartesianChart(plot: plot, period: entry.period)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .layoutPriority(1)
+                HStack(spacing: 4) {
+                    Text("\(WidgetWords.completed) \(finalized(overview))")
+                    Spacer(minLength: 2)
+                    Text("\(WidgetWords.partial) \(partial(overview))")
+                }
+                .font(.system(size: small ? 9 : 11))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             } else {
-                Spacer(minLength: 4)
+                Spacer(minLength: 2)
                 Text(WidgetWords.noData)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -135,7 +156,7 @@ private struct CalibrationWidgetView: View {
                 Spacer(minLength: 0)
             }
         }
-        .padding(family == .systemSmall ? 12 : 16)
+        .padding(small ? 9 : 13)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .containerBackground(for: .widget) {
             Color(uiColor: .secondarySystemGroupedBackground)
@@ -144,130 +165,44 @@ private struct CalibrationWidgetView: View {
     }
 
     @ViewBuilder
-    private func content(for overview: CalibrationWidgetOverview) -> some View {
+    private func primaryAssessment(_ overview: CalibrationWidgetOverview) -> some View {
         switch entry.period {
         case .week:
-            weekContent(overview)
-        case .month:
-            monthContent(overview)
-        case .year:
-            yearContent(overview)
-        }
-    }
-
-    @ViewBuilder
-    private func weekContent(_ overview: CalibrationWidgetOverview) -> some View {
-        let today = overview.weekDays.last
-        HStack(alignment: .firstTextBaseline) {
+            let today = overview.weekDays.last
             Text(today?.state == .finalized
-                 ? WidgetWords.completed : "\(WidgetWords.today) \(today?.assessedCount ?? 0)/5")
-                .font(.system(size: family == .systemSmall ? 23 : 27, weight: .semibold))
+                 ? WidgetWords.completed
+                 : "\(WidgetWords.today) \(today?.assessedCount ?? 0)/5")
+                .font(.system(size: small ? 18 : 22, weight: .semibold))
                 .lineLimit(1)
-                .minimumScaleFactor(0.72)
-            Spacer(minLength: 0)
-            if family == .systemMedium, let score = today?.netScore {
-                Text(score > 0 ? "+\(score)" : "\(score)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        HStack(spacing: family == .systemSmall ? 4 : 7) {
-            ForEach(overview.weekDays) { day in
-                VStack(spacing: 6) {
-                    if family == .systemMedium {
-                        Text(String(day.dayID.suffix(5)))
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                    }
-                    StatusDot(state: day.state)
-                }
-            }
-        }
-        Spacer(minLength: 2)
-        HStack {
-            Text("\(WidgetWords.completed) \(CalibrationWidgetOverview.finalizedDays(overview.weekDays))")
-            Spacer(minLength: 4)
-            Text("\(WidgetWords.partial) \(CalibrationWidgetOverview.partialDays(overview.weekDays))")
-        }
-        .font(.caption2)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-        .minimumScaleFactor(0.8)
-    }
-
-    @ViewBuilder
-    private func monthContent(_ overview: CalibrationWidgetOverview) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(ratioText(overview.monthDays))
-                .font(.system(size: family == .systemSmall ? 26 : 28, weight: .semibold))
-            Text(WidgetWords.days).font(.caption).foregroundStyle(.secondary)
-            Spacer(minLength: 2)
-        }
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4),
-                                 count: 10), spacing: 6) {
-            ForEach(overview.monthDays) { day in
-                StatusDot(state: day.state)
-            }
-        }
-        Spacer(minLength: 0)
-        if family == .systemMedium {
-            legend
-        } else {
-            Text("\(WidgetWords.completed) \(CalibrationWidgetOverview.finalizedDays(overview.monthDays))  ·  \(WidgetWords.partial) \(CalibrationWidgetOverview.partialDays(overview.monthDays))")
-                .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                .minimumScaleFactor(0.75)
+        case .month:
+            Text("\(CalibrationWidgetOverview.assessedDays(overview.monthDays))/30 \(WidgetWords.days)")
+                .font(.system(size: small ? 18 : 22, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        case .year:
+            let assessed = overview.yearMonths.reduce(0) { $0 + $1.assessedDays }
+            Text("\(assessed) \(WidgetWords.days)")
+                .font(.system(size: small ? 18 : 22, weight: .semibold))
+                .lineLimit(1)
                 .minimumScaleFactor(0.75)
         }
     }
 
-    @ViewBuilder
-    private func yearContent(_ overview: CalibrationWidgetOverview) -> some View {
-        let total = overview.yearMonths.reduce(0) { $0 + $1.assessedDays }
-        HStack(alignment: .firstTextBaseline) {
-            Text("\(total)")
-                .font(.system(size: family == .systemSmall ? 25 : 28, weight: .semibold))
-            Text(WidgetWords.days).font(.caption).foregroundStyle(.secondary)
-            Spacer(minLength: 2)
+    private func finalized(_ overview: CalibrationWidgetOverview) -> Int {
+        switch entry.period {
+        case .week: return CalibrationWidgetOverview.finalizedDays(overview.weekDays)
+        case .month: return CalibrationWidgetOverview.finalizedDays(overview.monthDays)
+        case .year: return overview.yearMonths.reduce(0) { $0 + $1.finalizedDays }
         }
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5),
-                                 count: family == .systemSmall ? 6 : 12), spacing: 7) {
-            ForEach(overview.yearMonths) { month in
-                VStack(spacing: 3) {
-                    Text("\(month.month)")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(month.elapsedDays == 0
-                              ? Color.secondary.opacity(0.08)
-                              : (month.assessedDays > 0 ? Color.green : Color.secondary.opacity(0.25)))
-                        .frame(height: 9)
-                    if family == .systemMedium {
-                        Text("\(month.assessedDays)/\(month.elapsedDays)")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
-                            .minimumScaleFactor(0.65)
-                            .lineLimit(1)
-                    }
-                }
-            }
-        }
-        Spacer(minLength: 0)
-        if family == .systemMedium { legend }
     }
 
-    private var legend: some View {
-        HStack(spacing: 12) {
-            Label(WidgetWords.completed, systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-            Label(WidgetWords.partial, systemImage: "circle.lefthalf.filled")
-                .foregroundStyle(.orange)
-            Text(WidgetWords.unknown).foregroundStyle(.secondary)
+    private func partial(_ overview: CalibrationWidgetOverview) -> Int {
+        switch entry.period {
+        case .week: return CalibrationWidgetOverview.partialDays(overview.weekDays)
+        case .month: return CalibrationWidgetOverview.partialDays(overview.monthDays)
+        case .year: return overview.yearMonths.reduce(0) { $0 + $1.partialDays }
         }
-        .font(.caption2)
-        .lineLimit(1)
-        .minimumScaleFactor(0.8)
-        .accessibilityElement(children: .combine)
     }
 }
 
