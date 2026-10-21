@@ -185,3 +185,26 @@ Run `39586231838` / SHA `e6b77b2430c9f3ca6568d4471c3a1e327cfd054a`：**Portable 
 ## 2026-10-21 · Chat 历史实际完成度复核
 
 原执行矩阵的 `CHAT-03.a`、`CHAT-03.b` 写成 NOT_STARTED 不准确：`ImpressChatSessionHistoryViewController.buildHits(query:)` 已进行本地标题/草稿/来源/全文消息筛选并携带消息 ID；列表原生侧滑经确认后使用 `ReviewWCDBRepository.deleteChatSession`，删除会话的原消息与草稿清除、已执行回执保留、进行中状态拒删，CAS 防异步复活。`testHistorySearchRestoresMatchedSessionContext` 和 `testDeleteConversationPreservesAppliedReceiptsAndDoesNotResurrect` 已在 `355656de` / Run #100 的 185 项原生 XCTest 中通过。**更新为 CODE_DONE + NATIVE_TEST_PASS（针对这两个子项），但 ACCEPT-06 的真实 UI/冷启动/设备与异常并发边界仍待逐步补证；不得冒充全项 E2E_PASS。**
+
+
+## 10. 2026-10-21 · F01～F13 故障注入证据映射（不把单测冒充全端 E2E）
+
+**精确测试基线**：`355656de` / Run #100 原生 XCTest 185/185 PASS；`7c28b74` / Run #39600533287 第一次尝试原生 XCTest 185/185 PASS，但其连续 XCUITest 有一次在测试 Vault 阅读器进入时失败，**整个 Run 标记 FAILURE**。下面只追踪真正通过的原生/Core 单测范围，不能归并成 13/13 完整端侧崩溃注入通过；第二次执行与 Widget 新代码的独立结果须按 SHA/Attempt 记录。
+
+| 场景 | 已存在且验证过的精确代码测试 | 证据边界／仍须补齐 |
+| --- | --- | --- |
+| F01 笔记成功、原卡 CAS 冲突 | `testDuplexPartialReceiptDoesNotReapplyWrittenQAFileOnCardConflict` | 真实 QA 文件回读与幂等已测；连续 UI 的单目标失败/重批准与进程注入仍需专项 |
+| F02 笔记失败、原卡成功 | `testF02DeniedNoteWriteAndAppliedOriginalCardSurviveColdStart` | 原生 fixture/冷启动测试已有；真 File Provider 拒权/回执 UI 未认证 |
+| F03 文件成功、回执丢失 | `testF03FileWrittenButReceiptMissingColdStartReconciliation`；Portable `F03InterruptedNoteReconciliationNeverReplaysStaleBytes` | 已核哈希/未重放；真进程在协调写和回执之间被强杀仍待注入 |
+| F04 原卡已改、状态未记录 | `testF04CardCommittedButReceiptMissingAfterReopen`；Portable `F04InterruptedCardReconciliationUsesContentVersionNotReviewSchedule` | 已按内容版本回读；真强杀交错/服务进程中断仍待注入 |
+| F05 重复确认／重试 | Portable `idempotentRetryIsNotASecondWrite`；`testDuplexPartialReceiptDoesNotReapplyWrittenQAFileOnCardConflict` | 同对象幂等成立；双目标 UI 重复快速点击及并发仍待验 |
+| F06 执行／撤销时中断 | `testF06InterruptedApprovalBlocksDiscardAndForwardConfirmation`；Portable `F06DeselectCannotEraseInterruptedForwardApplication` | 未决状态不得丢弃；真实 `undoing` 强杀与冷启动 UI 需补 |
+| F07 同文档两次批准 | `testTwoApprovedNoteRevisionsRemainIndependentAndUndoInReverseOrder` | 两个批准快照和逆序恢复已测；真机文件提供者异步冲突需补 |
+| F08 旧撤销与新变更冲突 | `testExplicitQAUndoRestoresExactBOMCRLFBytesAndBlocksLaterConflict` | 原字节/后续变更冲突拒覆已测；实际 UI 撤销确认的 E2E 仍未全量完成 |
+| F09 FSRS/内容交错 | `testDisposableVaultCardChatDuplexFullRoundTripAfterInterveningFSRS`；`testManualCardUndoCreatesNewContentVersionWithoutRescoring` | 保 cardID/调度与内容版本已测；真实 UI 返回原队列后完整复习边界待补 |
+| F10 Vault 失权/移动/更改/跨源 | `testSameFileConflictsNeverOverwriteExternalEdit`；`testMissingSourceFailsClosedWithoutRecreatingFile`；`testVersionedNoteSourceLookupPreservesLegacyLinksAndSeparatesSameTitle` | 真实 iCloud/Files 撤权、跨 Vault/重名设备负向未验 |
+| F11 ApprovedDraft 丢失 | `testF11MissingApprovedDraftDisablesNoteCommitFromApprovalUI` | 失快照拒绝操作已测；真实文件保护/恢复缺失的设备状态待验 |
+| F12 旧数据库与备份恢复 | `testChatSessionReopensDraftAndPreservesHistoryInV3Backup`；`testV3BackupZIPRoundTripAndChecksumRejection`；`testColdRestoreFaultRollsBackCalibrationPromptsJournalAndSQLite` | WCDB/ZIP 基本恢复已测；多年代旧 JSON/老库及真机源回执全量迁移仍需证明 |
+| F13 删除/发送/提案/备份并发 | `testDeleteConversationPreservesAppliedReceiptsAndDoesNotResurrect` | WCDB tombstone/CAS、留执行回执与禁止 `applying` 删除已测；正在真实网络流式发送和自动备份交错仍需 UI/设备注入 |
+
+**结论**：F01～F13 均有某种原生/Portable 测试覆盖，但除子项测试外仍缺强杀故障窗口、系统授权变动和必要 UI 连续行为的统一同 SHA 证据。要继续补实际执行而不是再复制一组相同的 Service 单测。
