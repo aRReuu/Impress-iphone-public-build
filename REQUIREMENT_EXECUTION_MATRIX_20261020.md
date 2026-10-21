@@ -36,7 +36,7 @@ B-* 为**已有证据定位**（不能仅凭名称标 PASS）；P-* 为**待实�
 | 键 | 方法/范围 |
 | --- | --- |
 | B-R | `testActualTinderSwipeSavesOneFSRSEventOnlyAfterRevealingAnswer`；`testAllFourDirectionsPersistCorrectFSRSRating` |
-| B-E | `testQuickEditAndVerifiedSourceVisibleBeforeAnswerWithoutScoring`；`testCardContentHistoryIsAtomicNoOpAndRestoresWithoutRescoring`；`testReturningAfterExternalCardEditRequiresRevealingTheNewAnswer` |
+| B-E | **旧揭示前可见断言需替代并保留来源/FSRS 安全验证**：`testQuickEditAndVerifiedSourceVisibleBeforeAnswerWithoutScoring`；`testCardContentHistoryIsAtomicNoOpAndRestoresWithoutRescoring`；`testReturningAfterExternalCardEditRequiresRevealingTheNewAnswer` |
 | B-F | `testManagedCardCRUDPreservesIdentityAndFSRSReviewEvents`；`testContentHistoryIsEditorOnly`；`testChoiceExplanationIsIndependentFromCorrectIndicesAndSurvivesLegacyReads` |
 | B-C | `testOneSourceSupportsTwoIndependentChatSessionsWithoutOverwritingHistory`；`testUnsentChatModelAndPromptSurviveColdStartAndLegacyJSON` |
 | B-M | `testAIQuestionMaterialRequiresExactLiveSourceBeforeHTTP`；`testChatNoteMaterialGateRejectsStaleForgedAndOversizedExcerpts`；`testChatProviderSwitchRequiresConsentAfterFailedFirstAttempt`；`testLongChatWarnsAboutRemoteWindowWithoutDiscardingLocalHistory` |
@@ -53,6 +53,7 @@ B-* 为**已有证据定位**（不能仅凭名称标 PASS）；P-* 为**待实�
 | P-M | `testStructuredSelectionMatchesVisibleSourceRanges`；`testCompositeMaterialsDoNotExpandConsent`（计划） |
 | P-V | `testSupportedCompositeFormatsRenderSelectAndRestore`；`testLegacyAnchorsSurviveParserUpgrade`；`testReadTypeExpansionDoesNotAuthorizeWrites`（计划） |
 | P-X | `testUIKnowledgeLoopAndReverseReviewAcrossColdLaunch`（计划，必须 XCUITest 连续操作，不以服务函数拼接冒充） |
+| P-W | `testCalibrationWidgetSixLayoutsAndStateProjection`、`testWidgetSafeReadOnlySnapshotAndRestore`、`testWidgetThreePeriodDeepLinks`、`testWidgetCivilDateBoundaries`（Widget/Core/Simulator/真机按层验收；均 NOT_RUN） |
 
 ## 3. 85 个稳定需求 ID
 
@@ -64,7 +65,7 @@ B-* 为**已有证据定位**（不能仅凭名称标 PASS）；P-* 为**待实�
 | NAV-02 | CODE_DONE | CODE_DONE | NAV/REVIEW/CAL | P-N；B-R |
 | NAV-03 | IN_PROGRESS | IN_PROGRESS | NAV/REVIEW/CAL | P-N；B-R |
 | NAV-04 | CODE_DONE | CODE_DONE | NAV/REVIEW/CAL | P-N；B-R |
-| NAV-05 | IN_PROGRESS | IN_PROGRESS | NAV/REVIEW/CAL | P-N；B-R |
+| NAV-05 | IN_PROGRESS | IN_PROGRESS | NAV/REVIEW/CAL/Widget（待建） | P-N/P-W；B-R |
 | NAV-06 | IN_PROGRESS | IN_PROGRESS | NAV/REVIEW/CAL | P-N；B-R |
 | LOOP-01 | IN_PROGRESS | IN_PROGRESS | CHAT/NOTE/DB/VAULT/CORE | B-L/B-D/B-S/B-X；P-X |
 | LOOP-02 | IN_PROGRESS | IN_PROGRESS | CHAT/NOTE/DB/VAULT/CORE | B-L/B-D/B-S/B-X；P-X |
@@ -87,14 +88,14 @@ B-* 为**已有证据定位**（不能仅凭名称标 PASS）；P-* 为**待实�
 | CARD-05 | IN_PROGRESS | IN_PROGRESS | REVIEW/CARD/EDITOR/OVERLAY/DB | B-R/B-E/B-F；P-R |
 | CARD-06 | IN_PROGRESS | IN_PROGRESS | REVIEW/CARD/EDITOR/OVERLAY/DB | B-R/B-E/B-F；P-R |
 | CARD-07 | IN_PROGRESS | IN_PROGRESS | REVIEW/CARD/EDITOR/OVERLAY/DB | B-R/B-E/B-F；P-R |
-| CARD-08 | IN_PROGRESS | IN_PROGRESS | REVIEW/CARD/EDITOR/OVERLAY/DB | B-R/B-E/B-F；P-R |
+| CARD-08 | IN_PROGRESS | IN_PROGRESS | REVIEW/CARD/EDITOR/OVERLAY/DB | B-R/B-E（旧可见性待替代）/B-F；P-R |
 | CARD-09 | CODE_DONE | CODE_DONE | REVIEW/CARD/EDITOR/OVERLAY/DB | B-R/B-E/B-F；P-R |
 | CARD-10 | CODE_DONE | CODE_DONE | REVIEW/CARD/EDITOR/OVERLAY/DB | B-R/B-E/B-F；P-R |
 | CARD-11 | CODE_DONE | CODE_DONE | REVIEW/CARD/EDITOR/OVERLAY/DB | B-R/B-E/B-F；P-R |
 | CARD-12 | CODE_DONE | CODE_DONE | REVIEW/CARD/EDITOR/OVERLAY/DB | B-R/B-E/B-F；P-R |
 | CARD-13 | IN_PROGRESS | IN_PROGRESS | REVIEW/CARD/EDITOR/OVERLAY/DB | B-R/B-E/B-F；P-R |
 | CARD-14 | IN_PROGRESS | IN_PROGRESS | REVIEW/CARD/EDITOR/OVERLAY/DB | B-R/B-E/B-F；P-R |
-| UI-01 | CODE_DONE | IN_PROGRESS | STYLE/NAV/REVIEW/CHAT | P-N/P-R/P-C；三语言/主题截图 |
+| UI-01 | CODE_DONE | IN_PROGRESS | STYLE/NAV/REVIEW/CHAT/EDITOR | P-N/P-R/P-C；保存 checkmark 的三语言/主题原生截图 |
 | UI-02 | CODE_DONE | IN_PROGRESS | STYLE/NAV/REVIEW/CHAT | P-N/P-R/P-C；三语言/主题截图 |
 | UI-03 | CODE_DONE | IN_PROGRESS | STYLE/NAV/REVIEW/CHAT | P-N/P-R/P-C；三语言/主题截图 |
 | UI-04 | IN_PROGRESS | IN_PROGRESS | STYLE/NAV/REVIEW/CHAT | P-N/P-R/P-C；三语言/主题截图 |
@@ -151,6 +152,10 @@ B-* 为**已有证据定位**（不能仅凭名称标 PASS）；P-* 为**待实�
 | 子项 | 父 ID | 施工范围 | 当前状态 | 验证 |
 | --- | --- | --- | --- | --- |
 | UI-03.a | UI-03/NAV-03/SAFE-03 | 笔记 Tab 一级页为 Obsidian 式原生折叠树；只显示名称、层级及必要 chevron，无图标/路径/摘要；覆盖全树搜索、来源身份、授权回读、分页与展开态 | IN_PROGRESS | 原生树形算法/控制器测试、SMOKE/设备视觉与 Vault 负向测试 |
+| CARD-08.a | CARD-08/CARD-13/CARD-09 | 卡内编辑/讨论只在揭示后同时显示；内容失效/换卡/未揭示隐藏且不可聚焦，保 FSRS | IN_PROGRESS（未施工） | P-R，修改 B-E 旧断言；ACCEPT-03/05 |
+| UI-01.a | UI-01/UI-03/UI-04 | 新增页保存为统一导航样式的 SF Symbols checkmark；保校验/防重复/VoiceOver | IN_PROGRESS（未施工） | P-R、ACCEPT-04，原生截图 |
+| NAV-05.w | NAV-05/UI-03/UI-04 | WidgetKit 周近7、月近30、年本年 × Small/Medium 六视图；记录状态 B 方案；三时段深链 | IN_PROGRESS（Widget target 尚不存在） | P-W，SMOKE W01～W06/W12～W14 |
+| SAFE-08.w | SAFE-08/SAFE-07/NAV-05 | 最小只读 App Group 统计快照、Timeline/WidgetCenter、跨日/恢复、签名与隐私 | IN_PROGRESS（未施工） | P-W，SMOKE W07～W11/W15 |
 | CHAT-03.a | CHAT-03 | 全本地会话搜索、正文命中定位、跨源上下文恢复 | NOT_STARTED | P-C |
 | CHAT-03.b | CHAT-03/10, SAFE-07 | 明确删除、未执行取消、已执行回执保留可达、防异步复活 | NOT_STARTED | P-C/B-B |
 | CHAT-06.a | CHAT-06, LOOP-03 | 真实层级/片段范围、父子去重、边界结构、源码映射 | IN_PROGRESS | P-M/B-L |
@@ -193,3 +198,7 @@ G4 同最终 SHA 全套 CI/证据/QA IPA；只有外部设备/Keychain/Files/授
 | ACCEPT-01～12 / QA IPA | NOT_RUN（最新版完整证据） | 必须按最终 HEAD 对应同一套成功 Actions 和真实 UI 回读 |
 
 原有 85 个需求 ID、ACCEPT-01～12、OPEN-01～06、DEFERRED 均不作隐式变更。永久保持 `ImVaultGuardedWrite.productionWriteEnabled = false`；真实日常 Obsidian Vault 禁止自动写入测试。
+
+## 2026-10-21 · 新增子项的验收边界
+
+仅在 `feature/impress-duplex-loop-v1` 的 `a6051b46c78910cdb87ca8d16f8ccbd5b4467967` 代码核对后定稿：`CARD-08.a/UI-01.a/NAV-05.w/SAFE-08.w` 全部 **IN_PROGRESS/实际新测试 NOT_RUN**。不得把原校准器已有周/月/年曲线或主 App App Group entitlement 误标为 Widget 已实现。旧 QuickEdit **查看答案前可见**测试断言必须以当前产品需求替代，同时保留来源安全与评分守卫；原 85 个主 ID、12 ACCEPT、6 OPEN、18步 E2E、F01～F13、CAL-01～15 DEFERRED 不增删。完整细节以产品稿 §2.2/2.3 和 SMOKE §9 为准。

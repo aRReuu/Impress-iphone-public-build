@@ -1,7 +1,7 @@
 # Impress · 校准器既有实现记录与 V1.1 入口迁移契约
 
 > 产品权威唯一为 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md)。本文件不再自称独立业务权威。唯一工作分支`feature/impress-duplex-loop-v1`；旧`feature/impress-vault-device-write-qa`与`feature/impress-v3-r04-2-build`只属历史，禁止据其施工。
-> 本轮定稿只批准将**现有校准器**加入第三个Tab。四Tab为闪卡/笔记/校准器/设置；不恢复首页周图，不修改新公式、目标迁移、图表规则或提醒策略。CAL-01～15的新方案仍DEFERRED，入口工作由NAV-01/NAV-05承载。本次未改导航代码。
+> 2026-10-21 追加批准只读 B 方案周/月/年桌面 Widget（Small/Medium），归 NAV-05.w/SAFE-08.w；第三 Tab/既有校准数据/原周月年应用内图不变，不恢复闪卡首页周图。CAL-01～15 **新方案仍 DEFERRED**（计分公式、迁移、新图表、新提醒未解冻）；本次仅改文档。
 
 ## 1. 入口与状态保全
 
@@ -41,3 +41,7 @@
 ## 2026-10-21 · 四 Tab 原生 UI 回归补记
 
 主工程新建 `aReuImpress-iPhoneUITests`，以真实 App 启动、逐一点击四 Tab、截图和冷启动验证一级路由基础。这不会创建第二套校准器、修改既有历史评分或重新引入首页周图。校准器通知/深链与数据完整性仍需独立专项回归；未运行真实设备前不记 DEVICE_PASS，十八步双向知识 E2E 仍为 NOT_RUN。
+
+## 7. 2026-10-21 · 只读桌面 Widget 接入说明
+
+唯一需求权威 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md) §2.2；详细验收 [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md) §9。周＝最近7本地日含今天，月＝最近30本地日含今天，年＝本自然年；三个 WidgetKind，各支持 Small/Medium。采用 **B（评估行为/记录覆盖）**，净分仅次要展示。**`CalibrationDayCheckIn.isComplete` 可在全部豁免且 `netScore=nil` 时成立**；`trendRecords()` 的未完成记录得分缺失不可代表零评估；请从 `ImpressCalibrationLocalStore.history()` 的四行为＋`moodAssessed` 投影完整/部分/未评估状态。App 在原账本成功回读后向 `group.areu.impress` 原子写最小匿名统计快照，Widget 只读且失败空态，不另建分数权威、数据库、备份或写入许可。WidgetKit Extension/entitlement/provisioning、Timeline、深链同一校准 Tab、真实 iPhone13/IPA、三语言/主题及恢复均需实证，当前 **NOT_RUN**。CAL-01～15 新公式/目标迁移/新提醒照旧 DEFERRED。

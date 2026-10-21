@@ -66,7 +66,8 @@
 | Chat 历史搜索 | 全本地标题/消息/来源搜索、无结果/清空/返回位置、命中定位；跨来源不串材料 |
 | Chat 删除 | 普通/当前/带提案/已应用/中断会话分别测；回执可达；发送/草稿回调不复活；备份保留范围告知 |
 | 题干/答案 | 1/3/超3行、中英混排/emoji/H1/H2/大字号、短题无空占位；全文可达，答案触底 |
-| 卡片控件 | 只有内部右上编辑/讨论；来源入口未丢；无底部重复按钮，无额外题答文字标签 |
+| 卡片控件 | 仅内部右上编辑/讨论；**揭示前隐藏、揭示后才可见、内容失效/换卡再隐藏，且无隐藏热区/焦点**；来源入口未丢；无底部重复按钮，无额外题答文字标签 |
+| 新增卡片保存 | 右上苹果 `checkmark` 图标而非文字；与所有导航栏按钮 tint/背景一致，VoiceOver 仍为「保存」；校验、保存中禁用、防重复、失败重试、成功回读 | 
 | 评分 | 中央可见紧凑单提示，四方向/转向/取消/阈值/重复手势；浏览点击/滚动/选字零评分 |
 | 视觉 | iPhone13尺寸、简繁英、浅/深/跟随系统、DynamicType/SafeArea/VoiceOver；原生截图，不用HTML演示冒充 |
 
@@ -120,7 +121,7 @@ UNDO-01原卡新restored版本、02后来内容冲突/仅FSRS变化不冲突、0
 | ID | 当前追踪口径 |
 | --- | --- |
 | A01 | 旧三Tab被四Tab替代，路由仍回归 |
-| A02 | 旧首页周图废止；只回归校准器已有数据/页面，不恢复首页图 |
+| A02 | 旧闪卡首页周图废止，校准器保留原页面；**新增 iPhone 桌面 Widget** 不属于闪卡首页周图 |
 | A03 | 新增三类卡不重建当前队列 |
 | A04 | 问答/选择/图片编辑、独立解析、无改动/取消 |
 | A05 | 内容历史恢复为新版本，保中间版本 |
@@ -149,3 +150,27 @@ STT回归包含三独立识别locale、模型可用/显式下载/麦克风权限
 已新增 `aReuImpress-iPhoneUITests/ImpressV11NavigationUITests.swift` 作为真实进程内的 XCUITest（实际四 Tab 点击、冷启动和截图），并纳入 Xcode Scheme；**它不实现本文件第3节的18步闭环**，后者仍为 NOT_RUN。F03/F04 新增 `ImDuplexInterruptedRecovery` 和 Approval 界面“核查中断”入口，可对上次 `applying` 状态回读 SHA/内容版本并禁止未经核查重试；尚未完成真实断点强杀注入，F01～F13 不得整体 TEST_PASS。
 
 Excalidraw compressed-json/有限 PNG/JPEG 的源码和测试已提交，但全图形/范围/附件仍有实现缺口。接受度台账 ACCEPT-01～12 需逐项填最新 SHA、Run ID、真实 XCUITest/截图及设备限制；不允许用旧成功 Run `39489025745` 证明新增功能。
+
+## 9. 2026-10-21 · B 方案 Widget 与新增闪卡冒烟（设计已定，全部 NOT_RUN）
+
+新验收基于 `NAV-05.w/SAFE-08.w/CARD-08.a/UI-01.a`，不插入原有十八步 E2E 中途、不删 F01～F13。每项需记录准确代码 SHA、Actions Run、真实 XCTest/XCUITest 名、Widget Preview/Simulator、iPhone13 桌面截图、签名 entitlement/安装结果、失败原因；静态设计/Swift Core 通过不能冒充桌面 E2E。
+
+| ID | 必须验证 |
+| --- | --- |
+| W01 | 周 Small：含今日滚动最近7日本地状态，今日明确评估 x/5，完整/部分/未评估有别 |
+| W02 | 周 Medium：逐日日期、已完整/部分评估日数，净分仅有值时作为次要信息 |
+| W03 | 月 Small：近30日本地状态格与有明确评估天数，月初/月末不断档 |
+| W04 | 月 Medium：30日矩阵、完整/部分状态及辅助图例；无记录不被判「失败」 |
+| W05 | 年 Small：本年12个月记录概览，未来月份不可当无记录 |
+| W06 | 年 Medium：各月有明确评估日数与已经过去的自然日数，年初/年末合理 |
+| W07 | 无数据、零评估、仅有1～4项、情绪跳过、四行为明确未完成、全部评估、全豁免净分 nil、仅附加分理由等状态均准确 |
+| W08 | `CalibrationDayCheckIn` 的原始评估/目标快照与 FSRS 不改变；不能仅通过 `trendRecords()` 的净分 null 猜是否记录 |
+| W09 | App Group 原子最小快照；没有用户笔记/Key/Vault/个人目标文字；Widget 仅读，文件损坏/无权限安全空态 |
+| W10 | App 保存完成后的快照刷新、冷启动/备份恢复后从原 Store 重新投影；共享文件不成为第二备份 |
+| W11 | 连续7/30日本地日期、闰日/DST/时区/跨年、本年未来月份；Timeline 刷新受系统控制不声称即时 |
+| W12 | 周/月/年三 Widget 分别深链到同一校准 Tab 对应周期；冷启动、已有会话、通知不互扰 |
+| W13 | 六种系统小组件布局：简繁英、Light/Dark/System、Dynamic Type、VoiceOver、色觉可辨、Small 无关键文字溢出 |
+| W14 | Widget Extension target 在 Debug/Release/iPhoneOS/最终 IPA 实际存在；主 App 和 Extension entitlement/Bundle ID/provisioning、真实设备添加及侧载限制有证据 |
+| W15 | 没有新计分/旧历史迁移/新通知策略；CAL 新规则仍 DEFERRED，原十八步/F01～F13 与备份无回归 |
+
+另需真实测试闪卡：未揭示两图标隐藏且不能聚焦，揭示后出现，进入编辑/讨论保持 cardID/队列，内容实际变化揭示失效再隐藏，换卡恢复初态，所有显隐不评分；新增页 `checkmark` 与统一导航样式、可访问性、表单校验/保存防重复/失败回读必须过 XCUITest。旧 `testQuickEditAndVerifiedSourceVisibleBeforeAnswerWithoutScoring` 的「揭示前可见」部分已被新需求取代，改断言而非删来源安全测试。

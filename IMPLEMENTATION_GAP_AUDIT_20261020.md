@@ -53,3 +53,7 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 **已推进（非最终验收）：** Excalidraw `compressed-json` LZ-String Base64 有界解码、基础本地绘图及选材/Chat 来源重校验、受限 PNG/JPEG 内嵌预览；双目标 `applying` 状态增加只读核验/确认阻断；新增可执行四 Tab XCUITest Target。代码证据 `b527764` → `b7a3e76`。
 
 **仍为内部实现缺口：** Excalidraw 全格式真实渲染、Markdown 封装附件、区域/框架全部边界；Mermaid/Markmap 离线图形及分支选材；复合文档跨格式选择一致性；18步连续真实 UI E2E；F01～F13 全量故障注入和恢复；ACCEPT-01～12 新版证据、设备授权以及最终同SHA QA IPA。全部仍按原优先级施工，不转 DEFERRED 或 DEVICE_BLOCKED 以掩盖内部缺口。
+
+## 2026-10-21 · B 方案与闪卡交互增量缺口
+
+从 HEAD `a6051b46c78910cdb87ca8d16f8ccbd5b4467967` 的现有 Swift/Xcode 工程核验：`ImpressV3ReviewViewController` 卡内编辑/讨论默认建立，尚缺揭示后显隐门禁；`ImpressV3CardComposerViewController` 右上仍是文字保存；`ImpressCalibrationViewController` 有原生周/月/年图且 App entitlement 具有 App Group，但目前没有 WidgetKit Extension target。因此四子项 `CARD-08.a/UI-01.a/NAV-05.w/SAFE-08.w` 的源码与专项测试全属待施工，不是 DEVICE_BLOCKED。旧 QuickEdit 揭示前可见的断言必须替代，但来源/FSRS 安全测试不删。产品稿 §2.2/2.3、执行矩阵新增子项、SMOKE W01～W15 构成同一需求契约；CAL-01～15 原新算法仍 DEFERRED；85 主 ID/12 ACCEPT/6 OPEN/18 步 E2E/F01～F13 不更名、不减少。
