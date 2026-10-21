@@ -68,8 +68,26 @@ final class ImpressV11NavigationUITests: XCTestCase {
         XCTAssertTrue(app.textViews["impress.diagram.material-preview"]
             .waitForExistence(timeout: 15))
         app.buttons["impress.diagram.confirm-material"].tap()
-        XCTAssertTrue(app.textViews["impress.ai.chat.input"]
-            .waitForExistence(timeout: 20))
+        let input = app.textViews["impress.ai.chat.input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 20))
+        let introduction = app.alerts["关于讨论"]
+        if introduction.waitForExistence(timeout: 3) {
+            introduction.buttons["知道了"].tap()
+        }
+        input.tap()
+        input.typeText("Please explain the approved Mermaid branch.")
+        let send = app.buttons["impress.ai.chat.send"]
+        XCTAssertTrue(send.isEnabled)
+        send.tap()
+        let scope = app.alerts["是否附带当前笔记材料？"]
+        if scope.waitForExistence(timeout: 10) {
+            scope.buttons["附带本次笔记材料"].tap()
+        }
+        let assistant = app.textViews.matching(
+            identifier: "impress.ai.chat.message-body").matching(
+                NSPredicate(format: "value CONTAINS %@", "合成模型回复")).firstMatch
+        XCTAssertTrue(assistant.waitForExistence(timeout: 30),
+            "The isolated synthetic provider must persist a real completed Chat message")
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Impress-V1.1-Scoped-Diagram-Chat"
         screenshot.lifetime = .keepAlways
