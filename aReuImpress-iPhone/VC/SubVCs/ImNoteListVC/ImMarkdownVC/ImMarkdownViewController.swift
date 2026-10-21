@@ -2249,8 +2249,8 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
     }
 
     /// Decode only already-embedded, source-authorized raster bytes. A
-    /// thumbnail bound keeps adversarial image dimensions from allocating a
-    /// full bitmap. External paths, SVG, remote URLs and web scripts are inert.
+    /// strict pixel bound prevents adversarial dimensions from allocating
+    /// an unbounded bitmap. External paths, SVG, remote URLs and web scripts are inert.
     private static func localImage(for element: ImpressExcalidrawElement,
                                    in scene: ImpressExcalidrawScene) -> UIImage? {
         guard let id = element.fileId, let file = scene.files?[id],
@@ -2267,23 +2267,17 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
         guard encoded.utf8.count <= 4 * 1_024 * 1_024,
               let bytes = Data(base64Encoded: encoded),
               bytes.count <= 3 * 1_024 * 1_024,
-              let source = CGImageSourceCreateWithData(bytes as CFData,
-                  [kCGImageSourceShouldCache: false] as CFDictionary),
+              let source = CGImageSourceCreateWithData(bytes as CFData, nil),
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
                   as NSDictionary?,
               let pixelWidth = properties.object(forKey: kCGImagePropertyPixelWidth) as? Int,
               let pixelHeight = properties.object(forKey: kCGImagePropertyPixelHeight) as? Int,
               pixelWidth > 0, pixelHeight > 0,
-              pixelWidth <= 10_000, pixelHeight <= 10_000,
-              pixelWidth * pixelHeight <= 16_000_000 else { return nil }
-        let options = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceThumbnailMaxPixelSize: 1_024,
-            kCGImageSourceShouldCacheImmediately: true
-        ] as CFDictionary
-        guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options)
-        else { return nil }
-        return UIImage(cgImage: thumbnail)
+              pixelWidth <= 4_096, pixelHeight <= 4_096,
+              pixelWidth * pixelHeight <= 4_000_000,
+              let raster = CGImageSourceCreateImageAtIndex(source, 0, nil)
+              else { return nil }
+        return UIImage(cgImage: raster)
     }
 
     private static func color(_ hex: String?) -> UIColor? {
