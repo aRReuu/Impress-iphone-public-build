@@ -47,3 +47,9 @@
 只修改指定分支，不动main/私库/原版AppIcon，不新分支、不破坏Git、不用Remote Desktop Commander，不付费模型。`ImVaultGuardedWrite.productionWriteEnabled = false`保持。所有测试使用合成无隐私fixture；任何真实授权与费用另核。
 G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA完整测试/IPA/证据。每批先查远端保护其他提交，合并同类修复再跑CI，失败读取具体日志。新功能未实现、未执行、测试失败和设备外部阻塞分开标；不以更新文档代替开发。
 本轮文档验收仅检查冲突替代、85稳定ID、ACCEPT/OPEN保留、子项映射、范围/许可/数据安全及八份稿件一致；没有新原生测试、UI实测或新IPA。
+
+## 2026-10-21 · 施工后的真实缺口复核
+
+**已推进（非最终验收）：** Excalidraw `compressed-json` LZ-String Base64 有界解码、基础本地绘图及选材/Chat 来源重校验、受限 PNG/JPEG 内嵌预览；双目标 `applying` 状态增加只读核验/确认阻断；新增可执行四 Tab XCUITest Target。代码证据 `b527764` → `b7a3e76`。
+
+**仍为内部实现缺口：** Excalidraw 全格式真实渲染、Markdown 封装附件、区域/框架全部边界；Mermaid/Markmap 离线图形及分支选材；复合文档跨格式选择一致性；18步连续真实 UI E2E；F01～F13 全量故障注入和恢复；ACCEPT-01～12 新版证据、设备授权以及最终同SHA QA IPA。全部仍按原优先级施工，不转 DEFERRED 或 DEVICE_BLOCKED 以掩盖内部缺口。
