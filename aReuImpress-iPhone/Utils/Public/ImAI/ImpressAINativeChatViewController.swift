@@ -1186,6 +1186,26 @@ final class ImpressAINativeChatViewController: UIViewController,
             present(alert, animated: true)
             return
         }
+        #if DEBUG
+        if ImpressV11UITestFixture.enabled &&
+           (noteIdentity?.vaultID == ImpressV11UITestFixture.vaultID ||
+            sourceCardID != nil) {
+            // This route never reaches URLSession. It exists only for the
+            // disposable fixture and retains ordinary material consent.
+            let syntheticID = UUID(uuidString: "00000000-0000-4000-8000-000000000005")!
+            let connection = ImpressAIConnection(id: syntheticID,
+                title: "Impress E2E Synthetic (offline)", provider: .custom,
+                apiProtocol: .chatCompletions,
+                baseURL: URL(string: "https://impress.invalid")!,
+                credentialID: nil, enabled: true,
+                authentication: .noAuthentication)
+            let model = ImpressAIModel(id: syntheticID, connectionID: syntheticID,
+                identifier: "impress-local-fixture", jsonVerified: true)
+            chooseSourceContext(text,
+                route: ImpressAIResolvedRoute(connection: connection, model: model))
+            return
+        }
+        #endif
         let route: ImpressAIResolvedRoute
         do { route = try liveRoute() }
         catch {
@@ -1376,8 +1396,23 @@ final class ImpressAINativeChatViewController: UIViewController,
                         text: saved.text)
                 }
                 turns.append(ImpressAIChatTurn(role: .user, text: message))
-                let reply = try await ImpressAIHTTPClient.shared.converse(
+                let reply: String
+                #if DEBUG
+                if ImpressV11UITestFixture.enabled &&
+                   (self.noteIdentity?.vaultID == ImpressV11UITestFixture.vaultID ||
+                    self.sourceCardID != nil) {
+                    // Still passes the actual Vault SHA/CAS + consent checks
+                    // above and persists real WCDB user/assistant messages.
+                    // No network request or model charge occurs.
+                    reply = "合成模型回复：依据已核准的来源，先确定前提，再提出可检验的机制，最后检查反例。原笔记与原卡必须分别审阅修改后才可批准。"
+                } else {
+                    reply = try await ImpressAIHTTPClient.shared.converse(
+                        route: route, system: system, turns: turns)
+                }
+                #else
+                reply = try await ImpressAIHTTPClient.shared.converse(
                     route: route, system: system, turns: turns)
+                #endif
                 try Task.checkCancellation()
                 if let index = history.firstIndex(where: { $0.messageID == messageID }) {
                     history[index].status = .completed
