@@ -37,6 +37,50 @@ struct ImpressDiagramDocumentTests {
         #expect(!expanded.ids.contains(same[1].id))
         #expect(expanded.ancestors.contains(doc.nodes[0].id))
     }
+    @Test func markdownListBranchesAreIndependentAndNeverLeakSiblings() throws {
+        let raw = "# Topic\r\n- Main hypothesis\r\n" +
+            "  - Approved 🌱\r\n  - Private secret\r\n" +
+            "- Another group\r\n  1. Unselected answer\r\n"
+        let doc = try ImpressDiagramDocument.markmap(in: Data(raw.utf8))
+        let root = try #require(doc.nodes.first(where: { $0.title == "Main hypothesis" }))
+        let approved = try #require(doc.nodes.first(where: { $0.title == "Approved 🌱" }))
+        let sibling = try #require(doc.nodes.first(where: { $0.title == "Private secret" }))
+        #expect(approved.parentID == root.id)
+        #expect(sibling.parentID == root.id)
+        let chosenOnly = try doc.selection(ids: [approved.id])
+        let excerpt = try chosenOnly.contextJSON()
+        #expect(excerpt.contains("Approved 🌱"))
+        #expect(excerpt.contains("Main hypothesis"))
+        #expect(!excerpt.contains("Private secret"))
+        #expect(!excerpt.contains("Unselected answer"))
+        // Merely clicking a parent is NOT approval to copy descendants.
+        let parentOnly = try doc.selection(ids: [root.id])
+        #expect(!((try parentOnly.contextJSON()).contains("Private secret")))
+        #expect(!((try parentOnly.contextJSON()).contains("Approved 🌱")))
+        // A separate explicit subtree consent can include these children.
+        let full = try doc.selection(ids: [root.id], includeDescendants: true)
+        #expect(full.ids.contains(approved.id))
+        #expect(full.ids.contains(sibling.id))
+        #expect(!full.ids.contains(try #require(
+            doc.nodes.first(where: { $0.title == "Another group" })).id))
+    }
+
+    @Test func listParserDoesNotTreatFrontmatterOrFencedExamplesAsNodes() throws {
+        let md = "---\r\n- hidden: yes\r\n---\r\n# Topic\r\n" +
+            "~~~swift\r\n- secret code line\r\n~~~\r\n" +
+            "- Explicit branch\r\n  1) Nested item\r\n> - inert quote\r\n"
+        let doc = try ImpressDiagramDocument.markmap(in: Data(md.utf8))
+        #expect(doc.nodes.contains { $0.title == "Explicit branch" })
+        #expect(doc.nodes.contains { $0.title == "Nested item" })
+        #expect(!doc.nodes.contains { $0.title.contains("hidden") })
+        #expect(!doc.nodes.contains { $0.title.contains("secret code") })
+        #expect(!doc.nodes.contains { $0.title.contains("inert quote") })
+        let child = try #require(doc.nodes.first { $0.title == "Nested item" })
+        let parent = try #require(doc.nodes.first { $0.title == "Explicit branch" })
+        #expect(child.parentID == parent.id)
+        #expect(child.startUTF8 == Array(md.utf8).firstIndex(of: UInt8(ascii: "1"))! - 2)
+    }
+
     @Test func forgedNodeAndMalformedBytesFailClosed() throws {
         let doc = try ImpressDiagramDocument.markmap(in: Data("# Hi\n".utf8))
         #expect(throws: ImpressDiagramError.invalidSelection) {

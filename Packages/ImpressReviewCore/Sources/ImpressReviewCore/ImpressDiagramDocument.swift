@@ -146,6 +146,78 @@ public struct ImpressDiagramDocument: Sendable {
         }
         return result
     }
+    private static func listText(_ line: String) -> (indent: Int, title: String)? {
+        let prefix = line.prefix(while: { $0 == " " || $0 == "\t" })
+        let indent = prefix.reduce(0) { $0 + ($1 == "\t" ? 4 : 1) }
+        guard indent <= 32 else { return nil }
+        let text = String(line.dropFirst(prefix.count))
+        let content: String
+        if text.hasPrefix("- ") || text.hasPrefix("* ") || text.hasPrefix("+ ") {
+            content = String(text.dropFirst(2))
+        } else {
+            let digits = text.prefix(while: { $0 >= "0" && $0 <= "9" })
+            guard (1...9).contains(digits.count) else { return nil }
+            let rest = text.dropFirst(digits.count)
+            guard rest.hasPrefix(". ") || rest.hasPrefix(") ") else { return nil }
+            content = String(rest.dropFirst(2))
+        }
+        let name = content.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return nil }
+        return (indent, name)
+    }
+
+    /// List items contribute exactly their own physical source line. We skip
+    /// code fences/frontmatter so a code sample cannot become a selectable
+    /// fake Markmap node. Both headings and list items use byte-offset IDs,
+    /// never mutable titles or provider-specific path heuristics.
+    private static func markmapLists(_ raw: [UInt8],
+                                     headings: [ImpressMarkdownSection])
+        -> [ImpressDiagramNode] {
+        let rows = lines(raw)
+        var frontmatter = rows.first?.text.replacingOccurrences(
+            of: "\u{FEFF}", with: "").trimmingCharacters(in: .whitespaces) == "---"
+        var fence: Fence?
+        var stack: [(indent: Int, id: String)] = []
+        var lastSectionID: String?
+        var result: [ImpressDiagramNode] = []
+        for (index, row) in rows.enumerated() {
+            let trimmed = row.text.trimmingCharacters(in: .whitespaces)
+            if frontmatter {
+                if index > 0 && (trimmed == "---" || trimmed == "...") {
+                    frontmatter = false
+                }
+                continue
+            }
+            if let current = fence {
+                if closes(row.text, current) { fence = nil }
+                continue
+            }
+            if let next = open(row.text) { fence = next; continue }
+            guard let item = listText(row.text) else { continue }
+            let parent = headings.filter { section in
+                section.level > 0 && section.startUTF8 < row.start &&
+                row.start < section.endUTF8
+            }.max { a, b in a.startUTF8 < b.startUTF8 }
+            let sectionID = parent?.id
+            if sectionID != lastSectionID {
+                stack.removeAll()
+                lastSectionID = sectionID
+            }
+            while let top = stack.last, top.indent >= item.indent {
+                stack.removeLast()
+            }
+            let key = "l:" + String(row.start)
+            let parentNodeID = stack.last?.id ??
+                parent.map { "h:" + String($0.startUTF8) }
+            result.append(ImpressDiagramNode(id: key, title: String(item.title.prefix(500)),
+                ownSourceText: trimmed, parentID: parentNodeID,
+                startUTF8: row.start, endUTF8: row.end))
+            stack.append((item.indent, key))
+            if result.count >= 512 { break }
+        }
+        return result
+    }
+
     public static func markmap(in bytes: Data) throws -> Self {
         guard !bytes.isEmpty, bytes.count <= 8 * 1_024 * 1_024,
               String(data: bytes, encoding: .utf8) != nil else {
@@ -157,19 +229,29 @@ public struct ImpressDiagramDocument: Sendable {
             ($0.id, "h:" + String($0.startUTF8))
         })
         let original = Array(bytes)
-        let nodes = sections.prefix(512).map { section in
-            // A parent section's endUTF8 includes all children. A node's
-            // own material ends BEFORE its first direct child, so choosing
-            // that parent alone cannot leak the entire unselected subtree.
-            let childStart = sections.filter { $0.parentID == section.id }
+        let listItems = markmapLists(original, headings: sections)
+        let headingNodes: [ImpressDiagramNode] = sections.prefix(512).map { section in
+            // A heading's source projection ends at its first child heading
+            // OR its first list branch, whichever comes first. It must never
+            // implicitly carry the text of an unselected list subtree.
+            let firstChildHeading = sections.filter { $0.parentID == section.id }
                 .map(\.startUTF8).min() ?? section.endUTF8
-            let own = String(decoding: original[section.startUTF8..<childStart],
+            let firstChildList = listItems.filter { item in
+                section.startUTF8 < item.startUTF8 &&
+                    item.startUTF8 < firstChildHeading
+            }.map(\.startUTF8).min() ?? section.endUTF8
+            let ownEnd = min(firstChildHeading, firstChildList)
+            let own = String(decoding: original[section.startUTF8..<ownEnd],
                 as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
             return ImpressDiagramNode(
                 id: lookup[section.id] ?? "h:" + String(section.startUTF8),
                 title: section.heading, ownSourceText: own,
                 parentID: section.parentID.flatMap { lookup[$0] },
                 startUTF8: section.startUTF8, endUTF8: section.endUTF8)
+        }
+        let remaining = max(0, 512 - headingNodes.count)
+        let nodes = (headingNodes + Array(listItems.prefix(remaining))).sorted {
+            $0.startUTF8 < $1.startUTF8
         }
         guard !nodes.isEmpty else { throw ImpressDiagramError.empty }
         return Self(kind: .markmap, startUTF8: 0, endUTF8: bytes.count,
