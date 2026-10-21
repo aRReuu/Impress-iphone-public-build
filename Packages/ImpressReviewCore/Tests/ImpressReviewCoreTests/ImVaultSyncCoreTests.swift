@@ -448,6 +448,15 @@ struct ImVaultSyncCoreTests {
         #expect(userContinuedEditing == .conflict)
     }
 
+    @Test func F04RevisionOverflowCannotCreateFalseIdempotentReceipt() {
+        let result = ImDuplexCardVersionGate.decide(
+            expectedContentRevision: Int.max, currentContentRevision: Int.max,
+            baseQuestion: "Old", baseAnswer: "Old",
+            proposedQuestion: "New", proposedAnswer: "New",
+            currentQuestion: "New", currentAnswer: "New")
+        #expect(result == .conflict)
+    }
+
     @Test func duplexCardConflictAndRepeatNeverOverwriteAnotherVersion() {
         let safe = ImDuplexCardVersionGate.decide(expectedContentRevision: 3,
             currentContentRevision: 3, baseQuestion: "Original Q", baseAnswer: "Original A",

@@ -388,7 +388,8 @@ public enum ImDuplexCardVersionGate {
         if currentContentRevision == expectedContentRevision && sameAsBase {
             return .safeToWrite
         }
-        if currentContentRevision == expectedContentRevision + 1 && sameAsProposal {
+        if expectedContentRevision >= 0 && expectedContentRevision < Int.max &&
+           currentContentRevision == expectedContentRevision + 1 && sameAsProposal {
             return .alreadyApplied
         }
         return .conflict

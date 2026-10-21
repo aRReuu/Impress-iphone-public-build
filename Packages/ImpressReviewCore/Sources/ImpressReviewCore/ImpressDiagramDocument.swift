@@ -207,8 +207,13 @@ public struct ImpressDiagramDocument: Sendable {
                 stack.removeLast()
             }
             let key = "l:" + String(row.start)
+            let prefixRoot = headings.first {
+                $0.level == 0 && $0.startUTF8 <= row.start &&
+                    row.start < $0.endUTF8
+            }
             let parentNodeID = stack.last?.id ??
-                parent.map { "h:" + String($0.startUTF8) }
+                parent.map { "h:" + String($0.startUTF8) } ??
+                prefixRoot.map { "h:" + String($0.startUTF8) }
             result.append(ImpressDiagramNode(id: key, title: String(item.title.prefix(500)),
                 ownSourceText: trimmed, parentID: parentNodeID,
                 startUTF8: row.start, endUTF8: row.end))

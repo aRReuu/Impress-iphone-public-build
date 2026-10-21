@@ -65,6 +65,19 @@ struct ImpressDiagramDocumentTests {
             doc.nodes.first(where: { $0.title == "Another group" })).id))
     }
 
+    @Test func headinglessListHasRealAncestorAndNoUnapprovedSibling() throws {
+        let doc = try ImpressDiagramDocument.markmap(in:
+            Data("- Parent\n  - Approved\n  - Secret\n".utf8))
+        let root = try #require(doc.nodes.first { $0.title == "全文" })
+        let parent = try #require(doc.nodes.first { $0.title == "Parent" })
+        let child = try #require(doc.nodes.first { $0.title == "Approved" })
+        #expect(parent.parentID == root.id)
+        #expect(child.parentID == parent.id)
+        let selection = try doc.selection(ids: [child.id])
+        #expect(selection.ancestors.contains(root.id))
+        #expect(!(try selection.contextJSON()).contains("Secret"))
+    }
+
     @Test func listParserDoesNotTreatFrontmatterOrFencedExamplesAsNodes() throws {
         let md = "---\r\n- hidden: yes\r\n---\r\n# Topic\r\n" +
             "~~~swift\r\n- secret code line\r\n~~~\r\n" +

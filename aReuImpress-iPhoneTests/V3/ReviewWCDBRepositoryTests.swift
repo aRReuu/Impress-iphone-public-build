@@ -479,6 +479,128 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 
+    /// F03: crash after the actual coordinated fixture file write, before
+    /// any WCDB success receipt. New database instance must adjudicate the
+    /// source SHA explicitly; no forward operation is replayed.
+    @MainActor
+    func testF03FileWrittenButReceiptMissingColdStartReconciliation() async throws {
+        let root = try createRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = try put("# Original\n", root: root, path: "Notes/F03.md")
+        let identity = try ImVaultFileIdentity(vaultID: UUID().uuidString,
+            relativePath: "Notes/F03.md")
+        let original = try ImVaultReadSync.load(root: root, identity: identity)
+        var draft = try ImVaultDraft(identity: identity,
+            baseText: original.markdown, baseRawData: original.sourceBytes)
+        try draft.update("# Applied once\n")
+        let targetSHA = ImVaultDigest.sha256(draft.proposedBytes)
+        let dbPath = temporaryPath()
+        let repository = try ReviewWCDBRepository(databasePath: dbPath,
+            calculator: FSRS6ReviewCalculator())
+        let sourceKey = "card:" + UUID().uuidString
+        var session = WCDBV3ChatSession(sourceIdentity: sourceKey)
+        session.pendingDuplex = WCDBV3DuplexProposal(sourceMessageID: UUID(),
+            noteIdentity: identity, noteBaseDigest: draft.baseDigest,
+            noteEditedDigest: targetSHA, cardID: nil, cardReviewRevision: nil,
+            cardContentRevision: nil, cardBaseQuestion: nil, cardBaseAnswer: nil,
+            cardEditedQuestion: nil, cardEditedAnswer: nil,
+            state: ImDuplexApprovalState(noteSelected: true, cardSelected: false,
+                noteStatus: .applying))
+        try await repository.saveChatSession(session, expectedRevision: nil)
+        guard case .written = try ImVaultGuardedWrite.commitFixture(root: root,
+            draft: draft, userConfirmedDiff: true) else {
+            XCTFail("Must write an actual fixture file"); return
+        }
+        let recovered = try ReviewWCDBRepository(databasePath: dbPath,
+            calculator: FSRS6ReviewCalculator())
+        let sessions = try await recovered.chatSessions(for: sourceKey)
+        var cold = try XCTUnwrap(sessions.first)
+        var proposal = try XCTUnwrap(cold.pendingDuplex)
+        XCTAssertEqual(proposal.state.noteStatus, .applying)
+        XCTAssertFalse(proposal.state.completed)
+        let verified = try ImVaultReadSync.load(root: root, identity: identity)
+        let result = ImDuplexInterruptedRecovery.noteStatus(
+            currentDigest: verified.digest, baseDigest: draft.baseDigest,
+            proposedDigest: targetSHA)
+        XCTAssertEqual(result, .applied)
+        proposal.state.noteStatus = try XCTUnwrap(result)
+        proposal.noteReceipt = "F03 SHA verified; file not replayed"
+        cold.pendingDuplex = proposal
+        cold.revision += 1
+        cold.updatedAt = Date()
+        try await recovered.saveChatSession(cold, expectedRevision: 0)
+        let latest = try await recovered.chatSessions(for: sourceKey)
+        XCTAssertEqual(latest.first?.pendingDuplex?.state.noteStatus, .applied)
+        XCTAssertEqual(try Data(contentsOf: file), draft.proposedBytes)
+        guard case .alreadyApplied = try ImVaultGuardedWrite.commitFixture(
+            root: root, draft: draft, userConfirmedDiff: true) else {
+            XCTFail("A duplicate attempt must be byte-level idempotent"); return
+        }
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    /// F04: WCDB card content CAS committed before the conversation receipt.
+    /// Reopening the same database proves the card revision was applied once,
+    /// with no FSRS event or duplicate content version.
+    @MainActor
+    func testF04CardCommittedButReceiptMissingAfterReopen() async throws {
+        let path = temporaryPath()
+        let calculator = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(databasePath: path,
+            calculator: calculator)
+        let id = UUID()
+        let now = Date(timeIntervalSince1970: 1_726_000_000)
+        try await repo.insertNewCard(WCDBV3CardInput(cardID: id,
+            question: "Old", answerText: "Before"),
+            initial: try calculator.newCardSnapshot(id: id, now: now), now: now)
+        let oldContentResult = try await repo.content(for: id)
+        let old = try XCTUnwrap(oldContentResult)
+        let queue = try await repo.fetchQueueCandidates()
+        let pending = try XCTUnwrap(queue.first { $0.cardID == id })
+        let source = "card:" + id.uuidString
+        var session = WCDBV3ChatSession(sourceIdentity: source)
+        session.pendingDuplex = WCDBV3DuplexProposal(sourceMessageID: UUID(),
+            noteIdentity: nil, noteBaseDigest: nil, noteEditedDigest: nil,
+            cardID: id, cardReviewRevision: pending.revision,
+            cardContentRevision: old.contentRevision, cardBaseQuestion: "Old",
+            cardBaseAnswer: "Before", cardEditedQuestion: "New",
+            cardEditedAnswer: "Approved",
+            state: ImDuplexApprovalState(noteSelected: false, cardSelected: true,
+                cardStatus: .applying))
+        try await repo.saveChatSession(session, expectedRevision: nil)
+        try await repo.updateManagedCard(WCDBV3CardInput(cardID: id,
+            question: "New", answerText: "Approved"),
+            expectedRevision: pending.revision,
+            expectedContentRevision: old.contentRevision, origin: .approvedAI)
+        let reopened = try ReviewWCDBRepository(databasePath: path,
+            calculator: calculator)
+        let loaded = try await reopened.chatSessions(for: source)
+        var persisted = try XCTUnwrap(loaded.first)
+        var p = try XCTUnwrap(persisted.pendingDuplex)
+        XCTAssertEqual(p.state.cardStatus, .applying)
+        let actualResult = try await reopened.content(for: id)
+        let actual = try XCTUnwrap(actualResult)
+        let verdict = ImDuplexInterruptedRecovery.cardStatus(
+            currentContentRevision: actual.contentRevision,
+            expectedContentRevision: old.contentRevision,
+            baseQuestion: "Old", baseAnswer: "Before",
+            proposedQuestion: "New", proposedAnswer: "Approved",
+            currentQuestion: actual.question, currentAnswer: actual.answerText)
+        XCTAssertEqual(verdict, .applied)
+        p.state.cardStatus = try XCTUnwrap(verdict)
+        p.cardReceipt = "F04 content CAS verified; no repeat"
+        persisted.pendingDuplex = p
+        persisted.revision += 1
+        persisted.updatedAt = Date()
+        try await reopened.saveChatSession(persisted, expectedRevision: 0)
+        let history = try await reopened.contentHistory(for: id)
+        XCTAssertEqual(history.map(\.contentRevision), [0, 1])
+        let ratings = try await reopened.reviewHistory(for: id)
+        XCTAssertTrue(ratings.isEmpty)
+        let current = try await reopened.chatSessions(for: source)
+        XCTAssertEqual(current.first?.pendingDuplex?.state.cardStatus, .applied)
+    }
+
     @MainActor
     func testDuplexProposalPersistsAcrossChatColdStartWithoutReplayingWrites() async throws {
         let path = temporaryPath()
