@@ -205,3 +205,9 @@
 定稿阶段仅改本文及现有矩阵/审计/架构/README/QA/校准说明，不改代码。后续获准施工：G0 远端与安全核对→G1 Chat/闪卡/四 Tab/历史实际代码与原生截图→G2 结构选材和复杂格式引擎验证后集成→G3 P0-A～D 与完整 UI 往返→G4 全回归/证据/同 SHA QA。阶段不等于删减范围，未完成 G2 不得宣称本轮完整交付。
 读取 `.github/scripts/verify_product_contract.py` 的旧“题干可滚动”等实现断言；施工时替换成新行为回归，保留原 85 ID/12 ACCEPT/6 OPEN 与安全检查，不能仅删除测试来变绿。本轮不改该脚本。
 每批合并同类修复后触发完整 CI，失败读具体日志。最终 SHA 绑定 Swift Core、原生 XCTest、真实 UI自动化、Debug/Release Simulator、iPhoneOS ARM64、IPA 完整性及 SHA-256。没有证据标 NOT_RUN，真设备/Keychain/Files/iCloud/授权阻塞写具体原因；服务层往返不冒充 UI E2E，文档定稿不冒充 CODE_DONE。
+
+## 2026-10-21 · V1.1 施工核验补记（不覆盖原需求及状态）
+
+已提交：`b527764` Excalidraw LZ-String Base64 compressed-json，`b1211f3` 原生只读几何/元素选材/Chat SHA 复核，`692fa1c`/`5bc369e`/`2d2e051` 受限内嵌 PNG/JPEG，`9cd3f73`/`6c2808f` 人工只读中断回执核查，以及 `b7a3e76` 真正 XCUITest Target 和四 Tab/冷启动/截图冒烟。
+
+这些仅代表相应子项已有代码（CODE_DONE 候选），并非整项 E2E_PASS。Excalidraw 全格式、Mermaid 离线图形、Markmap 分支选材、18 步连续业务 UI E2E、F01～F13 整组和 ACCEPT-01～12 最终证据仍未完成。永久保留生产 Vault 写入禁用，不能把基本绘图或静态合同测试冒充最终交付。
