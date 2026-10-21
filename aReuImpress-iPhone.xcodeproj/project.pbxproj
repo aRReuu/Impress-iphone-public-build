@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F5B200000000000000000012 /* DiagramReader in Resources */ = {isa = PBXBuildFile; fileRef = F5B200000000000000000011 /* DiagramReader */; };
 		F5B100000000000000000001 /* ImpressV11NavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B100000000000000000002 /* ImpressV11NavigationUITests.swift */; };
 		F3D300000000000000000010 /* ImpressSpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D300000000000000000020 /* ImpressSpeechService.swift */; };
 		F3D300000000000000000011 /* ImpressSpeechInputUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D300000000000000000021 /* ImpressSpeechInputUI.swift */; };
@@ -167,6 +168,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		F5B200000000000000000011 /* DiagramReader */ = {isa = PBXFileReference; lastKnownFileType = folder; path = DiagramReader; sourceTree = "<group>"; };
 		F5B100000000000000000002 /* ImpressV11NavigationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV11NavigationUITests.swift; sourceTree = "<group>"; };
 		F5B100000000000000000003 /* aReuImpress-iPhoneUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "aReuImpress-iPhoneUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F3D300000000000000000020 /* ImpressSpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressSpeechService.swift; sourceTree = "<group>"; };
@@ -618,6 +620,7 @@
 			children = (
 				38DE72E22E9A235D00E8909F /* ImCard */,
 				3895E16F293B8C1D006939DA /* Assets.xcassets */,
+				F5B200000000000000000011 /* DiagramReader */,
 				38134EC92978EF4100EE8786 /* Main.storyboard */,
 				3895E171293B8C1D006939DA /* LaunchScreen.storyboard */,
 			);
@@ -1102,6 +1105,7 @@
 				3859A3952E9B907400C5FA37 /* imcard_wallpaper.png in Resources */,
 				3895E173293B8C1D006939DA /* LaunchScreen.storyboard in Resources */,
 				3895E170293B8C1D006939DA /* Assets.xcassets in Resources */,
+				F5B200000000000000000012 /* DiagramReader in Resources */,
 				38134ECB2978EF4100EE8786 /* Main.storyboard in Resources */,
 				38DE72E82E9A23EC00E8909F /* imcard_hard@2x.png in Resources */,
 				38DE72E92E9A23EC00E8909F /* imcard_easy@2x.png in Resources */,

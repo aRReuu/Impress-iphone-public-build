@@ -90,6 +90,15 @@ jobs:
           fi
           pod --version | tee out/cocoapods-version.log
           pod install --repo-update 2>&1 | tee out/pod-install.log
+      - name: Build offline Mermaid/Markmap reader (no CDN at runtime)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd Scripts/DiagramReader
+          npm install --no-audit --no-fund --ignore-scripts --omit=optional
+          npm run build
+          test -s ../../aReuImpress-iPhone/Resources/DiagramReader/reader.js
+          cp ../../aReuImpress-iPhone/Resources/DiagramReader/manifest.json ../../out/diagram-engine-manifest.json
       - name: Build Debug iOS Simulator
         shell: bash
         run: |
@@ -140,6 +149,9 @@ jobs:
           test -d "$APP"
           test -f "$APP/Info.plist"
           test -f "$APP/aReuImpress-iPhone"
+          test -s "$APP/DiagramReader/reader.js"
+          test -s "$APP/DiagramReader/index.html"
+          test -s "$APP/DiagramReader/manifest.json"
           file "$APP/aReuImpress-iPhone" | tee out/mach-o-file.txt
           lipo -info "$APP/aReuImpress-iPhone" | tee out/mach-o-architecture.txt
           grep -q arm64 out/mach-o-architecture.txt
