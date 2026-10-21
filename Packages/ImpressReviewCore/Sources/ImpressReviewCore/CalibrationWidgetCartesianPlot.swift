@@ -23,10 +23,14 @@ public extension CalibrationWidgetProjection {
         }
         if period == .year {
             let year = calendar.component(.year, from: now)
+            // A valid-looking but stale/corrupt App Group snapshot may contain
+            // future entries. Only elapsed local civil days can contribute.
+            let lastElapsedDay = CalibrationDayCheckIn.dayID(for: now, calendar: calendar)
             let scores: [[Int]] = (1...12).map { month in
                 let prefix = String(format: "%04d-%02d-", year, month)
                 return snapshot.days.compactMap { day -> Int? in
-                    day.dayID.hasPrefix(prefix) ? day.netScore : nil
+                    day.dayID.hasPrefix(prefix) && day.dayID <= lastElapsedDay
+                        ? day.netScore : nil
                 }
             }
             let values: [Double?] = scores.map { items in

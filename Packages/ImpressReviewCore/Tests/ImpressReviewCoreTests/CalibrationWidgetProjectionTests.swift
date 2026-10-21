@@ -209,6 +209,34 @@ final class CalibrationWidgetProjectionTests: XCTestCase {
         XCTAssertEqual(year.tickLabels.first, "1月")
     }
 
+    func testPlausibleSharedSnapshotCannotDrawFutureCalendarScores() throws {
+        let now = date(2026, 10, 21)
+        let empty = CalibrationWidgetProjection.snapshot(from: [], at: now, calendar: calendar)
+        // A malformed producer could leave structurally valid future scores
+        // in shared cache; a Widget must not reveal them as completed history.
+        let future = [
+            CalibrationWidgetDay(dayID: "2026-10-22", assessedCount: 5,
+                                 state: .finalized, netScore: 19),
+            CalibrationWidgetDay(dayID: "2026-12-01", assessedCount: 5,
+                                 state: .finalized, netScore: -4)
+        ]
+        let snapshot = CalibrationWidgetSnapshot(
+            schemaVersion: empty.schemaVersion, generatedAt: empty.generatedAt,
+            timeZoneID: empty.timeZoneID, calendarID: empty.calendarID,
+            days: future)
+        XCTAssertTrue(snapshot.isValid, "Date syntax alone cannot prove a past assessment")
+        let year = try XCTUnwrap(CalibrationWidgetProjection.cartesianPlot(
+            from: snapshot, period: .year, at: now, calendar: calendar))
+        XCTAssertNil(year.values[9], "Future days in the current month are invalid")
+        XCTAssertNil(year.values[11], "Future months must be empty, not scored")
+        XCTAssertNil(year.smooth[9])
+        XCTAssertNil(year.smooth[11])
+        let coverage = try XCTUnwrap(CalibrationWidgetProjection.overview(
+            from: snapshot, at: now, calendar: calendar))
+        XCTAssertEqual(coverage.yearMonths[9].assessedDays, 0)
+        XCTAssertEqual(coverage.yearMonths[11].elapsedDays, 0)
+    }
+
     func testCartesianEmptyAndInvalidSnapshotsNeverFabricateScorePoints() throws {
         let now = date(2026, 10, 21)
         let recordedWithoutScore = try entry("2026-10-21", allExcused: true, mood: true)

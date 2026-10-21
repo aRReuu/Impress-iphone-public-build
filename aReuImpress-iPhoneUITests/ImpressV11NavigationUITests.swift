@@ -459,6 +459,37 @@ final class ImpressV11NavigationUITests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
 
+        // F08: actual human-controlled inverse of the already-applied CARD,
+        // through the same visible approval controller (never direct WCDB).
+        safeUndo.tap()
+        let undoCard = app.buttons["撤销原卡改动"]
+        XCTAssertTrue(undoCard.waitForExistence(timeout: 12),
+            "Applied card must offer an independently authorized inverse")
+        undoCard.tap()
+        let undoPreview = app.textViews["impress.duplex.undo.full-diff"]
+        XCTAssertTrue(undoPreview.waitForExistence(timeout: 20))
+        XCTAssertTrue(String(describing: undoPreview.value ?? "").contains("cardID:"),
+            "Undo must show the exact original card ID, not a generic confirmation")
+        let undoConfirm = app.buttons["impress.duplex.undo.confirm"]
+        XCTAssertTrue(undoConfirm.isEnabled)
+        undoConfirm.tap()
+        let inverseConsent = app.alerts["确认撤销这个目标？"]
+        XCTAssertTrue(inverseConsent.waitForExistence(timeout: 12))
+        inverseConsent.buttons["确认撤销"].tap()
+        let inverseReceipt = app.alerts["撤销结果已保存"]
+        XCTAssertTrue(inverseReceipt.waitForExistence(timeout: 30),
+            "CAS-approved inverse must save its receipt; failure is not success")
+        inverseReceipt.buttons["确定"].tap()
+        let afterInverse = String(describing: fullDiff.value ?? "")
+        XCTAssertTrue(afterInverse.contains("reverted"),
+            "Card inverse status must persist independently of the note target")
+        XCTAssertTrue(afterInverse.contains("applied"),
+            "Undoing the card must not silently undo the approved Markdown")
+        let inverseProof = XCTAttachment(screenshot: app.screenshot())
+        inverseProof.name = "Impress-V1.1-approved-card-actual-safe-undo"
+        inverseProof.lifetime = .keepAlways
+        add(inverseProof)
+
         // This process boundary must not replace the existing WCDB or Vault.
         app.terminate()
         app.launch()
