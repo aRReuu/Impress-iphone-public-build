@@ -110,7 +110,16 @@ final class ImpressV11NavigationUITests: XCTestCase {
         XCTAssertTrue(table.waitForExistence(timeout: 12))
         let branch = table.cells.matching(
             NSPredicate(format: "label CONTAINS %@", "经过审核的子节点")).firstMatch
-        XCTAssertTrue(branch.waitForExistence(timeout: 12))
+        // The graph owns the upper half of a phone screen. Deep list branches
+        // may be genuinely off-screen and therefore absent from the current
+        // accessibility snapshot until the user scrolls the node table.
+        for _ in 0..<12 {
+            if branch.exists { break }
+            table.swipeUp()
+        }
+        XCTAssertTrue(branch.waitForExistence(timeout: 12),
+            "A real list branch must be selectable after scrolling the diagram tree")
+        XCTAssertTrue(branch.isHittable)
         branch.tap()
         app.buttons["impress.diagram.preview-material"].tap()
         let material = app.textViews["impress.diagram.material-preview"]
@@ -129,11 +138,14 @@ final class ImpressV11NavigationUITests: XCTestCase {
 
     func testNativeJSONCanvasOnlySelectedNodeMovesIntoChat() throws {
         let app = openSyntheticFile("Diagram")
-        let graph = app.scrollViews["impress.canvas.native-viewport"]
-        XCTAssertTrue(graph.waitForExistence(timeout: 15))
+        // Require an actual rendered, interactable node rather than the
+        // accessibility *type* of a UIScrollView (UIKit may flatten it).
         let node = app.buttons["impress.canvas.node.a"]
-        XCTAssertTrue(node.waitForExistence(timeout: 12))
+        XCTAssertTrue(node.waitForExistence(timeout: 18),
+            "Canvas should render its real native node, not a raw JSON fallback")
+        XCTAssertTrue(node.isHittable)
         node.tap()
+        XCTAssertEqual(node.value as? String, "已选择")
         app.buttons["更多笔记操作"].tap()
         app.buttons["所选画布节点预览并加入 Chat"].tap()
         let material = app.textViews["impress.canvas.material-preview"]
@@ -145,11 +157,12 @@ final class ImpressV11NavigationUITests: XCTestCase {
 
     func testExcalidrawNativeReadSelectionAndChatRejectsUnselectedElement() throws {
         let app = openSyntheticFile("Drawing")
-        let graph = app.scrollViews["impress.excalidraw.native-viewport"]
-        XCTAssertTrue(graph.waitForExistence(timeout: 15))
         let rectangle = app.buttons["impress.excalidraw.element.a"]
-        XCTAssertTrue(rectangle.waitForExistence(timeout: 12))
+        XCTAssertTrue(rectangle.waitForExistence(timeout: 18),
+            "Excalidraw must create an actual tappable shape, not raw JSON text")
+        XCTAssertTrue(rectangle.isHittable)
         rectangle.tap()
+        XCTAssertEqual(rectangle.value as? String, "已选择")
         app.buttons["更多笔记操作"].tap()
         app.buttons["所选绘图元素预览并加入 Chat"].tap()
         let material = app.textViews["impress.excalidraw.material-preview"]

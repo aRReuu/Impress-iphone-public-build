@@ -65,6 +65,12 @@ final class ImpressV3ReviewViewController: UIViewController {
         if needsReloadAfterCollection && pending == nil {
             needsReloadAfterCollection = false
             reloadSession()
+        } else if hasLoaded && pending == nil && items.isEmpty && !isLoading {
+            // Cards created from Notes/AI candidate review enter the same WCDB
+            // but do not pass through Card Collection's reload flag. Recheck
+            // the *empty* queue when returning to Flashcards; do not restart
+            // an ongoing review, reveal answers or modify FSRS.
+            reloadSession()
         } else if hasLoaded && pending == nil {
             verifyCurrentContentOnReturn()
         }
