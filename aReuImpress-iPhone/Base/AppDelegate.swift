@@ -24,11 +24,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate
             UserDefaults.standard.removeObject(forKey: key)
         }
         // Apply a previously confirmed recovery only before WCDB opens.
-        do { try ImpressV3BackupCoordinator.applyPendingAtColdLaunch() }
-        catch {
-            UserDefaults.standard.set(
-                "恢复未完成：" + error.localizedDescription,
-                forKey: ImpressV3BackupCoordinator.failureKey)
+        #if DEBUG
+        let uiTestIsolated = ImpressV11UITestFixture.enabled
+        #else
+        let uiTestIsolated = false
+        #endif
+        if !uiTestIsolated {
+            do { try ImpressV3BackupCoordinator.applyPendingAtColdLaunch() }
+            catch {
+                UserDefaults.standard.set(
+                    "恢复未完成：" + error.localizedDescription,
+                    forKey: ImpressV3BackupCoordinator.failureKey)
+            }
         }
         // V3 alone handles notification routing; no retired reminder policy.
         ImpressV3NotificationCoordinator.shared.installDelegate()
