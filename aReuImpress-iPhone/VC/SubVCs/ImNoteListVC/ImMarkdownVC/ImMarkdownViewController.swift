@@ -652,6 +652,7 @@ final class ImVaultDocumentController: UIViewController {
     private let richView = MarkdownView()
     private let canvasHost = UIView()
     private var canvasGraph: ImpressCanvasNativeView?
+    private var drawingGraph: ImpressExcalidrawNativeView?
     private let pathLabel = UILabel()
     private var preparedMarkdown: String?
     private var isSourceMode = false
@@ -846,6 +847,12 @@ final class ImVaultDocumentController: UIViewController {
                     image: UIImage(systemName: "square.stack")) {
                         [weak self] _ in self?.reviewSelectedCanvas()
                 })
+            } else if document.identity.documentFormat == .excalidrawJSON ||
+                      document.identity.documentFormat == .excalidrawMarkdown {
+                actions.append(UIAction(title: V3L("所选绘图元素预览并加入 Chat"),
+                    image: UIImage(systemName: "square.stack")) {
+                        [weak self] _ in self?.reviewSelectedDrawing()
+                })
             }
             more.menu = UIMenu(children: actions)
         }
@@ -869,6 +876,8 @@ final class ImVaultDocumentController: UIViewController {
 
     private func renderBody() {
         canvasHost.isHidden = true
+        canvasGraph = nil
+        drawingGraph = nil
         if isSourceMode {
             readingView.isHidden = false
             richView.isHidden = true
@@ -900,8 +909,35 @@ final class ImVaultDocumentController: UIViewController {
                 readingView.text = V3L("Canvas 绘制范围过大或结构不合法；未修改源文件。请查看源码以核查实际内容。") +
                     "\n\n" + error.localizedDescription
             }
+        } else if document.identity.documentFormat == .excalidrawJSON ||
+                  document.identity.documentFormat == .excalidrawMarkdown {
+            richView.isHidden = true
+            readingView.isHidden = true
+            canvasHost.isHidden = false
+            do {
+                let scene = try ImpressExcalidrawScene.parse(document.sourceBytes,
+                    format: document.identity.documentFormat)
+                let graph = try ImpressExcalidrawNativeView(source: scene)
+                canvasHost.subviews.forEach { $0.removeFromSuperview() }
+                graph.translatesAutoresizingMaskIntoConstraints = false
+                canvasHost.addSubview(graph)
+                NSLayoutConstraint.activate([
+                    graph.topAnchor.constraint(equalTo: canvasHost.topAnchor),
+                    graph.bottomAnchor.constraint(equalTo: canvasHost.bottomAnchor),
+                    graph.leadingAnchor.constraint(equalTo: canvasHost.leadingAnchor),
+                    graph.trailingAnchor.constraint(equalTo: canvasHost.trailingAnchor)
+                ])
+                drawingGraph = graph
+            } catch {
+                drawingGraph = nil
+                canvasHost.isHidden = true
+                readingView.isHidden = false
+                readingView.isEditable = false
+                readingView.font = ImpressV3Appearance.Typography.code
+                readingView.text = V3L("绘图数据不合法或范围过大；未修改源文件。") +
+                    "\n\n" + error.localizedDescription
+            }
         } else if document.identity.documentFormat != .markdown {
-            canvasGraph = nil
             richView.isHidden = true
             readingView.isHidden = false
             readingView.isEditable = false
@@ -939,6 +975,128 @@ final class ImVaultDocumentController: UIViewController {
     @objc private func toggleSource() {
         isSourceMode.toggle()
         renderBody()
+    }
+
+    /// A drawing selection stays tied to the exact Vault, SHA-256 and element
+    /// IDs that the user saw. Preview never implies a model upload.
+    @objc private func reviewSelectedDrawing() {
+        let format = document.identity.documentFormat
+        guard format == .excalidrawJSON || format == .excalidrawMarkdown,
+              let ids = drawingGraph?.selectedIDs, !ids.isEmpty else {
+            let alert = UIAlertController(title: V3L("请先选择绘图元素"),
+                message: V3L("轻点元素选择范围。选材本身不发送任何数据或图像。"),
+                preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+            present(alert, animated: true)
+            return
+        }
+        let expectedDigest = document.digest
+        withVerifiedLiveDocument { [weak self] latest in
+            guard let self else { return }
+            guard latest.digest == expectedDigest,
+                  latest.identity.documentFormat == format else {
+                self.showVaultError(V3L("绘图来源已变化，请重新选择"),
+                    error: ImVaultSyncFailure.conflict)
+                return
+            }
+            do {
+                let scene = try ImpressExcalidrawScene.parse(latest.sourceBytes,
+                    format: format)
+                let hasRelated = scene.elements.contains {
+                    ids.contains($0.id) && ($0.type == "frame" ||
+                        !($0.groupIds ?? []).isEmpty)
+                }
+                if hasRelated {
+                    let ask = UIAlertController(title: V3L("确认绘图选材范围"),
+                        message: V3L("额外包含同组或框架内部元素会扩大材料，请明确选择。"),
+                        preferredStyle: .actionSheet)
+                    ask.addAction(UIAlertAction(title: V3L("仅选中的元素"),
+                        style: .default) { [weak self] _ in
+                        self?.previewDrawingSelection(latest, scene: scene, ids: ids,
+                            expandGroups: false)
+                    })
+                    ask.addAction(UIAlertAction(title: V3L("包括同组和框架元素"),
+                        style: .default) { [weak self] _ in
+                        self?.previewDrawingSelection(latest, scene: scene, ids: ids,
+                            expandGroups: true)
+                    })
+                    ask.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+                    ask.popoverPresentationController?.sourceView = self.view
+                    self.present(ask, animated: true)
+                } else {
+                    self.previewDrawingSelection(latest, scene: scene, ids: ids,
+                        expandGroups: false)
+                }
+            } catch {
+                self.showVaultError(V3L("无法验证当前绘图"), error: error)
+            }
+        }
+    }
+
+    private func previewDrawingSelection(_ live: ImVaultRawDocument,
+                                         scene: ImpressExcalidrawScene,
+                                         ids: Set<String>, expandGroups: Bool) {
+        do {
+            let selection = try scene.selection(ids: ids, expandGroups: expandGroups)
+            let json = try selection.textContextJSON()
+            let targetKey = "note:" + ImVaultDigest.sha256(
+                Data((live.identity.vaultID + "\n" +
+                      live.identity.relativePath).utf8))
+            // Existing source-scoped ID list is deliberately reused without
+            // migrating old Chat/backup records; sourceFormat disambiguates.
+            let reference = WCDBV3ChatContextReference(
+                stableIdentity: targetKey, sourceRevision: live.digest,
+                excerpt: json, sourceFormat: "excalidraw-structure",
+                selectedCanvasNodeIDs: selection.elementIDs.sorted())
+            let page = UIViewController()
+            page.title = V3L("绘图材料完整预览")
+            page.view.backgroundColor = ImpressV3Appearance.page
+            let preview = UITextView()
+            preview.translatesAutoresizingMaskIntoConstraints = false
+            preview.isEditable = false
+            preview.isSelectable = true
+            preview.isScrollEnabled = true
+            preview.font = ImpressV3Appearance.Typography.code
+            preview.adjustsFontForContentSizeCategory = true
+            preview.backgroundColor = ImpressV3Appearance.surface
+            preview.textColor = ImpressV3Appearance.primaryText
+            preview.text = V3L("来源 Vault：") + live.identity.vaultID +
+                "\n" + live.identity.relativePath + "\nSHA-256: " + live.digest +
+                "\n" + V3L("选择元素数：") + String(selection.elements.count) +
+                "\n" + V3L("仅传输所选文字/图形结构，不包含图片像素。") +
+                "\n\n" + json
+            preview.accessibilityIdentifier = "impress.excalidraw.material-preview"
+            page.view.addSubview(preview)
+            NSLayoutConstraint.activate([
+                preview.topAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.topAnchor),
+                preview.bottomAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.bottomAnchor),
+                preview.leadingAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.leadingAnchor),
+                preview.trailingAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.trailingAnchor)
+            ])
+            page.navigationItem.rightBarButtonItem = UIBarButtonItem(
+                primaryAction: UIAction(title: V3L("确认范围并加入 Chat"),
+                    image: UIImage(systemName: "bubble.left")) { [weak self] _ in
+                    guard let self,
+                          ImVaultReadOnlyProbe.shared.authorizedVaultID ==
+                              live.identity.vaultID else { return }
+                    do {
+                        let repo = try ImpressV3ReviewEnvironment.repository()
+                        let chat = ImpressAINativeChatViewController(
+                            question: V3L("来源绘图：") + live.identity.relativePath,
+                            answer: nil, repository: repo,
+                            sourceKey: targetKey, sourceVersion: live.digest,
+                            noteIdentity: live.identity, initialMaterials: [reference])
+                        self.navigationController?.pushViewController(chat, animated: true)
+                    } catch {
+                        self.showVaultError(V3L("无法保存绘图材料"), error: error)
+                    }
+                })
+            page.navigationItem.rightBarButtonItem?.accessibilityIdentifier =
+                "impress.excalidraw.confirm-material"
+            navigationController?.pushViewController(page, animated: true)
+        } catch {
+            showVaultError(V3L("所选绘图范围无效"), error: error)
+        }
     }
 
     /// A selection from JSON Canvas requires live Vault re-read, exact node
@@ -1177,6 +1335,11 @@ final class ImVaultDocumentController: UIViewController {
     @objc private func openNativeNoteDiscussion() {
         if document.identity.documentFormat == .jsonCanvas {
             reviewSelectedCanvas()
+            return
+        }
+        if document.identity.documentFormat == .excalidrawJSON ||
+           document.identity.documentFormat == .excalidrawMarkdown {
+            reviewSelectedDrawing()
             return
         }
         withVerifiedLiveDocument { [weak self] latest in
@@ -1962,6 +2125,168 @@ final class ImVaultDiffController: UIViewController {
     }
 }
 
+
+
+
+// MARK: - V1.1 Excalidraw offline read-only spatial viewport
+
+/// Native, local geometry projection for safe viewing/selection of Excalidraw
+/// elements. Unlike the official Excalidraw editor, this does not edit files
+/// or evaluate user-provided JavaScript/SVG/HTML. Images and custom fonts
+/// require a separately authorized resource bridge; they are NOT displayed
+/// or sent as image pixels by this projection.
+@MainActor
+final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
+    private let artboard = UIView()
+    private var controls: [String: UIButton] = [:]
+    private(set) var selectedIDs = Set<String>()
+    let source: ImpressExcalidrawScene
+
+    init(source: ImpressExcalidrawScene) throws {
+        self.source = source
+        super.init(frame: .zero)
+        accessibilityIdentifier = "impress.excalidraw.native-viewport"
+        backgroundColor = .systemGroupedBackground
+        delegate = self
+        minimumZoomScale = 0.25
+        maximumZoomScale = 3
+        alwaysBounceHorizontal = true
+        alwaysBounceVertical = true
+
+        let elements = source.elements.filter(\.isActive)
+        let minX = elements.map(\.x).min() ?? 0
+        let minY = elements.map(\.y).min() ?? 0
+        let maxX = elements.map { $0.x + $0.width }.max() ?? 320
+        let maxY = elements.map { $0.y + $0.height }.max() ?? 400
+        let width = max(320, maxX - minX + 96)
+        let height = max(400, maxY - minY + 96)
+        guard width.isFinite, height.isFinite,
+              width <= 12_000, height <= 12_000,
+              width * height <= 20_000_000 else {
+            throw ImpressExcalidrawReadError.tooLarge
+        }
+        artboard.frame = CGRect(x: 0, y: 0, width: width, height: height)
+        artboard.backgroundColor = .systemBackground
+        artboard.isAccessibilityElement = false
+        addSubview(artboard)
+        contentSize = artboard.bounds.size
+
+        // Iterate in serialized source order: later elements draw above
+        // earlier ones. No force-directed layout or automatic rearrangement.
+        for element in elements {
+            let rect = CGRect(x: element.x - minX + 48,
+                              y: element.y - minY + 48,
+                              width: max(1, element.width),
+                              height: max(1, element.height))
+            let control = UIButton(type: .custom)
+            control.frame = rect
+            control.backgroundColor = .clear
+            control.setTitleColor(.label, for: .normal)
+            control.titleLabel?.font = .preferredFont(forTextStyle: .body)
+            control.titleLabel?.adjustsFontForContentSizeCategory = true
+            control.titleLabel?.numberOfLines = 0
+            control.contentHorizontalAlignment = .leading
+            control.contentVerticalAlignment = .top
+            control.contentEdgeInsets = UIEdgeInsets(top: 3, left: 3, bottom: 3, right: 3)
+            control.accessibilityIdentifier = "impress.excalidraw.element." + element.id
+            control.accessibilityHint = V3L("选择或取消绘图元素；不会自动发送")
+            control.accessibilityLabel = element.text ?? (element.type + " · " + element.id)
+
+            let stroke = Self.color(element.strokeColor) ?? UIColor.secondaryLabel
+            if let outline = Self.path(for: element, size: rect.size) {
+                let shape = CAShapeLayer()
+                shape.path = outline.cgPath
+                shape.strokeColor = stroke.cgColor
+                shape.fillColor = (Self.color(element.backgroundColor) ?? UIColor.clear)
+                    .withAlphaComponent(CGFloat((element.opacity ?? 100) / 100)).cgColor
+                shape.lineWidth = CGFloat(min(24, max(0.5, element.strokeWidth ?? 1.5)))
+                control.layer.addSublayer(shape)
+            }
+            if element.type == "text" {
+                control.setTitle(element.text ?? "", for: .normal)
+            } else if element.type == "image" {
+                control.backgroundColor = UIColor.tertiarySystemFill
+                control.setTitle(V3L("图片占位：未读取像素"), for: .normal)
+                control.titleLabel?.font = .preferredFont(forTextStyle: .caption1)
+            } else if !["rectangle", "ellipse", "diamond", "frame",
+                       "line", "arrow", "freedraw"].contains(element.type) {
+                control.setTitle(element.type, for: .normal)
+            }
+            if let angle = element.angle, angle.isFinite {
+                control.transform = CGAffineTransform(rotationAngle: CGFloat(angle))
+            }
+            control.addAction(UIAction { [weak self] _ in
+                self?.toggle(element.id)
+            }, for: .touchUpInside)
+            artboard.addSubview(control)
+            controls[element.id] = control
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(source:) required") }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? { artboard }
+
+    private func toggle(_ id: String) {
+        if !selectedIDs.insert(id).inserted { selectedIDs.remove(id) }
+        for (key, button) in controls {
+            let selected = selectedIDs.contains(key)
+            button.layer.borderColor = selected
+                ? ImpressV3Appearance.accent.cgColor : UIColor.clear.cgColor
+            button.layer.borderWidth = selected ? 3 : 0
+            button.accessibilityValue = selected ? V3L("已选择") : V3L("未选择")
+        }
+    }
+
+    private static func color(_ hex: String?) -> UIColor? {
+        guard let hex, hex.first == "#", hex.count == 7,
+              let value = Int(hex.dropFirst(), radix: 16) else { return nil }
+        return UIColor(red: CGFloat((value >> 16) & 255) / 255,
+                       green: CGFloat((value >> 8) & 255) / 255,
+                       blue: CGFloat(value & 255) / 255, alpha: 1)
+    }
+
+    private static func path(for element: ImpressExcalidrawElement,
+                             size: CGSize) -> UIBezierPath? {
+        let bounds = CGRect(origin: .zero, size: size)
+        switch element.type {
+        case "rectangle", "frame":
+            return UIBezierPath(roundedRect: bounds, cornerRadius: 4)
+        case "ellipse":
+            return UIBezierPath(ovalIn: bounds)
+        case "diamond":
+            let path = UIBezierPath()
+            path.move(to: CGPoint(x: bounds.midX, y: 0))
+            path.addLine(to: CGPoint(x: bounds.maxX, y: bounds.midY))
+            path.addLine(to: CGPoint(x: bounds.midX, y: bounds.maxY))
+            path.addLine(to: CGPoint(x: 0, y: bounds.midY))
+            path.close()
+            return path
+        case "line", "arrow", "freedraw":
+            guard let points = element.points, let first = points.first,
+                  first.count >= 2 else { return nil }
+            let path = UIBezierPath()
+            path.move(to: CGPoint(x: first[0], y: first[1]))
+            for point in points.dropFirst() where point.count >= 2 {
+                path.addLine(to: CGPoint(x: point[0], y: point[1]))
+            }
+            if element.type == "arrow", let last = points.last,
+               let before = points.dropLast().last, last.count >= 2,
+               before.count >= 2 {
+                let angle = atan2(last[1] - before[1], last[0] - before[0])
+                let end = CGPoint(x: last[0], y: last[1])
+                let radius = 10.0
+                path.move(to: CGPoint(x: end.x - cos(angle - .pi / 6) * radius,
+                                      y: end.y - sin(angle - .pi / 6) * radius))
+                path.addLine(to: end)
+                path.addLine(to: CGPoint(x: end.x - cos(angle + .pi / 6) * radius,
+                                        y: end.y - sin(angle + .pi / 6) * radius))
+            }
+            return path
+        default: return nil
+        }
+    }
+}
 
 // MARK: - V1.1 read-only JSON Canvas native spatial visualization
 

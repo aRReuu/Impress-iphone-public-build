@@ -69,6 +69,8 @@ enum ImpressChatNoteUploadGate {
             ? ImpressAISectionExtractor.sections(in: document.markdown) : []
         let canvas = format == .jsonCanvas
             ? try ImpressCanvasDocument.parse(document.sourceBytes) : nil
+        let drawing = (format == .excalidrawJSON || format == .excalidrawMarkdown)
+            ? try ImpressExcalidrawScene.parse(document.sourceBytes, format: format) : nil
         var bytes = 0
         for item in excerpts {
             bytes += item.excerpt.utf8.count
@@ -112,9 +114,20 @@ enum ImpressChatNoteUploadGate {
                       try selected.serializedJSON() == item.excerpt else {
                     throw ImVaultSyncFailure.conflict
                 }
-            case .excalidrawMarkdown, .excalidrawJSON, .unsupported:
-                // A readable drawing is not automatically text-model input.
-                // Explicit image consent and supported engines are separate.
+            case .excalidrawMarkdown, .excalidrawJSON:
+                guard let drawing, item.sourceFormat == "excalidraw-structure",
+                      item.sourceStartUTF8 == nil, item.sourceEndUTF8 == nil,
+                      let ids = item.selectedCanvasNodeIDs, !ids.isEmpty,
+                      Set(ids).count == ids.count else {
+                    throw ImVaultSyncFailure.conflict
+                }
+                let selection = try drawing.selection(ids: Set(ids))
+                guard selection.elements.count == ids.count,
+                      try selection.textContextJSON() == item.excerpt else {
+                    throw ImVaultSyncFailure.conflict
+                }
+                // Approved structure only: no binary pixels or embedded files.
+            case .unsupported:
                 throw ImVaultSyncFailure.conflict
             }
         }
