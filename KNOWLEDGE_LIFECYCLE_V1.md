@@ -60,3 +60,9 @@ V3 WCDB是卡片、内容历史、FSRS、Chat及提案/回执的现有数据权�
 同设备重启可核验私有快照，ZIP异机恢复不能假设快照存在；缺失/损坏即禁文件撤销，不以AI回复还原原字节。删除App可能失去私人快照，不能作为修复数据的默认操作。文件本地回读≠iCloud同步。
 `ImVaultGuardedWrite.productionWriteEnabled = false`；Debug仅明确授权独立Impress-Write-Test-Vault，fixture仅temporaryDirectory。iOS26+、iPhone13、三语言、主题/字号、STT、通知、卡型/导入/搜索等全部回归。只在指定开发分支按业务批次提交；不改main/私库/原版图标，不用Remote Desktop Commander，不自动收费。
 G1界面→G2格式/选材→G3 P0-A～D及真实UI闭环→G4同SHA自动化/IPA/证据；所有细则见SMOKE与设备QA。架构定稿不是实施或验收完成。
+
+## 2026-10-21 · V1.1 跨格式选材与中断核验更新
+
+Excalidraw 解码使用有界 LZ-String Base64（`compressed-json`），普通 JSON 与 Obsidian 封装沿用 `ImVaultFileIdentity`。图形元素选材预览保留真实 Vault ID、相对路径、源 SHA 与元素 ID；Chat 发送前重新读取真实源并重算结构摘要，只传经明确确认的文本/几何结构，不传图片像素。旧 `WCDBV3ChatContextReference` 继续兼容，以 `sourceFormat=excalidraw-structure` 区分新来源。显示图形不等于模型获得视觉输入能力。
+
+恢复策略新增 F03/F04 的 *只读人工判定*：保存 `applying` 意图后中断，会阻断执行按钮；人工核查已批准快照与 Vault SHA 或卡片内容版本，能证明已应用才补回执，未证明则保留未知或冲突；核查路径绝不自动重放。当前为局部实现，Mermaid/Markmap、18 步 UI E2E 和整组异常强杀测试仍未完成。
