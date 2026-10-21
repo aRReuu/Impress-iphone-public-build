@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F5B100000000000000000001 /* ImpressV11NavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B100000000000000000002 /* ImpressV11NavigationUITests.swift */; };
 		F3D300000000000000000010 /* ImpressSpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D300000000000000000020 /* ImpressSpeechService.swift */; };
 		F3D300000000000000000011 /* ImpressSpeechInputUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D300000000000000000021 /* ImpressSpeechInputUI.swift */; };
 		F3D300000000000000000012 /* ImpressSpeechSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D300000000000000000022 /* ImpressSpeechSettingsViewController.swift */; };
@@ -126,6 +127,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		F5B10000000000000000000D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3895E15B293B8C1A006939DA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3895E162293B8C1A006939DA;
+			remoteInfo = "aReuImpress-iPhone";
+		};
 		38B00CCA2D17DE68002898A3 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 3895E15B293B8C1A006939DA /* Project object */;
@@ -159,6 +167,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		F5B100000000000000000002 /* ImpressV11NavigationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV11NavigationUITests.swift; sourceTree = "<group>"; };
+		F5B100000000000000000003 /* aReuImpress-iPhoneUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "aReuImpress-iPhoneUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F3D300000000000000000020 /* ImpressSpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressSpeechService.swift; sourceTree = "<group>"; };
 		F3D300000000000000000021 /* ImpressSpeechInputUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressSpeechInputUI.swift; sourceTree = "<group>"; };
 		F3D300000000000000000022 /* ImpressSpeechSettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressSpeechSettingsViewController.swift; sourceTree = "<group>"; };
@@ -298,6 +308,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		F5B100000000000000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		3895E160293B8C1A006939DA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -320,6 +337,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		F5B100000000000000000004 /* aReuImpress-iPhoneUITests */ = {
+			isa = PBXGroup;
+			children = (
+				F5B100000000000000000002 /* ImpressV11NavigationUITests.swift */,
+			);
+			path = "aReuImpress-iPhoneUITests";
+			sourceTree = "<group>";
+		};
 		F4A100000000000000000020 /* ImAI */ = {
 			isa = PBXGroup;
 			children = (
@@ -551,6 +576,7 @@
 				386840E12E25638C007391BA /* README.md */,
 				3895E165293B8C1A006939DA /* aReuImpress-iPhone */,
 				38B00CC62D17DE68002898A3 /* aReuImpress-iPhoneTests */,
+				F5B100000000000000000004 /* aReuImpress-iPhoneUITests */,
 				3895E164293B8C1A006939DA /* Products */,
 				7A2B07BB83908043B911A193 /* Pods */,
 				0B30725240E39861B377A41E /* Frameworks */,
@@ -562,6 +588,7 @@
 			children = (
 				3895E163293B8C1A006939DA /* aReuImpress-iPhone.app */,
 				38B00CC52D17DE68002898A3 /* aReuImpress-iPhoneTests.xctest */,
+				F5B100000000000000000003 /* aReuImpress-iPhoneUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -950,6 +977,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		F5B100000000000000000008 /* aReuImpress-iPhoneUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F5B10000000000000000000B /* Build configuration list for PBXNativeTarget "aReuImpress-iPhoneUITests" */;
+			buildPhases = (
+				F5B100000000000000000005 /* Sources */,
+				F5B100000000000000000006 /* Frameworks */,
+				F5B100000000000000000007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F5B10000000000000000000C /* PBXTargetDependency */,
+			);
+			name = "aReuImpress-iPhoneUITests";
+			productName = "aReuImpress-iPhoneUITests";
+			productReference = F5B100000000000000000003 /* aReuImpress-iPhoneUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		3895E162293B8C1A006939DA /* aReuImpress-iPhone */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 3895E177293B8C1D006939DA /* Build configuration list for PBXNativeTarget "aReuImpress-iPhone" */;
@@ -1012,6 +1057,10 @@
 						CreatedOnToolsVersion = 12.0;
 						TestTargetID = 3895E162293B8C1A006939DA;
 					};
+					F5B100000000000000000008 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = 3895E162293B8C1A006939DA;
+					};
 				};
 			};
 			buildConfigurationList = 3895E15E293B8C1A006939DA /* Build configuration list for PBXProject "aReuImpress-iPhone" */;
@@ -1033,11 +1082,19 @@
 			targets = (
 				3895E162293B8C1A006939DA /* aReuImpress-iPhone */,
 				38B00CC42D17DE68002898A3 /* aReuImpress-iPhoneTests */,
+				F5B100000000000000000008 /* aReuImpress-iPhoneUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		F5B100000000000000000007 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		3895E161293B8C1A006939DA /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1105,6 +1162,14 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		F5B100000000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F5B100000000000000000001 /* ImpressV11NavigationUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		3895E15F293B8C1A006939DA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1225,6 +1290,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		F5B10000000000000000000C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3895E162293B8C1A006939DA /* aReuImpress-iPhone */;
+			targetProxy = F5B10000000000000000000D /* PBXContainerItemProxy */;
+		};
 		38B00CCB2D17DE68002898A3 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 3895E162293B8C1A006939DA /* aReuImpress-iPhone */;
@@ -1252,6 +1322,36 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		F5B100000000000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.areu.iphone.ImpressV11UITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = "aReuImpress-iPhone";
+			};
+			name = Debug;
+		};
+		F5B10000000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.areu.iphone.ImpressV11UITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = "aReuImpress-iPhone";
+			};
+			name = Release;
+		};
 		3895E175293B8C1D006939DA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1501,6 +1601,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		F5B10000000000000000000B /* Build configuration list for PBXNativeTarget "aReuImpress-iPhoneUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F5B100000000000000000009 /* Debug */,
+				F5B10000000000000000000A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		3895E15E293B8C1A006939DA /* Build configuration list for PBXProject "aReuImpress-iPhone" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

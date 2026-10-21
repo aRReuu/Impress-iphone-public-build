@@ -52,6 +52,16 @@
                ReferencedContainer = "container:aReuImpress-iPhone.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "F5B100000000000000000008"
+               BuildableName = "aReuImpress-iPhoneUITests.xctest"
+               BlueprintName = "aReuImpress-iPhoneUITests"
+               ReferencedContainer = "container:aReuImpress-iPhone.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
