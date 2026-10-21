@@ -34,11 +34,24 @@ public struct CalibrationWidgetSnapshot: Codable, Equatable, Sendable {
         var seen = Set<String>()
         for day in days {
             let parts = day.dayID.split(separator: "-", omittingEmptySubsequences: false)
+            // Validate the actual Gregorian civil date, not merely yyyy-mm-dd syntax.
+            // Corrupted shared cache input must fail closed before it reaches a Widget.
             guard parts.count == 3, parts[0].count == 4, parts[1].count == 2,
                   parts[2].count == 2, day.dayID.utf8.allSatisfy({
                       $0 == 45 || (48...57).contains($0)
-                  }), seen.insert(day.dayID).inserted,
+                  }), let year = Int(parts[0]), let month = Int(parts[1]),
+                  let dayOfMonth = Int(parts[2]),
+                  (1...9999).contains(year), (1...12).contains(month),
+                  (1...31).contains(dayOfMonth),
+                  seen.insert(day.dayID).inserted,
                   (0...5).contains(day.assessedCount) else { return false }
+            var gregorian = Calendar(identifier: .gregorian)
+            gregorian.timeZone = TimeZone(secondsFromGMT: 0)!
+            guard let date = gregorian.date(from: DateComponents(
+                      year: year, month: month, day: dayOfMonth)) else { return false }
+            let actual = gregorian.dateComponents([.year, .month, .day], from: date)
+            guard actual.year == year, actual.month == month,
+                  actual.day == dayOfMonth else { return false }
             switch day.state {
             case .unrecorded:
                 guard day.assessedCount == 0, day.netScore == nil else { return false }

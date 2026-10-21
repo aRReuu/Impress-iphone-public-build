@@ -128,4 +128,37 @@ final class CalibrationWidgetProjectionTests: XCTestCase {
         XCTAssertEqual(snapshot.days.first?.assessedCount, 1)
         XCTAssertNil(snapshot.days.first?.netScore)
     }
+    func testDSTBoundariesUseConsecutiveCivilDays() throws {
+        var local = Calendar(identifier: .gregorian)
+        local.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        let now = try XCTUnwrap(local.date(from: DateComponents(
+            year: 2026, month: 3, day: 9, hour: 12)))
+        let yesterday = try entry("2026-03-08", allExcused: true, mood: true)
+        let snapshot = CalibrationWidgetProjection.snapshot(
+            from: [yesterday], at: now, calendar: local)
+        let overview = try XCTUnwrap(CalibrationWidgetProjection.overview(
+            from: snapshot, at: now, calendar: local))
+        XCTAssertEqual(overview.weekDays.map(\.dayID), [
+            "2026-03-03", "2026-03-04", "2026-03-05", "2026-03-06",
+            "2026-03-07", "2026-03-08", "2026-03-09"
+        ])
+        XCTAssertEqual(CalibrationWidgetOverview.finalizedDays(overview.weekDays), 1)
+    }
+
+    func testInvalidCivilDateInSharedSnapshotSafelyRejects() throws {
+        let now = date(2026, 10, 21)
+        let base = CalibrationWidgetProjection.snapshot(from: [], at: now, calendar: calendar)
+        let fake = CalibrationWidgetDay(
+            dayID: "2026-02-30", assessedCount: 5,
+            state: .finalized, netScore: 1)
+        let malformed = CalibrationWidgetSnapshot(
+            schemaVersion: base.schemaVersion, generatedAt: base.generatedAt,
+            timeZoneID: base.timeZoneID, calendarID: base.calendarID,
+            days: [fake])
+        XCTAssertFalse(malformed.isValid)
+        XCTAssertNil(CalibrationWidgetProjection.overview(
+            from: malformed, at: now, calendar: calendar))
+    }
+
+
 }

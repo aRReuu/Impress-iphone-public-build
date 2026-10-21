@@ -429,6 +429,35 @@ final class ImpressV11NavigationUITests: XCTestCase {
         XCTAssertTrue(tabs.waitForExistence(timeout: 30))
         tabs.buttons.element(boundBy: 1).tap()
         XCTAssertTrue(folder.waitForExistence(timeout: 25))
+        folder.tap()
+        let reopened = app.cells.matching(identifier: "impress.notes.file-row")
+            .matching(NSPredicate(format: "label == %@", "Impress_E2E_Proof")).firstMatch
+        XCTAssertTrue(reopened.waitForExistence(timeout: 20))
+        reopened.tap()
+        let persistedSource = app.staticTexts["impress.notes.source-path"]
+        XCTAssertTrue(persistedSource.waitForExistence(timeout: 15))
+        // Verify the actual QA Markdown byte change after a true process boundary,
+        // not merely that the folder shell can open again.
+        app.buttons["更多笔记操作"].tap()
+        app.buttons["查看 Markdown 源码"].tap()
+        let savedNote = app.textViews.matching(
+            NSPredicate(format: "value CONTAINS %@", "经人工核查")).firstMatch
+        XCTAssertTrue(savedNote.waitForExistence(timeout: 15),
+            "Approved source edits must survive cold launch in the same disposable Vault")
+        // The real session (and its receipt history) must remain discoverable;
+        // opening the source is not permission to upload another message.
+        app.buttons["impress.notes.ai-discussion"].tap()
+        let features = app.buttons["impress.ai.chat.features"]
+        XCTAssertTrue(features.waitForExistence(timeout: 15))
+        features.tap()
+        let history = app.cells["impress.ai.chat.feature.history"]
+        XCTAssertTrue(history.waitForExistence(timeout: 15))
+        history.tap()
+        let sessions = app.tables["impress.ai.chat.history-list"]
+        XCTAssertTrue(sessions.waitForExistence(timeout: 15))
+        let persistedSession = sessions.cells["impress.ai.chat.history-row"].firstMatch
+        XCTAssertTrue(persistedSession.waitForExistence(timeout: 20),
+            "Completed discussion must remain in persisted local history")
     }
 
     private func tapVisible(_ element: XCUIElement, in app: XCUIApplication) {
