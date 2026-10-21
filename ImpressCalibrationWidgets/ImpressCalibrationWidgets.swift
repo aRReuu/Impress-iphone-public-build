@@ -169,9 +169,9 @@ private struct CalibrationWidgetView: View {
         switch entry.period {
         case .week:
             let today = overview.weekDays.last
-            Text(today?.state == .finalized
-                 ? WidgetWords.completed
-                 : "\(WidgetWords.today) \(today?.assessedCount ?? 0)/5")
+            // Coverage stays primary even on a fully assessed or all-excused day.
+            // Replacing 5/5 with a generic "assessed" label hides the B metric.
+            Text("\(WidgetWords.today) \(today?.assessedCount ?? 0)/5")
                 .font(.system(size: small ? 18 : 22, weight: .semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
