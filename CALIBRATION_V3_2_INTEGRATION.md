@@ -37,3 +37,7 @@
 保留`CalibrationScoreCoreTests`、`CalibrationCheckInCoreTests`、`ImpressCalibrationIntegrationTests`及WCDB备份回归；把旧“三Tab”导航断言改为“四Tab顺序/已有校准数据/通知正确路由”，不能删除评分/快照/备份测试。
 新增计划`testFourTabsOpenExistingCalibrationWithoutRewritingScores`，当前NOT_RUN。在相同fixture下验证入口前后checkins字节/得分/目标快照/FSRS不因路由改变。iPhone13/三语言/字号/主题/通知/Files恢复按设备QA单独认证。
 本轮仅定稿，不宣称新Tab已实现。后续同最终SHA完整CI/IPA证据；不改main/私库，不改原版AppIcon。旧缺1024图标/签名等门禁如实保留，不以自行生成图标绕过。校准新公式/阅读项迁移/新提醒继续DEFERRED，不阻塞已确认入口和主知识闭环。
+
+## 2026-10-21 · 四 Tab 原生 UI 回归补记
+
+主工程新建 `aReuImpress-iPhoneUITests`，以真实 App 启动、逐一点击四 Tab、截图和冷启动验证一级路由基础。这不会创建第二套校准器、修改既有历史评分或重新引入首页周图。校准器通知/深链与数据完整性仍需独立专项回归；未运行真实设备前不记 DEVICE_PASS，十八步双向知识 E2E 仍为 NOT_RUN。
