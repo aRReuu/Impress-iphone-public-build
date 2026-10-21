@@ -54,3 +54,9 @@ Chat无AI讨论标题/模型说明/常驻隐私段落；功能列表/新建顺�
 
 每个场景记录Requirement/子项/ACCEPT、精确源码SHA、Actions Run、安装包SHA-256、Debug或Release、设备/系统/语言/主题/字号、测试文件/来源身份、操作步骤、实际结果及证据、失败/未执行/外部原因。不记录真实Key或私人正文。
 真机/真实推理/Files/iCloud与模拟器/Core/XCTest分层；当前均未因定稿获得PASS。正式生产Vault仍锁定，不把后续单独授权评估当本轮发布前必须擅自执行的任务。
+
+## 2026-10-21 · 复合格式与设备验证边界
+
+Excalidraw 仅从当前授权文档读取合法受限数据，外部图片、SVG、脚本和插件不执行；内嵌 PNG/JPEG 按尺寸/字节数上限读取，Chat 只收到经审查的结构范围。中断应用核验只回读批准快照和精确 SHA / cardID 内容版本，不重复文件或 WCDB 写入。测试写权限仍严格限定临时 Fixture 或明确授权的独立 Debug QA Vault；`ImVaultGuardedWrite.productionWriteEnabled = false` 永久不变。
+
+四 Tab/冷启动 XCUITest 不证明真实 Files/iCloud、设备 Keychain、签名、STT、提供商 HTTP 或 iPhone13 UI 性能。上述继续标记 DEVICE_BLOCKED/NOT_RUN，待具备明确的设备授权后独立验收；本轮无真实日常 Vault 文件写入。
