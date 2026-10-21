@@ -396,6 +396,11 @@ struct ImVaultSyncCoreTests {
         #expect(check(revision: 5, question: "Another edit", answer: "Improved") == .conflict)
         #expect(check(revision: nil, question: nil, answer: nil) == nil)
         #expect(ImDuplexInterruptedRecovery.cardStatus(
+            currentContentRevision: 0, expectedContentRevision: Int.max,
+            baseQuestion: "Old", baseAnswer: nil,
+            proposedQuestion: "New", proposedAnswer: nil,
+            currentQuestion: "New", currentAnswer: nil) == nil)
+        #expect(ImDuplexInterruptedRecovery.cardStatus(
             currentContentRevision: 7, expectedContentRevision: 7,
             baseQuestion: "Same", baseAnswer: nil,
             proposedQuestion: "Same", proposedAnswer: nil,
