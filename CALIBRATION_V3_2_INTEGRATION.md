@@ -49,3 +49,8 @@
 ## 8. 2026-10-21 · Widget 集成进度证据
 
 此前本文件“本次仅改文档/尚无 Widget Target”的话属于 **2026-10-21 定稿当时**的历史状态。现以 `e6b77b2` / Actions Run `39586231838` 为新的可重复代码证据：Widget Extension、周/月/年三独立配置、Small/Medium 六套布局、最小隐私快照、主 App 校准保存后投影、Deep Link 路由代码已合入，Portable Core 99、原生 XCTest 185、XCUITest 7、Simulator Debug/Release、iPhoneOS ARM64 与内含 Widget.appex 的 unsigned IPA 全部构建测试 PASS。**但真机桌面、侧载 App Group 签名、完整 W12 深链及设备同步尚未验收**。CAL-01～15 新计分/提醒仍 DEFERRED。
+
+
+## 9. 2026-10-21 · 同源 Cartesian 图表实际代码（新提交，完整 CI 待验）
+
+`35dd7a0` 在唯一产品稿替换先前状态点／矩阵展示为同源二维折线图；`7c28b74` 抽取 App 原 `ImpressCalibrationTrendChart.draw` 内 CoreGraphics 几何为 `CalibrationCartesianTrendRenderer.draw`，原 App 实际调用同一绘图函数，WidgetKit 经 `CalibrationCartesianTrendRenderer.image` 绘制后嵌入 SwiftUI。`CalibrationWidgetProjection.cartesianPlot` 只使用既有只读快照的有效净分，周/月7日均线、年3月平滑依旧按原校准图口径，不对部分/无得分/全豁免虚构0；行为评估覆盖数据仍置于主标题。已添加纯 Core 缺失/正负分/月均/异常时区测试，**此处只登记 CODE_SUBMITTED；最终 CI/Widget 六尺寸设备截图/真实侧载未确认前不得标 TEST_PASS/DEVICE_PASS**。

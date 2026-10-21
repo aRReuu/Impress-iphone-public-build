@@ -180,3 +180,8 @@ Excalidraw compressed-json/有限 PNG/JPEG 的源码和测试已提交，但全�
 Run `39586231838` / SHA `e6b77b2430c9f3ca6568d4471c3a1e327cfd054a`：**Portable Core 99 PASS / XCTest 185 PASS / XCUITest 7 PASS / Debug+Release Simulator PASS / unsigned iPhoneOS ARM64 与 Widget.appex 二进制、IPA ZIP/哈希 PASS**。W07/W08/W11 的纯状态/日期/隐私子测试获得 **CORE_PASS（仅 Core 证据）**；W14 的 unsigned 打包子步骤 **BUILD_PASS**，不等于真机可签名运行；W01～W06 原生 Widget 视觉/添加、W09 签名授权、W10 设备重启恢复、W12 真实系统路由及 W15 真机隐私 **NOT_RUN**。原 18 步 UI E2E 目前的连续测试覆盖双目标建议/审批/重启但不覆盖全部中断回滚和手动撤销，仍是 **PARTIAL_E2E_PASS**，不得标注完整 E2E_PASS。见 [Actions Run #39586231838](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39586231838)。
 
 产物 `Impress-V3.1-P0P2-e6b77b2430c9-unsigned.ipa`，SHA256 `b7b1174a969103b1ec1dbf16b29aa8f7cf52b8d54a7b10d1146fcbbafba90b57`。它是 **UNSIGNED**，必须独立合法签名并验证 Widget Extension 与 `group.areu.impress` 相同有效 entitlement 才能宣称设备可用。
+
+
+## 2026-10-21 · Chat 历史实际完成度复核
+
+原执行矩阵的 `CHAT-03.a`、`CHAT-03.b` 写成 NOT_STARTED 不准确：`ImpressChatSessionHistoryViewController.buildHits(query:)` 已进行本地标题/草稿/来源/全文消息筛选并携带消息 ID；列表原生侧滑经确认后使用 `ReviewWCDBRepository.deleteChatSession`，删除会话的原消息与草稿清除、已执行回执保留、进行中状态拒删，CAS 防异步复活。`testHistorySearchRestoresMatchedSessionContext` 和 `testDeleteConversationPreservesAppliedReceiptsAndDoesNotResurrect` 已在 `355656de` / Run #100 的 185 项原生 XCTest 中通过。**更新为 CODE_DONE + NATIVE_TEST_PASS（针对这两个子项），但 ACCEPT-06 的真实 UI/冷启动/设备与异常并发边界仍待逐步补证；不得冒充全项 E2E_PASS。**

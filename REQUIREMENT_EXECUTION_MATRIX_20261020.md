@@ -156,8 +156,8 @@ B-* 为**已有证据定位**（不能仅凭名称标 PASS）；P-* 为**待实�
 | UI-01.a | UI-01/UI-03/UI-04 | 新增页保存为统一导航样式的 SF Symbols checkmark；保校验/防重复/VoiceOver | CODE_DONE；原生 XCTest PASS（e6b77b2），视觉/真机待验 | P-R、ACCEPT-04，原生截图待验 |
 | NAV-05.w | NAV-05/UI-03/UI-04 | WidgetKit 周近7、月近30、年本年 × Small/Medium 六视图；记录状态 B 方案；三时段深链 | 旧状态点/矩阵版本 CODE_DONE；用户新指定同源二维图表布局 IN_PROGRESS，完成 Core 共用绘制、六布局/视觉验收后才能标记代码完成 | P-W；W01～W06、W12 深链待实测、W14 unsigned 构建 PASS |
 | SAFE-08.w | SAFE-08/SAFE-07/NAV-05 | 最小只读 App Group 统计快照、Timeline/WidgetCenter、跨日/恢复、签名与隐私 | CODE_DONE（已有最小快照/Portable Core TEST_PASS；新增同口径绘图投影与负向验证待补），签名/真实 App Group 与恢复设备待验 | P-W；W07/W08/W11 Core 已验证、W09/W10/W15 需设备及负向证据 |
-| CHAT-03.a | CHAT-03 | 全本地会话搜索、正文命中定位、跨源上下文恢复 | NOT_STARTED | P-C |
-| CHAT-03.b | CHAT-03/10, SAFE-07 | 明确删除、未执行取消、已执行回执保留可达、防异步复活 | NOT_STARTED | P-C/B-B |
+| CHAT-03.a | CHAT-03 | 全本地会话搜索、正文命中定位、跨源上下文恢复 | CODE_DONE；历史筛选/正文命中ID/跨源激活已有实现，原生 XCTest testHistorySearchRestoresMatchedSessionContext 已在 Run #100 PASS；完整真实 UI/设备待验 | P-C，ACCEPT-06 |
+| CHAT-03.b | CHAT-03/10, SAFE-07 | 明确删除、未执行取消、已执行回执保留可达、防异步复活 | CODE_DONE；WCDB tombstone/执行回执保全/竞态阻断与滑动确认已实现，原生 XCTest testDeleteConversationPreservesAppliedReceiptsAndDoesNotResurrect 在 Run #100 PASS；真实 UI/备份设备待验 | P-C/B-B，ACCEPT-06/10 |
 | CHAT-06.a | CHAT-06, LOOP-03 | 真实层级/片段范围、父子去重、边界结构、源码映射 | IN_PROGRESS | P-M/B-L |
 | CHAT-06.b | CHAT-06/08, SAFE-06 | 嵌入依赖清单、循环/权限/预算、选材与发送同范围 | NOT_STARTED | P-M |
 | CHAT-06.c | CHAT-06, UI-03 | Excalidraw/Obsidian封装、资源、范围与版本化预览 | NOT_STARTED | P-V |
