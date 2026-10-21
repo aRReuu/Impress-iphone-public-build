@@ -93,7 +93,7 @@ private struct SharedCartesianChart: View {
                 let labels = period == .year
                     ? plot.tickLabels.map {
                         $0.replacingOccurrences(
-                            of: "月", with: WidgetWords.tr("月", "月", "m"))
+                            of: "月", with: WidgetWords.tr("月", "月", "Month"))
                     } : plot.tickLabels
                 Image(uiImage: CalibrationCartesianTrendRenderer.image(
                     size: geometry.size, values: plot.values,
@@ -159,7 +159,7 @@ private struct CalibrationWidgetView: View {
         .padding(small ? 9 : 13)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .containerBackground(for: .widget) {
-            Color(uiColor: .secondarySystemGroupedBackground)
+            Color(uiColor: .systemGroupedBackground)
         }
         .widgetURL(URL(string: "impress://calibration/\(entry.period.rawValue)"))
     }

@@ -439,10 +439,7 @@ private final class ImpressCalibrationTrendChart: UIView {
         CalibrationCartesianTrendRenderer.draw(
             in: rect, context: context,
             values: values, smooth: smooth, tickLabels: tickLabels,
-            palette: CalibrationCartesianPalette(
-                axis: ImpressV3Appearance.divider,
-                secondary: ImpressV3Appearance.secondaryText,
-                accent: ImpressV3Appearance.accent),
+            palette: .semantic,
             font: ImpressV3Appearance.Typography.micro,
             traitCollection: traitCollection)
     }

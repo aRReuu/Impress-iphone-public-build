@@ -436,11 +436,12 @@ extension ImVaultReadOnlyProbe {
     // Each callback owns exactly one scoped-access lease, then releases it.
     func withAuthorizedRoot<T>(
         _ operation: @escaping (URL, String) throws -> T,
+        qos: DispatchQoS.QoSClass = .utility,
         completion: @escaping (Result<T, Error>) -> Void
     ) {
         #if DEBUG
         if let id = ImpressV11UITestFixture.vaultID {
-            DispatchQueue.global(qos: .utility).async {
+            DispatchQueue.global(qos: qos).async {
                 let outcome: Result<T, Error> = Result {
                     try operation(ImpressV11UITestFixture.root(), id)
                 }
@@ -453,7 +454,7 @@ extension ImVaultReadOnlyProbe {
               let id = UserDefaults.standard.string(forKey: Self.vaultIDKey) else {
             completion(.failure(ImVaultReadOnlyError.missingBookmark)); return
         }
-        DispatchQueue.global(qos: .utility).async {
+        DispatchQueue.global(qos: qos).async {
             let result: Result<T, Error> = Result {
                 var stale = false
                 let root = try URL(resolvingBookmarkData: bookmark, options: [],
@@ -505,7 +506,7 @@ final class ImVaultReadSync {
         ImVaultReadOnlyProbe.shared.withAuthorizedRoot({ root, vaultID in
             guard identity.vaultID == vaultID else { throw ImVaultSyncFailure.wrongVault }
             return try Self.load(root: root, identity: identity)
-        }, completion: completion)
+        }, qos: .userInitiated, completion: completion)
     }
 
     static func enforceContainment(_ file: URL, root: URL) throws {
@@ -1029,7 +1030,7 @@ extension ImVaultReadSync {
             }
             return try Self.safeMarkdownProjection(root: root,
                 identity: document.identity, source: document.markdown)
-        }, completion: completion)
+        }, qos: .userInitiated, completion: completion)
     }
 
     static func safeMarkdownProjection(root: URL,

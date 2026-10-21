@@ -186,4 +186,51 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
             Data("damaged".utf8)))
     }
 
+    /// Both presentation hosts invoke exactly the same CoreGraphics painter.
+    /// Snapshot parity is proven here; SpringBoard placement and device scale
+    /// still require a separate WidgetKit/physical-device acceptance record.
+    @MainActor
+    func testCartesianRendererHasIdenticalUIKitAndWidgetImagePaths() throws {
+        let size = CGSize(width: 168, height: 94)
+        let values: [Double?] = [nil, 2, nil, -1, nil, 0, 1]
+        let average: [Double?] = [nil, 2, nil, 0.5, nil, 0.3, 0.5]
+        let dates = ["10-15", "10-16", "10-17", "10-18", "10-19", "10-20", "10-21"]
+        let font = ImpressV3Appearance.Typography.micro
+        let palette = CalibrationCartesianPalette(
+            axis: ImpressV3Appearance.divider,
+            secondary: ImpressV3Appearance.secondaryText,
+            accent: ImpressV3Appearance.accent)
+        for style in [UIUserInterfaceStyle.light, .dark] {
+            let traits = UITraitCollection(userInterfaceStyle: style)
+            let widgetBitmap = CalibrationCartesianTrendRenderer.image(
+                size: size, values: values, smooth: average,
+                tickLabels: dates, palette: palette, font: font,
+                traitCollection: traits)
+            let nativeBitmap = UIGraphicsImageRenderer(size: size).image { canvas in
+                CalibrationCartesianTrendRenderer.draw(
+                    in: CGRect(origin: .zero, size: size),
+                    context: canvas.cgContext,
+                    values: values, smooth: average, tickLabels: dates,
+                    palette: palette, font: font, traitCollection: traits)
+            }
+            XCTAssertEqual(widgetBitmap.size, nativeBitmap.size)
+            XCTAssertEqual(widgetBitmap.pngData(), nativeBitmap.pngData(),
+                "Identical render inputs must have identical pixel geometry")
+            let emptyImage = CalibrationCartesianTrendRenderer.image(
+                size: size, values: Array(repeating: nil, count: 7),
+                smooth: Array(repeating: nil, count: 7),
+                tickLabels: dates, palette: palette, font: font,
+                traitCollection: traits)
+            XCTAssertNotEqual(widgetBitmap.pngData(), emptyImage.pngData(),
+                "A real scored point must be visible; missing points stay empty")
+            let proof = XCTAttachment(image: widgetBitmap)
+            proof.name = style == .light
+                ? "Calibration-Shared-Cartesian-Light-168x94"
+                : "Calibration-Shared-Cartesian-Dark-168x94"
+            proof.lifetime = .keepAlways
+            add(proof)
+        }
+    }
+
+
 }

@@ -147,6 +147,9 @@ class ImpressNoteListTableViewController: ImBaseViewController
     private var showingPartialIndex = false
     private var externalReadGate = ImVaultAsyncReadGate()
     private var externalError: String?
+    // One visible, bounded source navigation at a time. The source content is
+    // still read ONLY through the scoped NSFileCoordinator gate.
+    private var pendingExternalSourceOpen: UUID?
 
     private var hasMoreExternalRows: Bool {
         visibleExternalRows.count < totalExternalRowCount
@@ -680,21 +683,62 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
                 return
             }
             guard let item = row.note else { return }
+            // A delayed File Provider read must never load a different note,
+            // and the user must see bounded progress rather than a silent tap.
+            guard pendingExternalSourceOpen == nil else { return }
+            let request = UUID()
+            pendingExternalSourceOpen = request
+            navigationItem.prompt = V3L("正在核实原始笔记…")
+            #if DEBUG
+            if ImpressV11UITestFixture.enabled {
+                NSLog("IMPRESS_V11_NOTE_OPEN_REQUESTED")
+            }
+            #endif
             ImVaultReadSync.shared.read(item.identity) { [weak self] result in
-                guard let self = self,
-                      self.externalMode,
+                guard let self, self.pendingExternalSourceOpen == request else { return }
+                self.pendingExternalSourceOpen = nil
+                self.navigationItem.prompt = nil
+                guard self.externalMode,
                       ImVaultReadOnlyProbe.shared.authorizedVaultID ==
                           item.identity.vaultID else { return }
                 switch result {
                 case let .success(source):
+                    #if DEBUG
+                    if ImpressV11UITestFixture.enabled {
+                        NSLog("IMPRESS_V11_NOTE_OPEN_VERIFIED")
+                    }
+                    #endif
                     self.navigationController?.pushViewController(
                         ImVaultDocumentController(document: source), animated: true)
                 case let .failure(error):
+                    #if DEBUG
+                    if ImpressV11UITestFixture.enabled {
+                        NSLog("IMPRESS_V11_NOTE_OPEN_REJECTED")
+                    }
+                    #endif
                     let alert = UIAlertController(title: V3L("无法读取源笔记"),
                         message: error.localizedDescription, preferredStyle: .alert)
                     alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
                     self.present(alert, animated: true)
                 }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 45) { [weak self] in
+                guard let self, self.pendingExternalSourceOpen == request else { return }
+                // A stalled File Provider operation cannot authorize cached
+                // text. Reject this request; any later callback is ignored.
+                self.pendingExternalSourceOpen = nil
+                self.navigationItem.prompt = nil
+                #if DEBUG
+                if ImpressV11UITestFixture.enabled {
+                    NSLog("IMPRESS_V11_NOTE_OPEN_TIMEOUT")
+                }
+                #endif
+                guard self.view.window != nil else { return }
+                let alert = UIAlertController(title: V3L("源笔记读取超时"),
+                    message: V3L("来源文件暂未完成授权读取，请稍后重试。未修改任何原始内容。"),
+                    preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+                self.present(alert, animated: true)
             }
             return
         }

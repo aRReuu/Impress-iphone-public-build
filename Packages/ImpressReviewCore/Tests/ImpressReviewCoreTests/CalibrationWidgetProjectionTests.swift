@@ -226,4 +226,55 @@ final class CalibrationWidgetProjectionTests: XCTestCase {
             from: snapshot, period: .week, at: now, calendar: invalidZone))
     }
 
+    func testCartesianMatchesExactAppScoreCoreDailyAndMonthlySeries() throws {
+        let now = date(2026, 10, 21)
+        var records = [CalibrationDayCheckIn]()
+        var october19 = try entry("2026-10-19", allExcused: true, mood: true)
+        try october19.setOutcome(.completed, for: .sleep)
+        try october19.setManualAdjustment(positive: true, reason: "synthetic test")
+        records.append(october19)
+        let october20 = try entry("2026-10-20", outcome: .missed)
+        records.append(october20)
+        var october21 = try entry("2026-10-21", allExcused: true, mood: true)
+        try october21.setOutcome(.missed, for: .exercise)
+        records.append(october21)
+        var september = try entry("2026-09-12", allExcused: true, mood: true)
+        try september.setOutcome(.completed, for: .custom)
+        records.append(september)
+        let scoreRecords = records.map(\.rawRecord)
+        let snapshot = CalibrationWidgetProjection.snapshot(
+            from: records, at: now, calendar: calendar)
+
+        let week = try XCTUnwrap(CalibrationWidgetProjection.cartesianPlot(
+            from: snapshot, period: .week, at: now, calendar: calendar))
+        let coreWeek = try CalibrationScoreCore.dailyTrend(
+            scoreRecords, from: "2026-10-15", through: "2026-10-21")
+        XCTAssertEqual(week.values, coreWeek.map { $0.netScore.map(Double.init) })
+        XCTAssertEqual(week.smooth, coreWeek.map(\.trailingSevenDayMean),
+            "The widget must retain the App's exact gap-aware seven-day mean")
+
+        let month = try XCTUnwrap(CalibrationWidgetProjection.cartesianPlot(
+            from: snapshot, period: .month, at: now, calendar: calendar))
+        let coreMonth = try CalibrationScoreCore.dailyTrend(
+            scoreRecords, from: "2026-09-22", through: "2026-10-21")
+        XCTAssertEqual(month.values, coreMonth.map { $0.netScore.map(Double.init) })
+        XCTAssertEqual(month.smooth, coreMonth.map(\.trailingSevenDayMean))
+
+        let year = try XCTUnwrap(CalibrationWidgetProjection.cartesianPlot(
+            from: snapshot, period: .year, at: now, calendar: calendar))
+        let coreYear = try CalibrationScoreCore.monthlyTrend(scoreRecords, year: 2026)
+        XCTAssertEqual(year.values, coreYear.map(\.averageDailyScore))
+        let originalAppSmoothing: [Double?] = year.values.indices.map { index in
+            guard year.values[index] != nil else { return nil }
+            let recent = year.values[max(0, index - 2)...index].compactMap { $0 }
+            return recent.reduce(0, +) / Double(recent.count)
+        }
+        XCTAssertEqual(year.smooth, originalAppSmoothing)
+        XCTAssertEqual(CalibrationWidgetOverview.assessedDays(
+            try XCTUnwrap(CalibrationWidgetProjection.overview(
+                from: snapshot, at: now, calendar: calendar)).weekDays), 3,
+            "B scheme assessment coverage must remain separate from scored points")
+    }
+
+
 }

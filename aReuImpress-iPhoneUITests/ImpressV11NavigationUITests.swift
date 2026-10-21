@@ -329,8 +329,14 @@ final class ImpressV11NavigationUITests: XCTestCase {
             .matching(NSPredicate(format: "label == %@", "Impress_E2E_Proof")).firstMatch
         XCTAssertTrue(note.waitForExistence(timeout: 20))
         note.tap()
-        XCTAssertTrue(app.staticTexts["impress.notes.source-path"]
-            .waitForExistence(timeout: 15))
+        // A cold Xcode 27 simulator can stall coordinated source reads while
+        // its full-Vault scan and accessibility bootstrap settle. Keep the
+        // actual source/identity assertion (never skip or inject a document).
+        let actualSourcePath = app.staticTexts["impress.notes.source-path"]
+        XCTAssertTrue(actualSourcePath.waitForExistence(timeout: 40),
+            "The real selected note must open through its authorized Vault reader")
+        XCTAssertTrue(actualSourcePath.label.contains("Study/Impress_E2E_Proof.md"),
+            "A same-title or stale cached note must never satisfy the E2E source gate")
 
         // Real chapter picker -> review a deterministic AI candidate, reject
         // the second candidate, and explicitly commit one original card.
