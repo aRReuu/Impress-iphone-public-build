@@ -2270,9 +2270,9 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
               let source = CGImageSourceCreateWithData(bytes as CFData,
                   [kCGImageSourceShouldCache: false] as CFDictionary),
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
-                  as? [CFString: Any],
-              let pixelWidth = properties[kCGImagePropertyPixelWidth] as? Int,
-              let pixelHeight = properties[kCGImagePropertyPixelHeight] as? Int,
+                  as NSDictionary?,
+              let pixelWidth = properties.object(forKey: kCGImagePropertyPixelWidth) as? Int,
+              let pixelHeight = properties.object(forKey: kCGImagePropertyPixelHeight) as? Int,
               pixelWidth > 0, pixelHeight > 0,
               pixelWidth <= 10_000, pixelHeight <= 10_000,
               pixelWidth * pixelHeight <= 16_000_000 else { return nil }
