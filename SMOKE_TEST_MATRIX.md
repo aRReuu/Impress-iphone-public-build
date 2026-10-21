@@ -234,3 +234,9 @@ Run `39586231838` / SHA `e6b77b2430c9f3ca6568d4471c3a1e327cfd054a`：**Portable 
 | U12 | 周/月/年 × Small/Medium 六布局真实 iPhone13 SpringBoard、Widget 装配、深链、AppGroup provisioning/签名与通知路由；未真机验证不得升级为 PASS |
 
 以上条目与原 ACCEPT-01–12、W01–W15 同步，区别 CODE_DONE/NATIVE_TEST_PASS/XCUITEST_PASS/DEVICE_BLOCKED；本次增量新用例不得继承旧版全绿 Run。
+
+### 2026-10-22 · GitHub 同 SHA 稳定基线与新增专项 UI 门禁
+
+Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39648988015) / SHA `738a333d8a6ccd656117e0316bac6396ccf9f262` 已确认所有 Jobs SUCCESS：Native XCTest **191/191**、真实进程 XCUITest **8/8**，Portable Core、Debug/Release Simulator、unsigned arm64 + Widget Extension、ZIP 自检通过。IPA `Impress-V3.1-P0P2-738a333d8a6c-unsigned.ipa`（7,467,517 bytes，SHA256 `0323cf20e93104272f8cc5e72b32b0949878c0938b99d70aa4797f0bc5b6d628`）。**这是有效的自动化成功基线，但不是 U01–U12、18 步、F01–F13、真机 Widget 的整体验收成功。**
+
+从该成功基线增量增加 `testNativeVaultOutlineFoldAndDocumentTitleWithoutPathBanner`：真实 UIKit 进入测试 Vault → 折叠状态核验 → 系统展开 → 子文件出现 → 折叠移除子文件 → 重新展开 → 阅读器显示实际文件标题而无完整路径栏 → 原生屏幕证据。新测试只有取得本次新 SHA 对应工作流通过才可记为 XCUITEST_PASS。

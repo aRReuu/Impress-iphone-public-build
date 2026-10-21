@@ -48,6 +48,56 @@ final class ImpressV11NavigationUITests: XCTestCase {
         }
     }
 
+    /// U06/U07: actual visible folder disclosure, collapsed descendants and
+    /// document-title projection. This is a real UIKit interaction in the
+    /// disposable scoped Vault, not an inspector shortcut or service-only test.
+    func testNativeVaultOutlineFoldAndDocumentTitleWithoutPathBanner() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-ImpressV11SyntheticVault",
+                                "-AppleLanguages", "(zh-Hans)"]
+        app.launchEnvironment["IMPRESS_V11_FIXTURE_ID"] = UUID().uuidString
+        app.launch()
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 30))
+        app.tabBars.buttons.element(boundBy: 1).tap()
+        let folder = app.cells.matching(identifier: "impress.notes.folder-row")
+            .matching(NSPredicate(format: "label == %@", "Study")).firstMatch
+        let graph = app.cells.matching(identifier: "impress.notes.file-row")
+            .matching(NSPredicate(format: "label == %@", "Graph")).firstMatch
+        XCTAssertTrue(folder.waitForExistence(timeout: 25))
+        XCTAssertEqual(folder.value as? String, "已折叠")
+        XCTAssertFalse(graph.exists, "The initial folder must not leak descendants")
+
+        folder.tap()
+        XCTAssertTrue(graph.waitForExistence(timeout: 15))
+        XCTAssertEqual(folder.value as? String, "已展开")
+        let expanded = XCTAttachment(screenshot: app.screenshot())
+        expanded.name = "Impress-V1.1-native-outline-expanded"
+        expanded.lifetime = .keepAlways
+        add(expanded)
+
+        folder.tap()
+        let hidden = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"), object: graph)
+        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 10), .completed,
+            "UITableView collapse must actually remove hidden child rows")
+        XCTAssertEqual(folder.value as? String, "已折叠")
+        folder.tap()
+        XCTAssertTrue(graph.waitForExistence(timeout: 15))
+        graph.tap()
+        let heading = app.staticTexts["impress.notes.document-title"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 30))
+        XCTAssertEqual(heading.label, "Graph",
+            "The source file name, not an Obsidian path or guessed title, leads the reader")
+        XCTAssertFalse(app.staticTexts["impress.notes.source-path"].exists,
+            "Do not restore the redundant full-path banner")
+        XCTAssertLessThan(heading.frame.height, 125,
+            "A bounded large title must leave room for Canvas and rich Markdown")
+        let readable = XCTAttachment(screenshot: app.screenshot())
+        readable.name = "Impress-V1.1-document-heading-no-path-banner"
+        readable.lifetime = .keepAlways
+        add(readable)
+    }
+
     /// Real UIKit navigation from a disposable Vault into an offline diagram,
     /// a user-selected node, full source preview and the normal Chat screen.
     /// No fake completion button, repository shortcut or network model call.
