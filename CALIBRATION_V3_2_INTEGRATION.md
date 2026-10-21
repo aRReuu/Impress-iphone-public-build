@@ -44,7 +44,7 @@
 
 ## 7. 2026-10-21 · 只读桌面 Widget 接入说明
 
-唯一需求权威 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md) §2.2；详细验收 [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md) §9。周＝最近7本地日含今天，月＝最近30本地日含今天，年＝本自然年；三个 WidgetKind，各支持 Small/Medium。采用 **B（评估行为/记录覆盖）**，净分仅次要展示。**`CalibrationDayCheckIn.isComplete` 可在全部豁免且 `netScore=nil` 时成立**；`trendRecords()` 的未完成记录得分缺失不可代表零评估；请从 `ImpressCalibrationLocalStore.history()` 的四行为＋`moodAssessed` 投影完整/部分/未评估状态。App 在原账本成功回读后向 `group.areu.impress` 原子写最小匿名统计快照，Widget 只读且失败空态，不另建分数权威、数据库、备份或写入许可。WidgetKit Extension/entitlement/provisioning、Timeline、深链同一校准 Tab、真实 iPhone13/IPA、三语言/主题及恢复均需实证，当前 **NOT_RUN**。CAL-01～15 新公式/目标迁移/新提醒照旧 DEFERRED。
+唯一需求权威 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md) §2.2；详细验收 [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md) §9。周＝最近7本地日含今天，月＝最近30本地日含今天，年＝本自然年；三个 WidgetKind，各支持 Small/Medium。采用 **B（评估行为/记录覆盖）**，净分仅次要展示。**用户于2026-10-21再次明确：桌面 Widget 必须沿用原 `ImpressCalibrationTrendChart` 二维坐标折线图，与校准器原 UI 保持同一坐标几何、灰色原始得分/蓝色均线、正零负刻度及缺失断线；原先状态点／日历矩阵视图作废。评估覆盖文字为 B 方案主信息；坐标中的得分辅助展示仍按旧算法，不推导新的 CAL 评分。绘制器必须共用，禁止主 App/Widget 各造一套看似相似的图。****`CalibrationDayCheckIn.isComplete` 可在全部豁免且 `netScore=nil` 时成立**；`trendRecords()` 的未完成记录得分缺失不可代表零评估；请从 `ImpressCalibrationLocalStore.history()` 的四行为＋`moodAssessed` 投影完整/部分/未评估状态。App 在原账本成功回读后向 `group.areu.impress` 原子写最小匿名统计快照，Widget 只读且失败空态，不另建分数权威、数据库、备份或写入许可。WidgetKit Extension/entitlement/provisioning、Timeline、深链同一校准 Tab、真实 iPhone13/IPA、三语言/主题及恢复均需实证，当前 **NOT_RUN**。CAL-01～15 新公式/目标迁移/新提醒照旧 DEFERRED。
 
 ## 8. 2026-10-21 · Widget 集成进度证据
 

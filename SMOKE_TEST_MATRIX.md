@@ -157,19 +157,19 @@ Excalidraw compressed-json/有限 PNG/JPEG 的源码和测试已提交，但全�
 
 | ID | 必须验证 |
 | --- | --- |
-| W01 | 周 Small：含今日滚动最近7日本地状态，今日明确评估 x/5，完整/部分/未评估有别 |
-| W02 | 周 Medium：逐日日期、已完整/部分评估日数，净分仅有值时作为次要信息 |
-| W03 | 月 Small：近30日本地状态格与有明确评估天数，月初/月末不断档 |
-| W04 | 月 Medium：30日矩阵、完整/部分状态及辅助图例；无记录不被判「失败」 |
-| W05 | 年 Small：本年12个月记录概览，未来月份不可当无记录 |
-| W06 | 年 Medium：各月有明确评估日数与已经过去的自然日数，年初/年末合理 |
+| W01 | 周 Small：今日明确评估 x/5；原 App 同源二维七日得分与7日均线、X日期/Y正零负刻度；未记录断线，全豁免不得画零 |
+| W02 | 周 Medium：与 App 同源二维七日坐标图及日标签，完整/部分天数为主；和 Small 仅信息密度差异，不替换图表 |
+| W03 | 月 Small：最近30日本地日的二维坐标折线及7日均线；有明确评估天数为主，跨月不断档、缺失断线 |
+| W04 | 月 Medium：与 App 相同二维30日坐标系统，首/中/末日 X 标签、正零负 Y 刻度；文字列出完整/部分评估，不采用30日矩阵 |
+| W05 | 年 Small：本年12个月二维月均每日得分与3月均线；年内有明确评估天数为主，未来月份必须断线、不当0 |
+| W06 | 年 Medium：与 App 相同12月二维坐标图（灰色月均/蓝色3月均线），另附评估覆盖与有效自然日信息 |
 | W07 | 无数据、零评估、仅有1～4项、情绪跳过、四行为明确未完成、全部评估、全豁免净分 nil、仅附加分理由等状态均准确 |
 | W08 | `CalibrationDayCheckIn` 的原始评估/目标快照与 FSRS 不改变；不能仅通过 `trendRecords()` 的净分 null 猜是否记录 |
 | W09 | App Group 原子最小快照；没有用户笔记/Key/Vault/个人目标文字；Widget 仅读，文件损坏/无权限安全空态 |
 | W10 | App 保存完成后的快照刷新、冷启动/备份恢复后从原 Store 重新投影；共享文件不成为第二备份 |
 | W11 | 连续7/30日本地日期、闰日/DST/时区/跨年、本年未来月份；Timeline 刷新受系统控制不声称即时 |
 | W12 | 周/月/年三 Widget 分别深链到同一校准 Tab 对应周期；冷启动、已有会话、通知不互扰 |
-| W13 | 六种系统小组件布局：简繁英、Light/Dark/System、Dynamic Type、VoiceOver、色觉可辨、Small 无关键文字溢出 |
+| W13 | 六布局同源 Cartesian/CoreGraphics 渲染与 App 固定输入/尺寸几何对比：轴线、Y零线、刻度、灰蓝双折线、空点、孤点和字体颜色一致；简繁英、Light/Dark/System、Dynamic Type、VoiceOver、Small 无溢出 |
 | W14 | Widget Extension target 在 Debug/Release/iPhoneOS/最终 IPA 实际存在；主 App 和 Extension entitlement/Bundle ID/provisioning、真实设备添加及侧载限制有证据 |
 | W15 | 没有新计分/旧历史迁移/新通知策略；CAL 新规则仍 DEFERRED，原十八步/F01～F13 与备份无回归 |
 
