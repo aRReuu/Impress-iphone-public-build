@@ -84,6 +84,33 @@ enum ImpressChatNoteUploadGate {
             }
             switch format {
             case .markdown:
+                if item.sourceFormat == "mermaid-structure" ||
+                   item.sourceFormat == "markmap-structure" {
+                    let scoped: ImpressDiagramDocument
+                    if item.sourceFormat == "mermaid-structure" {
+                        let blocks = try ImpressDiagramDocument.mermaidBlocks(
+                            in: document.sourceBytes)
+                        guard let found = blocks.first(where: {
+                            $0.startUTF8 == item.sourceStartUTF8 &&
+                            $0.endUTF8 == item.sourceEndUTF8
+                        }) else { throw ImVaultSyncFailure.conflict }
+                        scoped = found
+                    } else {
+                        scoped = try ImpressDiagramDocument.markmap(in: document.sourceBytes)
+                    }
+                    guard scoped.startUTF8 == item.sourceStartUTF8,
+                          scoped.endUTF8 == item.sourceEndUTF8,
+                          let ids = item.selectedCanvasNodeIDs, !ids.isEmpty,
+                          Set(ids).count == ids.count else {
+                        throw ImVaultSyncFailure.conflict
+                    }
+                    let selection = try scoped.selection(ids: Set(ids))
+                    guard selection.ids == ids.sorted(),
+                          try selection.contextJSON() == item.excerpt else {
+                        throw ImVaultSyncFailure.conflict
+                    }
+                    continue
+                }
                 guard (item.sourceFormat == nil || item.sourceFormat == "markdown"),
                       item.selectedCanvasNodeIDs == nil else {
                     throw ImVaultSyncFailure.conflict

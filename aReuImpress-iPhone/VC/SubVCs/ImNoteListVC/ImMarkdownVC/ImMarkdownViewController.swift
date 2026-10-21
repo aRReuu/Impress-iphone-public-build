@@ -7,6 +7,7 @@
 
 import UIKit
 import ImageIO
+import WebKit
 import ImpressReviewCore
 import MarkdownView
 
@@ -857,6 +858,24 @@ final class ImVaultDocumentController: UIViewController {
             }
             more.menu = UIMenu(children: actions)
         }
+        if document.identity.documentFormat == .markdown {
+            var extras: [UIMenuElement] = []
+            if let diagrams = try? ImpressDiagramDocument.mermaidBlocks(
+                in: document.sourceBytes), !diagrams.isEmpty {
+                extras.append(UIAction(title: V3L("阅读 Mermaid 图形"),
+                    image: UIImage(systemName: "point.3.connected.trianglepath.dotted")) {
+                    [weak self] _ in self?.openDiagram(.mermaid)
+                })
+            }
+            if (try? ImpressDiagramDocument.markmap(
+                in: document.sourceBytes)) != nil {
+                extras.append(UIAction(title: V3L("阅读 Markmap 思维导图"),
+                    image: UIImage(systemName: "point.3.filled.connected.trianglepath.dotted")) {
+                    [weak self] _ in self?.openDiagram(.markmap)
+                })
+            }
+            more.menu = UIMenu(children: (more.menu?.children ?? []) + extras)
+        }
         if sourceSectionDigest != nil &&
            document.identity.documentFormat == .markdown {
             // Only a single verified section anchor may be offered. When
@@ -1318,6 +1337,50 @@ final class ImVaultDocumentController: UIViewController {
             }
         } catch {
             showVaultError("内部链接索引不可用", error: error)
+        }
+    }
+
+    /// A diagram entry never trusts a cached projection: the full Vault
+    /// identity/version and structural source ranges are checked again.
+    private func openDiagram(_ kind: ImpressDiagramKind) {
+        guard document.identity.documentFormat == .markdown else { return }
+        withVerifiedLiveDocument { [weak self] current in
+            guard let self else { return }
+            do {
+                let candidates: [ImpressDiagramDocument]
+                switch kind {
+                case .mermaid:
+                    candidates = try ImpressDiagramDocument.mermaidBlocks(
+                        in: current.sourceBytes)
+                case .markmap:
+                    candidates = [try ImpressDiagramDocument.markmap(
+                        in: current.sourceBytes)]
+                }
+                guard !candidates.isEmpty else { throw ImpressDiagramError.empty }
+                if candidates.count == 1 {
+                    self.navigationController?.pushViewController(
+                        ImpressDiagramReaderController(source: current,
+                            diagram: candidates[0]), animated: true)
+                } else {
+                    let alert = UIAlertController(title: V3L("选择 Mermaid 图形"),
+                        message: V3L("每个图形保留独立的源文件范围。"),
+                        preferredStyle: .actionSheet)
+                    for (index, item) in candidates.enumerated() {
+                        alert.addAction(UIAlertAction(title: "Mermaid " +
+                            String(index + 1) + " · UTF8 " + String(item.startUTF8),
+                            style: .default) { [weak self] _ in
+                            self?.navigationController?.pushViewController(
+                                ImpressDiagramReaderController(source: current,
+                                    diagram: item), animated: true)
+                        })
+                    }
+                    alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+                    alert.popoverPresentationController?.sourceView = self.view
+                    self.present(alert, animated: true)
+                }
+            } catch {
+                self.showVaultError(V3L("无法读取图形来源"), error: error)
+            }
         }
     }
 
@@ -2524,3 +2587,293 @@ final class ImpressCanvasNativeView: UIScrollView, UIScrollViewDelegate {
         }
     }
 }
+
+
+// MARK: - V1.1 Mermaid and Markmap trusted offline renderer
+
+/// WKWebView receives only inert source text and app-bundled JS/CSS. It is
+/// never given a Vault URL/bookmark or arbitrary local file read access.
+/// Explicit native selections are the authority for Chat material scope.
+@MainActor
+final class ImpressDiagramReaderController: UIViewController,
+        UITableViewDataSource, UITableViewDelegate, WKNavigationDelegate {
+    private let source: ImVaultRawDocument
+    private let diagram: ImpressDiagramDocument
+    private let graph = WKWebView(frame: .zero, configuration: {
+        let cfg = WKWebViewConfiguration()
+        cfg.websiteDataStore = .nonPersistent()
+        cfg.preferences.javaScriptCanOpenWindowsAutomatically = false
+        cfg.defaultWebpagePreferences.allowsContentJavaScript = true
+        return cfg
+    }())
+    private let choices = UITableView(frame: .zero, style: .plain)
+    private let action = UIButton(type: .system)
+    private let message = UILabel()
+    private var chosen = Set<String>()
+    private var ready = false
+    private var allowedFolder: URL? {
+        Bundle.main.url(forResource: "index", withExtension: "html",
+            subdirectory: "DiagramReader")?.deletingLastPathComponent()
+    }
+
+    init(source: ImVaultRawDocument, diagram: ImpressDiagramDocument) {
+        self.source = source
+        self.diagram = diagram
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = diagram.kind == .mermaid ? "Mermaid" : "Markmap"
+        view.backgroundColor = ImpressV3Appearance.page
+        graph.translatesAutoresizingMaskIntoConstraints = false
+        graph.accessibilityIdentifier = "impress.diagram.offline-graph"
+        graph.navigationDelegate = self
+        graph.isOpaque = false
+        graph.backgroundColor = ImpressV3Appearance.surface
+        graph.allowsBackForwardNavigationGestures = false
+        graph.scrollView.bounces = false
+        choices.translatesAutoresizingMaskIntoConstraints = false
+        choices.accessibilityIdentifier = "impress.diagram.source-selection"
+        choices.dataSource = self
+        choices.delegate = self
+        choices.rowHeight = UITableView.automaticDimension
+        choices.estimatedRowHeight = 54
+        message.translatesAutoresizingMaskIntoConstraints = false
+        message.text = V3L("轻点下方原始节点选择范围；可单独选择子树。预览不是发送许可。")
+        message.font = ImpressV3Appearance.Typography.footnote
+        message.adjustsFontForContentSizeCategory = true
+        message.textColor = ImpressV3Appearance.secondaryText
+        message.numberOfLines = 0
+        action.translatesAutoresizingMaskIntoConstraints = false
+        ImpressV3Appearance.styleQuietButton(action,
+            title: V3L("完整预览并加入 Chat"), symbol: "bubble.left")
+        action.accessibilityIdentifier = "impress.diagram.preview-material"
+        action.addTarget(self, action: #selector(previewMaterial), for: .touchUpInside)
+        action.isEnabled = false
+        view.addSubview(graph)
+        view.addSubview(message)
+        view.addSubview(choices)
+        view.addSubview(action)
+        let safe = view.safeAreaLayoutGuide
+        NSLayoutConstraint.activate([
+            graph.topAnchor.constraint(equalTo: safe.topAnchor, constant: 8),
+            graph.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 8),
+            graph.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -8),
+            graph.heightAnchor.constraint(equalTo: safe.heightAnchor, multiplier: 0.52),
+            message.topAnchor.constraint(equalTo: graph.bottomAnchor, constant: 6),
+            message.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 16),
+            message.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -16),
+            choices.topAnchor.constraint(equalTo: message.bottomAnchor, constant: 6),
+            choices.leadingAnchor.constraint(equalTo: safe.leadingAnchor),
+            choices.trailingAnchor.constraint(equalTo: safe.trailingAnchor),
+            choices.bottomAnchor.constraint(equalTo: action.topAnchor, constant: -8),
+            action.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 16),
+            action.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -16),
+            action.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -8),
+            action.heightAnchor.constraint(greaterThanOrEqualToConstant: 48)
+        ])
+        guard let folder = allowedFolder else {
+            message.text = V3L("离线图形引擎资源缺失。不可将源码列表冒充图形完成。")
+            return
+        }
+        graph.loadFileURL(folder.appendingPathComponent("index.html"),
+            allowingReadAccessTo: folder)
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url,
+              url.isFileURL, let allowedFolder,
+              url.standardizedFileURL.deletingLastPathComponent() == allowedFolder.standardizedFileURL,
+              url.lastPathComponent == "index.html" else {
+            decisionHandler(.cancel)
+            return
+        }
+        decisionHandler(.allow)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        ready = true
+        render()
+    }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!,
+                 withError error: Error) {
+        message.text = V3L("离线图形引擎加载失败：") + error.localizedDescription
+    }
+    private func render() {
+        guard ready else { return }
+        let payload: [String: Any] = [
+            "kind": diagram.kind.rawValue,
+            "source": diagram.rendererText,
+            "dark": traitCollection.userInterfaceStyle == .dark
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let value = String(data: data, encoding: .utf8) else { return }
+        graph.evaluateJavaScript("window.renderImpressDiagram(" + value + ");") {
+            [weak self] _, error in
+            if let error {
+                self?.message.text = V3L("图形引擎不可用：") + error.localizedDescription
+            }
+        }
+    }
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if previousTraitCollection?.userInterfaceStyle != traitCollection.userInterfaceStyle {
+            render()
+        }
+    }
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        diagram.nodes.count
+    }
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath)
+        -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "diagram-node") ??
+            UITableViewCell(style: .subtitle, reuseIdentifier: "diagram-node")
+        let node = diagram.nodes[indexPath.row]
+        cell.textLabel?.text = node.title
+        cell.textLabel?.numberOfLines = 2
+        cell.textLabel?.font = ImpressV3Appearance.Typography.body
+        cell.detailTextLabel?.text = "UTF8 " + String(node.startUTF8)
+        cell.indentationLevel = min(6, diagram.kind == .markmap ? 1 : 0)
+        cell.indentationWidth = 14
+        cell.accessoryType = chosen.contains(node.id) ? .checkmark : .none
+        cell.accessibilityIdentifier = "impress.diagram.node." + node.id
+        return cell
+    }
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        let node = diagram.nodes[indexPath.row]
+        tableView.deselectRow(at: indexPath, animated: true)
+        if chosen.contains(node.id) {
+            chosen.remove(node.id)
+            action.isEnabled = !chosen.isEmpty
+            choices.reloadData()
+            return
+        }
+        let hasChildren = diagram.nodes.contains { $0.parentID == node.id }
+        guard hasChildren else {
+            chosen.insert(node.id)
+            action.isEnabled = true
+            choices.reloadData()
+            return
+        }
+        let prompt = UIAlertController(title: V3L("选择节点范围"),
+            message: V3L("包含子树会将其子节点加入待审核材料；默认仅选当前节点。"),
+            preferredStyle: .actionSheet)
+        prompt.addAction(UIAlertAction(title: V3L("仅当前节点"), style: .default) {
+            [weak self] _ in self?.completeSelection([node.id])
+        })
+        prompt.addAction(UIAlertAction(title: V3L("当前节点与子树"), style: .default) {
+            [weak self] _ in
+            guard let self, let selection = try? self.diagram.selection(
+                ids: [node.id], includeDescendants: true) else { return }
+            self.completeSelection(selection.ids)
+        })
+        prompt.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        prompt.popoverPresentationController?.sourceView = view
+        present(prompt, animated: true)
+    }
+    private func completeSelection(_ ids: [String]) {
+        chosen.formUnion(ids)
+        action.isEnabled = !chosen.isEmpty
+        choices.reloadData()
+    }
+    @objc private func previewMaterial() {
+        guard !chosen.isEmpty,
+              ImVaultReadOnlyProbe.shared.authorizedVaultID == source.identity.vaultID else {
+            return
+        }
+        let expectedDigest = source.digest
+        let requestedIDs = chosen
+        ImVaultReadSync.shared.read(source.identity) { [weak self] result in
+            guard let self else { return }
+            do {
+                let live = try result.get()
+                guard live.identity == self.source.identity,
+                      live.digest == expectedDigest,
+                      ImVaultDigest.sha256(live.sourceBytes) == expectedDigest else {
+                    throw ImVaultSyncFailure.conflict
+                }
+                let updated: ImpressDiagramDocument
+                switch self.diagram.kind {
+                case .mermaid:
+                    let candidates = try ImpressDiagramDocument.mermaidBlocks(in: live.sourceBytes)
+                    guard let match = candidates.first(where: {
+                        $0.startUTF8 == self.diagram.startUTF8 &&
+                        $0.endUTF8 == self.diagram.endUTF8
+                    }) else { throw ImpressDiagramError.invalidSelection }
+                    updated = match
+                case .markmap:
+                    updated = try ImpressDiagramDocument.markmap(in: live.sourceBytes)
+                }
+                guard updated.startUTF8 == self.diagram.startUTF8,
+                      updated.endUTF8 == self.diagram.endUTF8 else {
+                    throw ImVaultSyncFailure.conflict
+                }
+                let selection = try updated.selection(ids: requestedIDs)
+                let json = try selection.contextJSON()
+                let key = "note:" + (try ImpressBatchSourceKey.encode(live.identity))
+                let reference = WCDBV3ChatContextReference(
+                    stableIdentity: key, sourceRevision: live.digest,
+                    excerpt: json, sourceStartUTF8: updated.startUTF8,
+                    sourceEndUTF8: updated.endUTF8,
+                    sourceFormat: updated.kind.rawValue + "-structure",
+                    selectedCanvasNodeIDs: selection.ids)
+                self.presentMaterialPreview(live, reference: reference, json: json)
+            } catch {
+                self.presentError(error)
+            }
+        }
+    }
+
+    private func presentMaterialPreview(_ live: ImVaultRawDocument,
+                                        reference: WCDBV3ChatContextReference, json: String) {
+        let page = UIViewController()
+        page.view.backgroundColor = ImpressV3Appearance.page
+        page.title = V3L("核对图形材料范围")
+        let preview = UITextView()
+        preview.translatesAutoresizingMaskIntoConstraints = false
+        preview.isEditable = false
+        preview.isSelectable = true
+        preview.isScrollEnabled = true
+        preview.font = ImpressV3Appearance.Typography.code
+        preview.adjustsFontForContentSizeCategory = true
+        preview.text = "Vault: " + live.identity.vaultID + "\n" +
+            live.identity.relativePath + "\nSHA-256: " + live.digest +
+            "\n" + V3L("此处仅是选中分支的文字与结构，不包含图像像素。") + "\n\n" + json
+        preview.accessibilityIdentifier = "impress.diagram.material-preview"
+        page.view.addSubview(preview)
+        NSLayoutConstraint.activate([
+            preview.topAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.topAnchor),
+            preview.bottomAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.bottomAnchor),
+            preview.leadingAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.leadingAnchor),
+            preview.trailingAnchor.constraint(equalTo: page.view.safeAreaLayoutGuide.trailingAnchor)
+        ])
+        page.navigationItem.rightBarButtonItem = UIBarButtonItem(primaryAction: UIAction(
+            title: V3L("确认范围并加入 Chat"), image: UIImage(systemName: "bubble.left")) {
+                [weak self] _ in
+            guard let self, ImVaultReadOnlyProbe.shared.authorizedVaultID ==
+                live.identity.vaultID else { return }
+            do {
+                let repo = try ImpressV3ReviewEnvironment.repository()
+                let chat = ImpressAINativeChatViewController(
+                    question: V3L("来源图形：") + live.identity.relativePath,
+                    answer: nil, repository: repo, sourceKey: reference.stableIdentity,
+                    sourceVersion: live.digest, noteIdentity: live.identity,
+                    initialMaterials: [reference])
+                self.navigationController?.pushViewController(chat, animated: true)
+            } catch { self.presentError(error) }
+        })
+        page.navigationItem.rightBarButtonItem?.accessibilityIdentifier =
+            "impress.diagram.confirm-material"
+        navigationController?.pushViewController(page, animated: true)
+    }
+    private func presentError(_ error: Error) {
+        let alert = UIAlertController(title: V3L("图形来源核查失败"),
+            message: error.localizedDescription, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("确定"), style: .default))
+        present(alert, animated: true)
+    }
+}
+

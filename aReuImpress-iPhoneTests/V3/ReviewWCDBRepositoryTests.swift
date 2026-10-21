@@ -1565,6 +1565,62 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 
+
+    @MainActor
+    func testMermaidAndMarkmapScopedChatMaterialsDoNotLeakUnselectedBranches() throws {
+        let markdown = """
+        # 上层知识
+        ## A
+        Alpha
+        ## B
+        Private sibling
+        ```mermaid
+        flowchart LR
+        X[Allowed] --> Y[Selected]
+        Z[Private branch]
+        ```
+        """
+        let bytes = Data(markdown.utf8)
+        let digest = ImVaultDigest.sha256(bytes)
+        let identity = try ImVaultFileIdentity(vaultID: "fixture-only",
+            relativePath: "Notes/Diagram.md")
+        let raw = ImVaultRawDocument(identity: identity, sourceBytes: bytes,
+            markdown: markdown, digest: digest)
+        let diagram = try XCTUnwrap(ImpressDiagramDocument.mermaidBlocks(in: bytes).first)
+        let selected = try diagram.selection(ids: [diagram.nodes[0].id])
+        let key = "note:diagram-test"
+        let accepted = WCDBV3ChatContextReference(stableIdentity: key,
+            sourceRevision: digest, excerpt: try selected.contextJSON(),
+            sourceStartUTF8: diagram.startUTF8, sourceEndUTF8: diagram.endUTF8,
+            sourceFormat: "mermaid-structure", selectedCanvasNodeIDs: selected.ids)
+        XCTAssertNoThrow(try ImpressChatNoteUploadGate.validate(
+            document: raw, expectedIdentity: identity,
+            expectedDigest: digest, conversationKey: key, excerpts: [accepted]))
+        XCTAssertFalse(accepted.excerpt.contains("Private branch"))
+        let changed = WCDBV3ChatContextReference(stableIdentity: key,
+            sourceRevision: digest, excerpt: accepted.excerpt,
+            sourceStartUTF8: diagram.startUTF8, sourceEndUTF8: diagram.endUTF8,
+            sourceFormat: "mermaid-structure",
+            selectedCanvasNodeIDs: [diagram.nodes[1].id])
+        XCTAssertThrowsError(try ImpressChatNoteUploadGate.validate(
+            document: raw, expectedIdentity: identity,
+            expectedDigest: digest, conversationKey: key, excerpts: [changed]))
+        let outline = try ImpressDiagramDocument.markmap(in: bytes)
+        let root = try XCTUnwrap(outline.nodes.first)
+        let context = try outline.selection(ids: [root.id])
+        let linked = WCDBV3ChatContextReference(stableIdentity: key,
+            sourceRevision: digest, excerpt: try context.contextJSON(),
+            sourceStartUTF8: 0, sourceEndUTF8: bytes.count,
+            sourceFormat: "markmap-structure", selectedCanvasNodeIDs: context.ids)
+        XCTAssertNoThrow(try ImpressChatNoteUploadGate.validate(
+            document: raw, expectedIdentity: identity,
+            expectedDigest: digest, conversationKey: key, excerpts: [linked]))
+        XCTAssertFalse(linked.excerpt.contains("Private sibling"))
+        XCTAssertThrowsError(try ImpressChatNoteUploadGate.validate(
+            document: raw, expectedIdentity: identity,
+            expectedDigest: "outdated-sha", conversationKey: key, excerpts: [linked]))
+    }
+
     @MainActor
     func testCanvasChatScopeCannotSubstituteUnselectedNodeOrOldRevision() throws {
         let json = """
