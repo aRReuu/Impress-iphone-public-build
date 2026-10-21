@@ -11,6 +11,14 @@ enum ImpressV3ReviewEnvironment {
 
     static let databaseResult: Result<ReviewWCDBRepository, Swift.Error> = Result {
         let root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        #if DEBUG
+        if let fixture = ImpressV11UITestFixture.databaseURL {
+            try FileManager.default.createDirectory(
+                at: fixture.deletingLastPathComponent(), withIntermediateDirectories: true)
+            return try ReviewWCDBRepository(databasePath: fixture.path,
+                calculator: FSRS6ReviewCalculator())
+        }
+        #endif
         let path = root.appendingPathComponent("ImpressV3/ReviewV3.sqlite").path
         return try ReviewWCDBRepository(databasePath: path, calculator: FSRS6ReviewCalculator())
     }
