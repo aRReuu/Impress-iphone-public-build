@@ -31,3 +31,9 @@ V3 WCDB为卡片/FSRS/Chat唯一权威；内容revision与调度revision独立�
 构建/来源背景仍见[PUBLIC_BUILD_CONTRACT.md](PUBLIC_BUILD_CONTRACT.md)、[BUILD_AND_SIGN.md](BUILD_AND_SIGN.md)、`SOURCE_MANIFEST.json`，但旧分支/布局指示不能覆盖当前产品稿。
 最终QA须绑定同一实际Git SHA、完整Core/原生XCTest、Debug/Release Simulator、ARM64、UI证据、IPA完整性及SHA-256。旧IPA不能称为新定稿版本；物理iPhone13、真实HTTP/Keychain、Files/iCloud分别验收。
 公开源缺权威原版1024图标的历史限制仍须复核，禁止自行生成替换；无签名QA不等于正式发行或已安装。不得向公共仓库提交私人笔记、用户截图、Key、数据库、证书或未授权资源。当前文档提交没有新IPA。
+
+## 2026-10-21 · V1.1 开发续作状态
+
+指定分支 `feature/impress-duplex-loop-v1` 已实现 Excalidraw LZ-String compressed-json 解析、受限原生绘图视口/内嵌 PNG/JPEG、选材后逐版本的 Chat 门禁及 F03/F04 中断人工只读恢复判定。相关 Swift Core/XCTest 已增加。工程新增 `aReuImpress-iPhoneUITests` 真实 UI 测试 Target，并纳入主 Scheme；该测试目前仅覆盖四 Tab 跳转、真实屏幕截图和冷启动，**不等于原冒烟矩阵的 18 步业务 E2E**。Mermaid、Markmap、复合格式完整阅读、故障矩阵整体与同 SHA QA IPA 仍需验收。
+
+继续用 `.github/workflows/public-ios-build.yml` 的 GitHub Actions 查看最新提交对应的独立 Swift Core、XCTest、Simulator、ARM64、未签名 IPA SHA-256。不得将旧 `39489025745` 的成功视为本次新代码交付。生产 Vault 写入始终禁用。
