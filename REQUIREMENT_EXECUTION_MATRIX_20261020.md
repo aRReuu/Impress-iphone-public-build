@@ -178,3 +178,18 @@ G1 完成 Chat/闪卡/四 Tab/历史功能、原生视觉记录与回归，更�
 G2 复杂样例“显示→选材→实际预览→Chat→重开”，依赖验证后集成所有明确格式；不复制笔记库/插件平台。
 G3 复用已有 Duplex/SourceImpact，实现 P0-A 实际建议到提案、P0-B 连续 UI、P0-C 故障恢复、P0-D 反向核查及备份兼容。
 G4 同最终 SHA 全套 CI/证据/QA IPA；只有外部设备/Keychain/Files/授权可单独 BLOCKED，不可藏内部缺口。`productionWriteEnabled = false` 永不因集成或撤销而放开。
+
+## 2026-10-21 · V1.1 实现核验补记（不替代85项原始需求状态）
+
+工作分支仅 `feature/impress-duplex-loop-v1`，起点 `44fded0b`。代码证据：`b527764` LZ-String compressed-json；`b1211f3` 绘图阅读/选材/Chat 精确门禁；`692fa1c`、`5bc369e`、`2d2e051` 内嵌 PNG/JPEG 限量解码和测试；`9cd3f73`、`6c2808f` 人工只读中断核验；`b7a3e76` 原生 XCUITest Target + 四Tab冷启动导航/截图。
+
+| 子项 | 当前实际状态 | 未完成边界 |
+| --- | --- | --- |
+| Excalidraw 压缩 JSON 及基础空间图形 | CODE_DONE（子项） | 全格式、完整附件、旋转细节/区域选择、全 UI 验收 NOT_RUN |
+| Excalidraw 元素选材与 Chat | CODE_DONE（子项） | Vault/SHA/元素核验已接入；模型视觉理解仍独立许可，真实 UI E2E NOT_RUN |
+| Mermaid、Markmap | IN_PROGRESS | 离线成熟引擎/图形选材/Chat 往返尚未实现 |
+| F03/F04 中断核验 | CODE_DONE（子项） | F01～F13 全部异常注入未整体 TEST_PASS |
+| 原生 XCUITest | CODE_DONE（四Tab测试） | 18步连续 E2E NOT_RUN，不能用四Tab冒烟代替 |
+| ACCEPT-01～12 / QA IPA | NOT_RUN（最新版完整证据） | 必须按最终 HEAD 对应同一套成功 Actions 和真实 UI 回读 |
+
+原有 85 个需求 ID、ACCEPT-01～12、OPEN-01～06、DEFERRED 均不作隐式变更。永久保持 `ImVaultGuardedWrite.productionWriteEnabled = false`；真实日常 Obsidian Vault 禁止自动写入测试。
