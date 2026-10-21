@@ -2635,6 +2635,7 @@ final class ImpressDuplexApprovalController: UIViewController {
     private let confirm = UIButton(type: .system)
     private var undoBarItem: UIBarButtonItem?
     private var reconcileBarItem: UIBarButtonItem?
+    private var discardBarItem: UIBarButtonItem?
     private var notePreviewValid = false
     private var committing = false
 
@@ -2710,12 +2711,16 @@ final class ImpressDuplexApprovalController: UIViewController {
             target: self, action: #selector(reconcileInterrupted))
         reconcile.accessibilityIdentifier = "impress.duplex.reconcile-interrupted"
         reconcileBarItem = reconcile
+        discardBarItem = discard
         navigationItem.rightBarButtonItems = [discard, inverse, reconcile]
         refreshPreview()
     }
 
     @objc private func discardUnapplied() {
-        guard !committing else { return }
+        guard !committing, proposal.state.noteStatus != .applying,
+              proposal.state.cardStatus != .applying,
+              !proposal.state.needsNoteUndo,
+              !proposal.state.needsCardUndo else { return }
         let confirmDiscard = UIAlertController(title: V3L("放弃未完成项？"),
             message: V3L("仅取消尚未执行的目标，已成功的笔记和原卡保留且不会撤销。"),
             preferredStyle: .alert)
@@ -2725,6 +2730,12 @@ final class ImpressDuplexApprovalController: UIViewController {
             guard let self else { return }
             Task {
                 var cancelled = self.proposal
+                // Re-check immediately before saving: a pending async write
+                // could have recorded .applying while this alert was open.
+                guard cancelled.state.noteStatus != .applying,
+                      cancelled.state.cardStatus != .applying,
+                      !cancelled.state.needsNoteUndo,
+                      !cancelled.state.needsCardUndo else { return }
                 // Discard may stop an unexecuted forward proposal only.
                 // Undoing/reverted targets are immutable audit history; hiding
                 // an undoing flag would orphan an in-flight inverse write.
@@ -2805,9 +2816,11 @@ final class ImpressDuplexApprovalController: UIViewController {
             ![.applying, .applied, .undoing, .reverted].contains(proposal.state.noteStatus)
         cardToggle.isEnabled = proposal.cardID != nil &&
             ![.applying, .applied, .undoing, .reverted].contains(proposal.state.cardStatus)
-        reconcileBarItem?.isEnabled = !committing &&
-            (proposal.state.noteStatus == .applying ||
-             proposal.state.cardStatus == .applying)
+        let interrupted = proposal.state.noteStatus == .applying ||
+            proposal.state.cardStatus == .applying
+        reconcileBarItem?.isEnabled = !committing && interrupted
+        discardBarItem?.isEnabled = !committing && !interrupted &&
+            !proposal.state.needsNoteUndo && !proposal.state.needsCardUndo
         if proposal.state.noteStatus == .applying ||
            proposal.state.cardStatus == .applying {
             pieces.append(V3L("上次修改执行中断。禁止直接重试，必须先通过「核查中断」回读目标并裁定。"))

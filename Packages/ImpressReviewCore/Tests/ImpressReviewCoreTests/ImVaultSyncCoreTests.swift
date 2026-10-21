@@ -342,6 +342,27 @@ struct ImVaultSyncCoreTests {
         #expect(state.completed)
     }
 
+    @Test func F06DeselectCannotEraseInterruptedForwardApplication() throws {
+        var state = ImDuplexApprovalState(noteSelected: true, cardSelected: true,
+            noteStatus: .applying, cardStatus: .pending)
+        #expect(state.needsNoteAction && state.needsCardAction)
+        #expect(!state.completed)
+        // A stale destructive UI request once cleared both selection bits.
+        state.noteSelected = false
+        state.cardSelected = false
+        let recovered = try JSONDecoder().decode(ImDuplexApprovalState.self,
+            from: JSONEncoder().encode(state))
+        #expect(recovered.noteStatus == .applying)
+        #expect(!recovered.completed)
+        #expect(!recovered.needsNoteUndo && !recovered.needsCardUndo)
+        // Only an explicit read-after-crash reconciliation can resolve the
+        // unknown forward intent; caller must not infer success from a flag.
+        state.noteStatus = .conflict
+        #expect(state.completed)
+        state.noteSelected = true
+        #expect(!state.completed)
+    }
+
     @Test func deselectionCannotErasePendingUndoAfterCrash() throws {
         var state = ImDuplexApprovalState(noteSelected: true, cardSelected: true,
             noteStatus: .undoing, cardStatus: .undoing)

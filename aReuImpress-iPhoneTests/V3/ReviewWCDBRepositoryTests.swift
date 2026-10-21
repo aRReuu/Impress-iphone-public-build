@@ -313,6 +313,40 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
     }
 
     @MainActor
+    func testF06InterruptedApprovalBlocksDiscardAndForwardConfirmation() throws {
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
+            calculator: FSRS6ReviewCalculator())
+        let cardID = UUID()
+        let proposal = WCDBV3DuplexProposal(
+            cardID: cardID, cardContentRevision: 0,
+            cardBaseQuestion: "Original", cardEditedQuestion: "Changed",
+            state: ImDuplexApprovalState(noteSelected: false,
+                cardSelected: true, noteStatus: .pending, cardStatus: .applying))
+        let controller = ImpressDuplexApprovalController(
+            repository: repo, proposal: proposal, saveProposal: { _ in
+                XCTFail("An interrupted proposal must not auto-persist")
+                return false
+            })
+        controller.loadViewIfNeeded()
+        func descendants(_ root: UIView) -> [UIView] {
+            [root] + root.subviews.flatMap { descendants($0) }
+        }
+        let confirm = try XCTUnwrap(descendants(controller.view).compactMap {
+            $0 as? UIButton
+        }.first(where: { $0.accessibilityIdentifier == "impress.duplex.confirm" }))
+        XCTAssertFalse(confirm.isEnabled)
+        let discard = try XCTUnwrap(controller.navigationItem.rightBarButtonItems?.first {
+            $0.title == V3L("放弃未完成项")
+        })
+        XCTAssertFalse(discard.isEnabled)
+        let reconciliation = try XCTUnwrap(controller.navigationItem.rightBarButtonItems?.first {
+            $0.accessibilityIdentifier == "impress.duplex.reconcile-interrupted"
+        })
+        XCTAssertTrue(reconciliation.isEnabled)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    @MainActor
     func testConfirmedDuplexHistoryRetainsReceiptsWhenNewerProposalIsSaved() async throws {
         let path = temporaryPath()
         let original = try ReviewWCDBRepository(databasePath: path,

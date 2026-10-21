@@ -323,6 +323,7 @@ public struct ImDuplexApprovalState: Codable, Equatable, Sendable {
     public var completed: Bool {
         // A crash between the reverse write and its receipt is never
         // mistaken for an already-finished operation. Recover manually.
+        noteStatus != .applying && cardStatus != .applying &&
         !needsNoteAction && !needsCardAction && !needsNoteUndo && !needsCardUndo
     }
 }
