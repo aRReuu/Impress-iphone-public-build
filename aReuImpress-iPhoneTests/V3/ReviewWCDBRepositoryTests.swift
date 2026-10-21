@@ -2349,12 +2349,20 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             $0.accessibilityIdentifier == "impress.ai.chat.features" }))
         let add = try XCTUnwrap(bars.first(where: {
             $0.accessibilityIdentifier == "impress.ai.chat.new-discussion" }))
-        _ = UIApplication.shared.sendAction(try XCTUnwrap(features.action),
-                                           to: features.target, from: features, for: nil)
-        let featureList = try XCTUnwrap(nav.topViewController
-            as? ImpressChatFeatureListViewController)
-        featureList.tableView(featureList.tableView,
-            didSelectRowAt: IndexPath(row: 1, section: 0))
+        // The feature button is now a native nested UIMenu, not a selector
+        // that pushes the former feature-list controller. Exercise its real
+        // UIAction handler instead of bypassing the menu to reach history.
+        XCTAssertNil(features.action)
+        let menu = try XCTUnwrap(features.menu)
+        XCTAssertEqual(menu.children.count, 4)
+        let historyAction = try XCTUnwrap(menu.children.first as? UIAction)
+        XCTAssertFalse(historyAction.title.isEmpty)
+        let settingsMenu = try XCTUnwrap(menu.children[1] as? UIMenu)
+        XCTAssertEqual(settingsMenu.children.count, 3)
+        XCTAssertTrue(settingsMenu.children.allSatisfy { $0 is UIAction })
+        let receiptsMenu = try XCTUnwrap(menu.children[2] as? UIMenu)
+        XCTAssertFalse(receiptsMenu.children.isEmpty)
+        historyAction.performWithSender(features, target: chat)
         for _ in 0..<100 where !(nav.topViewController is ImpressChatSessionHistoryViewController) {
             try await Task.sleep(for: .milliseconds(30))
         }
