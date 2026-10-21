@@ -2572,6 +2572,7 @@ final class ImpressDuplexApprovalController: UIViewController {
     private let preview = UITextView()
     private let confirm = UIButton(type: .system)
     private var undoBarItem: UIBarButtonItem?
+    private var reconcileBarItem: UIBarButtonItem?
     private var notePreviewValid = false
     private var committing = false
 
@@ -2643,7 +2644,11 @@ final class ImpressDuplexApprovalController: UIViewController {
             title: V3L("安全撤销"), style: .plain,
             target: self, action: #selector(openUndoOptions))
         undoBarItem = inverse
-        navigationItem.rightBarButtonItems = [discard, inverse]
+        let reconcile = UIBarButtonItem(title: V3L("核查中断"), style: .plain,
+            target: self, action: #selector(reconcileInterrupted))
+        reconcile.accessibilityIdentifier = "impress.duplex.reconcile-interrupted"
+        reconcileBarItem = reconcile
+        navigationItem.rightBarButtonItems = [discard, inverse, reconcile]
         refreshPreview()
     }
 
@@ -2735,9 +2740,17 @@ final class ImpressDuplexApprovalController: UIViewController {
         }
         preview.text = pieces.joined(separator: "\n")
         noteToggle.isEnabled = proposal.noteIdentity != nil &&
-            ![.applied, .undoing, .reverted].contains(proposal.state.noteStatus)
+            ![.applying, .applied, .undoing, .reverted].contains(proposal.state.noteStatus)
         cardToggle.isEnabled = proposal.cardID != nil &&
-            ![.applied, .undoing, .reverted].contains(proposal.state.cardStatus)
+            ![.applying, .applied, .undoing, .reverted].contains(proposal.state.cardStatus)
+        reconcileBarItem?.isEnabled = !committing &&
+            (proposal.state.noteStatus == .applying ||
+             proposal.state.cardStatus == .applying)
+        if proposal.state.noteStatus == .applying ||
+           proposal.state.cardStatus == .applying {
+            pieces.append(V3L("上次修改执行中断。禁止直接重试，必须先通过「核查中断」回读目标并裁定。"))
+            preview.text = pieces.joined(separator: "\n")
+        }
         undoBarItem?.isEnabled = !committing && (
             [.applied, .undoing].contains(proposal.state.noteStatus) ||
             [.applied, .undoing].contains(proposal.state.cardStatus))
@@ -2746,13 +2759,17 @@ final class ImpressDuplexApprovalController: UIViewController {
 
     @objc private func updateConfirmation() {
         confirm.isEnabled = !committing &&
+            proposal.state.noteStatus != .applying &&
+            proposal.state.cardStatus != .applying &&
             !proposal.state.needsNoteUndo && !proposal.state.needsCardUndo &&
             ((noteToggle.isOn && noteToggle.isEnabled && notePreviewValid) ||
              (cardToggle.isOn && cardToggle.isEnabled))
     }
 
     @objc private func confirmChanges() {
-        guard !committing else { return }
+        guard !committing,
+              proposal.state.noteStatus != .applying,
+              proposal.state.cardStatus != .applying else { return }
         let noteChosen = (noteToggle.isOn && notePreviewValid) ||
             (proposal.state.noteSelected && proposal.state.noteStatus == .applied)
         let cardChosen = cardToggle.isOn ||
@@ -2782,6 +2799,9 @@ final class ImpressDuplexApprovalController: UIViewController {
     }
 
     private func execute(_ chosen: WCDBV3DuplexProposal) async {
+        guard !committing,
+              chosen.state.noteStatus != .applying,
+              chosen.state.cardStatus != .applying else { return }
         committing = true
         updateConfirmation()
         defer { committing = false; refreshPreview() }
@@ -2917,6 +2937,87 @@ final class ImpressDuplexApprovalController: UIViewController {
             (proposal.noteReceipt ?? V3L("笔记未选择")) + "\n\n" +
             (proposal.cardReceipt ?? V3L("原卡未选择")) + "\n\n" +
             V3L("所有回执存于原 Chat 会话；失败目标仅允许再次手动核查后重试。"))
+    }
+
+    /// Explicit, read-only adjudication for F03/F04 crash windows. No write
+    /// code path is called here. If current source cannot be verified, the
+    /// original applying state remains durable and confirmation stays locked.
+    @objc private func reconcileInterrupted() {
+        guard !committing &&
+              (proposal.state.noteStatus == .applying ||
+               proposal.state.cardStatus == .applying) else { return }
+        committing = true
+        updateConfirmation()
+        Task { [weak self] in
+            guard let self else { return }
+            var result = self.proposal
+            if result.state.noteStatus == .applying,
+               let id = result.noteIdentity,
+               let base = result.noteBaseDigest,
+               let proposed = result.noteEditedDigest {
+                do {
+                    guard let draft = try ImVaultPrivateStore.approvedDraft(
+                        identity: id, baseDigest: base, editedDigest: proposed),
+                        draft.baseDigest == base,
+                        ImVaultDigest.sha256(draft.proposedBytes) == proposed else {
+                        throw ImVaultSyncFailure.conflict
+                    }
+                    let live: ImVaultRawDocument = try await withCheckedThrowingContinuation {
+                        (continuation: CheckedContinuation<ImVaultRawDocument, Error>) in
+                        ImVaultReadSync.shared.read(id) { response in
+                            continuation.resume(with: response)
+                        }
+                    }
+                    guard live.identity == id,
+                          live.digest == ImVaultDigest.sha256(live.sourceBytes) else {
+                        throw ImVaultSyncFailure.conflict
+                    }
+                    if let state = ImDuplexInterruptedRecovery.noteStatus(
+                        currentDigest: live.digest, baseDigest: base,
+                        proposedDigest: proposed) {
+                        result.state.noteStatus = state
+                        result.noteReceipt = state == .applied
+                            ? V3L("中断核查：源文件 SHA 与已批准版本吻合；不重复写入。")
+                            : V3L("中断核查：源文件与批准版本不一致；必须重新核对并批准。")
+                    }
+                } catch {
+                    // No receipt fabricated when File Provider permission,
+                    // ApprovedDraft or protected recovery bytes are missing.
+                }
+            }
+            if result.state.cardStatus == .applying,
+               let id = result.cardID,
+               let revision = result.cardContentRevision,
+               let base = result.cardBaseQuestion,
+               let proposed = result.cardEditedQuestion {
+                do {
+                    let current = try await repository.content(for: id)
+                    if let status = ImDuplexInterruptedRecovery.cardStatus(
+                        currentContentRevision: current?.contentRevision,
+                        expectedContentRevision: revision,
+                        baseQuestion: base, baseAnswer: result.cardBaseAnswer,
+                        proposedQuestion: proposed, proposedAnswer: result.cardEditedAnswer,
+                        currentQuestion: current?.question, currentAnswer: current?.answerText) {
+                        result.state.cardStatus = status
+                        result.cardReceipt = status == .applied
+                            ? V3L("中断核查：原卡内容版本吻合；不生成第二次编辑或评分。")
+                            : V3L("中断核查：原卡版本不吻合；拒绝自动重放。")
+                    }
+                } catch {
+                    // Unknown state remains applying and cannot be retried.
+                }
+            }
+            let changed = result.state != self.proposal.state ||
+                result.noteReceipt != self.proposal.noteReceipt ||
+                result.cardReceipt != self.proposal.cardReceipt
+            if changed && await self.saveProposal(result) {
+                self.proposal = result
+            }
+            self.committing = false
+            self.refreshPreview()
+            self.showResult(V3L("中断结果已核查"),
+                V3L("已核实目标按回执记录；无法验证的目标保留执行中断状态并禁止重试。此操作不执行任何写回。"))
+        }
     }
 
     private enum UndoTarget { case note, card }

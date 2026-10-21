@@ -327,6 +327,44 @@ public struct ImDuplexApprovalState: Codable, Equatable, Sendable {
     }
 }
 
+
+
+/// Classify a previously interrupted *forward* write by reading authoritative
+/// storage; never attempt a second write while its outcome is unknown.
+/// A verified changed source is a conflict requiring fresh review, not an
+/// invitation to replay a stale ApprovedDraft.
+public enum ImDuplexInterruptedRecovery {
+    public static func noteStatus(currentDigest: String?,
+                                  baseDigest: String, proposedDigest: String)
+        -> ImDuplexTargetStatus? {
+        guard let currentDigest, !currentDigest.isEmpty,
+              !baseDigest.isEmpty, !proposedDigest.isEmpty else { return nil }
+        if currentDigest == proposedDigest { return .applied }
+        return .conflict
+    }
+
+    public static func cardStatus(currentContentRevision: Int?,
+                                  expectedContentRevision: Int,
+                                  baseQuestion: String, baseAnswer: String?,
+                                  proposedQuestion: String, proposedAnswer: String?,
+                                  currentQuestion: String?, currentAnswer: String?)
+        -> ImDuplexTargetStatus? {
+        guard let currentContentRevision, let currentQuestion,
+              expectedContentRevision >= 0 else { return nil }
+        let unchangedProposal = baseQuestion == proposedQuestion &&
+            baseAnswer == proposedAnswer
+        if unchangedProposal && currentContentRevision == expectedContentRevision &&
+           currentQuestion == baseQuestion && currentAnswer == baseAnswer {
+            return .applied
+        }
+        if currentContentRevision == expectedContentRevision + 1 &&
+           currentQuestion == proposedQuestion && currentAnswer == proposedAnswer {
+            return .applied
+        }
+        return .conflict
+    }
+}
+
 public enum ImDuplexCardVersionDecision: Equatable, Sendable {
     case unchanged, safeToWrite, alreadyApplied, conflict
 }

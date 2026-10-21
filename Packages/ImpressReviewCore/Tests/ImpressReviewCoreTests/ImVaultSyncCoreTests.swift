@@ -358,6 +358,49 @@ struct ImVaultSyncCoreTests {
         #expect(restored.noteStatus == .undoing)
     }
 
+
+    @Test func F03InterruptedNoteReconciliationNeverReplaysStaleBytes() throws {
+        let id = try ImVaultFileIdentity(vaultID: "recovery-test",
+            relativePath: "A/Knowledge.md")
+        var draft = try ImVaultDraft(identity: id, baseText: "Before")
+        try draft.update("After")
+        let proposed = ImVaultDigest.sha256(draft.proposedBytes)
+        #expect(ImDuplexInterruptedRecovery.noteStatus(
+            currentDigest: proposed, baseDigest: draft.baseDigest,
+            proposedDigest: proposed) == .applied)
+        // Missing source authorization is *unknown*, never success.
+        #expect(ImDuplexInterruptedRecovery.noteStatus(
+            currentDigest: nil, baseDigest: draft.baseDigest,
+            proposedDigest: proposed) == nil)
+        #expect(ImDuplexInterruptedRecovery.noteStatus(
+            currentDigest: draft.baseDigest, baseDigest: draft.baseDigest,
+            proposedDigest: proposed) == .conflict)
+        #expect(ImDuplexInterruptedRecovery.noteStatus(
+            currentDigest: ImVaultDigest.sha256(Data("Later legitimate edit".utf8)),
+            baseDigest: draft.baseDigest, proposedDigest: proposed) == .conflict)
+        #expect(!ImDuplexApprovalState(noteSelected: true, cardSelected: false,
+            noteStatus: .undoing).needsNoteAction)
+    }
+
+    @Test func F04InterruptedCardReconciliationUsesContentVersionNotReviewSchedule() {
+        func check(revision: Int?, question: String?, answer: String?) -> ImDuplexTargetStatus? {
+            ImDuplexInterruptedRecovery.cardStatus(
+                currentContentRevision: revision, expectedContentRevision: 4,
+                baseQuestion: "Old", baseAnswer: "Original",
+                proposedQuestion: "New", proposedAnswer: "Improved",
+                currentQuestion: question, currentAnswer: answer)
+        }
+        #expect(check(revision: 5, question: "New", answer: "Improved") == .applied)
+        #expect(check(revision: 4, question: "Old", answer: "Original") == .conflict)
+        #expect(check(revision: 6, question: "New", answer: "Improved") == .conflict)
+        #expect(check(revision: 5, question: "Another edit", answer: "Improved") == .conflict)
+        #expect(check(revision: nil, question: nil, answer: nil) == nil)
+        #expect(ImDuplexInterruptedRecovery.cardStatus(
+            currentContentRevision: 7, expectedContentRevision: 7,
+            baseQuestion: "Same", baseAnswer: nil,
+            proposedQuestion: "Same", proposedAnswer: nil,
+            currentQuestion: "Same", currentAnswer: nil) == .applied)
+    }
     @Test func reverseCardEditUsesFreshCASAndRejectsInterveningRevision() {
         let originallyApplied = ImDuplexCardVersionGate.decide(
             expectedContentRevision: 5, currentContentRevision: 5,
