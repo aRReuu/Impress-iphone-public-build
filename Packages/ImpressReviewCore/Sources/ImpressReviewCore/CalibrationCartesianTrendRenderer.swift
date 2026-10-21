@@ -71,10 +71,12 @@ public enum CalibrationCartesianTrendRenderer {
             }
         }
         func plot(_ data: [Double?], color: UIColor, width: CGFloat) {
-            context.setStrokeColor(color.resolvedColor(with: traitCollection).cgColor)
+            let ink = color.resolvedColor(with: traitCollection)
+            context.setStrokeColor(ink.cgColor)
             context.setLineWidth(width)
             context.setLineCap(.round)
             context.setLineJoin(.round)
+            context.beginPath()
             var continuing = false
             for index in data.indices {
                 guard let value = data[index] else { continuing = false; continue }
@@ -86,17 +88,24 @@ public enum CalibrationCartesianTrendRenderer {
                 continuing = true
             }
             context.strokePath()
+            // Stroked lines cannot render a single sample in a gap-delimited run.
+            // Mark ALL isolated real values in each series, never invented zeros.
+            for index in data.indices {
+                guard let value = data[index] else { continue }
+                let hasPrevious = index > 0 && data[index - 1] != nil
+                let hasNext = index + 1 < data.count && data[index + 1] != nil
+                guard !hasPrevious && !hasNext else { continue }
+                let x = box.minX + box.width * CGFloat(index) /
+                    CGFloat(max(1, data.count - 1))
+                let diameter = max(4, width * 2)
+                context.setFillColor(ink.cgColor)
+                context.fillEllipse(in: CGRect(
+                    x: x - diameter / 2, y: y(value) - diameter / 2,
+                    width: diameter, height: diameter))
+            }
         }
         plot(values, color: palette.secondary, width: 1.4)
         plot(smooth, color: palette.accent, width: 2.8)
-        if values.compactMap({ $0 }).count == 1,
-           let index = values.firstIndex(where: { $0 != nil }),
-           let value = values[index] {
-            let x = box.minX + box.width * CGFloat(index) /
-                CGFloat(max(1, values.count - 1))
-            context.setFillColor(palette.accent.resolvedColor(with: traitCollection).cgColor)
-            context.fillEllipse(in: CGRect(x: x-3, y: y(value)-3, width: 6, height: 6))
-        }
     }
 
     /// WidgetKit must use this exact draw() path, not a second Swift Charts

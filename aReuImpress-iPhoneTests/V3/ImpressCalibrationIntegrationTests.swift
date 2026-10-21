@@ -233,4 +233,67 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
     }
 
 
+
+    /// CoreGraphics screenshot evidence, not physical SpringBoard Widget QA.
+    /// Anchors lock the scale: a missing isolated point cannot hide behind
+    /// a merely changed y-axis when comparing rendered bitmaps.
+    @MainActor
+    func testCartesianGappedMultiIsolatesAreVisibleInSixWidgetCanvases() throws {
+        let cases: [(String, Int, CGSize)] = [
+            ("week-small", 7, CGSize(width: 142, height: 76)),
+            ("week-medium", 7, CGSize(width: 300, height: 104)),
+            ("month-small", 30, CGSize(width: 142, height: 76)),
+            ("month-medium", 30, CGSize(width: 300, height: 104)),
+            ("year-small", 12, CGSize(width: 142, height: 76)),
+            ("year-medium", 12, CGSize(width: 300, height: 104))
+        ]
+        for (name, count, size) in cases {
+            var scores = Array<Double?>(repeating: nil, count: count)
+            scores[1] = 2
+            scores[count / 2] = -1
+            scores[count - 2] = 1
+            var means = Array<Double?>(repeating: nil, count: count)
+            means[1] = 1
+            means[count / 2] = 0.5
+            means[count - 2] = 0
+            let gaps = Array<Double?>(repeating: nil, count: count)
+            var anchor = gaps
+            anchor[0] = 2
+            anchor[1] = 2
+            let labels = (0..<count).map { String($0) }
+            for style in [UIUserInterfaceStyle.light, .dark] {
+                let traits = UITraitCollection(userInterfaceStyle: style)
+                func render(_ values: [Double?], _ smooth: [Double?]) -> UIImage {
+                    CalibrationCartesianTrendRenderer.image(
+                        size: size, values: values, smooth: smooth,
+                        tickLabels: labels, palette: .semantic,
+                        font: UIFont.preferredFont(forTextStyle: .caption2),
+                        traitCollection: traits)
+                }
+                let grayBaseline = render(gaps, anchor)
+                let blueBaseline = render(anchor, gaps)
+                let grayIsolates = render(scores, anchor)
+                let blueIsolates = render(anchor, means)
+                XCTAssertNotEqual(grayIsolates.pngData(), grayBaseline.pngData(),
+                    "\(name): separated gray score points must be visible")
+                XCTAssertNotEqual(blueIsolates.pngData(), blueBaseline.pngData(),
+                    "\(name): separated blue mean points must be visible")
+                let joined = render(scores, means)
+                let native = UIGraphicsImageRenderer(size: size).image { canvas in
+                    CalibrationCartesianTrendRenderer.draw(
+                        in: CGRect(origin: .zero, size: size),
+                        context: canvas.cgContext, values: scores, smooth: means,
+                        tickLabels: labels, palette: .semantic,
+                        font: UIFont.preferredFont(forTextStyle: .caption2),
+                        traitCollection: traits)
+                }
+                XCTAssertEqual(joined.pngData(), native.pngData(),
+                    "\(name): App and Widget must share pixel geometry")
+                let proof = XCTAttachment(image: joined)
+                proof.name = "Calibration-Cartesian-Canvas-\(name)-\(style == .dark ? "dark" : "light")"
+                proof.lifetime = .keepAlways
+                add(proof)
+            }
+        }
+    }
 }

@@ -122,6 +122,24 @@ jobs:
             echo "No available iPhone simulator" | tee out/simulator-error.log
             exit 1
           fi
+          # Hosted Xcode 27 can fail to connect to Simulator lockdown when
+          # xcodebuild cold-boots the first iPhone. Verify a full boot first.
+          # This preflight is fatal on failure; it never bypasses XCTest.
+          SIM_STATE=$(python3 - out/simulators.json "$SIM_ID" <<'PY'
+          import json, sys
+          for group in json.load(open(sys.argv[1]))["devices"].values():
+              for device in group:
+                  if device["udid"] == sys.argv[2]:
+                      print(device.get("state", ""))
+                      raise SystemExit(0)
+          raise SystemExit("Selected iPhone simulator disappeared")
+          PY
+          )
+          if [ "$SIM_STATE" != "Booted" ]; then
+            xcrun simctl boot "$SIM_ID"
+          fi
+          xcrun simctl bootstatus "$SIM_ID" -b 2>&1 | tee out/simulator-bootstatus.log
+          xcrun simctl spawn "$SIM_ID" launchctl list >/dev/null
           echo "IMPRESS_SIMULATOR_ID=$SIM_ID" >> "$GITHUB_ENV"
       - name: Run native iOS XCTest
         shell: bash
