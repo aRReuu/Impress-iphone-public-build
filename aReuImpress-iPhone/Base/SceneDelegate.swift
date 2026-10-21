@@ -11,6 +11,13 @@ import IQKeyboardManagerSwift
 class SceneDelegate: UIResponder, UIWindowSceneDelegate
 {
     var window: UIWindow?
+    private var isolatedV11Fixture: Bool {
+        #if DEBUG
+        return ImpressV11UITestFixture.enabled
+        #else
+        return false
+        #endif
+    }
     
     @available(iOS 13.0, *)
     func scene(_ scene: UIScene,
@@ -45,8 +52,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
         catch { showDatabaseUnavailable(); return }
         initRootVC()
         // Silent V3 backup check: no file picker or cloud permission prompt.
-        Task(priority: .utility) {
-            await ImpressV3BackupCoordinator.shared.backupIfNeeded()
+        if !isolatedV11Fixture {
+            Task(priority: .utility) {
+                await ImpressV3BackupCoordinator.shared.backupIfNeeded()
+            }
         }
         ImpressV3NotificationRouteInbox.shared.deliverIfPossible(
             in: window?.rootViewController)
@@ -67,8 +76,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
     func sceneDidEnterBackground(_ scene: UIScene) {
         NotificationCenter.default.post(name: .appDidEnterBackground, object: nil)
         // Best-effort only: iOS may suspend this work.
-        Task(priority: .utility) {
-            await ImpressV3BackupCoordinator.shared.backupIfNeeded()
+        if !isolatedV11Fixture {
+            Task(priority: .utility) {
+                await ImpressV3BackupCoordinator.shared.backupIfNeeded()
+            }
         }
     }
     
@@ -80,8 +91,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
     {
         // Foreground resumes are new uses even without a cold launch.
         // The coordinator avoids redundant copies when nothing changed.
-        Task(priority: .utility) {
-            await ImpressV3BackupCoordinator.shared.backupIfNeeded()
+        if !isolatedV11Fixture {
+            Task(priority: .utility) {
+                await ImpressV3BackupCoordinator.shared.backupIfNeeded()
+            }
         }
         ImpressV3NotificationRouteInbox.shared.deliverIfPossible(
             in: window?.rootViewController)
