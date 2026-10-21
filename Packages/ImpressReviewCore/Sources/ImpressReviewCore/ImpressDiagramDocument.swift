@@ -289,8 +289,18 @@ public struct ImpressDiagramDocument: Sendable {
             }
         }
         let included = selected.union(ancestors)
+        // Ancestor approval is only structural: preserve its title, ID
+        // and byte locator, but NEVER include ancestor body text. A selected
+        // descendant is not consent to transmit unrelated parent paragraphs,
+        // hidden frontmatter or sibling branches.
+        let scoped = nodes.filter { included.contains($0.id) }.map { node in
+            guard ancestors.contains(node.id) else { return node }
+            return ImpressDiagramNode(id: node.id, title: node.title,
+                ownSourceText: "", parentID: node.parentID,
+                startUTF8: node.startUTF8, endUTF8: node.endUTF8)
+        }
         return ImpressDiagramSelection(ids: selected.sorted(), ancestors: ancestors.sorted(),
-            nodes: nodes.filter { included.contains($0.id) }, kind: kind,
+            nodes: scoped, kind: kind,
             scopeStartUTF8: startUTF8, scopeEndUTF8: endUTF8)
     }
 }

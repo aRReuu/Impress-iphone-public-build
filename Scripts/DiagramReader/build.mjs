@@ -14,8 +14,10 @@ await build({
   logLevel: "warning"
 });
 cpSync(resolve(import.meta.dirname, "index.html"), resolve(destination, "index.html"));
+cpSync(resolve(import.meta.dirname, "THIRD_PARTY_LICENSES.txt"),
+  resolve(destination, "THIRD_PARTY_LICENSES.txt"));
 const manifest = {};
-for (const file of ["reader.js", "index.html"]) {
+for (const file of ["reader.js", "index.html", "THIRD_PARTY_LICENSES.txt"]) {
   const data = readFileSync(resolve(destination, file));
   manifest[file] = { size: data.byteLength,
     sha256: createHash("sha256").update(data).digest("hex") };

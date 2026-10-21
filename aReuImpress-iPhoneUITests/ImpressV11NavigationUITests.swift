@@ -99,6 +99,122 @@ final class ImpressV11NavigationUITests: XCTestCase {
         XCTAssertTrue(folder.waitForExistence(timeout: 20))
     }
 
+    func testMarkmapOfflineListBranchAndChatUsesOnlyApprovedSubtree() throws {
+        let app = openSyntheticFile("Graph")
+        app.buttons["更多笔记操作"].tap()
+        let markmap = app.buttons["阅读 Markmap 思维导图"]
+        XCTAssertTrue(markmap.waitForExistence(timeout: 12))
+        markmap.tap()
+        assertOfflineDiagramReady(app)
+        let table = app.tables["impress.diagram.source-selection"]
+        XCTAssertTrue(table.waitForExistence(timeout: 12))
+        let branch = table.cells.matching(
+            NSPredicate(format: "label CONTAINS %@", "经过审核的子节点")).firstMatch
+        XCTAssertTrue(branch.waitForExistence(timeout: 12))
+        branch.tap()
+        app.buttons["impress.diagram.preview-material"].tap()
+        let material = app.textViews["impress.diagram.material-preview"]
+        XCTAssertTrue(material.waitForExistence(timeout: 12))
+        let scope = String(describing: material.value ?? "")
+        XCTAssertTrue(scope.contains("经过审核的子节点"))
+        XCTAssertFalse(scope.contains("未获批准的兄弟分支"),
+            "Markmap selection must never include an unapproved sibling")
+        app.buttons["impress.diagram.confirm-material"].tap()
+        sendSyntheticChatAndVerifyReply(app, message: "Explain the selected subtree only.")
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Markmap-offline-approved-subtree-to-Chat"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
+    func testNativeJSONCanvasOnlySelectedNodeMovesIntoChat() throws {
+        let app = openSyntheticFile("Diagram")
+        let graph = app.scrollViews["impress.canvas.native-viewport"]
+        XCTAssertTrue(graph.waitForExistence(timeout: 15))
+        let node = app.buttons["impress.canvas.node.a"]
+        XCTAssertTrue(node.waitForExistence(timeout: 12))
+        node.tap()
+        app.buttons["更多笔记操作"].tap()
+        app.buttons["所选画布节点预览并加入 Chat"].tap()
+        let material = app.textViews["impress.canvas.material-preview"]
+        XCTAssertTrue(material.waitForExistence(timeout: 12))
+        XCTAssertTrue(String(describing: material.value ?? "").contains("a"))
+        app.buttons["impress.canvas.confirm-material"].tap()
+        sendSyntheticChatAndVerifyReply(app, message: "Analyze the approved Canvas node.")
+    }
+
+    func testExcalidrawNativeReadSelectionAndChatRejectsUnselectedElement() throws {
+        let app = openSyntheticFile("Drawing")
+        let graph = app.scrollViews["impress.excalidraw.native-viewport"]
+        XCTAssertTrue(graph.waitForExistence(timeout: 15))
+        let rectangle = app.buttons["impress.excalidraw.element.a"]
+        XCTAssertTrue(rectangle.waitForExistence(timeout: 12))
+        rectangle.tap()
+        app.buttons["更多笔记操作"].tap()
+        app.buttons["所选绘图元素预览并加入 Chat"].tap()
+        let material = app.textViews["impress.excalidraw.material-preview"]
+        XCTAssertTrue(material.waitForExistence(timeout: 12))
+        XCTAssertFalse(String(describing: material.value ?? "").contains("Unapproved"))
+        app.buttons["impress.excalidraw.confirm-material"].tap()
+        sendSyntheticChatAndVerifyReply(app, message: "Analyze only the approved rectangle.")
+    }
+
+    private func openSyntheticFile(_ title: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments += ["-ImpressV11SyntheticVault",
+                                "-AppleLanguages", "(zh-Hans)"]
+        app.launchEnvironment["IMPRESS_V11_FIXTURE_ID"] = UUID().uuidString
+        app.launch()
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 30))
+        app.tabBars.buttons.element(boundBy: 1).tap()
+        let folder = app.cells.matching(identifier: "impress.notes.folder-row")
+            .matching(NSPredicate(format: "label == %@", "Study")).firstMatch
+        XCTAssertTrue(folder.waitForExistence(timeout: 30))
+        folder.tap()
+        let file = app.cells.matching(identifier: "impress.notes.file-row")
+            .matching(NSPredicate(format: "label == %@", title)).firstMatch
+        XCTAssertTrue(file.waitForExistence(timeout: 25))
+        file.tap()
+        XCTAssertTrue(app.staticTexts["impress.notes.source-path"]
+            .waitForExistence(timeout: 20))
+        return app
+    }
+
+    private func assertOfflineDiagramReady(_ app: XCUIApplication) {
+        XCTAssertTrue(app.webViews["impress.diagram.offline-graph"]
+            .waitForExistence(timeout: 20))
+        let state = app.staticTexts["impress.diagram.render-state"]
+        XCTAssertTrue(state.waitForExistence(timeout: 15))
+        let didRender = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "ready"), object: state)
+        XCTAssertEqual(XCTWaiter.wait(for: [didRender], timeout: 30), .completed)
+    }
+
+    private func sendSyntheticChatAndVerifyReply(_ app: XCUIApplication,
+                                                 message: String) {
+        let input = app.textViews["impress.ai.chat.input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 25))
+        let guide = app.alerts["关于讨论"]
+        if guide.waitForExistence(timeout: 2) { guide.buttons["知道了"].tap() }
+        input.tap()
+        input.typeText(message)
+        let send = app.buttons["impress.ai.chat.send"]
+        XCTAssertTrue(send.isEnabled)
+        send.tap()
+        let permission = app.alerts["是否附带当前笔记材料？"]
+        if permission.waitForExistence(timeout: 10) {
+            permission.buttons["附带本次笔记材料"].tap()
+        }
+        let assistant = app.textViews.matching(
+            identifier: "impress.ai.chat.message-body").matching(
+                NSPredicate(format: "value CONTAINS %@", "合成模型回复")).firstMatch
+        XCTAssertTrue(assistant.waitForExistence(timeout: 35))
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Composite-Selected-Material-Chat-RoundTrip"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
     /// Candidate review and WCDB card creation happen through genuine UI
     /// controls, with an explicit fixed synthetic provider for this fixture.
     func testSyntheticQuestionPoolReviewAndNativeFlashcard() throws {

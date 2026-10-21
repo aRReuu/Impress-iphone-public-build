@@ -312,6 +312,41 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(button.accessibilityIdentifier, "impress.duplex.undo.confirm")
     }
 
+    /// F11: missing/corrupt private recovery snapshots must never be
+    /// reconstructed from public Chat prose or an incomplete WCDB proposal.
+    @MainActor
+    func testF11MissingApprovedDraftDisablesNoteCommitFromApprovalUI() throws {
+        let identity = try ImVaultFileIdentity(vaultID: UUID().uuidString,
+            relativePath: "Missing/Untrusted.md")
+        let proposal = WCDBV3DuplexProposal(sourceMessageID: UUID(),
+            noteIdentity: identity,
+            noteBaseDigest: String(repeating: "a", count: 64),
+            noteEditedDigest: String(repeating: "b", count: 64),
+            cardID: nil, cardReviewRevision: nil, cardContentRevision: nil,
+            cardBaseQuestion: nil, cardBaseAnswer: nil,
+            cardEditedQuestion: nil, cardEditedAnswer: nil,
+            state: ImDuplexApprovalState(noteSelected: true, cardSelected: false))
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
+            calculator: FSRS6ReviewCalculator())
+        let page = ImpressDuplexApprovalController(repository: repo, proposal: proposal) {
+            _ in XCTFail("Missing ApprovedDraft must not persist an applied proposal")
+            return false
+        }
+        page.loadViewIfNeeded()
+        let preview = try XCTUnwrap(page.view.subviews.compactMap {
+            $0 as? UITextView
+        }.first(where: { $0.accessibilityIdentifier == "impress.duplex.full-diff" }))
+        XCTAssertTrue(preview.text.contains("草稿变更或不存在"))
+        let confirm = try XCTUnwrap(page.view.subviews.compactMap {
+            $0 as? UIButton
+        }.first(where: { $0.accessibilityIdentifier == "impress.duplex.confirm" }))
+        XCTAssertFalse(confirm.isEnabled)
+        XCTAssertNil(try ImVaultPrivateStore.approvedDraft(identity: identity,
+            baseDigest: proposal.noteBaseDigest,
+            editedDigest: proposal.noteEditedDigest))
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
     @MainActor
     func testF06InterruptedApprovalBlocksDiscardAndForwardConfirmation() throws {
         let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
@@ -599,6 +634,72 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertTrue(ratings.isEmpty)
         let current = try await reopened.chatSessions(for: source)
         XCTAssertEqual(current.first?.pendingDuplex?.state.cardStatus, .applied)
+    }
+
+    /// F02: the real production write guard denies the source update,
+    /// but a separately approved original card CAS can still succeed. A
+    /// cold WCDB read preserves both facts and no FSRS rating is invented.
+    @MainActor
+    func testF02DeniedNoteWriteAndAppliedOriginalCardSurviveColdStart() async throws {
+        let db = temporaryPath()
+        let calculator = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(databasePath: db, calculator: calculator)
+        let cardID = UUID()
+        let now = Date(timeIntervalSince1970: 1_726_000_000)
+        let identity = try ImVaultFileIdentity(vaultID: UUID().uuidString,
+            relativePath: "Notes/F02.md")
+        let noteLink = try ImpressBatchSourceKey.encode(identity)
+        try await repo.insertNewCard(WCDBV3CardInput(cardID: cardID,
+            question: "Old", answerText: "Original", sourceNotePath: noteLink),
+            initial: try calculator.newCardSnapshot(id: cardID, now: now), now: now)
+        var draft = try ImVaultDraft(identity: identity, baseText: "# Source\n")
+        try draft.update("# Updated\n")
+        let refused: Result<ImVaultCommitOutcome, Error> =
+            await withCheckedContinuation { continuation in
+                ImVaultGuardedWrite.commitAuthorized(draft: draft,
+                    userConfirmedDiff: true, deviceQATestCopyConfirmed: false) {
+                    continuation.resume(returning: $0)
+                }
+            }
+        guard case .failure = refused else {
+            XCTFail("Production Vault write must remain locked"); return
+        }
+        let queue = try await repo.fetchQueueCandidates()
+        let token = try XCTUnwrap(queue.first { $0.cardID == cardID })
+        try await repo.updateManagedCard(WCDBV3CardInput(cardID: cardID,
+            question: "Approved question", answerText: "Approved answer",
+            sourceNotePath: noteLink), expectedRevision: token.revision,
+            expectedContentRevision: 0, origin: .approvedAI)
+        var session = WCDBV3ChatSession(sourceIdentity: "card:" + cardID.uuidString)
+        var proposal = WCDBV3DuplexProposal(sourceMessageID: UUID(),
+            noteIdentity: identity, noteBaseDigest: draft.baseDigest,
+            noteEditedDigest: ImVaultDigest.sha256(draft.proposedBytes),
+            cardID: cardID, cardReviewRevision: token.revision,
+            cardContentRevision: 0, cardBaseQuestion: "Old", cardBaseAnswer: "Original",
+            cardEditedQuestion: "Approved question", cardEditedAnswer: "Approved answer",
+            state: ImDuplexApprovalState(noteSelected: true, cardSelected: true,
+                noteStatus: .failed, cardStatus: .applied))
+        proposal.noteReceipt = "Production gate rejected file write"
+        proposal.cardReceipt = "Card CAS applied once"
+        session.pendingDuplex = proposal
+        try await repo.saveChatSession(session, expectedRevision: nil)
+        let reopened = try ReviewWCDBRepository(databasePath: db,
+            calculator: calculator)
+        let conversations = try await reopened.chatSessions(for: session.sourceIdentity)
+        let receipt = try XCTUnwrap(conversations.first?.pendingDuplex)
+        XCTAssertEqual(receipt.state.noteStatus, .failed)
+        XCTAssertEqual(receipt.state.cardStatus, .applied)
+        XCTAssertTrue(receipt.state.needsNoteAction)
+        XCTAssertFalse(receipt.state.needsCardAction)
+        let contentResult = try await reopened.content(for: cardID)
+        let content = try XCTUnwrap(contentResult)
+        XCTAssertEqual(content.question, "Approved question")
+        XCTAssertEqual(content.contentRevision, 1)
+        let versions = try await reopened.contentHistory(for: cardID)
+        XCTAssertEqual(versions.map(\.contentRevision), [0, 1])
+        let ratings = try await reopened.reviewHistory(for: cardID)
+        XCTAssertTrue(ratings.isEmpty)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 
     @MainActor
@@ -1693,6 +1794,34 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertNotNil(descendants(page.view).first {
             $0.accessibilityIdentifier == "impress.excalidraw.native-viewport"
         })
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    @MainActor
+    func testExcalidrawExplicitFullAndSpatialRangeCannotLeakOtherElement() throws {
+        let json = """
+        {"type":"excalidraw","elements":[
+          {"id":"a","type":"rectangle","x":0,"y":0,"width":90,"height":70},
+          {"id":"secret","type":"text","x":350,"y":0,"width":100,"height":70,
+           "text":"Unapproved source"}]}
+        """
+        let scene = try ImpressExcalidrawScene.parse(Data(json.utf8),
+            format: .excalidrawJSON)
+        let viewport = try ImpressExcalidrawNativeView(source: scene)
+        let a = try XCTUnwrap(viewport.subviews.flatMap { $0.subviews }
+            .compactMap { $0 as? UIButton }.first {
+                $0.accessibilityIdentifier == "impress.excalidraw.element.a"
+            })
+        let near = CGRect(x: a.frame.midX - 30, y: a.frame.midY - 30,
+            width: 60, height: 60)
+        viewport.selectElements(in: near)
+        XCTAssertEqual(viewport.selectedIDs, ["a"])
+        let preview = try scene.selection(ids: viewport.selectedIDs).textContextJSON()
+        XCTAssertFalse(preview.contains("Unapproved source"))
+        viewport.selectAllActive()
+        XCTAssertEqual(viewport.selectedIDs, Set(["a", "secret"]))
+        viewport.clearSelections()
+        XCTAssertTrue(viewport.selectedIDs.isEmpty)
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 

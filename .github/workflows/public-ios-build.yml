@@ -152,6 +152,7 @@ jobs:
           test -s "$APP/DiagramReader/reader.js"
           test -s "$APP/DiagramReader/index.html"
           test -s "$APP/DiagramReader/manifest.json"
+          test -s "$APP/DiagramReader/THIRD_PARTY_LICENSES.txt"
           file "$APP/aReuImpress-iPhone" | tee out/mach-o-file.txt
           lipo -info "$APP/aReuImpress-iPhone" | tee out/mach-o-architecture.txt
           grep -q arm64 out/mach-o-architecture.txt

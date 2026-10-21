@@ -129,9 +129,12 @@ enum ImpressV11UITestFixture {
             "Study/Graph.md":
                 "# 本地图形\n## Mermaid\n" + fence +
                 "mermaid\nflowchart LR\nA[观察] --> B[验证]\nC[不可上传]\n" +
-                fence + "\n## Markmap\n### 机制\n### 反例\n",
+                fence + "\n## Markmap\n### 机制\n### 反例\n" +
+                "- 证据主分支\n  - 经过审核的子节点\n  - 未获批准的兄弟分支\n",
             "Study/Diagram.canvas":
-                "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":150,\"height\":85,\"text\":\"图形范围\"}],\"edges\":[]}"
+                "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":150,\"height\":85,\"text\":\"图形范围\"}],\"edges\":[]}",
+            "Study/Drawing.excalidraw":
+                "{\"type\":\"excalidraw\",\"elements\":[{\"id\":\"a\",\"type\":\"rectangle\",\"x\":0,\"y\":0,\"width\":150,\"height\":90,\"strokeColor\":\"#4f93b3\"},{\"id\":\"private\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":160,\"height\":90,\"text\":\"Unapproved\"}]}"
         ]
         for (name, contents) in files {
             let destination = root.appendingPathComponent(name)

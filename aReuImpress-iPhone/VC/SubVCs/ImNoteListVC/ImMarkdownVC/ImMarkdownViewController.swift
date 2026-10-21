@@ -855,6 +855,22 @@ final class ImVaultDocumentController: UIViewController {
                     image: UIImage(systemName: "square.stack")) {
                         [weak self] _ in self?.reviewSelectedDrawing()
                 })
+                actions.append(UIAction(title: V3L("选择整张绘图"),
+                    image: UIImage(systemName: "square.dashed.inset.filled")) {
+                        [weak self] _ in self?.drawingGraph?.selectAllActive()
+                })
+                actions.append(UIAction(title: V3L("框选绘图区域"),
+                    image: UIImage(systemName: "selection.pin.in.out")) {
+                        [weak self] _ in self?.drawingGraph?.beginRegionSelection()
+                })
+                actions.append(UIAction(title: V3L("结束框选"),
+                    image: UIImage(systemName: "checkmark.circle")) {
+                        [weak self] _ in self?.drawingGraph?.endRegionSelection()
+                })
+                actions.append(UIAction(title: V3L("清空所选绘图"),
+                    image: UIImage(systemName: "xmark.circle")) {
+                        [weak self] _ in self?.drawingGraph?.clearSelections()
+                })
             }
             more.menu = UIMenu(children: actions)
         }
@@ -2204,6 +2220,10 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
     private let artboard = UIView()
     private var controls: [String: UIButton] = [:]
     private(set) var selectedIDs = Set<String>()
+    private var selectionPan: UIPanGestureRecognizer?
+    private var selectionStart: CGPoint?
+    private let selectionOutline = CAShapeLayer()
+    private(set) var selectingRegion = false
     let source: ImpressExcalidrawScene
 
     init(source: ImpressExcalidrawScene) throws {
@@ -2294,14 +2314,93 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
             artboard.addSubview(control)
             controls[element.id] = control
         }
+        selectionOutline.fillColor = UIColor.clear.cgColor
+        selectionOutline.strokeColor = ImpressV3Appearance.accent.cgColor
+        selectionOutline.lineDashPattern = [6, 4]
+        selectionOutline.lineWidth = 1.5
+        selectionOutline.zPosition = 1_000
+        artboard.layer.addSublayer(selectionOutline)
+        let recognizer = UIPanGestureRecognizer(target: self,
+            action: #selector(dragSelectionRegion(_:)))
+        recognizer.minimumNumberOfTouches = 1
+        recognizer.maximumNumberOfTouches = 1
+        recognizer.isEnabled = false
+        artboard.addGestureRecognizer(recognizer)
+        selectionPan = recognizer
     }
 
     required init?(coder: NSCoder) { fatalError("init(source:) required") }
 
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { artboard }
 
+    /// Whole-picture approval is an explicit user action, never the default
+    /// Chat material scope. Every selected ID is independently revalidated.
+    func selectAllActive() {
+        endRegionSelection()
+        selectedIDs = Set(controls.keys)
+        refreshSelections()
+    }
+
+    func clearSelections() {
+        endRegionSelection()
+        selectedIDs.removeAll()
+        refreshSelections()
+    }
+
+    func beginRegionSelection() {
+        selectingRegion = true
+        isScrollEnabled = false
+        selectionPan?.isEnabled = true
+        accessibilityValue = V3L("区域选择模式：在画布中拖动一个矩形")
+    }
+
+    func endRegionSelection() {
+        selectingRegion = false
+        isScrollEnabled = true
+        selectionPan?.isEnabled = false
+        selectionStart = nil
+        selectionOutline.path = nil
+        accessibilityValue = nil
+    }
+
+    /// Use the center point of each transformed element to avoid importing a
+    /// visually adjacent, unapproved shape touched by one rectangle pixel.
+    func selectElements(in rect: CGRect) {
+        guard rect.width >= 12, rect.height >= 12 else { return }
+        for (id, button) in controls where rect.contains(
+            CGPoint(x: button.frame.midX, y: button.frame.midY)) {
+            selectedIDs.insert(id)
+        }
+        refreshSelections()
+    }
+
+    @objc private func dragSelectionRegion(_ recognizer: UIPanGestureRecognizer) {
+        let cursor = recognizer.location(in: artboard)
+        switch recognizer.state {
+        case .began:
+            selectionStart = cursor
+        case .changed, .ended:
+            guard let start = selectionStart else { return }
+            let frame = CGRect(x: min(start.x, cursor.x),
+                y: min(start.y, cursor.y),
+                width: abs(cursor.x - start.x), height: abs(cursor.y - start.y))
+            selectionOutline.path = UIBezierPath(rect: frame).cgPath
+            if recognizer.state == .ended {
+                selectElements(in: frame)
+                endRegionSelection()
+            }
+        case .cancelled, .failed:
+            endRegionSelection()
+        default: break
+        }
+    }
+
     private func toggle(_ id: String) {
         if !selectedIDs.insert(id).inserted { selectedIDs.remove(id) }
+        refreshSelections()
+    }
+
+    private func refreshSelections() {
         for (key, button) in controls {
             let selected = selectedIDs.contains(key)
             button.layer.borderColor = selected

@@ -65,6 +65,25 @@ struct ImpressDiagramDocumentTests {
             doc.nodes.first(where: { $0.title == "Another group" })).id))
     }
 
+    @Test func ancestorMetadataCannotUploadPrivateUnselectedParentBody() throws {
+        let markdown = "# Parent\nPRIVATE PARENT BODY\n" +
+            "## Selected child\nReviewed observation\n" +
+            "## Secret sibling\nPRIVATE SIBLING BODY\n"
+        let diagram = try ImpressDiagramDocument.markmap(in: Data(markdown.utf8))
+        let child = try #require(diagram.nodes.first {
+            $0.title == "Selected child"
+        })
+        let chosen = try diagram.selection(ids: [child.id])
+        let exported = try chosen.contextJSON()
+        #expect(exported.contains("Selected child"))
+        #expect(exported.contains("Reviewed observation"))
+        #expect(exported.contains("Parent"))
+        #expect(!exported.contains("PRIVATE PARENT BODY"))
+        #expect(!exported.contains("PRIVATE SIBLING BODY"))
+        #expect(chosen.nodes.filter { chosen.ancestors.contains($0.id) }
+            .allSatisfy { $0.ownSourceText.isEmpty })
+    }
+
     @Test func headinglessListHasRealAncestorAndNoUnapprovedSibling() throws {
         let doc = try ImpressDiagramDocument.markmap(in:
             Data("- Parent\n  - Approved\n  - Secret\n".utf8))
