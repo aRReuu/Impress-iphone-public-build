@@ -144,8 +144,11 @@ class ImMemoryCardView: UIView
     override func layoutSubviews()
     {
         super.layoutSubviews()
-        // 延迟到下一轮runloop执行高度更新，避免布局冲突
-        scheduleHeightUpdate()
+        // Reconcile with the current text width synchronously. Async-only
+        // sizing left a newly presented question at the former 44pt placeholder,
+        // clipping a three-line question to one/two lines until another layout.
+        // The height setter is idempotent (changes > 1pt only).
+        updateQuestionTextViewHeight()
     }
 
     // MARK: - Setup
@@ -183,7 +186,18 @@ class ImMemoryCardView: UIView
         questionTextViewCenterYConstraint = questionTextView.centerYAnchor.constraint(equalTo: cardView.centerYAnchor)
         questionTextViewCenterYConstraint.isActive = true
 
-        questionTextViewHeightConstraint = questionTextView.heightAnchor.constraint(equalToConstant: 44)
+        // A card may be rendered before it has a window/safe-area width.
+        // Use a true three-line initial viewport instead of a 44pt placeholder.
+        // Once width is known, updateQuestionTextViewHeight() shrinks short
+        // questions to their measured 1/2 lines and retains a 3-line maximum.
+        let initialQuestionHeight: CGFloat = usesCompactV3Style
+            ? (questionTextView.font?.lineHeight ??
+                ImpressV3Appearance.Typography.flashQuestion.lineHeight) * 3 +
+                questionTextView.textContainerInset.top +
+                questionTextView.textContainerInset.bottom + 3
+            : 44
+        questionTextViewHeightConstraint = questionTextView.heightAnchor.constraint(
+            equalToConstant: initialQuestionHeight)
         // 设置高度约束优先级为高但非必需，允许在空间不足时压缩
         questionTextViewHeightConstraint.priority = UILayoutPriority(750)
         questionTextViewHeightConstraint.isActive = true
@@ -281,13 +295,6 @@ class ImMemoryCardView: UIView
         guard abs(questionTextViewHeightConstraint.constant - target) > 1.0 else { return }
         questionTextViewHeightConstraint.constant = target
         // 移除强制布局调用，避免在布局过程中触发新的布局周期
-    }
-
-    /// 使用异步延迟更新高度，避免布局冲突
-    private func scheduleHeightUpdate() {
-        DispatchQueue.main.async { [weak self] in
-            self?.updateQuestionTextViewHeight()
-        }
     }
 
     private func setupActions()
