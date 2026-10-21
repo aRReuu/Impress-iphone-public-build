@@ -2,7 +2,7 @@ import Foundation
 
 /// Read-only Excalidraw scene adapter. Source bytes remain owned by the
 /// authorized Vault; no Obsidian plugin scripts or file embeds are executed.
-/// Plain .excalidraw JSON and uncompressed Drawing json fenced blocks from
+/// Plain .excalidraw JSON and JSON/LZ-String Drawing fences from
 /// .excalidraw.md use the same immutable parser.
 public enum ImpressExcalidrawReadError: Error, Equatable {
     case invalidScene, missingDrawing, compressedDataUnsupported,
@@ -79,6 +79,7 @@ public struct ImpressExcalidrawScene: Decodable, Sendable {
                 .components(separatedBy: "\n")
             var inDrawing = false
             var collecting = false
+            var compressed = false
             var captured: [String] = []
             var found = false
             for line in lines {
@@ -91,11 +92,10 @@ public struct ImpressExcalidrawScene: Decodable, Sendable {
                         continue
                     }
                     if !inDrawing { continue }
-                    if trimmed == Self.fence.repeatElement(3) + "compressed-json" {
-                        throw ImpressExcalidrawReadError.compressedDataUnsupported
-                    }
-                    if trimmed == Self.fence.repeatElement(3) + "json" {
+                    if trimmed == Self.fence.repeatElement(3) + "compressed-json" ||
+                       trimmed == Self.fence.repeatElement(3) + "json" {
                         collecting = true
+                        compressed = trimmed.hasSuffix("compressed-json")
                         captured = []
                     }
                     continue
@@ -107,7 +107,17 @@ public struct ImpressExcalidrawScene: Decodable, Sendable {
                 captured.append(line)
             }
             guard found else { throw ImpressExcalidrawReadError.missingDrawing }
-            json = captured.joined(separator: "\n")
+            if compressed {
+                do {
+                    json = try ImpressLZStringBase64.decompress(captured.joined(separator: "\n"))
+                } catch ImpressLZStringBase64.Error.exceedsLimit {
+                    throw ImpressExcalidrawReadError.tooLarge
+                } catch {
+                    throw ImpressExcalidrawReadError.invalidScene
+                }
+            } else {
+                json = captured.joined(separator: "\n")
+            }
         default:
             throw ImpressExcalidrawReadError.invalidScene
         }
