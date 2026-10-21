@@ -1,7 +1,7 @@
 # Impress · 当前唯一产品需求与执行契约
 
-> **版本：V1.1 · 开工前定稿。** 用户最新指示 > 本文件 > 执行矩阵 > 架构/验收说明 > 历史记录。本轮仅更新现有稿件，不改 Swift、依赖、工程、测试或工作流，不代表功能完成。
-> **唯一仓库/分支：** `aRReuu/Impress-iphone-public-build` / `feature/impress-duplex-loop-v1`。定稿读取的代码基线：`b7f5101187e37cffca87091bfd665eeaa94b9f59`，完整成功 CI：Run `39443303363`。施工开始必须重新读取远端 HEAD，保留后来合法提交；此历史 CI 不证明 V1.1 已实现。
+> **版本：V1.1 · 当前唯一需求权威（已进入实施与分层验收）。** 用户最新指示 > 本文件 > 执行矩阵 > 架构/验收说明 > 历史记录。旧开工前仅更新文档的门禁已由后续用户施工授权取代；需求确认不等于功能或真机验收通过。
+> **唯一仓库/分支：** `aRReuu/Impress-iphone-public-build` / `feature/impress-duplex-loop-v1`。原定稿代码基线：`b7f5101187e37cffca87091bfd665eeaa94b9f59`，当时 CI Run `39443303363`；后续已有实施并于 `355656de` / Run #100 获得分层 CI 成功。二维 Widget 最新代码为 `7c28b74`，其完整 CI #39600533287 正在进行；开工前文件口径只保留作为历史证据，任何验收须用对应实际 SHA。
 > **安全：** 不修改 main/私库，不新建分支，不用 Remote Desktop Commander，不 reset/clean/强推/删除历史，不提交私人笔记、截图、数据库、Key、证书；不替换原版 AppIcon、不自动收费。`ImVaultGuardedWrite.productionWriteEnabled = false`。只允许独立临时 fixture/明确授权的 Debug QA Vault 测试写入。
 
 ## 1. 本轮替代规则（旧要求不再参与当前布局验收）

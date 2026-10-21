@@ -1,7 +1,7 @@
 # Impress · 校准器既有实现记录与 V1.1 入口迁移契约
 
 > 产品权威唯一为 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md)。本文件不再自称独立业务权威。唯一工作分支`feature/impress-duplex-loop-v1`；旧`feature/impress-vault-device-write-qa`与`feature/impress-v3-r04-2-build`只属历史，禁止据其施工。
-> 2026-10-21 追加批准只读 B 方案周/月/年桌面 Widget（Small/Medium），归 NAV-05.w/SAFE-08.w；第三 Tab/既有校准数据/原周月年应用内图不变，不恢复闪卡首页周图。CAL-01～15 **新方案仍 DEFERRED**（计分公式、迁移、新图表、新提醒未解冻）；本次仅改文档。
+> 2026-10-21 追加批准只读 B 方案周/月/年桌面 Widget（Small/Medium），归 NAV-05.w/SAFE-08.w；第三 Tab/既有校准数据/原周月年应用内图不变，不恢复闪卡首页周图。CAL-01～15 **新方案仍 DEFERRED**（计分公式、迁移、新图表、新提醒未解冻）；原定稿阶段仅改文档，后续已获准实施，当前二维同源 Widget 代码见 §9。
 
 ## 1. 入口与状态保全
 

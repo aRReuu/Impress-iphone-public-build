@@ -1,12 +1,12 @@
 # Impress · 需求 × 代码 × 测试 × 设备验收执行矩阵
 
-> **V1.1 开工前定稿；仅文档，未施工/未运行新测试。** 唯一需求权威：[PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md)。只使用 `feature/impress-duplex-loop-v1`。本次确认的远端代码 SHA 为 `b7f5101187e37cffca87091bfd665eeaa94b9f59`（B0），成功 Actions Run `39443303363`（R0）；不是新 UI 或复杂格式的完成证据。
+> **V1.1 当前执行矩阵；开工前状态保留在“旧”列，已有持续施工和部分真实测试。** 唯一需求权威：[PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md)。只使用 `feature/impress-duplex-loop-v1`。本次确认的远端代码 SHA 为 `b7f5101187e37cffca87091bfd665eeaa94b9f59`（B0），成功 Actions Run `39443303363`（R0）；不是新 UI 或复杂格式的完成证据。
 > 历史源码/测试不因新设计而被视为不存在。旧矩阵的 42 IN_PROGRESS、25 CODE_DONE、18 DEFERRED 仅作为迁移前记录；表中“旧”列完整保留。此次状态调整只反映需求变化与已知差距，不假造逐项测试结果。旧章节里“尚无统一预览/回执”的说法已过时，现有代码应复用。
 
 ## 1. 状态与证据分离
 
 设计已定与实现已完不是同一维度。`IN_PROGRESS` 可以表示基线已实现、但新规格/异常/证据未补齐；不是命令重写全部。`CODE_DONE` 仅源码层，仍须复核；`TEST_PASS` 必须有该方法在精确 SHA 的结果；`E2E_PASS` 必须真实连续 UI 操作；`NOT_RUN` 无执行证据；`DEVICE_BLOCKED` 有明确外部设备/授权限制；`DEFERRED` 明确暂缓；`FAIL` 已复现失败。不得把内部缺代码写成设备阻塞。
-本轮没有把任何条目提升为 TEST_PASS/E2E_PASS。旧 CI 只认证 B0 的原测试范围；UI 参数验证不是已批准像素验收。
+原 B0 定稿时没有新 TEST_PASS/E2E_PASS；此后在精确 SHA 的原生 XCTest/XCUITest 已有分层 PASS，按本矩阵增量记录。原 UI 及当前 Widget 真机像素/完整十八步验收仍需独立证据。
 
 ## 2. 源码与测试定位索引
 

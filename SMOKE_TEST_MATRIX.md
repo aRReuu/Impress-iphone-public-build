@@ -1,11 +1,11 @@
 # Impress · 当前验收与完整冒烟矩阵
 
-> **V1.1 开工前定稿，仅测试规格，未执行新测试。** 需求权威为 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md)，状态为 [REQUIREMENT_EXECUTION_MATRIX_20261020.md](REQUIREMENT_EXECUTION_MATRIX_20261020.md)。B0=`b7f5101187e37cffca87091bfd665eeaa94b9f59`，R0=`39443303363`，该历史 CI 已回读 success；不能据此认证新布局/复杂格式。服务层完整往返不是 UI E2E。
+> **V1.1 当前测试规格与实际增量证据；历史 B0 阶段未执行新测试。** 需求权威为 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md)，状态为 [REQUIREMENT_EXECUTION_MATRIX_20261020.md](REQUIREMENT_EXECUTION_MATRIX_20261020.md)。B0=`b7f5101187e37cffca87091bfd665eeaa94b9f59`，R0=`39443303363`，该历史 CI 已回读 success；不能据此认证新布局/复杂格式。服务层完整往返不是 UI E2E。
 
 ## 1. 证据记录契约
 
 每次验收必须记录：Requirement ID/子项、场景、具体源码/入口、实际测试方法、环境/fixture、结果、精确 Git SHA、Actions Run ID与job、Simulator、连续UI E2E、物理设备、截图/日志定位、缺陷或具体外部阻塞。计划方法均为 NOT_RUN，不能当作已有测试。只有真正执行的层级可 TEST_PASS/E2E_PASS；代码已写只可 CODE_DONE；未执行 NOT_RUN；内部未实现 IN_PROGRESS，不以 DEVICE_BLOCKED 遮掩；已复现 FAIL；明确延期 DEFERRED。
-以下“基线”统一指 B0/R0 的**证据定位而非整项 PASS**；V1.1 的执行 SHA/Run 目前为“—/—”，Simulator/UI E2E为NOT_RUN，Device为DEVICE_BLOCKED（无物理设备与真实授权证据）。后续必须逐行替换为实际结果，不能只改总标题。
+以下“基线”统一指 B0/R0 的**历史证据定位**。表内未更新的“—/—”“NOT_RUN”是对应 ACCEPT 的完整逐项证明尚未登记，不否认后文列出的 Run #100 分层成功与新增真实 XCUITest；真实设备仍须验。不得只凭汇总 CI 将全部 ACCEPT 标为通过。
 
 ## 2. ACCEPT-01～12 逐项证据台账
 
@@ -151,7 +151,7 @@ STT回归包含三独立识别locale、模型可用/显式下载/麦克风权限
 
 Excalidraw compressed-json/有限 PNG/JPEG 的源码和测试已提交，但全图形/范围/附件仍有实现缺口。接受度台账 ACCEPT-01～12 需逐项填最新 SHA、Run ID、真实 XCUITest/截图及设备限制；不允许用旧成功 Run `39489025745` 证明新增功能。
 
-## 9. 2026-10-21 · B 方案 Widget 与新增闪卡冒烟（设计已定，全部 NOT_RUN）
+## 9. 2026-10-21 · B 方案 Widget 与新增闪卡冒烟（已有源码/部分测试，真实六布局与设备仍待验）
 
 新验收基于 `NAV-05.w/SAFE-08.w/CARD-08.a/UI-01.a`，不插入原有十八步 E2E 中途、不删 F01～F13。每项需记录准确代码 SHA、Actions Run、真实 XCTest/XCUITest 名、Widget Preview/Simulator、iPhone13 桌面截图、签名 entitlement/安装结果、失败原因；静态设计/Swift Core 通过不能冒充桌面 E2E。
 
