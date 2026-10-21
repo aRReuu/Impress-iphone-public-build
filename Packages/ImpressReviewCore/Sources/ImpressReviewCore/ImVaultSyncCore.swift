@@ -350,7 +350,8 @@ public enum ImDuplexInterruptedRecovery {
                                   currentQuestion: String?, currentAnswer: String?)
         -> ImDuplexTargetStatus? {
         guard let currentContentRevision, let currentQuestion,
-              expectedContentRevision >= 0 else { return nil }
+              expectedContentRevision >= 0, expectedContentRevision < Int.max
+              else { return nil }
         let unchangedProposal = baseQuestion == proposedQuestion &&
             baseAnswer == proposedAnswer
         if unchangedProposal && currentContentRevision == expectedContentRevision &&
