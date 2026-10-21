@@ -143,3 +143,9 @@ UNDO-01原卡新restored版本、02后来内容冲突/仅FSRS变化不冲突、0
 备份回归包含CRC/SHA/SQLite integrity、并发变更generation、Dirty标记、恢复前镜像、SQLite/WAL与JSON一致性、冷启动前完成恢复。普通ZIP不加密；原始Markdown批准快照仅本机保护目录，不进普通ZIP；恢复后缺快照禁撤销，不伪装异机字节恢复成功。
 STT回归包含三独立识别locale、模型可用/显式下载/麦克风权限、UTF-16范围、取消/过期编辑、final-only提交及单次回调，不新增伪语音聊天。通知回归含FSRS/校准命名空间隔离、权限、点击路由、不因新Tab新增催促策略。
 最终构建须同一SHA：全部Portable Core/原生XCTest、实际UI测试或明确运行限制、Debug/Release Simulator、ARM64、无XCTest污染的IPA、ZIP完整性及SHA-256。物理iPhone13/真实HTTP/Keychain/Files/iCloud各自留证据；正式Vault一直锁定，原版图标/签名限制如实保留。文档提交不产生新的QA安装包。
+
+## 2026-10-21 · 最新执行证据补录（原18步/F01～13规格不变）
+
+已新增 `aReuImpress-iPhoneUITests/ImpressV11NavigationUITests.swift` 作为真实进程内的 XCUITest（实际四 Tab 点击、冷启动和截图），并纳入 Xcode Scheme；**它不实现本文件第3节的18步闭环**，后者仍为 NOT_RUN。F03/F04 新增 `ImDuplexInterruptedRecovery` 和 Approval 界面“核查中断”入口，可对上次 `applying` 状态回读 SHA/内容版本并禁止未经核查重试；尚未完成真实断点强杀注入，F01～F13 不得整体 TEST_PASS。
+
+Excalidraw compressed-json/有限 PNG/JPEG 的源码和测试已提交，但全图形/范围/附件仍有实现缺口。接受度台账 ACCEPT-01～12 需逐项填最新 SHA、Run ID、真实 XCUITest/截图及设备限制；不允许用旧成功 Run `39489025745` 证明新增功能。
