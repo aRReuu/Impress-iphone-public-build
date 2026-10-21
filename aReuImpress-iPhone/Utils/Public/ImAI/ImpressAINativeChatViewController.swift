@@ -1985,6 +1985,9 @@ final class ImpressChatMessageCell: UITableViewCell {
     required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
 
     func configure(_ message: WCDBV3ChatMessage) {
+        accessibilityIdentifier = message.role == .assistant &&
+            message.status == .completed ? "impress.ai.chat.completed-assistant" :
+            "impress.ai.chat.history-turn"
         roleLabel.text = message.role == .user ? V3L("我") : V3L("AI")
         let rendered = MarkdownKitRenderer().parseMarkdown(message.text)
             ?? NSAttributedString(string: message.text)
@@ -2177,6 +2180,7 @@ final class ImpressDuplexChangeController: UIViewController {
         navigationItem.largeTitleDisplayMode = .never
         let scroll = UIScrollView()
         let stack = UIStackView()
+        scroll.accessibilityIdentifier = "impress.duplex.change-scroll"
         scroll.translatesAutoresizingMaskIntoConstraints = false
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.axis = .vertical

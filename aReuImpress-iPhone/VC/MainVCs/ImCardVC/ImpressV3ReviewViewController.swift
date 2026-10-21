@@ -169,6 +169,8 @@ final class ImpressV3ReviewViewController: UIViewController {
             revealButton.backgroundColor = ImpressV3Appearance.reviewPrimarySurface
             revealButton.layer.cornerRadius = ImpressV3Appearance.Metrics.primaryActionHeight / 2
         }
+        revealButton.accessibilityIdentifier = "impress.review.reveal-answer"
+        cardStack.accessibilityIdentifier = "impress.review.swipe-stack"
         revealButton.addTarget(self, action: #selector(revealCurrentAnswer),
                                for: .touchUpInside)
         revealButton.accessibilityHint = V3L("显示答案后才可以通过四向滑动进行复习评分")

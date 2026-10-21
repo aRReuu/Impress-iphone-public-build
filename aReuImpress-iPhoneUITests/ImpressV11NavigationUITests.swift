@@ -149,6 +149,161 @@ final class ImpressV11NavigationUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 30))
     }
 
+    /// One *continuous* visible UI path using one fixed disposable Vault and
+    /// the actual WCDB, Chat, draft, approval and guarded Debug QA writer.
+    /// The synthetic model only returns a fixed message after normal consent
+    /// and source revision checks. No business operation is auto-completed by
+    /// a test-only button or by a direct Swift repository call.
+    func testContinuousSourceCardChatDoubleTargetApprovalAndRestart() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-ImpressV11SyntheticVault",
+                                "-AppleLanguages", "(zh-Hans)"]
+        let id = UUID().uuidString
+        app.launchEnvironment["IMPRESS_V11_FIXTURE_ID"] = id
+        app.launch()
+        let tabs = app.tabBars.firstMatch
+        XCTAssertTrue(tabs.waitForExistence(timeout: 30))
+        tabs.buttons.element(boundBy: 1).tap()
+        let folder = app.cells.matching(identifier: "impress.notes.folder-row")
+            .matching(NSPredicate(format: "label == %@", "Study")).firstMatch
+        XCTAssertTrue(folder.waitForExistence(timeout: 30))
+        folder.tap()
+        let note = app.cells.matching(identifier: "impress.notes.file-row")
+            .matching(NSPredicate(format: "label == %@", "Impress_E2E_Proof")).firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 20))
+        note.tap()
+        XCTAssertTrue(app.staticTexts["impress.notes.source-path"]
+            .waitForExistence(timeout: 15))
+
+        // Real chapter picker -> review a deterministic AI candidate, reject
+        // the second candidate, and explicitly commit one original card.
+        app.buttons["更多笔记操作"].tap()
+        app.buttons["根据笔记生成卡片"].tap()
+        XCTAssertTrue(app.navigationBars["生成综合问题"].waitForExistence(timeout: 15))
+        app.navigationBars.buttons["生成"].tap()
+        let generateConsent = app.alerts["模拟器合成出题"]
+        XCTAssertTrue(generateConsent.waitForExistence(timeout: 12))
+        generateConsent.buttons["生成"].tap()
+        XCTAssertTrue(app.navigationBars["问题候选池"].waitForExistence(timeout: 20))
+        let candidates = app.tables.cells
+        XCTAssertGreaterThanOrEqual(candidates.count, 2)
+        candidates.element(boundBy: 1).tap()
+        let importButton = app.navigationBars.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "加入")).firstMatch
+        XCTAssertTrue(importButton.isEnabled)
+        importButton.tap()
+        let saveCard = app.alerts["加入卡片集？"]
+        XCTAssertTrue(saveCard.waitForExistence(timeout: 12))
+        saveCard.buttons["确认加入"].tap()
+        let saved = app.alerts["卡片已添加"]
+        XCTAssertTrue(saved.waitForExistence(timeout: 30))
+        saved.buttons["完成"].tap()
+
+        // UI re-entry to the exact card and its verified source. No alternate
+        // database, title matching, or source inference is used.
+        tabs.buttons.element(boundBy: 0).tap()
+        let discuss = app.buttons["impress.review.ai-discussion"]
+        XCTAssertTrue(discuss.waitForExistence(timeout: 20))
+        let source = app.buttons["impress.review.source-note"]
+        XCTAssertTrue(source.waitForExistence(timeout: 20))
+        source.tap()
+        XCTAssertTrue(app.staticTexts["impress.notes.source-path"]
+            .waitForExistence(timeout: 15))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(discuss.waitForExistence(timeout: 15))
+        discuss.tap()
+
+        let input = app.textViews["impress.ai.chat.input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 20))
+        let guide = app.alerts["关于讨论"]
+        if guide.waitForExistence(timeout: 2) { guide.buttons["知道了"].tap() }
+        input.tap()
+        input.typeText("请根据所选来源明确推导、反例与下一步可检验的假设。")
+        let send = app.buttons["impress.ai.chat.send"]
+        XCTAssertTrue(send.isEnabled)
+        send.tap()
+        let context = app.alerts["是否附带当前卡片？"]
+        if context.waitForExistence(timeout: 8) {
+            context.buttons["附带当前卡片"].tap()
+        }
+        let completedText = app.textViews.matching(
+            identifier: "impress.ai.chat.message-body").matching(
+                NSPredicate(format: "value CONTAINS %@", "合成模型回复")).firstMatch
+        XCTAssertTrue(completedText.waitForExistence(timeout: 30))
+        let completedCell = app.cells["impress.ai.chat.completed-assistant"]
+        XCTAssertTrue(completedCell.waitForExistence(timeout: 15))
+        completedCell.press(forDuration: 1.1)
+        let change = app.buttons["统一预览笔记与原卡修订"]
+        XCTAssertTrue(change.waitForExistence(timeout: 12))
+        change.tap()
+
+        let answer = app.textViews["impress.duplex.answer"]
+        XCTAssertTrue(answer.waitForExistence(timeout: 20))
+        let adopt = app.buttons["impress.duplex.use-suggestion"]
+        XCTAssertTrue(adopt.waitForExistence(timeout: 15))
+        tapVisible(adopt, in: app)
+        let editNote = app.buttons["impress.duplex.edit-note"]
+        XCTAssertTrue(editNote.waitForExistence(timeout: 15))
+        tapVisible(editNote, in: app)
+        let kind = app.buttons["指定原章节并编辑 AI 建议"]
+        XCTAssertTrue(kind.waitForExistence(timeout: 12))
+        kind.tap()
+        let sectionList = app.tables["impress.duplex.note-section-picker"]
+        XCTAssertTrue(sectionList.waitForExistence(timeout: 15))
+        XCTAssertGreaterThanOrEqual(sectionList.cells.count, 2)
+        sectionList.cells.element(boundBy: 1).tap()
+        let replacement = app.textViews["impress.duplex.section-replacement"]
+        XCTAssertTrue(replacement.waitForExistence(timeout: 15))
+        replacement.tap()
+        replacement.typeText("\n## 观察\n（经人工核查）这是一条可检验的解释。")
+        app.buttons["impress.duplex.save-section-draft"].tap()
+
+        // The actual existing proposal and Approval screens are both used.
+        // Switching target choices is non-destructive; neither target is
+        // written until the explicit confirmation alert.
+        XCTAssertTrue(answer.waitForExistence(timeout: 20))
+        let reviewProposal = app.buttons["impress.duplex.preview"]
+        tapVisible(reviewProposal, in: app)
+        let fullDiff = app.textViews["impress.duplex.full-diff"]
+        XCTAssertTrue(fullDiff.waitForExistence(timeout: 20))
+        XCTAssertTrue(String(describing: fullDiff.value ?? "").contains("Vault ID:"))
+        let noteToggle = app.switches["impress.duplex.select-note"]
+        let cardToggle = app.switches["impress.duplex.select-card"]
+        XCTAssertTrue(noteToggle.exists && cardToggle.exists)
+        let approve = app.buttons["impress.duplex.confirm"]
+        XCTAssertTrue(approve.isEnabled)
+        approve.tap()
+        let finalConsent = app.alerts["确认这两个目标的所选修改？"]
+        XCTAssertTrue(finalConsent.waitForExistence(timeout: 12))
+        finalConsent.buttons["确认执行"].tap()
+        let applied = app.alerts["所选修改已处理"]
+        XCTAssertTrue(applied.waitForExistence(timeout: 30),
+            "Both source and original card must be verified before a success receipt")
+        applied.buttons["确定"].tap()
+        let receipt = String(describing: fullDiff.value ?? "")
+        XCTAssertTrue(receipt.contains("applied"))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Impress-V1.1-continuous-double-target-CAS-approval"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        // This process boundary must not replace the existing WCDB or Vault.
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(tabs.waitForExistence(timeout: 30))
+        tabs.buttons.element(boundBy: 1).tap()
+        XCTAssertTrue(folder.waitForExistence(timeout: 25))
+    }
+
+    private func tapVisible(_ element: XCUIElement, in app: XCUIApplication) {
+        let scroll = app.scrollViews["impress.duplex.change-scroll"]
+        for _ in 0..<8 where !element.isHittable {
+            if scroll.exists { scroll.swipeUp() } else { app.swipeUp() }
+        }
+        XCTAssertTrue(element.isHittable)
+        element.tap()
+    }
+
     private func validateNativeTabNavigation(in app: XCUIApplication,
                                               capture: Bool) throws {
         let bar = app.tabBars.firstMatch
