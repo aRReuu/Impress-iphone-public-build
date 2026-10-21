@@ -89,6 +89,63 @@ final class ImObsidianManager: NSObject
 }
 
 
+
+#if DEBUG
+/// One disposable, repeatable Simulator fixture. Never consult a real Vault
+/// bookmark when BOTH the explicit test flag and UUID environment ID exist.
+enum ImpressV11UITestFixture {
+    static var id: UUID? {
+        guard ProcessInfo.processInfo.arguments.contains("-ImpressV11SyntheticVault"),
+              let raw = ProcessInfo.processInfo.environment["IMPRESS_V11_FIXTURE_ID"]
+        else { return nil }
+        return UUID(uuidString: raw)
+    }
+    static var enabled: Bool { id != nil }
+    static var vaultID: String? { id.map { "impress-v11-test-" + $0.uuidString } }
+    static var sessionRoot: URL? {
+        id.map { FileManager.default.temporaryDirectory.appendingPathComponent(
+            "ImpressV11-" + $0.uuidString, isDirectory: true) }
+    }
+    static var databaseURL: URL? {
+        sessionRoot?.appendingPathComponent("WCDB/ReviewV3.sqlite")
+    }
+    static func root() throws -> URL {
+        guard let path = sessionRoot?.appendingPathComponent(
+            "Impress-Write-Test-Vault", isDirectory: true) else {
+            throw ImVaultReadOnlyError.notAuthorized
+        }
+        let root = path.standardizedFileURL.resolvingSymlinksInPath()
+        let tmp = FileManager.default.temporaryDirectory.standardizedFileURL
+            .resolvingSymlinksInPath().path + "/"
+        guard root.path.hasPrefix(tmp),
+              root.lastPathComponent == "Impress-Write-Test-Vault" else {
+            throw ImVaultReadOnlyError.notAuthorized
+        }
+        let fence = String(repeating: String(Character(UnicodeScalar(96)!)), count: 3)
+        let files: [String: String] = [
+            "Study/Impress_E2E_Proof.md":
+                "# 来源与证据\n## 观察\n所有解释必须能反向核查原始证据。\n" +
+                "## 假设\n需要可证伪的前提。\n## 反例\n无关段落不被隐式上传。\n",
+            "Study/Graph.md":
+                "# 本地图形\n## Mermaid\n" + fence +
+                "mermaid\nflowchart LR\nA[观察] --> B[验证]\nC[不可上传]\n" +
+                fence + "\n## Markmap\n### 机制\n### 反例\n",
+            "Study/Diagram.canvas":
+                "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":150,\"height\":85,\"text\":\"图形范围\"}],\"edges\":[]}"
+        ]
+        for (name, contents) in files {
+            let destination = root.appendingPathComponent(name)
+            try FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if !FileManager.default.fileExists(atPath: destination.path) {
+                try Data(contents.utf8).write(to: destination, options: .atomic)
+            }
+        }
+        return root
+    }
+}
+#endif
+
 // MARK: - P0-1: Authorized external Obsidian Vault READ-ONLY probe
 //
 // This is intentionally separate from the legacy sandbox mirror. A successful
@@ -362,6 +419,9 @@ struct ImVaultRawDocument {
 
 extension ImVaultReadOnlyProbe {
     var authorizedVaultID: String? {
+        #if DEBUG
+        if let synthetic = ImpressV11UITestFixture.vaultID { return synthetic }
+        #endif
         guard UserDefaults.standard.data(forKey: Self.bookmarkKey) != nil else {
             return nil
         }
@@ -375,6 +435,17 @@ extension ImVaultReadOnlyProbe {
         _ operation: @escaping (URL, String) throws -> T,
         completion: @escaping (Result<T, Error>) -> Void
     ) {
+        #if DEBUG
+        if let id = ImpressV11UITestFixture.vaultID {
+            DispatchQueue.global(qos: .utility).async {
+                let outcome: Result<T, Error> = Result {
+                    try operation(ImpressV11UITestFixture.root(), id)
+                }
+                DispatchQueue.main.async { completion(outcome) }
+            }
+            return
+        }
+        #endif
         guard let bookmark = UserDefaults.standard.data(forKey: Self.bookmarkKey),
               let id = UserDefaults.standard.string(forKey: Self.vaultIDKey) else {
             completion(.failure(ImVaultReadOnlyError.missingBookmark)); return
