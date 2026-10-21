@@ -208,3 +208,10 @@ Run `39586231838` / SHA `e6b77b2430c9f3ca6568d4471c3a1e327cfd054a`：**Portable 
 | F13 删除/发送/提案/备份并发 | `testDeleteConversationPreservesAppliedReceiptsAndDoesNotResurrect` | WCDB tombstone/CAS、留执行回执与禁止 `applying` 删除已测；正在真实网络流式发送和自动备份交错仍需 UI/设备注入 |
 
 **结论**：F01～F13 均有某种原生/Portable 测试覆盖，但除子项测试外仍缺强杀故障窗口、系统授权变动和必要 UI 连续行为的统一同 SHA 证据。要继续补实际执行而不是再复制一组相同的 Service 单测。
+
+## 11. 2026-10-22 · 同 SHA CI 全绿基线与 F06 逆向崩溃修复排队
+
+- **已实际完成的旧 HEAD 证明**：`0f7bdd24c3023f3a03af5275c969682c6568ae43` / [GitHub Actions #39633907831](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39633907831) **SUCCESS**（2026-10-22 01:01 中国标准时间）。Portable Swift Core PASS、原生 XCTest **187/187 PASS**、真实进程 XCUITest **8/8 PASS**（包含真实 UI 的原卡批准后单目标安全撤销、两次用户确认、回执和冷启动）、Debug/Release Simulator PASS、unsigned iPhoneOS ARM64 PASS、嵌入原生 Widget.appex arm64 PASS、IPA ZIP 完整性 PASS。
+- SHA 对应 unsigned 文件：`Impress-V3.1-P0P2-0f7bdd24c302-unsigned.ipa`，大小 **7,445,998 bytes**，文件 SHA-256 **`406ac69aedccc26e6e15837816e58ebb0dafcbe6bf13d3d3c95243769c232b19`**；[Actions Artifact #12364901665](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39633907831/artifacts/12364901665)。未签名、不含真实 iPhone13/Files/iCloud/Keychain/外部真实 API 的设备验收；不声称可无证书直接安装。
+- **新增 F06 风险复核及排队修复（仅新代码，须等待下一 SHA CI 才可登记通过）**：之前已有的 `.undoing` 持久化逆向意图未进入「核查中断」，旧「安全撤销」反而仍可再次选择该中断对象。本批实现只读逆向核查，只有文件原 SHA 或 WCDB 恰好恢复到 `baseContentRevision+2` 且内容相同时记录 `.reverted`；源冲突、其他人合法编辑、缺字节、错误内容版本仍为 `.undoing`，不自动重播或猜成功。中断期间禁第二次逆向执行、正向确认与放弃；仅启用只读核验。新增 Portable/Core 正负向测试与原生 UI 锁门禁、内容真实落盘但回执未写且冷启动读取的负载测试，均为**新 SHA NOT_RUN**直到该次完整 CI。
+- **交付边界不变**：18 步仍需补 UI 的继续 FSRS 评分、外部合法编辑冲突、端到端备份恢复与系统强杀；F01～F13 原生/Portable 单项不能冒充完整故障注入；W01～W15 尚缺 SpringBoard 六布局视觉/签名设备证据；ACCEPT-01～12 逐项仍有缺口；实体真机标记 DEVICE_BLOCKED，正式 Vault 写门禁永久 false。

@@ -2824,17 +2824,23 @@ final class ImpressDuplexApprovalController: UIViewController {
             ![.applying, .applied, .undoing, .reverted].contains(proposal.state.cardStatus)
         let interrupted = proposal.state.noteStatus == .applying ||
             proposal.state.cardStatus == .applying
-        reconcileBarItem?.isEnabled = !committing && interrupted
+        reconcileBarItem?.isEnabled = !committing && (interrupted ||
+            proposal.state.noteStatus == .undoing ||
+            proposal.state.cardStatus == .undoing)
         discardBarItem?.isEnabled = !committing && !interrupted &&
             !proposal.state.needsNoteUndo && !proposal.state.needsCardUndo
         if proposal.state.noteStatus == .applying ||
-           proposal.state.cardStatus == .applying {
-            pieces.append(V3L("上次修改执行中断。禁止直接重试，必须先通过「核查中断」回读目标并裁定。"))
+           proposal.state.cardStatus == .applying ||
+           proposal.state.noteStatus == .undoing ||
+           proposal.state.cardStatus == .undoing {
+            pieces.append(V3L("执行或撤销曾经中断。禁止直接重试；请通过「核查中断」只读回查目标。无法确认的撤销必须保持冻结。"))
             preview.text = pieces.joined(separator: "\n")
         }
+        // An interrupted inverse is not a new permission to replay it.
+        // Its outcome must first be resolved by read-only reconciliation.
         undoBarItem?.isEnabled = !committing && (
-            [.applied, .undoing].contains(proposal.state.noteStatus) ||
-            [.applied, .undoing].contains(proposal.state.cardStatus))
+            proposal.state.noteStatus == .applied ||
+            proposal.state.cardStatus == .applied)
         updateConfirmation()
     }
 
@@ -3020,13 +3026,16 @@ final class ImpressDuplexApprovalController: UIViewController {
             V3L("所有回执存于原 Chat 会话；失败目标仅允许再次手动核查后重试。"))
     }
 
-    /// Explicit, read-only adjudication for F03/F04 crash windows. No write
-    /// code path is called here. If current source cannot be verified, the
-    /// original applying state remains durable and confirmation stays locked.
+    /// Explicit, read-only adjudication for forward F03/F04 and reverse F06
+    /// crash windows. No write path is called here. If current source or
+    /// content revision cannot be verified, applying/undoing remains durable
+    /// and the interrupted target cannot be replayed.
     @objc private func reconcileInterrupted() {
         guard !committing &&
               (proposal.state.noteStatus == .applying ||
-               proposal.state.cardStatus == .applying) else { return }
+               proposal.state.cardStatus == .applying ||
+               proposal.state.noteStatus == .undoing ||
+               proposal.state.cardStatus == .undoing) else { return }
         committing = true
         updateConfirmation()
         Task { [weak self] in
@@ -3088,6 +3097,61 @@ final class ImpressDuplexApprovalController: UIViewController {
                     // Unknown state remains applying and cannot be retried.
                 }
             }
+            // F06: A process may terminate after inverse storage writes but
+            // before the durable inverse receipt. Resolve ONLY verified
+            // already-restored targets; never invoke an inverse writer here.
+            if result.state.noteStatus == .undoing,
+               let id = result.noteIdentity,
+               let original = result.noteBaseDigest,
+               let approved = result.noteEditedDigest {
+                do {
+                    guard let draft = try ImVaultPrivateStore.approvedDraft(
+                        identity: id, baseDigest: original, editedDigest: approved),
+                        draft.baseDigest == original,
+                        ImVaultDigest.sha256(draft.proposedBytes) == approved else {
+                        throw ImVaultSyncFailure.conflict
+                    }
+                    let live: ImVaultRawDocument = try await withCheckedThrowingContinuation {
+                        (continuation: CheckedContinuation<ImVaultRawDocument, Error>) in
+                        ImVaultReadSync.shared.read(id) { outcome in
+                            continuation.resume(with: outcome)
+                        }
+                    }
+                    if live.identity == id,
+                       live.digest == ImVaultDigest.sha256(live.sourceBytes),
+                       ImDuplexInterruptedRecovery.noteUndoStatus(
+                           currentDigest: live.digest, approvedDigest: approved,
+                           originalDigest: original) == .reverted {
+                        result.state.noteStatus = .reverted
+                        result.noteReceipt = (result.noteReceipt ?? "") + "\n" +
+                            V3L("撤销中断核查：当前源字节与原始 SHA 匹配；没有再次写入，也不代表 iCloud 远端同步。")
+                    }
+                } catch {
+                    // No verified raw-byte identity => leave undoing durable.
+                }
+            }
+            if result.state.cardStatus == .undoing,
+               let id = result.cardID,
+               let revision = result.cardContentRevision,
+               let original = result.cardBaseQuestion,
+               let approved = result.cardEditedQuestion {
+                do {
+                    let card = try await self.repository.content(for: id)
+                    if ImDuplexInterruptedRecovery.cardUndoStatus(
+                        currentContentRevision: card?.contentRevision,
+                        expectedBaseContentRevision: revision,
+                        originalQuestion: original, originalAnswer: result.cardBaseAnswer,
+                        approvedQuestion: approved, approvedAnswer: result.cardEditedAnswer,
+                        currentQuestion: card?.question, currentAnswer: card?.answerText) == .reverted {
+                        result.state.cardStatus = .reverted
+                        result.cardReceipt = (result.cardReceipt ?? "") + "\n" +
+                            V3L("撤销中断核查：原卡内容版本与恢复内容吻合；没有二次修改或 FSRS 评分。")
+                    }
+                } catch {
+                    // Missing card, later human edit, or unreadable WCDB =>
+                    // not a verified inverse completion. Keep undoing locked.
+                }
+            }
             let changed = result.state != self.proposal.state ||
                 result.noteReceipt != self.proposal.noteReceipt ||
                 result.cardReceipt != self.proposal.cardReceipt
@@ -3110,14 +3174,14 @@ final class ImpressDuplexApprovalController: UIViewController {
         let actions = UIAlertController(title: V3L("撤销已执行的目标"),
             message: V3L("每个目标单独预览、确认及记录回执。不会自动覆盖后续人工编辑。"),
             preferredStyle: .actionSheet)
-        if [.applied, .undoing].contains(proposal.state.noteStatus),
+        if proposal.state.noteStatus == .applied,
            proposal.noteIdentity != nil {
             actions.addAction(UIAlertAction(title: V3L("撤销笔记改动"),
                 style: .default) { [weak self] _ in
                 Task { await self?.prepareUndo(.note) }
             })
         }
-        if [.applied, .undoing].contains(proposal.state.cardStatus),
+        if proposal.state.cardStatus == .applied,
            proposal.cardID != nil {
             actions.addAction(UIAlertAction(title: V3L("撤销原卡改动"),
                 style: .default) { [weak self] _ in
@@ -3215,9 +3279,11 @@ final class ImpressDuplexApprovalController: UIViewController {
             committing = false
             refreshPreview()
         }
+        // A persisted .undoing is not a valid second user approval after a
+        // crash. Only .applied may begin a new, freshly previewed inverse.
         switch target {
         case .note:
-            guard [.applied, .undoing].contains(proposal.state.noteStatus),
+            guard proposal.state.noteStatus == .applied,
                   let id = proposal.noteIdentity,
                   let existing = try ImVaultPrivateStore.approvedDraft(
                       identity: id, baseDigest: proposal.noteBaseDigest,
@@ -3276,7 +3342,7 @@ final class ImpressDuplexApprovalController: UIViewController {
                 throw error
             }
         case .card:
-            guard [.applied, .undoing].contains(proposal.state.cardStatus),
+            guard proposal.state.cardStatus == .applied,
                   let id = proposal.cardID, let revision = proposal.cardContentRevision,
                   let revised = proposal.cardEditedQuestion,
                   let original = proposal.cardBaseQuestion else {

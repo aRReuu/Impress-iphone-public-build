@@ -448,6 +448,52 @@ struct ImVaultSyncCoreTests {
         #expect(userContinuedEditing == .conflict)
     }
 
+    @Test func F06InterruptedInverseSourceOnlyAcceptsRestoredBytes() {
+        #expect(ImDuplexInterruptedRecovery.noteUndoStatus(
+            currentDigest: "original", approvedDigest: "approved",
+            originalDigest: "original") == .reverted)
+        #expect(ImDuplexInterruptedRecovery.noteUndoStatus(
+            currentDigest: "approved", approvedDigest: "approved",
+            originalDigest: "original") == nil,
+            "Still-approved source must not silently retry the inverse")
+        #expect(ImDuplexInterruptedRecovery.noteUndoStatus(
+            currentDigest: "later-human-edit", approvedDigest: "approved",
+            originalDigest: "original") == nil,
+            "Newer bytes cannot produce a false restored receipt")
+        #expect(ImDuplexInterruptedRecovery.noteUndoStatus(
+            currentDigest: nil, approvedDigest: "approved",
+            originalDigest: "original") == nil)
+        #expect(ImDuplexInterruptedRecovery.noteUndoStatus(
+            currentDigest: "original", approvedDigest: "same",
+            originalDigest: "same") == nil)
+    }
+
+    @Test func F06InterruptedInverseCardRequiresSecondContentRevision() {
+        func classify(revision: Int?, question: String?, answer: String?) -> ImDuplexTargetStatus? {
+            ImDuplexInterruptedRecovery.cardUndoStatus(
+                currentContentRevision: revision,
+                expectedBaseContentRevision: 12,
+                originalQuestion: "Original Q", originalAnswer: "Original A",
+                approvedQuestion: "AI Q", approvedAnswer: "AI A",
+                currentQuestion: question, currentAnswer: answer)
+        }
+        #expect(classify(revision: 14, question: "Original Q",
+                         answer: "Original A") == .reverted)
+        #expect(classify(revision: 13, question: "AI Q", answer: "AI A") == nil)
+        #expect(classify(revision: 14, question: "Later human Q",
+                         answer: "Original A") == nil)
+        #expect(classify(revision: 15, question: "Original Q",
+                         answer: "Original A") == nil,
+            "Equal visible text at a later revision is not a verified inverse")
+        #expect(classify(revision: nil, question: nil, answer: nil) == nil)
+        #expect(ImDuplexInterruptedRecovery.cardUndoStatus(
+            currentContentRevision: Int.max,
+            expectedBaseContentRevision: Int.max,
+            originalQuestion: "Original Q", originalAnswer: "A",
+            approvedQuestion: "AI Q", approvedAnswer: "B",
+            currentQuestion: "Original Q", currentAnswer: "A") == nil)
+    }
+
     @Test func F04RevisionOverflowCannotCreateFalseIdempotentReceipt() {
         let result = ImDuplexCardVersionGate.decide(
             expectedContentRevision: Int.max, currentContentRevision: Int.max,

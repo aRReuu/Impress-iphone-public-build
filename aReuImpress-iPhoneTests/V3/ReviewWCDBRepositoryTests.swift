@@ -384,6 +384,123 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 
+    /// F06 inverse crash window: a visible controller must not let a user
+    /// accidentally replay an in-flight inverse, erase its audit status or
+    /// confirm a new forward write. A read-only reconciliation remains available.
+    @MainActor
+    func testF06InterruptedUndoLocksReplayAndOffersReadOnlyRecovery() throws {
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
+            calculator: FSRS6ReviewCalculator())
+        let proposal = WCDBV3DuplexProposal(
+            sourceMessageID: UUID(), noteIdentity: nil,
+            noteBaseDigest: nil, noteEditedDigest: nil,
+            cardID: UUID(), cardReviewRevision: 0, cardContentRevision: 0,
+            cardBaseQuestion: "Original", cardBaseAnswer: "Answer",
+            cardEditedQuestion: "Approved", cardEditedAnswer: "Updated",
+            state: ImDuplexApprovalState(noteSelected: false,
+                cardSelected: true, cardStatus: .undoing))
+        let controller = ImpressDuplexApprovalController(
+            repository: repo, proposal: proposal, saveProposal: { _ in
+                XCTFail("An unverified interrupted inverse must not auto-save")
+                return false
+            })
+        controller.loadViewIfNeeded()
+        func descendants(_ view: UIView) -> [UIView] {
+            [view] + view.subviews.flatMap { descendants($0) }
+        }
+        let confirm = try XCTUnwrap(descendants(controller.view).compactMap {
+            $0 as? UIButton
+        }.first(where: { $0.accessibilityIdentifier == "impress.duplex.confirm" }))
+        XCTAssertFalse(confirm.isEnabled)
+        let discard = try XCTUnwrap(controller.navigationItem.rightBarButtonItems?.first {
+            $0.title == V3L("放弃未完成项")
+        })
+        XCTAssertFalse(discard.isEnabled)
+        let undo = try XCTUnwrap(controller.navigationItem.rightBarButtonItems?.first {
+            $0.title == V3L("安全撤销")
+        })
+        XCTAssertFalse(undo.isEnabled)
+        let reconcile = try XCTUnwrap(controller.navigationItem.rightBarButtonItems?.first {
+            $0.accessibilityIdentifier == "impress.duplex.reconcile-interrupted"
+        })
+        XCTAssertTrue(reconcile.isEnabled)
+        let diff = try XCTUnwrap(descendants(controller.view).compactMap {
+            $0 as? UITextView
+        }.first(where: { $0.accessibilityIdentifier == "impress.duplex.full-diff" }))
+        XCTAssertTrue(diff.text.contains("撤销"))
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    /// The card WCDB inverse is already committed when the process dies, but
+    /// the Chat receipt is still .undoing. Reopening must compare the second
+    /// CONTENT revision (not an independent FSRS schedule revision), record
+    /// the original card's recovered state, and never write a duplicate version.
+    @MainActor
+    func testF06InverseCardCommittedBeforeReceiptColdStartReadback() async throws {
+        let path = temporaryPath()
+        let calculator = FSRS6ReviewCalculator()
+        let repo = try ReviewWCDBRepository(databasePath: path, calculator: calculator)
+        let id = UUID(), now = Date(timeIntervalSince1970: 1_726_000_000)
+        try await repo.insertNewCard(WCDBV3CardInput(cardID: id,
+            question: "Original", answerText: "A"),
+            initial: try calculator.newCardSnapshot(id: id, now: now), now: now)
+        let queue0 = try await repo.fetchQueueCandidates()
+        let first = try XCTUnwrap(queue0.first { $0.cardID == id })
+        try await repo.updateManagedCard(WCDBV3CardInput(cardID: id,
+            question: "AI revision", answerText: "B"),
+            expectedRevision: first.revision, expectedContentRevision: 0,
+            origin: .approvedAI)
+        let source = "card:" + id.uuidString
+        var session = WCDBV3ChatSession(sourceIdentity: source)
+        session.pendingDuplex = WCDBV3DuplexProposal(sourceMessageID: UUID(),
+            noteIdentity: nil, noteBaseDigest: nil, noteEditedDigest: nil,
+            cardID: id, cardReviewRevision: first.revision, cardContentRevision: 0,
+            cardBaseQuestion: "Original", cardBaseAnswer: "A",
+            cardEditedQuestion: "AI revision", cardEditedAnswer: "B",
+            state: ImDuplexApprovalState(noteSelected: false, cardSelected: true,
+                cardStatus: .undoing))
+        try await repo.saveChatSession(session, expectedRevision: nil)
+        let queue1 = try await repo.fetchQueueCandidates()
+        let current = try XCTUnwrap(queue1.first { $0.cardID == id })
+        try await repo.updateManagedCard(WCDBV3CardInput(cardID: id,
+            question: "Original", answerText: "A"),
+            expectedRevision: current.revision, expectedContentRevision: 1,
+            origin: .restored)
+
+        let coldRepo = try ReviewWCDBRepository(databasePath: path,
+            calculator: calculator)
+        let loaded = try await coldRepo.chatSessions(for: source)
+        var reopened = try XCTUnwrap(loaded.first)
+        var proposal = try XCTUnwrap(reopened.pendingDuplex)
+        XCTAssertEqual(proposal.state.cardStatus, .undoing)
+        XCTAssertFalse(proposal.state.completed)
+        let readCard = try await coldRepo.content(for: id)
+        let card = try XCTUnwrap(readCard)
+        let verified = ImDuplexInterruptedRecovery.cardUndoStatus(
+            currentContentRevision: card.contentRevision,
+            expectedBaseContentRevision: 0,
+            originalQuestion: "Original", originalAnswer: "A",
+            approvedQuestion: "AI revision", approvedAnswer: "B",
+            currentQuestion: card.question, currentAnswer: card.answerText)
+        XCTAssertEqual(verified, .reverted)
+        proposal.state.cardStatus = try XCTUnwrap(verified)
+        proposal.cardReceipt = "F06 restored content version verified without replay"
+        reopened.pendingDuplex = proposal
+        let prevRevision = reopened.revision
+        reopened.revision += 1
+        reopened.updatedAt = Date()
+        try await coldRepo.saveChatSession(reopened, expectedRevision: prevRevision)
+        let finalSession = try await coldRepo.chatSessions(for: source)
+        XCTAssertEqual(finalSession.first?.pendingDuplex?.state.cardStatus, .reverted)
+        XCTAssertEqual(finalSession.first?.pendingDuplex?.cardReceipt,
+                       "F06 restored content version verified without replay")
+        let versions = try await coldRepo.contentHistory(for: id)
+        XCTAssertEqual(versions.map(\\.contentRevision), [0, 1, 2])
+        let reviewEvents = try await coldRepo.reviewHistory(for: id)
+        XCTAssertTrue(reviewEvents.isEmpty)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
     @MainActor
     func testConfirmedDuplexHistoryRetainsReceiptsWhenNewerProposalIsSaved() async throws {
         let path = temporaryPath()

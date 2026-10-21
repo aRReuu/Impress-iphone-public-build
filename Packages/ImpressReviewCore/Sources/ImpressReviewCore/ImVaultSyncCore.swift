@@ -335,6 +335,40 @@ public struct ImDuplexApprovalState: Codable, Equatable, Sendable {
 /// A verified changed source is a conflict requiring fresh review, not an
 /// invitation to replay a stale ApprovedDraft.
 public enum ImDuplexInterruptedRecovery {
+    /// Read-only adjudication of an interrupted inverse source write. Only
+    /// matching the *original* bytes can confirm the desired restored state.
+    /// An approved or third-party digest is inconclusive and MUST NOT cause a
+    /// retry, status reset or a fabricated completion receipt.
+    public static func noteUndoStatus(currentDigest: String?,
+                                      approvedDigest: String,
+                                      originalDigest: String) -> ImDuplexTargetStatus? {
+        guard let currentDigest, !currentDigest.isEmpty,
+              !approvedDigest.isEmpty, !originalDigest.isEmpty,
+              approvedDigest != originalDigest else { return nil }
+        return currentDigest == originalDigest ? .reverted : nil
+    }
+
+    /// Content revision, not the independent FSRS scheduling revision, is the
+    /// proof for a completed inverse card write. Approval created revision +1;
+    /// a verified undo creates +2. Intervening edits never infer success.
+    public static func cardUndoStatus(currentContentRevision: Int?,
+                                      expectedBaseContentRevision: Int,
+                                      originalQuestion: String, originalAnswer: String?,
+                                      approvedQuestion: String, approvedAnswer: String?,
+                                      currentQuestion: String?, currentAnswer: String?)
+        -> ImDuplexTargetStatus? {
+        guard let currentContentRevision, let currentQuestion,
+              expectedBaseContentRevision >= 0,
+              expectedBaseContentRevision <= Int.max - 2,
+              originalQuestion != approvedQuestion ||
+                  originalAnswer != approvedAnswer else { return nil }
+        if currentContentRevision == expectedBaseContentRevision + 2 &&
+            currentQuestion == originalQuestion && currentAnswer == originalAnswer {
+            return .reverted
+        }
+        return nil
+    }
+
     public static func noteStatus(currentDigest: String?,
                                   baseDigest: String, proposedDigest: String)
         -> ImDuplexTargetStatus? {
