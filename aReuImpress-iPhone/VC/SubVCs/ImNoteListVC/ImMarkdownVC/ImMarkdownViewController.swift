@@ -742,6 +742,13 @@ final class ImVaultDocumentController: UIViewController {
         pathLabel.textColor = ImpressV3Appearance.secondaryText
         pathLabel.numberOfLines = 2
         pathLabel.lineBreakMode = .byTruncatingMiddle
+        // In composite documents readingView is hidden, so UIKit must not
+        // stretch this 2-line label to consume the empty editor's layout.
+        // Otherwise the native Canvas/Excalidraw viewport can be pushed
+        // entirely below the visible screen and excluded from XCUITest AX tree.
+        pathLabel.setContentHuggingPriority(.required, for: .vertical)
+        pathLabel.setContentCompressionResistancePriority(.required, for: .vertical)
+        readingView.setContentHuggingPriority(.defaultLow, for: .vertical)
         pathLabel.accessibilityIdentifier = "impress.notes.source-path"
         pathLabel.translatesAutoresizingMaskIntoConstraints = false
         readingView.translatesAutoresizingMaskIntoConstraints = false
@@ -2773,7 +2780,11 @@ final class ImpressDiagramReaderController: UIViewController,
         choices.estimatedRowHeight = 54
         nodeSearch.frame = CGRect(x: 0, y: 0, width: 320, height: 48)
         nodeSearch.placeholder = V3L("查找标题或分支")
-        nodeSearch.accessibilityIdentifier = "impress.diagram.node-search"
+        nodeSearch.accessibilityIdentifier = "impress.diagram.node-search-bar"
+        // UISearchBar is a container, not the SearchField used by XCUITest or
+        // VoiceOver. Identify its actual editing control and keep it hittable.
+        nodeSearch.searchTextField.accessibilityIdentifier = "impress.diagram.node-search"
+        nodeSearch.searchTextField.accessibilityLabel = V3L("查找标题或分支")
         nodeSearch.delegate = self
         nodeSearch.searchBarStyle = .minimal
         nodeSearch.returnKeyType = .search

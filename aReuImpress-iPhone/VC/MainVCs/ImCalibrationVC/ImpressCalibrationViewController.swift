@@ -96,6 +96,17 @@ final class ImpressCalibrationViewController: UITableViewController {
 
     @objc private func periodChanged() { Task { await refreshChart() } }
 
+    /// A Widget tap navigates to the existing controller, not a parallel score UI.
+    func selectWidgetPeriod(_ selected: CalibrationWidgetPeriod) {
+        loadViewIfNeeded()
+        switch selected {
+        case .week: period.selectedSegmentIndex = 0
+        case .month: period.selectedSegmentIndex = 1
+        case .year: period.selectedSegmentIndex = 2
+        }
+        Task { await refreshChart() }
+    }
+
     private func refresh() async {
         guard !loading else { return }
         loading = true

@@ -153,6 +153,15 @@ jobs:
           test -s "$APP/DiagramReader/index.html"
           test -s "$APP/DiagramReader/manifest.json"
           test -s "$APP/DiagramReader/THIRD_PARTY_LICENSES.txt"
+          # WidgetKit is part of the actual installable artifact, not just Swift sources.
+          WIDGET="$APP/PlugIns/ImpressCalibrationWidgets.appex"
+          test -d "$WIDGET"
+          test -s "$WIDGET/Info.plist"
+          test -s "$WIDGET/ImpressCalibrationWidgets"
+          /usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$WIDGET/Info.plist" | grep -qx 'com.apple.widgetkit-extension'
+          file "$WIDGET/ImpressCalibrationWidgets" | tee out/widget-mach-o-file.txt
+          lipo -info "$WIDGET/ImpressCalibrationWidgets" | tee out/widget-mach-o-architecture.txt
+          grep -q arm64 out/widget-mach-o-architecture.txt
           file "$APP/aReuImpress-iPhone" | tee out/mach-o-file.txt
           lipo -info "$APP/aReuImpress-iPhone" | tee out/mach-o-architecture.txt
           grep -q arm64 out/mach-o-architecture.txt

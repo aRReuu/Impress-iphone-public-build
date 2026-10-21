@@ -135,6 +135,10 @@ final class ImpressV11NavigationUITests: XCTestCase {
 
     func testNativeJSONCanvasOnlySelectedNodeMovesIntoChat() throws {
         let app = openSyntheticFile("Diagram")
+        // The source label must hug its two lines rather than consuming the
+        // entire reader viewport and hiding native canvas controls.
+        let sourcePath = app.staticTexts["impress.notes.source-path"]
+        XCTAssertLessThan(sourcePath.frame.height, 120, "Canvas viewport layout is collapsed")
         // Require an actual rendered, interactable node rather than the
         // accessibility *type* of a UIScrollView (UIKit may flatten it).
         let node = app.buttons["impress.canvas.node.a"]
@@ -154,6 +158,8 @@ final class ImpressV11NavigationUITests: XCTestCase {
 
     func testExcalidrawNativeReadSelectionAndChatRejectsUnselectedElement() throws {
         let app = openSyntheticFile("Drawing")
+        let sourcePath = app.staticTexts["impress.notes.source-path"]
+        XCTAssertLessThan(sourcePath.frame.height, 120, "Excalidraw viewport layout is collapsed")
         let rectangle = app.buttons["impress.excalidraw.element.a"]
         XCTAssertTrue(rectangle.waitForExistence(timeout: 18),
             "Excalidraw shape missing in native tree: " + app.debugDescription)

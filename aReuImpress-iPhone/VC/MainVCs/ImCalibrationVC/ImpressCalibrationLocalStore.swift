@@ -151,6 +151,12 @@ actor ImpressCalibrationLocalStore {
         // Only committed updates participate in the existing V3 backup cadence.
         ImpressV3BackupCoordinator.markDataChanged()
         NotificationCenter.default.post(name: Self.didChange, object: nil)
+        // Only canonical durable saves publish shared widget status; QA fixtures never do.
+        if storageURL.standardizedFileURL == Self.canonicalURL().standardizedFileURL {
+            Task(priority: .utility) {
+                await ImpressCalibrationWidgetExporter.publishFromAuthoritativeStore()
+            }
+        }
         Task { @MainActor in
             ImpressCalibrationReminderCoordinator.shared.requestReconciliation()
         }

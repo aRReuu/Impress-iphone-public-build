@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+
+		F6C000000000000000000001 /* Widget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6C000000000000000000005 /* Widget.swift */; };
+		F6C000000000000000000002 /* Exporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6C000000000000000000006 /* Exporter.swift */; };
+		F6C000000000000000000003 /* Widget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = F6C000000000000000000007 /* Widget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, CodeSignOnCopy, ); }; };
+		F6C000000000000000000004 /* Core in Widget Frameworks */ = {isa = PBXBuildFile; productRef = F6C000000000000000000017 /* ImpressReviewCore */; };
 		F5B200000000000000000012 /* DiagramReader in Resources */ = {isa = PBXBuildFile; fileRef = F5B200000000000000000011 /* DiagramReader */; };
 		F5B100000000000000000001 /* ImpressV11NavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B100000000000000000002 /* ImpressV11NavigationUITests.swift */; };
 		F3D300000000000000000010 /* ImpressSpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D300000000000000000020 /* ImpressSpeechService.swift */; };
@@ -128,6 +133,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+
+		F6C000000000000000000019 /* Widget proxy */ = {isa = PBXContainerItemProxy; containerPortal = 3895E15B293B8C1A006939DA /* Project object */; proxyType = 1; remoteGlobalIDString = F6C000000000000000000011; remoteInfo = ImpressCalibrationWidgets; };
 		F5B10000000000000000000D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 3895E15B293B8C1A006939DA /* Project object */;
@@ -161,6 +168,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
+				F6C000000000000000000003 /* Widget.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -168,6 +176,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+
+		F6C000000000000000000005 /* Widget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressCalibrationWidgets.swift; sourceTree = "<group>"; };
+		F6C000000000000000000006 /* Exporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressCalibrationWidgetExporter.swift; sourceTree = "<group>"; };
+		F6C000000000000000000007 /* Widget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ImpressCalibrationWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		F6C000000000000000000008 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F6C000000000000000000009 /* Widget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ImpressCalibrationWidgets.entitlements; sourceTree = "<group>"; };
 		F5B200000000000000000011 /* DiagramReader */ = {isa = PBXFileReference; lastKnownFileType = folder; path = DiagramReader; sourceTree = "<group>"; };
 		F5B100000000000000000002 /* ImpressV11NavigationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV11NavigationUITests.swift; sourceTree = "<group>"; };
 		F5B100000000000000000003 /* aReuImpress-iPhoneUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "aReuImpress-iPhoneUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -310,6 +324,10 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+
+		F6C000000000000000000013 /* Widget Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (
+			F6C000000000000000000004 /* Core in Widget Frameworks */,
+		); runOnlyForDeploymentPostprocessing = 0; };
 		F5B100000000000000000006 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -339,6 +357,17 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+
+		F6C000000000000000000010 /* ImpressCalibrationWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				F6C000000000000000000005 /* Widget.swift */,
+				F6C000000000000000000008 /* Info.plist */,
+				F6C000000000000000000009 /* Widget.entitlements */,
+			);
+			path = ImpressCalibrationWidgets;
+			sourceTree = "<group>";
+		};
 		F5B100000000000000000004 /* aReuImpress-iPhoneUITests */ = {
 			isa = PBXGroup;
 			children = (
@@ -579,6 +608,7 @@
 				3895E165293B8C1A006939DA /* aReuImpress-iPhone */,
 				38B00CC62D17DE68002898A3 /* aReuImpress-iPhoneTests */,
 				F5B100000000000000000004 /* aReuImpress-iPhoneUITests */,
+				F6C000000000000000000010 /* ImpressCalibrationWidgets */,
 				3895E164293B8C1A006939DA /* Products */,
 				7A2B07BB83908043B911A193 /* Pods */,
 				0B30725240E39861B377A41E /* Frameworks */,
@@ -591,6 +621,7 @@
 				3895E163293B8C1A006939DA /* aReuImpress-iPhone.app */,
 				38B00CC52D17DE68002898A3 /* aReuImpress-iPhoneTests.xctest */,
 				F5B100000000000000000003 /* aReuImpress-iPhoneUITests.xctest */,
+				F6C000000000000000000007 /* ImpressCalibrationWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -973,6 +1004,7 @@
 				F3C000000000000000000011 /* ImpressCalibrationViewController.swift */,
 				F3C000000000000000000012 /* ImpressCalibrationLocalStore.swift */,
 				F3C000000000000000000013 /* ImpressCalibrationReminderCoordinator.swift */,
+				F6C000000000000000000006 /* Exporter.swift */,
 			);
 			path = ImCalibrationVC;
 			sourceTree = "<group>";
@@ -980,6 +1012,19 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+
+		F6C000000000000000000011 /* ImpressCalibrationWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F6C000000000000000000016 /* Widget config list */;
+			buildPhases = (F6C000000000000000000012 /* Widget Sources */, F6C000000000000000000013 /* Widget Frameworks */,);
+			buildRules = ();
+			dependencies = ();
+			name = ImpressCalibrationWidgets;
+			packageProductDependencies = (F6C000000000000000000017 /* ImpressReviewCore */,);
+			productName = ImpressCalibrationWidgets;
+			productReference = F6C000000000000000000007 /* Widget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		F5B100000000000000000008 /* aReuImpress-iPhoneUITests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = F5B10000000000000000000B /* Build configuration list for PBXNativeTarget "aReuImpress-iPhoneUITests" */;
@@ -1013,6 +1058,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				F6C000000000000000000018 /* Widget dependency */,
 			);
 			name = "aReuImpress-iPhone";
 			packageProductDependencies = (
@@ -1056,6 +1102,7 @@
 					3895E162293B8C1A006939DA = {
 						CreatedOnToolsVersion = 12.0;
 					};
+					F6C000000000000000000011 = { CreatedOnToolsVersion = 27.0; };
 					38B00CC42D17DE68002898A3 = {
 						CreatedOnToolsVersion = 12.0;
 						TestTargetID = 3895E162293B8C1A006939DA;
@@ -1086,6 +1133,7 @@
 				3895E162293B8C1A006939DA /* aReuImpress-iPhone */,
 				38B00CC42D17DE68002898A3 /* aReuImpress-iPhoneTests */,
 				F5B100000000000000000008 /* aReuImpress-iPhoneUITests */,
+				F6C000000000000000000011 /* ImpressCalibrationWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -1166,6 +1214,10 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+
+		F6C000000000000000000012 /* Widget Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
+			F6C000000000000000000001 /* Widget.swift in Sources */,
+		); runOnlyForDeploymentPostprocessing = 0; };
 		F5B100000000000000000005 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1194,6 +1246,7 @@
 				F3C000000000000000000001 /* ImpressCalibrationViewController.swift in Sources */,
 				F3C000000000000000000002 /* ImpressCalibrationLocalStore.swift in Sources */,
 				F3C000000000000000000003 /* ImpressCalibrationReminderCoordinator.swift in Sources */,
+				F6C000000000000000000002 /* Exporter.swift in Sources */,
 				F3D300000000000000000010 /* ImpressSpeechService.swift in Sources */,
 				F3D300000000000000000011 /* ImpressSpeechInputUI.swift in Sources */,
 				F3D300000000000000000012 /* ImpressSpeechSettingsViewController.swift in Sources */,
@@ -1294,6 +1347,8 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+
+		F6C000000000000000000018 /* Widget dependency */ = {isa = PBXTargetDependency; target = F6C000000000000000000011 /* ImpressCalibrationWidgets */; targetProxy = F6C000000000000000000019 /* Widget proxy */; };
 		F5B10000000000000000000C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 3895E162293B8C1A006939DA /* aReuImpress-iPhone */;
@@ -1326,6 +1381,51 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+
+		F6C000000000000000000014 /* Widget Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = ImpressCalibrationWidgets/ImpressCalibrationWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ImpressCalibrationWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks",);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.areu2.iphone.ImpressCalibrationWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		F6C000000000000000000015 /* Widget Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = ImpressCalibrationWidgets/ImpressCalibrationWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ImpressCalibrationWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks",);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.areu2.iphone.ImpressCalibrationWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 		F5B100000000000000000009 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1605,6 +1705,8 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+
+		F6C000000000000000000016 /* Widget config list */ = {isa = XCConfigurationList; buildConfigurations = (F6C000000000000000000014 /* Widget Debug */, F6C000000000000000000015 /* Widget Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		F5B10000000000000000000B /* Build configuration list for PBXNativeTarget "aReuImpress-iPhoneUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1662,6 +1764,8 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+
+		F6C000000000000000000017 /* ImpressReviewCore */ = {isa = XCSwiftPackageProductDependency; package = F3A10000000000000000001E /* Local ImpressReviewCore */; productName = ImpressReviewCore; };
 		F3A100000000000000000028 /* ImpressReviewCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = F3A10000000000000000001E /* XCLocalSwiftPackageReference "Packages/ImpressReviewCore" */;

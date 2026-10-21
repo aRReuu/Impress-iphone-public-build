@@ -7,6 +7,7 @@
 
 import UIKit
 import IQKeyboardManagerSwift
+import ImpressReviewCore
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate
 {
@@ -51,6 +52,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
         do { _ = try ImpressV3ReviewEnvironment.repository() }
         catch { showDatabaseUnavailable(); return }
         initRootVC()
+        if let url = connectionOptions.urlContexts.first?.url {
+            openCalibrationWidgetLink(url)
+        }
         // Silent V3 backup check: no file picker or cloud permission prompt.
         if !isolatedV11Fixture {
             Task(priority: .utility) {
@@ -65,6 +69,30 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
         initKeyboard()
     }
     
+    @available(iOS 13.0, *)
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        if let url = URLContexts.first?.url { openCalibrationWidgetLink(url) }
+    }
+
+    /// Route by controller identity, not a fixed Tab index or new calibration store.
+    private func openCalibrationWidgetLink(_ url: URL) {
+        guard url.scheme == "impress", url.host == "calibration",
+              let key = url.pathComponents.dropFirst().first,
+              let period = CalibrationWidgetPeriod(rawValue: key),
+              let tabs = window?.rootViewController as? ImTabBarViewController,
+              let controllers = tabs.viewControllers,
+              let index = controllers.firstIndex(where: {
+                  ($0 as? UINavigationController)?.viewControllers.first is
+                      ImpressCalibrationViewController
+              }),
+              let nav = controllers[index] as? UINavigationController,
+              let calibration = nav.viewControllers.first as? ImpressCalibrationViewController
+        else { return }
+        tabs.selectedIndex = index
+        nav.popToRootViewController(animated: false)
+        calibration.selectWidgetPeriod(period)
+    }
+
     @available(iOS 13.0, *)
     func sceneDidDisconnect(_ scene: UIScene)
     {
@@ -102,6 +130,12 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
             in: window?.rootViewController)
         ImpressV3NotificationCoordinator.shared.requestReconciliation()
         ImpressCalibrationReminderCoordinator.shared.requestReconciliation()
+        // Includes a successful cold-start backup restore and local date/time-zone changes.
+        if !isolatedV11Fixture {
+            Task(priority: .utility) {
+                await ImpressCalibrationWidgetExporter.publishFromAuthoritativeStore()
+            }
+        }
     }
 }
 
