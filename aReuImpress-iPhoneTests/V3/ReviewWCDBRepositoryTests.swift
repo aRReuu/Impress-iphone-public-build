@@ -1464,6 +1464,107 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertTrue(events.isEmpty)
     }
 
+
+    @MainActor
+    func testExcalidrawNativeDrawingAndChatGateKeepOnlyApprovedElements() throws {
+        let raw = """
+        {"type":"excalidraw","elements":[
+          {"id":"f","type":"frame","x":-20,"y":0,"width":350,"height":210},
+          {"id":"a","type":"rectangle","x":5,"y":15,"width":90,"height":55,
+           "groupIds":["g"],"frameId":"f"},
+          {"id":"b","type":"text","x":190,"y":15,"width":100,"height":55,
+           "text":"NOT approved","groupIds":["g"],"frameId":"f"}]}
+        """
+        let identity = try ImVaultFileIdentity(vaultID: "qa-drawing",
+            relativePath: "Study/Sketch.excalidraw")
+        let bytes = Data(raw.utf8)
+        let digest = ImVaultDigest.sha256(bytes)
+        let live = ImVaultRawDocument(identity: identity,
+            sourceBytes: bytes, markdown: raw, digest: digest)
+        let scene = try ImpressExcalidrawScene.parse(bytes,
+            format: .excalidrawJSON)
+        let visual = try ImpressExcalidrawNativeView(source: scene)
+        visual.frame = CGRect(x: 0, y: 0, width: 390, height: 650)
+        visual.layoutIfNeeded()
+        func buttons(in root: UIView) -> [UIButton] {
+            let own = (root as? UIButton).map { [$0] } ?? []
+            return own + root.subviews.flatMap { buttons(in: $0) }
+        }
+        let all = buttons(in: visual)
+        let a = try XCTUnwrap(all.first {
+            $0.accessibilityIdentifier == "impress.excalidraw.element.a"
+        })
+        let b = try XCTUnwrap(all.first {
+            $0.accessibilityIdentifier == "impress.excalidraw.element.b"
+        })
+        XCTAssertEqual(b.frame.minX - a.frame.minX, 185, accuracy: 0.1)
+        a.sendActions(for: .touchUpInside)
+        XCTAssertEqual(visual.selectedIDs, ["a"])
+        XCTAssertEqual(a.accessibilityValue, V3L("已选择"))
+        XCTAssertNotEqual(b.accessibilityValue, V3L("已选择"))
+        let selected = try scene.selection(ids: visual.selectedIDs)
+        let excerpt = try selected.textContextJSON()
+        XCTAssertFalse(excerpt.contains("NOT approved"))
+        let key = "note:drawing-qa"
+        let reference = WCDBV3ChatContextReference(
+            stableIdentity: key, sourceRevision: digest,
+            excerpt: excerpt, sourceFormat: "excalidraw-structure",
+            selectedCanvasNodeIDs: ["a"])
+        XCTAssertNoThrow(try ImpressChatNoteUploadGate.validate(
+            document: live, expectedIdentity: identity,
+            expectedDigest: digest, conversationKey: key,
+            excerpts: [reference]))
+        let switched = WCDBV3ChatContextReference(
+            stableIdentity: key, sourceRevision: digest,
+            excerpt: excerpt, sourceFormat: "excalidraw-structure",
+            selectedCanvasNodeIDs: ["b"])
+        XCTAssertThrowsError(try ImpressChatNoteUploadGate.validate(
+            document: live, expectedIdentity: identity,
+            expectedDigest: digest, conversationKey: key,
+            excerpts: [switched]))
+        XCTAssertThrowsError(try ImpressChatNoteUploadGate.validate(
+            document: live, expectedIdentity: identity,
+            expectedDigest: "old-source", conversationKey: key,
+            excerpts: [reference]))
+        let page = ImVaultDocumentController(document: live)
+        page.loadViewIfNeeded()
+        func descendants(_ view: UIView) -> [UIView] {
+            [view] + view.subviews.flatMap { descendants($0) }
+        }
+        XCTAssertNotNil(descendants(page.view).first {
+            $0.accessibilityIdentifier == "impress.excalidraw.native-viewport"
+        })
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
+    @MainActor
+    func testExcalidrawEmbeddedPNGDisplaysLocallyWithoutTransmittingPixels() throws {
+        let raster = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2))
+            .image { context in
+                UIColor.systemRed.setFill()
+                context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+            }
+        let imageData = try XCTUnwrap(raster.pngData())
+        let raw = """
+        {"type":"excalidraw",
+         "elements":[{"id":"picture","type":"image","x":0,"y":0,
+                      "width":100,"height":100,"fileId":"file"}],
+         "files":{"file":{"mimeType":"image/png","id":"file",
+                            "dataURL":"data:image/png;base64,\(imageData.base64EncodedString())"}}}
+        """
+        let scene = try ImpressExcalidrawScene.parse(Data(raw.utf8),
+            format: .excalidrawJSON)
+        let visual = try ImpressExcalidrawNativeView(source: scene)
+        func descendants(_ view: UIView) -> [UIView] {
+            [view] + view.subviews.flatMap { descendants($0) }
+        }
+        XCTAssertTrue(descendants(visual).contains { $0 is UIImageView })
+        let excerpt = try scene.selection(ids: ["picture"]).textContextJSON()
+        XCTAssertFalse(excerpt.contains("data:image"))
+        XCTAssertTrue(excerpt.contains("fileId"))
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
     @MainActor
     func testCanvasChatScopeCannotSubstituteUnselectedNodeOrOldRevision() throws {
         let json = """

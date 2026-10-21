@@ -6,6 +6,7 @@
 //
 
 import UIKit
+import ImageIO
 import ImpressReviewCore
 import MarkdownView
 
@@ -2205,9 +2206,18 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
             if element.type == "text" {
                 control.setTitle(element.text ?? "", for: .normal)
             } else if element.type == "image" {
-                control.backgroundColor = UIColor.tertiarySystemFill
-                control.setTitle(V3L("图片占位：未读取像素"), for: .normal)
-                control.titleLabel?.font = .preferredFont(forTextStyle: .caption1)
+                if let picture = Self.localImage(for: element, in: source) {
+                    let imageView = UIImageView(image: picture)
+                    imageView.frame = control.bounds
+                    imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                    imageView.contentMode = .scaleAspectFit
+                    imageView.isUserInteractionEnabled = false
+                    control.addSubview(imageView)
+                } else {
+                    control.backgroundColor = UIColor.tertiarySystemFill
+                    control.setTitle(V3L("图片未就绪：不加载外链"), for: .normal)
+                    control.titleLabel?.font = .preferredFont(forTextStyle: .caption1)
+                }
             } else if !["rectangle", "ellipse", "diamond", "frame",
                        "line", "arrow", "freedraw"].contains(element.type) {
                 control.setTitle(element.type, for: .normal)
@@ -2236,6 +2246,44 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
             button.layer.borderWidth = selected ? 3 : 0
             button.accessibilityValue = selected ? V3L("已选择") : V3L("未选择")
         }
+    }
+
+    /// Decode only already-embedded, source-authorized raster bytes. A
+    /// thumbnail bound keeps adversarial image dimensions from allocating a
+    /// full bitmap. External paths, SVG, remote URLs and web scripts are inert.
+    private static func localImage(for element: ImpressExcalidrawElement,
+                                   in scene: ImpressExcalidrawScene) -> UIImage? {
+        guard let id = element.fileId, let file = scene.files?[id],
+              let value = file.dataURL else { return nil }
+        let prefix: String
+        if value.hasPrefix("data:image/png;base64,") {
+            prefix = "data:image/png;base64,"
+        } else if value.hasPrefix("data:image/jpeg;base64,") {
+            prefix = "data:image/jpeg;base64,"
+        } else {
+            return nil
+        }
+        let encoded = String(value.dropFirst(prefix.count))
+        guard encoded.utf8.count <= 4 * 1_024 * 1_024,
+              let bytes = Data(base64Encoded: encoded),
+              bytes.count <= 3 * 1_024 * 1_024,
+              let source = CGImageSourceCreateWithData(bytes as CFData,
+                  [kCGImageSourceShouldCache: false] as CFDictionary),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
+                  as? [CFString: Any],
+              let pixelWidth = properties[kCGImagePropertyPixelWidth] as? Int,
+              let pixelHeight = properties[kCGImagePropertyPixelHeight] as? Int,
+              pixelWidth > 0, pixelHeight > 0,
+              pixelWidth <= 10_000, pixelHeight <= 10_000,
+              pixelWidth * pixelHeight <= 16_000_000 else { return nil }
+        let options = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: 1_024,
+            kCGImageSourceShouldCacheImmediately: true
+        ] as CFDictionary
+        guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options)
+        else { return nil }
+        return UIImage(cgImage: thumbnail)
     }
 
     private static func color(_ hex: String?) -> UIColor? {

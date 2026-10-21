@@ -31,6 +31,15 @@ public struct ImpressExcalidrawElement: Codable, Sendable, Equatable {
     public var isActive: Bool { isDeleted != true }
 }
 
+/// Embedded files are never included in text-model excerpts. Only trusted,
+/// bounded PNG/JPEG data URLs may be decoded by the read-only UI; remote and
+/// SVG data remain unavailable until separately reviewed.
+public struct ImpressExcalidrawEmbeddedFile: Decodable, Sendable {
+    public let mimeType: String?
+    public let dataURL: String?
+    public let id: String?
+}
+
 public struct ImpressExcalidrawSelection: Sendable {
     public let elementIDs: Set<String>
     public let elements: [ImpressExcalidrawElement]
@@ -58,6 +67,7 @@ public struct ImpressExcalidrawScene: Decodable, Sendable {
     public let type: String?
     public let version: Int?
     public let elements: [ImpressExcalidrawElement]
+    public let files: [String: ImpressExcalidrawEmbeddedFile]?
 
     private static let fence = String(Character(UnicodeScalar(96)!))
 
@@ -131,6 +141,13 @@ public struct ImpressExcalidrawScene: Decodable, Sendable {
               parsed.elements.count <= 5_000 else {
             throw ImpressExcalidrawReadError.tooLarge
         }
+        guard (parsed.files?.count ?? 0) <= 512,
+              parsed.files?.allSatisfy({ key, file in
+                  !key.isEmpty && key.utf8.count <= 256 &&
+                  (file.dataURL?.utf8.count ?? 0) <= 8 * 1_024 * 1_024
+              }) ?? true else {
+            throw ImpressExcalidrawReadError.tooLarge
+        }
         let ids = parsed.elements.map(\.id)
         guard ids.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 256 }),
               Set(ids).count == ids.count else {
@@ -144,6 +161,9 @@ public struct ImpressExcalidrawScene: Decodable, Sendable {
                   (0.0...1_000_000.0).contains(element.width),
                   (0.0...1_000_000.0).contains(element.height),
                   element.text.map({ $0.utf8.count <= 400_000 }) ?? true,
+                  element.angle.map({ $0.isFinite }) ?? true,
+                  element.opacity.map({ $0.isFinite && (0...100).contains($0) }) ?? true,
+                  element.strokeWidth.map({ $0.isFinite && (0...100).contains($0) }) ?? true,
                   element.points.map({ $0.count <= 20_000 &&
                     $0.allSatisfy { point in
                         point.count >= 2 && point[0].isFinite &&
