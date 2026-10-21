@@ -154,6 +154,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # A passing native suite is not proof that simulator services stayed
+          # healthy. Fail early on a broken boot instead of misreporting UI logic.
+          xcrun simctl bootstatus "$IMPRESS_SIMULATOR_ID" -b 2>&1 | tee out/simulator-ui-bootstatus.log
+          xcrun simctl spawn "$IMPRESS_SIMULATOR_ID" launchctl list >/dev/null
           xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination "platform=iOS Simulator,id=$IMPRESS_SIMULATOR_ID" -derivedDataPath "$RUNNER_TEMP/ImpressDebugSim" -resultBundlePath "$PWD/out/ImpressUI.xcresult" -parallel-testing-enabled NO -collect-test-diagnostics never -only-testing:aReuImpress-iPhoneUITests \
              CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
              CODE_SIGN_ENTITLEMENTS="$GITHUB_WORKSPACE/.github/ci/ImpressSimulatorKeychainQA.entitlements" \
