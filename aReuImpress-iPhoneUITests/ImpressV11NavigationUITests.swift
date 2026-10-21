@@ -50,6 +50,13 @@ final class ImpressV11NavigationUITests: XCTestCase {
         action.tap()
         XCTAssertTrue(app.webViews["impress.diagram.offline-graph"]
             .waitForExistence(timeout: 20))
+        let renderState = app.staticTexts["impress.diagram.render-state"]
+        XCTAssertTrue(renderState.waitForExistence(timeout: 20))
+        let rendered = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "ready"),
+            object: renderState)
+        XCTAssertEqual(XCTWaiter.wait(for: [rendered], timeout: 30), .completed,
+            "An actual offline Mermaid SVG must render, not merely a WKWebView shell")
         let options = app.tables["impress.diagram.source-selection"]
         XCTAssertTrue(options.waitForExistence(timeout: 15))
         XCTAssertGreaterThan(options.cells.count, 0)

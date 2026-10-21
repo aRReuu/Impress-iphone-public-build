@@ -5,6 +5,9 @@ public enum ImpressDiagramError: Error, Equatable { case invalidDocument, tooLar
 public struct ImpressDiagramNode: Codable, Sendable, Equatable {
     public let id: String
     public let title: String
+    /// Only this node's source text, excluding unselected sibling branches.
+    /// The complete Markdown remains authoritative solely in the Vault.
+    public let ownSourceText: String
     public let parentID: String?
     public let startUTF8: Int
     public let endUTF8: Int
@@ -136,7 +139,7 @@ public struct ImpressDiagramDocument: Sendable {
             while let previous = stack.last, previous.0 >= indent { stack.removeLast() }
             let id = "m:" + String(start + line.start)
             result.append(ImpressDiagramNode(id: id, title: String(trimmed.prefix(500)),
-                parentID: stack.last?.1, startUTF8: start + line.start,
+                ownSourceText: trimmed, parentID: stack.last?.1, startUTF8: start + line.start,
                 endUTF8: start + line.end))
             stack.append((indent, id))
             if result.count == 512 { break }
@@ -153,9 +156,18 @@ public struct ImpressDiagramDocument: Sendable {
         let lookup = Dictionary(uniqueKeysWithValues: sections.map {
             ($0.id, "h:" + String($0.startUTF8))
         })
+        let original = Array(bytes)
         let nodes = sections.prefix(512).map { section in
-            ImpressDiagramNode(id: lookup[section.id] ?? "h:" + String(section.startUTF8),
-                title: section.heading,
+            // A parent section's endUTF8 includes all children. A node's
+            // own material ends BEFORE its first direct child, so choosing
+            // that parent alone cannot leak the entire unselected subtree.
+            let childStart = sections.filter { $0.parentID == section.id }
+                .map(\.startUTF8).min() ?? section.endUTF8
+            let own = String(decoding: original[section.startUTF8..<childStart],
+                as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            return ImpressDiagramNode(
+                id: lookup[section.id] ?? "h:" + String(section.startUTF8),
+                title: section.heading, ownSourceText: own,
                 parentID: section.parentID.flatMap { lookup[$0] },
                 startUTF8: section.startUTF8, endUTF8: section.endUTF8)
         }

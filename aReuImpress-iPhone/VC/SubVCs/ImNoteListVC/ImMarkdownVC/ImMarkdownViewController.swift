@@ -2607,6 +2607,7 @@ final class ImpressDiagramReaderController: UIViewController,
         return cfg
     }())
     private let choices = UITableView(frame: .zero, style: .plain)
+    private let eventRelay = ImpressDiagramEventRelay()
     private let action = UIButton(type: .system)
     private let message = UILabel()
     private var chosen = Set<String>()
@@ -2630,6 +2631,17 @@ final class ImpressDiagramReaderController: UIViewController,
         graph.translatesAutoresizingMaskIntoConstraints = false
         graph.accessibilityIdentifier = "impress.diagram.offline-graph"
         graph.navigationDelegate = self
+        eventRelay.onState = { [weak self] state in
+            guard let self else { return }
+            if state == "ready" {
+                self.message.text = V3L("本地图形已真实渲染。轻点下方节点选择发送范围。")
+                self.message.accessibilityValue = "ready"
+            } else {
+                self.message.text = V3L("本地引擎渲染失败；不能以源码文本冒充图形。")
+                self.message.accessibilityValue = "failed"
+            }
+        }
+        graph.configuration.userContentController.add(eventRelay, name: "diagramState")
         graph.isOpaque = false
         graph.backgroundColor = ImpressV3Appearance.surface
         graph.allowsBackForwardNavigationGestures = false
@@ -2641,7 +2653,9 @@ final class ImpressDiagramReaderController: UIViewController,
         choices.rowHeight = UITableView.automaticDimension
         choices.estimatedRowHeight = 54
         message.translatesAutoresizingMaskIntoConstraints = false
-        message.text = V3L("轻点下方原始节点选择范围；可单独选择子树。预览不是发送许可。")
+        message.accessibilityIdentifier = "impress.diagram.render-state"
+        message.accessibilityValue = "loading"
+        message.text = V3L("离线图形正在渲染。下方源节点选择不代表发送许可。")
         message.font = ImpressV3Appearance.Typography.footnote
         message.adjustsFontForContentSizeCategory = true
         message.textColor = ImpressV3Appearance.secondaryText
@@ -2877,3 +2891,18 @@ final class ImpressDiagramReaderController: UIViewController,
     }
 }
 
+
+
+/// WKWebView owns the relay, but the relay never owns the reader. No
+/// persistent web storage or Vault capability is exposed across this bridge.
+final class ImpressDiagramEventRelay: NSObject, WKScriptMessageHandler {
+    var onState: ((String) -> Void)?
+    func userContentController(_ userContentController: WKUserContentController,
+                               didReceive message: WKScriptMessage) {
+        guard message.name == "diagramState",
+              let body = message.body as? [String: String],
+              let state = body["state"],
+              state == "ready" || state == "failed" else { return }
+        DispatchQueue.main.async { [weak self] in self?.onState?(state) }
+    }
+}

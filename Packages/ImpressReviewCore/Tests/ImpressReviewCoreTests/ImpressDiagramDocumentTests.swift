@@ -24,13 +24,14 @@ struct ImpressDiagramDocumentTests {
     }
     @Test func duplicateHeadingsStaySeparateAndChildExpansionIsExplicit() throws {
         let doc = try ImpressDiagramDocument.markmap(in:
-            Data("# Root\n## Same\n### Child\n## Same\nUnapproved\n".utf8))
+            Data("# Root\n## Same\nConcrete mechanism\n### Child\n## Same\nUnapproved\n".utf8))
         let same = doc.nodes.filter { $0.title == "Same" }
         #expect(same.count == 2)
         #expect(same[0].id != same[1].id)
         let one = try doc.selection(ids: [same[0].id])
         #expect(!one.ids.contains(doc.nodes[2].id))
         #expect(!((try one.contextJSON()).contains("Unapproved")))
+        #expect((try one.contextJSON()).contains("Concrete mechanism"))
         let expanded = try doc.selection(ids: [same[0].id], includeDescendants: true)
         #expect(expanded.ids.contains(doc.nodes[2].id))
         #expect(!expanded.ids.contains(same[1].id))
