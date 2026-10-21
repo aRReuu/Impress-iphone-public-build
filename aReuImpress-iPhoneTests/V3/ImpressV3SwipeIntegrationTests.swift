@@ -883,7 +883,7 @@ final class ImpressR042AppearanceTests: XCTestCase {
             .resolvedColor(with: lightTraits)
         XCTAssertEqual(
             selected.titleTextAttributes(for: .selected)?[.foregroundColor] as? UIColor,
-            ImpressV3Appearance.reviewPrimaryInk)
+            ImpressV3Appearance.primaryText)
 
         window.overrideUserInterfaceStyle = .dark
         window.layoutIfNeeded()
@@ -895,7 +895,7 @@ final class ImpressR042AppearanceTests: XCTestCase {
         XCTAssertEqual(after,
             ImpressV3Appearance.page.resolvedColor(with: darkTraits))
         XCTAssertEqual(selected.selectedSegmentTintColor,
-                       ImpressV3Appearance.reviewPrimarySurface)
+                       ImpressV3Appearance.secondarySegmentSelection)
     }
 
     func testLocalVaultMarkdownHasNativeDarkCSSWithoutRemoteNetworkInjection() {
@@ -930,7 +930,7 @@ final class ImpressR042AppearanceTests: XCTestCase {
                           "Core Animation colors cannot remain frozen in Light.")
     }
 
-    func testNativeThreeTypeSelectorHasHighContrastActiveSegment() throws {
+    func testNativeThreeTypeSelectorMatchesBatchImportNeutralSelection() throws {
         let composer = ImpressV3CardComposerViewController()
         composer.loadViewIfNeeded()
         func findSegments(_ view: UIView) -> [UISegmentedControl] {
@@ -940,7 +940,8 @@ final class ImpressR042AppearanceTests: XCTestCase {
         let selectors = findSegments(composer.view)
         let types = try XCTUnwrap(selectors.first(where: { $0.numberOfSegments == 3 }))
         let answerMode = try XCTUnwrap(selectors.first(where: { $0.numberOfSegments == 2 }))
-        XCTAssertEqual(types.selectedSegmentTintColor, ImpressV3Appearance.reviewPrimarySurface)
+        XCTAssertEqual(types.selectedSegmentTintColor,
+                       ImpressV3Appearance.secondarySegmentSelection)
         XCTAssertEqual(types.backgroundColor, ImpressV3Appearance.segmentTrack)
         XCTAssertEqual(types.accessibilityLabel, "卡片类型")
         XCTAssertEqual(types.selectedSegmentIndex, 0)
@@ -950,7 +951,7 @@ final class ImpressR042AppearanceTests: XCTestCase {
         let attrs = types.titleTextAttributes(for: .selected)
         XCTAssertNotNil(attrs?[.font] as? UIFont)
         XCTAssertEqual(attrs?[.foregroundColor] as? UIColor,
-                       ImpressV3Appearance.reviewPrimaryInk)
+                       ImpressV3Appearance.primaryText)
     }
     func testCentralButtonTapTargetsAndQuietSecondaryFeedback() {
         guard #available(iOS 15.0, *) else { return }
