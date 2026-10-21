@@ -748,6 +748,8 @@ final class ImVaultDocumentController: UIViewController {
         richView.translatesAutoresizingMaskIntoConstraints = false
         canvasHost.translatesAutoresizingMaskIntoConstraints = false
         canvasHost.isHidden = true
+        canvasHost.isAccessibilityElement = false
+        canvasHost.shouldGroupAccessibilityChildren = false
         canvasHost.accessibilityIdentifier = "impress.canvas.host"
         richView.isScrollEnabled = true
         // Do not load external Markdown images or navigate to arbitrary
@@ -2231,6 +2233,8 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
         super.init(frame: .zero)
         accessibilityIdentifier = "impress.excalidraw.native-viewport"
         backgroundColor = .systemGroupedBackground
+        isAccessibilityElement = false
+        shouldGroupAccessibilityChildren = false
         delegate = self
         minimumZoomScale = 0.25
         maximumZoomScale = 3
@@ -2252,6 +2256,7 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
         artboard.frame = CGRect(x: 0, y: 0, width: width, height: height)
         artboard.backgroundColor = .systemBackground
         artboard.isAccessibilityElement = false
+        artboard.shouldGroupAccessibilityChildren = false
         addSubview(artboard)
         contentSize = artboard.bounds.size
 
@@ -2272,6 +2277,8 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
             control.contentHorizontalAlignment = .leading
             control.contentVerticalAlignment = .top
             control.contentEdgeInsets = UIEdgeInsets(top: 3, left: 3, bottom: 3, right: 3)
+            control.isAccessibilityElement = true
+            control.accessibilityTraits = .button
             control.accessibilityIdentifier = "impress.excalidraw.element." + element.id
             control.accessibilityHint = V3L("选择或取消绘图元素；不会自动发送")
             control.accessibilityLabel = element.text ?? (element.type + " · " + element.id)
@@ -2314,6 +2321,8 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
             artboard.addSubview(control)
             controls[element.id] = control
         }
+        artboard.accessibilityElements = source.elements.filter(\.isActive)
+            .compactMap { controls[$0.id] }
         selectionOutline.fillColor = UIColor.clear.cgColor
         selectionOutline.strokeColor = ImpressV3Appearance.accent.cgColor
         selectionOutline.lineDashPattern = [6, 4]
@@ -2513,6 +2522,8 @@ final class ImpressCanvasNativeView: UIScrollView, UIScrollViewDelegate {
         super.init(frame: .zero)
         backgroundColor = .systemGroupedBackground
         accessibilityIdentifier = "impress.canvas.native-viewport"
+        isAccessibilityElement = false
+        shouldGroupAccessibilityChildren = false
         delegate = self
         minimumZoomScale = 0.25
         maximumZoomScale = 2.5
@@ -2619,6 +2630,8 @@ final class ImpressCanvasNativeView: UIScrollView, UIScrollViewDelegate {
                 button.setTitleColor(.label, for: .normal)
             }
             button.accessibilityLabel = Self.displayText(for: node)
+            button.isAccessibilityElement = true
+            button.accessibilityTraits = .button
             button.accessibilityIdentifier = "impress.canvas.node." + node.id
             button.accessibilityHint = V3L("轻点选择或取消此节点；只有批准后才会加入 Chat")
             button.addAction(UIAction { [weak self] _ in
@@ -2627,6 +2640,7 @@ final class ImpressCanvasNativeView: UIScrollView, UIScrollViewDelegate {
             artboard.addSubview(button)
             buttons[node.id] = button
         }
+        artboard.accessibilityElements = source.nodes.compactMap { buttons[$0.id] }
     }
 
     required init?(coder: NSCoder) { fatalError("init(source:) unsupported") }
@@ -2695,7 +2709,7 @@ final class ImpressCanvasNativeView: UIScrollView, UIScrollViewDelegate {
 /// Explicit native selections are the authority for Chat material scope.
 @MainActor
 final class ImpressDiagramReaderController: UIViewController,
-        UITableViewDataSource, UITableViewDelegate, WKNavigationDelegate {
+        UITableViewDataSource, UITableViewDelegate, WKNavigationDelegate, UISearchBarDelegate {
     private let source: ImVaultRawDocument
     private let diagram: ImpressDiagramDocument
     private let graph = WKWebView(frame: .zero, configuration: {
@@ -2706,6 +2720,12 @@ final class ImpressDiagramReaderController: UIViewController,
         return cfg
     }())
     private let choices = UITableView(frame: .zero, style: .plain)
+    private let nodeSearch = UISearchBar()
+    private var nodeQuery = ""
+    private var visibleNodes: [ImpressDiagramNode] {
+        guard !nodeQuery.isEmpty else { return diagram.nodes }
+        return diagram.nodes.filter { $0.title.localizedCaseInsensitiveContains(nodeQuery) }
+    }
     private let eventRelay = ImpressDiagramEventRelay()
     private let action = UIButton(type: .system)
     private let message = UILabel()
@@ -2751,6 +2771,13 @@ final class ImpressDiagramReaderController: UIViewController,
         choices.delegate = self
         choices.rowHeight = UITableView.automaticDimension
         choices.estimatedRowHeight = 54
+        nodeSearch.frame = CGRect(x: 0, y: 0, width: 320, height: 48)
+        nodeSearch.placeholder = V3L("查找标题或分支")
+        nodeSearch.accessibilityIdentifier = "impress.diagram.node-search"
+        nodeSearch.delegate = self
+        nodeSearch.searchBarStyle = .minimal
+        nodeSearch.returnKeyType = .search
+        choices.tableHeaderView = nodeSearch
         message.translatesAutoresizingMaskIntoConstraints = false
         message.accessibilityIdentifier = "impress.diagram.render-state"
         message.accessibilityValue = "loading"
@@ -2837,14 +2864,21 @@ final class ImpressDiagramReaderController: UIViewController,
             render()
         }
     }
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        nodeQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        choices.reloadData()
+    }
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        searchBar.resignFirstResponder()
+    }
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        diagram.nodes.count
+        visibleNodes.count
     }
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath)
         -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "diagram-node") ??
             UITableViewCell(style: .subtitle, reuseIdentifier: "diagram-node")
-        let node = diagram.nodes[indexPath.row]
+        let node = visibleNodes[indexPath.row]
         cell.textLabel?.text = node.title
         cell.textLabel?.numberOfLines = 2
         cell.textLabel?.font = ImpressV3Appearance.Typography.body
@@ -2852,11 +2886,13 @@ final class ImpressDiagramReaderController: UIViewController,
         cell.indentationLevel = min(6, diagram.kind == .markmap ? 1 : 0)
         cell.indentationWidth = 14
         cell.accessoryType = chosen.contains(node.id) ? .checkmark : .none
+        cell.isAccessibilityElement = true
+        cell.accessibilityLabel = node.title
         cell.accessibilityIdentifier = "impress.diagram.node." + node.id
         return cell
     }
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        let node = diagram.nodes[indexPath.row]
+        let node = visibleNodes[indexPath.row]
         tableView.deselectRow(at: indexPath, animated: true)
         if chosen.contains(node.id) {
             chosen.remove(node.id)

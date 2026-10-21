@@ -108,17 +108,14 @@ final class ImpressV11NavigationUITests: XCTestCase {
         assertOfflineDiagramReady(app)
         let table = app.tables["impress.diagram.source-selection"]
         XCTAssertTrue(table.waitForExistence(timeout: 12))
+        let search = app.searchFields["impress.diagram.node-search"]
+        XCTAssertTrue(search.waitForExistence(timeout: 12))
+        search.tap()
+        search.typeText("经过审核的子节点\n")
         let branch = table.cells.matching(
             NSPredicate(format: "label CONTAINS %@", "经过审核的子节点")).firstMatch
-        // The graph owns the upper half of a phone screen. Deep list branches
-        // may be genuinely off-screen and therefore absent from the current
-        // accessibility snapshot until the user scrolls the node table.
-        for _ in 0..<12 {
-            if branch.exists { break }
-            table.swipeUp()
-        }
         XCTAssertTrue(branch.waitForExistence(timeout: 12),
-            "A real list branch must be selectable after scrolling the diagram tree")
+            "A real matching Markmap node must be selectable in the source tree")
         XCTAssertTrue(branch.isHittable)
         branch.tap()
         app.buttons["impress.diagram.preview-material"].tap()
@@ -142,7 +139,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
         // accessibility *type* of a UIScrollView (UIKit may flatten it).
         let node = app.buttons["impress.canvas.node.a"]
         XCTAssertTrue(node.waitForExistence(timeout: 18),
-            "Canvas should render its real native node, not a raw JSON fallback")
+            "Canvas node missing in native tree: " + app.debugDescription)
         XCTAssertTrue(node.isHittable)
         node.tap()
         XCTAssertEqual(node.value as? String, "已选择")
@@ -159,7 +156,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
         let app = openSyntheticFile("Drawing")
         let rectangle = app.buttons["impress.excalidraw.element.a"]
         XCTAssertTrue(rectangle.waitForExistence(timeout: 18),
-            "Excalidraw must create an actual tappable shape, not raw JSON text")
+            "Excalidraw shape missing in native tree: " + app.debugDescription)
         XCTAssertTrue(rectangle.isHittable)
         rectangle.tap()
         XCTAssertEqual(rectangle.value as? String, "已选择")

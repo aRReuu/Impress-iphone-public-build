@@ -2425,7 +2425,9 @@ final class ImpressDuplexChangeController: UIViewController {
         // Explicit user operation changes ONLY the editor field. No FSRS
         // mutation, Vault write, proposal or network request happens here.
         answerInput.text = suggestion
-        answerInput.becomeFirstResponder()
+        // Adopting a read-only suggestion must not cover the Note editor with
+        // a keyboard; the user may focus Answer explicitly to edit it.
+        answerInput.resignFirstResponder()
     }
 
     @objc private func preparePreview() {
