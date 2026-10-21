@@ -232,6 +232,13 @@ final class ImpressAIQuestionGenerationViewController: UITableViewController {
 
     @objc private func startGeneration() {
         guard !running else { return }
+        #if DEBUG
+        if ImpressV11UITestFixture.enabled &&
+           document.identity.vaultID == ImpressV11UITestFixture.vaultID {
+            startSyntheticGeneration()
+            return
+        }
+        #endif
         let config = ImpressAIConfigStore.shared.registry
         let resolved: ImpressAIResolvedRoute
         do { resolved = try config.resolve(.questionGeneration) }
@@ -257,6 +264,77 @@ final class ImpressAIQuestionGenerationViewController: UITableViewController {
         })
         present(alert, animated: true)
     }
+
+    #if DEBUG
+    /// Replaces the cloud model ONLY in the explicitly opted-in isolated
+    /// Simulator fixture. The real section picker, consent sheet, audited
+    /// candidate pool, WCDB transaction and Source SHA gates remain intact.
+    private func startSyntheticGeneration() {
+        let selectedSections = ImpressAISectionExtractor.effectiveSelection(
+            sections, selectedIDs: selected)
+        guard let first = selectedSections.first else {
+            showFailure(ImpressAIContractError.invalidRequest)
+            return
+        }
+        let source = ImpressAISource(vaultID: document.identity.vaultID,
+            relativePath: document.identity.relativePath,
+            documentSHA256: document.digest, heading: first.heading)
+        let excerpts = selectedSections.map {
+            ImpressAIExcerpt(id: $0.id, source: source, text: $0.text,
+                sectionHeading: $0.heading)
+        }
+        let notice = UIAlertController(title: V3L("模拟器合成出题"),
+            message: V3L("不会访问任何模型或网络；需要逐条审核后才允许入库。"),
+            preferredStyle: .alert)
+        notice.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        notice.addAction(UIAlertAction(title: V3L("生成"), style: .default) {
+            [weak self] _ in self?.performSyntheticGeneration(source: source, excerpts: excerpts)
+        })
+        present(notice, animated: true)
+    }
+
+    private func performSyntheticGeneration(source: ImpressAISource,
+                                            excerpts: [ImpressAIExcerpt]) {
+        guard !running, let evidence = excerpts.first else { return }
+        running = true
+        navigationItem.rightBarButtonItem?.isEnabled = false
+        Task {
+            defer {
+                running = false
+                navigationItem.rightBarButtonItem?.isEnabled = true
+            }
+            do {
+                let live: ImVaultRawDocument = try await withCheckedThrowingContinuation {
+                    (continuation: CheckedContinuation<ImVaultRawDocument, Error>) in
+                    ImVaultReadSync.shared.read(document.identity) {
+                        continuation.resume(with: $0)
+                    }
+                }
+                try ImpressAIQuestionSendGate.validate(source: source,
+                    excerpts: excerpts, live: live)
+                let questions = [
+                    ImpressAIQuestionCandidate(
+                        question: "如何将一项观察转化为可验证的假设？",
+                        answer: "固定来源与边界，提出可证伪的机制并验证。",
+                        dimension: .mechanism, evidenceIDs: [evidence.id]),
+                    ImpressAIQuestionCandidate(
+                        question: "什么反例能够推翻这一解释？",
+                        answer: "寻找独立反例，并重新核查原始来源和版本。",
+                        dimension: .counterexample, evidenceIDs: [evidence.id])
+                ]
+                let profile = UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+                let pool = ImpressAIQuestionPool(source: source, excerpts: excerpts,
+                    requestedCount: max(2, Int(stepper.value)),
+                    modelProfileID: profile, candidates: questions)
+                let verified = ImpressAIQuestionValidator.audit(pool)
+                try ImVaultPrivateStore.saveQuestionPool(verified)
+                navigationController?.pushViewController(
+                    ImpressAIQuestionPoolViewController(document: document, pool: verified),
+                    animated: true)
+            } catch { showFailure(error) }
+        }
+    }
+    #endif
 
     private func performGeneration(source: ImpressAISource, excerpts: [ImpressAIExcerpt],
                                    route: ImpressAIResolvedRoute) {
