@@ -67,7 +67,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
             .matching(NSPredicate(format: "label == %@", "Graph")).firstMatch
         XCTAssertTrue(note.waitForExistence(timeout: 20))
         note.tap()
-        XCTAssertTrue(app.staticTexts["impress.notes.source-path"]
+        XCTAssertTrue(app.staticTexts["impress.notes.document-title"]
             .waitForExistence(timeout: 15))
         app.buttons["更多笔记操作"].tap()
         let action = app.buttons["阅读 Mermaid 图形"]
@@ -162,7 +162,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
         let app = openSyntheticFile("Diagram")
         // The source label must hug its two lines rather than consuming the
         // entire reader viewport and hiding native canvas controls.
-        let sourcePath = app.staticTexts["impress.notes.source-path"]
+        let sourcePath = app.staticTexts["impress.notes.document-title"]
         XCTAssertLessThan(sourcePath.frame.height, 120, "Canvas viewport layout is collapsed")
         // Require an actual rendered, interactable node rather than the
         // accessibility *type* of a UIScrollView (UIKit may flatten it).
@@ -183,7 +183,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
 
     func testExcalidrawNativeReadSelectionAndChatRejectsUnselectedElement() throws {
         let app = openSyntheticFile("Drawing")
-        let sourcePath = app.staticTexts["impress.notes.source-path"]
+        let sourcePath = app.staticTexts["impress.notes.document-title"]
         XCTAssertLessThan(sourcePath.frame.height, 120, "Excalidraw viewport layout is collapsed")
         let rectangle = app.buttons["impress.excalidraw.element.a"]
         XCTAssertTrue(rectangle.waitForExistence(timeout: 18),
@@ -216,7 +216,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
             .matching(NSPredicate(format: "label == %@", title)).firstMatch
         XCTAssertTrue(file.waitForExistence(timeout: 25))
         file.tap()
-        XCTAssertTrue(app.staticTexts["impress.notes.source-path"]
+        XCTAssertTrue(app.staticTexts["impress.notes.document-title"]
             .waitForExistence(timeout: 20))
         return app
     }
@@ -332,11 +332,11 @@ final class ImpressV11NavigationUITests: XCTestCase {
         // A cold Xcode 27 simulator can stall coordinated source reads while
         // its full-Vault scan and accessibility bootstrap settle. Keep the
         // actual source/identity assertion (never skip or inject a document).
-        let actualSourcePath = app.staticTexts["impress.notes.source-path"]
+        let actualSourcePath = app.staticTexts["impress.notes.document-title"]
         XCTAssertTrue(actualSourcePath.waitForExistence(timeout: 40),
             "The real selected note must open through its authorized Vault reader")
-        XCTAssertTrue(actualSourcePath.label.contains("Study/Impress_E2E_Proof.md"),
-            "A same-title or stale cached note must never satisfy the E2E source gate")
+        XCTAssertEqual(actualSourcePath.label, "Impress_E2E_Proof",
+            "The authorized reader must show the real document title")
 
         // Real chapter picker -> review a deterministic AI candidate, reject
         // the second candidate, and explicitly commit one original card.
@@ -374,7 +374,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
         let source = app.buttons["impress.review.source-note"]
         XCTAssertTrue(source.waitForExistence(timeout: 20))
         source.tap()
-        XCTAssertTrue(app.staticTexts["impress.notes.source-path"]
+        XCTAssertTrue(app.staticTexts["impress.notes.document-title"]
             .waitForExistence(timeout: 15))
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(discuss.waitForExistence(timeout: 15))
@@ -501,7 +501,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
             .matching(NSPredicate(format: "label == %@", "Impress_E2E_Proof")).firstMatch
         XCTAssertTrue(reopened.waitForExistence(timeout: 20))
         reopened.tap()
-        let persistedSource = app.staticTexts["impress.notes.source-path"]
+        let persistedSource = app.staticTexts["impress.notes.document-title"]
         XCTAssertTrue(persistedSource.waitForExistence(timeout: 15))
         // Verify the actual QA Markdown byte change after a true process boundary,
         // not merely that the folder shell can open again.
@@ -533,7 +533,8 @@ final class ImpressV11NavigationUITests: XCTestCase {
         let features = app.buttons["impress.ai.chat.features"]
         XCTAssertTrue(features.waitForExistence(timeout: 15))
         features.tap()
-        let history = app.cells["impress.ai.chat.feature.history"]
+        // Native pop-up menu, not a pushed feature-list controller.
+        let history = app.buttons["历史讨论"]
         XCTAssertTrue(history.waitForExistence(timeout: 15))
         history.tap()
         let sessions = app.tables["impress.ai.chat.history-list"]

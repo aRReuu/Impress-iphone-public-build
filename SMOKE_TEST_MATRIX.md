@@ -215,3 +215,22 @@ Run `39586231838` / SHA `e6b77b2430c9f3ca6568d4471c3a1e327cfd054a`：**Portable 
 - SHA 对应 unsigned 文件：`Impress-V3.1-P0P2-0f7bdd24c302-unsigned.ipa`，大小 **7,445,998 bytes**，文件 SHA-256 **`406ac69aedccc26e6e15837816e58ebb0dafcbe6bf13d3d3c95243769c232b19`**；[Actions Artifact #12364901665](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39633907831/artifacts/12364901665)。未签名、不含真实 iPhone13/Files/iCloud/Keychain/外部真实 API 的设备验收；不声称可无证书直接安装。
 - **新增 F06 风险复核及排队修复（仅新代码，须等待下一 SHA CI 才可登记通过）**：之前已有的 `.undoing` 持久化逆向意图未进入「核查中断」，旧「安全撤销」反而仍可再次选择该中断对象。本批实现只读逆向核查，只有文件原 SHA 或 WCDB 恰好恢复到 `baseContentRevision+2` 且内容相同时记录 `.reverted`；源冲突、其他人合法编辑、缺字节、错误内容版本仍为 `.undoing`，不自动重播或猜成功。中断期间禁第二次逆向执行、正向确认与放弃；仅启用只读核验。新增 Portable/Core 正负向测试与原生 UI 锁门禁、内容真实落盘但回执未写且冷启动读取的负载测试，均为**新 SHA NOT_RUN**直到该次完整 CI。
 - **交付边界不变**：18 步仍需补 UI 的继续 FSRS 评分、外部合法编辑冲突、端到端备份恢复与系统强杀；F01～F13 原生/Portable 单项不能冒充完整故障注入；W01～W15 尚缺 SpringBoard 六布局视觉/签名设备证据；ACCEPT-01～12 逐项仍有缺口；实体真机标记 DEVICE_BLOCKED，正式 Vault 写门禁永久 false。
+
+## 2026-10-22 · UI 回归专项冒烟（U01–U12；未执行前 NOT_RUN）
+
+| ID | 行为与完成标准 |
+|---|---|
+| U01 | 标准卡未揭示的超长 Markdown 题目准确三行：真实像素高度与文本片段一致，未揭示答案不可见；轻点截断题只进入全文，无评分 |
+| U02 | 题干 Bold title2 大于正文 Regular body，富文本/粗体/列表/长中英文/系统大字号及答案滚动下均正确 |
+| U03 | 长按题目与答案仅显示系统文本菜单，不存在自定义「摘录」按钮，不自动生成内容或上传 |
+| U04 | 批量导入预览按钮与全局导航栏 tint、SF Symbol 和无障碍名称相同；保存/导入等页面不使用散落填充式导航色 |
+| U05 | 新增卡片与批量导入的 Segmented Control 同尺寸、同语义色、同选中/未选中样式、深浅模式一致 |
+| U06 | 笔记一级目录仅小 chevron，不有选中高亮，展开/折叠使用 UITableView 原生行插删动画；多目录、120分页、搜索与身份不回归 |
+| U07 | 笔记详情内出现粗体大文档名，不显示源文件完整路径；原始 Vault/相对路径/SHA 强校验仍有效 |
+| U08 | Chat 顶部圆形省略号直接展示 UIMenu，历史直达、设置子菜单及回执完整，无中转 VC，二次入口都可操作 |
+| U09 | AI 服务连接、模型、隐私/任务列表的 icon 为统一动态灰色；颜色不被系统默认蓝覆盖，新增/刷新导航仍原生 |
+| U10 | 无历史记录但 App Group 可用时，Widget 显示合法空坐标和 0/5，不把空态作负分 |
+| U11 | Widget App Group 不存在、共享快照缺失/损坏/时区失效时主 App 明确诊断；无双向数据写回或假数 |
+| U12 | 周/月/年 × Small/Medium 六布局真实 iPhone13 SpringBoard、Widget 装配、深链、AppGroup provisioning/签名与通知路由；未真机验证不得升级为 PASS |
+
+以上条目与原 ACCEPT-01–12、W01–W15 同步，区别 CODE_DONE/NATIVE_TEST_PASS/XCUITEST_PASS/DEVICE_BLOCKED；本次增量新用例不得继承旧版全绿 Run。

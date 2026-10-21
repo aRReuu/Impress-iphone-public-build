@@ -10,6 +10,7 @@ final class ImpressCalibrationViewController: UITableViewController {
     private let header = UIView()
     private let headline = UILabel()
     private let detail = UILabel()
+    private let widgetWarning = UILabel()
     private let chart = ImpressCalibrationTrendChart()
     private let period = UISegmentedControl(items: [V3L("周"), V3L("月"), V3L("年")])
     private var loading = false
@@ -72,11 +73,17 @@ final class ImpressCalibrationViewController: UITableViewController {
         detail.textColor = ImpressV3Appearance.secondaryText
         detail.numberOfLines = 2
         detail.text = V3L("完成一次评估后，计算今日净得分。")
+        widgetWarning.font = ImpressV3Appearance.Typography.footnote
+        widgetWarning.adjustsFontForContentSizeCategory = true
+        widgetWarning.textColor = ImpressV3Appearance.secondaryText
+        widgetWarning.numberOfLines = 0
+        widgetWarning.isHidden = true
+        widgetWarning.accessibilityIdentifier = "impress.calibration.widget-diagnostic"
         period.selectedSegmentIndex = 0
         period.accessibilityIdentifier = "impress.calibration.period"
         ImpressV3Appearance.styleSegmentedControl(period, prominent: false)
         chart.accessibilityIdentifier = "impress.calibration.trend"
-        let container = UIStackView(arrangedSubviews: [headline, detail, period, chart])
+        let container = UIStackView(arrangedSubviews: [headline, detail, widgetWarning, period, chart])
         container.axis = .vertical
         container.spacing = ImpressV3Appearance.Metrics.rowSpacing
         container.translatesAutoresizingMaskIntoConstraints = false
@@ -129,9 +136,35 @@ final class ImpressCalibrationViewController: UITableViewController {
             }
             tableView.reloadData()
             await refreshChart()
+            await updateWidgetStatus()
             ImpressCalibrationReminderCoordinator.shared.requestReconciliation()
         } catch {
             showError(error)
+        }
+    }
+
+    /// User-visible diagnosis when the Widget is stuck at its no-data prompt.
+    /// It does not read or modify the real Vault, nor duplicate score storage.
+    private func updateWidgetStatus() async {
+        await ImpressCalibrationWidgetExporter.publishFromAuthoritativeStore()
+        switch ImpressCalibrationWidgetExporter.availability() {
+        case .ready:
+            widgetWarning.text = nil
+            widgetWarning.isHidden = true
+        case .missingAppGroup:
+            widgetWarning.text = V3L("桌面组件无法访问共享存储。请检查 App 与 Widget 的签名均包含 App Group，然后重新打开校准器。")
+            widgetWarning.isHidden = false
+        case .missingSnapshot:
+            widgetWarning.text = V3L("桌面组件快照尚未生成。请确认共享权限，并重新进入校准器同步。")
+            widgetWarning.isHidden = false
+        case .invalidSnapshot:
+            widgetWarning.text = V3L("桌面组件的共享记录过期或无效。检查时区及共享权限后重新打开应用。")
+            widgetWarning.isHidden = false
+        }
+        let desiredHeight: CGFloat = widgetWarning.isHidden ? 290 : 330
+        if abs(header.frame.height - desiredHeight) > 0.5 {
+            header.frame.size.height = desiredHeight
+            tableView.tableHeaderView = header
         }
     }
 

@@ -109,11 +109,6 @@ class ImMarkdownViewController: ImBaseViewController
         // 记录初始 attributed 文本（使用Down渲染后的富文本）
         originalAttributedText = textView.attributedText
 
-        // Explicit user action only: no implicit native Chat persistence.
-        textView.onTextExtracted = { [weak self] selectedText in
-            self?.showExcerptMenu(for: selectedText)
-        }
-
         view.addSubview(textView)
 
         NSLayoutConstraint.activate([
@@ -351,78 +346,7 @@ extension ImMarkdownViewController
             "Obsidian 源文件目前为只读。请使用独立认知记录；双向写回必须经过版本比对和确认。")
     }
 
-    /// 处理长按手势，实现摘录功能
-    @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
-        guard gesture.state == .began else { return }
 
-        // 获取长按位置的文本内容
-        let location = gesture.location(in: textView)
-        let characterIndex = textView.layoutManager.characterIndex(for: location, in: textView.textContainer, fractionOfDistanceBetweenInsertionPoints: nil)
-
-        // 尝试获取当前行的文本内容作为摘录内容
-        guard let textRange = getTextRangeAtLocation(characterIndex) else { return }
-
-        let selectedText = (textView.text as NSString).substring(with: textRange)
-
-        // 显示摘录菜单
-        showExcerptMenu(for: selectedText)
-    }
-
-    /// 获取指定位置的文本范围（通常是一行或一段）
-    private func getTextRangeAtLocation(_ characterIndex: Int) -> NSRange? {
-        let text = textView.text as NSString
-        let fullRange = NSRange(location: 0, length: text.length)
-
-        // 查找当前行的范围
-        var lineStart = characterIndex
-        var lineEnd = characterIndex
-
-        // 向前查找行开始
-        while lineStart > 0 {
-            let char = text.character(at: lineStart - 1)
-            if char == 10 || char == 13 { // \n or \r
-                break
-            }
-            lineStart -= 1
-        }
-
-        // 向后查找行结束
-        while lineEnd < text.length {
-            let char = text.character(at: lineEnd)
-            if char == 10 || char == 13 { // \n or \r
-                break
-            }
-            lineEnd += 1
-        }
-
-        let lineRange = NSRange(location: lineStart, length: lineEnd - lineStart)
-        return lineRange.length > 0 ? lineRange : nil
-    }
-
-    /// 显示摘录菜单
-    private func showExcerptMenu(for selectedText: String) {
-        let alertController = UIAlertController(
-            title: "复制摘录",
-            message: "确认后仅复制到系统剪贴板；不会保存到旧聊天记录或自动上传。",
-            preferredStyle: .actionSheet)
-
-        let excerptAction = UIAlertAction(title: "复制所选文字", style: .default) { _ in
-            UIPasteboard.general.string = selectedText
-        }
-
-        let cancelAction = UIAlertAction(title: V3L("取消"), style: .cancel, handler: nil)
-
-        alertController.addAction(excerptAction)
-        alertController.addAction(cancelAction)
-
-        // 在iPad上需要设置popoverPresentationController
-        if let popoverController = alertController.popoverPresentationController {
-            popoverController.sourceView = textView
-            popoverController.sourceRect = CGRect(x: textView.bounds.midX, y: textView.bounds.midY, width: 0, height: 0)
-        }
-
-        present(alertController, animated: true, completion: nil)
-    }
 
 
 }
@@ -655,7 +579,11 @@ final class ImVaultDocumentController: UIViewController {
     private let canvasHost = UIView()
     private var canvasGraph: ImpressCanvasNativeView?
     private var drawingGraph: ImpressExcalidrawNativeView?
-    private let pathLabel = UILabel()
+    private let documentTitleLabel = UILabel()
+    private var documentTitleText: String {
+        URL(fileURLWithPath: document.identity.relativePath)
+            .deletingPathExtension().lastPathComponent
+    }
     private var preparedMarkdown: String?
     private var isSourceMode = false
     private let renderer = MarkdownKitRenderer()
@@ -669,7 +597,7 @@ final class ImVaultDocumentController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        pathLabel.text = V3L("只读") + " · " + document.identity.relativePath
+        documentTitleLabel.text = documentTitleText
         if hasAppearedOnce {
             // Re-read after the draft editor, QA source write, other Files
             // provider edits, or a child discussion. Never keep showing a
@@ -729,28 +657,26 @@ final class ImVaultDocumentController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = URL(fileURLWithPath: document.identity.relativePath)
-            .deletingPathExtension().lastPathComponent
+        title = "" // Full document name now leads the reader, not the navigation bar.
         view.backgroundColor = ImpressV3Appearance.page
         navigationItem.largeTitleDisplayMode = .never
         ImpressV3Appearance.styleReadingTextView(readingView)
         ImpressV3Appearance.styleVaultDocument(richView)
         readingView.textAlignment = .left
-        pathLabel.text = V3L("只读") + " · " + document.identity.relativePath
-        pathLabel.font = ImpressV3Appearance.Typography.footnote
-        pathLabel.adjustsFontForContentSizeCategory = true
-        pathLabel.textColor = ImpressV3Appearance.secondaryText
-        pathLabel.numberOfLines = 2
-        pathLabel.lineBreakMode = .byTruncatingMiddle
-        // In composite documents readingView is hidden, so UIKit must not
-        // stretch this 2-line label to consume the empty editor's layout.
+        documentTitleLabel.text = documentTitleText
+        documentTitleLabel.font = ImpressV3Appearance.Typography.documentTitle
+        documentTitleLabel.adjustsFontForContentSizeCategory = true
+        documentTitleLabel.textColor = ImpressV3Appearance.primaryText
+        documentTitleLabel.numberOfLines = 2
+        documentTitleLabel.lineBreakMode = .byTruncatingTail
+        // Keep the title bounded so drawing and Canvas content retain space.
         // Otherwise the native Canvas/Excalidraw viewport can be pushed
         // entirely below the visible screen and excluded from XCUITest AX tree.
-        pathLabel.setContentHuggingPriority(.required, for: .vertical)
-        pathLabel.setContentCompressionResistancePriority(.required, for: .vertical)
+        documentTitleLabel.setContentHuggingPriority(.required, for: .vertical)
+        documentTitleLabel.setContentCompressionResistancePriority(.required, for: .vertical)
         readingView.setContentHuggingPriority(.defaultLow, for: .vertical)
-        pathLabel.accessibilityIdentifier = "impress.notes.source-path"
-        pathLabel.translatesAutoresizingMaskIntoConstraints = false
+        documentTitleLabel.accessibilityIdentifier = "impress.notes.document-title"
+        documentTitleLabel.translatesAutoresizingMaskIntoConstraints = false
         readingView.translatesAutoresizingMaskIntoConstraints = false
         richView.translatesAutoresizingMaskIntoConstraints = false
         canvasHost.translatesAutoresizingMaskIntoConstraints = false
@@ -773,7 +699,7 @@ final class ImVaultDocumentController: UIViewController {
             self?.followWikiLink(target)
             return false
         }
-        view.addSubview(pathLabel)
+        view.addSubview(documentTitleLabel)
         view.addSubview(readingView)
         view.addSubview(richView)
         view.addSubview(canvasHost)
@@ -783,10 +709,10 @@ final class ImVaultDocumentController: UIViewController {
         let bottom = ImpressV3Appearance.Metrics.compactInset
         let gap = ImpressV3Appearance.Metrics.rowSpacing
         NSLayoutConstraint.activate([
-            pathLabel.topAnchor.constraint(equalTo: safe.topAnchor, constant: top),
-            pathLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: inset),
-            pathLabel.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -inset),
-            readingView.topAnchor.constraint(equalTo: pathLabel.bottomAnchor, constant: gap),
+            documentTitleLabel.topAnchor.constraint(equalTo: safe.topAnchor, constant: top),
+            documentTitleLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: inset),
+            documentTitleLabel.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -inset),
+            readingView.topAnchor.constraint(equalTo: documentTitleLabel.bottomAnchor, constant: gap),
             readingView.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -bottom),
             readingView.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: inset),
             readingView.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -inset),
@@ -1964,7 +1890,7 @@ final class ImVaultDraftEditorController: UIViewController, UITextViewDelegate {
                 equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -ImpressV3Appearance.Metrics.compactInset)
         ])
         navigationItem.rightBarButtonItems = [
-            UIBarButtonItem(title: V3L("查看差异"), style: .done, target: self,
+            UIBarButtonItem(title: V3L("查看差异"), style: .plain, target: self,
                             action: #selector(showDiff)),
             UIBarButtonItem(title: V3L("保存草稿"), style: .plain, target: self,
                             action: #selector(saveDraftNow))
@@ -2149,7 +2075,7 @@ final class ImVaultDiffController: UIViewController {
             text.trailingAnchor.constraint(
                 equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -ImpressV3Appearance.Metrics.screenInset)
         ])
-        let save = UIBarButtonItem(title: "确认写回", style: .done,
+        let save = UIBarButtonItem(title: "确认写回", style: .plain,
                                    target: self, action: #selector(confirmWrite))
         // Production stays read-only. Debug QA can only enable this action
         // when the authorized folder is the explicitly named disposable copy.

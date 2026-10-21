@@ -242,3 +242,16 @@
 已提交：`b527764` Excalidraw LZ-String Base64 compressed-json，`b1211f3` 原生只读几何/元素选材/Chat SHA 复核，`692fa1c`/`5bc369e`/`2d2e051` 受限内嵌 PNG/JPEG，`9cd3f73`/`6c2808f` 人工只读中断回执核查，以及 `b7a3e76` 真正 XCUITest Target 和四 Tab/冷启动/截图冒烟。
 
 这些仅代表相应子项已有代码（CODE_DONE 候选），并非整项 E2E_PASS。Excalidraw 全格式、Mermaid 离线图形、Markmap 分支选材、18 步连续业务 UI E2E、F01～F13 整组和 ACCEPT-01～12 最终证据仍未完成。永久保留生产 Vault 写入禁用，不能把基本绘图或静态合同测试冒充最终交付。
+
+## 2026-10-22 · V1.1 视觉/交互增量冻结（现有 ID 子项，不新增主需求）
+
+本节覆盖相同模块此前相反的视觉表述；不得将代码已提交、模拟器 CI 或 Widget 空态冒充真实设备完成。
+
+1. **CARD-01/03/08, UI-01**：闪卡未揭示前题干最多**准确三行可见**，不足三行不填充假内容；超出用省略号，点击仍能阅读全文。问题使用统一的 Dynamic Type **22pt title2 Bold（随系统缩放）**，答案使用正文级 **17pt body Regular（随系统缩放）**，颜色均遵循系统 Primary Label，不在单个控制器散置样式。Markdown 富文本赋值后必须重施字体权威，答案仍独立滚动；文本长按仅保留 iOS 原生选中、复制、查询等，**删除旧全局 UIMenuController「摘录」及伪保存提示**。
+2. **UI-01/02/03, NAV-01**：全局导航栏右侧操作统一从 `ImpressV3Appearance` 的中性色/语义强调色与同一 SF Symbols/原生 `.plain` 规范取得，不再让单页自定硬蓝 icon 或凸出的 `.done` 图块。批量导入的「预览」为与导航栏同色的原生图标（有「预览」无障碍名称），涉及保存/导入须维持完整审批与禁重复；新增卡片类型 `UISegmentedControl` 的背景、选中态、字号、宽高完全复用批量导入的 `styleSegmentedControl(prominent:false)` 与 `segmentedRow`。
+3. **UI-03.a/NAV-03**：笔记一级目录 chevron 缩至统一紧凑 SF Symbol（10pt），无装饰 icon/路径副标题；文件夹行完全取消点击选中高亮；折叠/展开走系统 `UITableView.performBatchUpdates` 行插删动画，源身份/分页/搜索临时展开/折叠状态均不可回归。笔记阅读器页显示**文档文件名的系统放大粗体标题**，顶栏不再显示完整路径/「只读·路径」文字；来源 Vault/相对路径/SHA 校验继续在业务层，不能靠标题匹配。
+4. **CHAT-02/03, UI-02**：Chat 顶部「···」为与笔记详情页一致的原生 `UIBarButtonItem.menu / UIMenu`，直接弹出轻量菜单，历史讨论直达、模型/提示词/本次材料为次级 `UIMenu`，回执/帮助保留完整现有授权逻辑；不可再 push 「对话功能」中转表页。原生历史搜索、删除、安全回执保留。
+5. **AI-01/03, UI-02**：AI 服务/API 连接/模型与子列表的 SF Symbol 统一使用全局次要文字灰色（浅/深动态适配），不再使用列表默认蓝色；导航栏按钮和其他功能模块共用统一样式工厂，不改变 API Key/任务路由/隐私授权。
+6. **NAV-05.w/SAFE-08.w, W01–W15**：Widget 显示 `Open Impress to load assessments` 是**未能读取共享 App Group 投影**的空态，不是评分为 0。主 App 打开校准器时重新从唯一 `checkins-v1.json` 投影并尝试 WidgetCenter 刷新；UI 可区分共享容器不存在、快照缺失、失效三种原因。若自由签名或重新签名未包含**App 与 Extension 同一有效 App Group**，代码不可绕过 iOS 沙箱，必须提示设备签名检查；不得伪造打分点、复制账本或声明设备成功。
+
+**实施/验收**：检查本轮实际 SHA 的源代码、独立原生测试及真实 XCUITest；六种 Widget SpringBoard 截图、iPhone13 真实 App Group/侧载权限、动态字体/简繁英/明暗模式仍需实测。旧 85 主需求、12 ACCEPT、F01–F13、18 步 E2E、18 DEFERRED 不增删。生产 Vault 写门禁永久为 false。

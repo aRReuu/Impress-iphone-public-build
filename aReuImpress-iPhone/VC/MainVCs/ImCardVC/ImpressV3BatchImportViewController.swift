@@ -82,8 +82,9 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
         view.backgroundColor = ImpressV3Appearance.page
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: V3L("预览"), style: .done, target: self, action: #selector(preview))
+        navigationItem.rightBarButtonItem = ImpressV3Appearance.navigationAction(
+            symbol: "doc.text.magnifyingglass", label: V3L("预览"),
+            target: self, action: #selector(preview))
         let scroll = UIScrollView()
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.keyboardDismissMode = .interactive
@@ -369,7 +370,7 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
         tableView.backgroundColor = ImpressV3Appearance.page
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 78
-        let commit = UIBarButtonItem(title: V3L("全部导入"), style: .done,
+        let commit = UIBarButtonItem(title: V3L("全部导入"), style: .plain,
                                      target: self, action: #selector(commitBatch))
         commitButton = commit
         navigationItem.rightBarButtonItem = commit

@@ -1229,7 +1229,7 @@ final class ImpressV3CaptureViewController: UIViewController {
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
         navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: V3L("提交"), style: .done, target: self, action: #selector(save))
+            title: V3L("提交"), style: .plain, target: self, action: #selector(save))
     }
 
     @objc private func cancel() { dismiss(animated: true) }
@@ -1587,7 +1587,7 @@ final class ImpressV3UnderstandingEditorViewController: UIViewController, UIText
                 constant: -ImpressV3Appearance.Metrics.compactInset).isActive = true
         }
         saveAction = UIBarButtonItem(
-            title: V3L("保存"), style: .done, target: self, action: #selector(save))
+            title: V3L("保存"), style: .plain, target: self, action: #selector(save))
         saveAction.accessibilityIdentifier = "impress.learning.edit.save"
         navigationItem.rightBarButtonItem = saveAction
         updateSaveEnabled()

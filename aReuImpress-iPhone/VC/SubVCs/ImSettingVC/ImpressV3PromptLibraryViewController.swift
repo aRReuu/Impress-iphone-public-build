@@ -213,7 +213,7 @@ final class ImpressV3PromptEditorViewController: UIViewController {
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
         navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: V3L("保存"), style: .done, target: self, action: #selector(save))
+            title: V3L("保存"), style: .plain, target: self, action: #selector(save))
         let scroll = UIScrollView()
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.keyboardDismissMode = .interactive

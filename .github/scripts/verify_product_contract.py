@@ -125,6 +125,33 @@ assert "CalibrationCartesianTrendRenderer.image(" in widget
 assert "private struct StatusDot" not in widget and "LazyVGrid(" not in widget
 assert "public enum CalibrationCartesianTrendRenderer" in shared_chart
 assert "static func cartesianPlot(" in plot_source
+# Latest UIKit visual/navigation contract (static guard, NOT device acceptance).
+style = source("aReuImpress-iPhone/Utils/Constansts/ImColorConstants.swift")
+flash = source("aReuImpress-iPhone/View/ImCard/ImMemoryCard/ImMemoryCardView.swift")
+extract = source("aReuImpress-iPhone/Utils/Public/ImExtractTextView/ImExtractTextView.swift")
+composer = source("aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3CardComposerViewController.swift")
+batch = source("aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3BatchImportViewController.swift")
+list_notes = source("aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImpressNoteListTableViewController.swift")
+reader = source("aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdownViewController.swift")
+ai_page = source("aReuImpress-iPhone/Utils/Public/ImAI/ImpressAISettingsViewController.swift")
+widget_export = source("aReuImpress-iPhone/VC/MainVCs/ImCalibrationVC/ImpressCalibrationWidgetExporter.swift")
+assert "styleFlashcardText" in style and "Typography.flashQuestion" in flash
+assert "visibleLineCount(" in flash and "maximumNumberOfLines = 3" in flash
+assert "UIMenuController.shared.menuItems" not in extract and "extractSpecifiedContent" not in extract
+assert "styleSegmentedControl(typePicker, prominent: false)" in composer
+assert "styleSegmentedControl(formatPicker, prominent: false)" in batch
+assert "animateOutlineChange" in list_notes and "tableView.performBatchUpdates" in list_notes
+assert "impress.notes.document-title" in reader and "impress.notes.source-path" not in reader
+assert "more.menu = chatFeaturesMenu()" in chat and "UIMenu(title: V3L(\"对话设置\")" in chat
+assert "content.imageProperties.tintColor = ImpressV3Appearance.listIconTint" in ai_page
+assert "case ready, missingAppGroup, missingSnapshot, invalidSnapshot" in widget_export
+import plistlib
+app_group_key = "com.apple.security.application-groups"
+for relative in ("aReuImpress-iPhone/aReuImpress-iPhone.entitlements",
+                 "aReuImpress-iPhone/aReuImpress-iPhoneDebug.entitlements",
+                 "ImpressCalibrationWidgets/ImpressCalibrationWidgets.entitlements"):
+    entitlements = plistlib.loads((ROOT / relative).read_bytes())
+    assert "group.areu.impress" in entitlements.get(app_group_key, []), relative
 assert "xcode-27" in workflow, "iOS 26+ Xcode SDK regression"
 print(f"PRODUCT_CONTRACT_STATIC_PASS: {len(ledger_ids)} requirements, "
       f"{len(acceptance)} acceptances, {len(open_issues)} open decisions")

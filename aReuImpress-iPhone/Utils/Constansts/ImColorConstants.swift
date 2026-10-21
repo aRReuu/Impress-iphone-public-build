@@ -325,6 +325,9 @@ enum ImpressV3Appearance {
     static let correctOptionSurface = feedbackSurface(safeTipColor)
     static let incorrectOptionSurface = feedbackSurface(reviewCellColor)
     static let accent = funBtnColor
+    /// Informational glyphs are neutral; blue is reserved for an actionable accent.
+    static let listIconTint = UIColor.secondaryLabel
+    static let outlineChevronPointSize: CGFloat = 10
     static let primaryText = titleColor
     static let secondaryText = contentColor
     static let mutedText = subTitleColor
@@ -440,6 +443,33 @@ enum ImpressV3Appearance {
 
     static func styleNavigationBar(_ bar: UINavigationBar) {
         bar.tintColor = accent
+    }
+
+    /// Only one owner for bar-action symbols, size and tint. Do not introduce
+    /// page-specific filled nav buttons or hard-coded system-blue glyphs.
+    static func navigationAction(symbol: String, label: String,
+                                 target: Any?, action: Selector?) -> UIBarButtonItem {
+        let item = UIBarButtonItem(image: UIImage(systemName: symbol),
+                                   style: .plain, target: target, action: action)
+        item.accessibilityLabel = label
+        item.tintColor = accent
+        return item
+    }
+
+    /// Normalize MarkdownKit's attributed fonts AFTER parsing; assigning only
+    /// UITextView.font before setting attributedText is ignored by UIKit.
+    static func styleFlashcardText(_ view: UITextView, question: Bool) {
+        let preferred = question ? Typography.flashQuestion : Typography.flashAnswer
+        let base = view.attributedText ?? NSAttributedString(string: view.text ?? "")
+        if base.length > 0 {
+            let styled = NSMutableAttributedString(attributedString: base)
+            let range = NSRange(location: 0, length: styled.length)
+            styled.addAttribute(.font, value: preferred, range: range)
+            styled.addAttribute(.foregroundColor, value: primaryText, range: range)
+            view.attributedText = styled
+        }
+        view.font = preferred
+        view.textColor = primaryText
     }
 
     /// Native segmented control with an unmistakable selected state.
@@ -663,6 +693,15 @@ enum ImpressV3Appearance {
     enum Typography {
         static var largeTitle: UIFont { UIFont.preferredFont(forTextStyle: .title1) }
         static var cardTitle: UIFont { UIFont.preferredFont(forTextStyle: .title3) }
+        static var flashQuestion: UIFont {
+            UIFontMetrics(forTextStyle: .title2).scaledFont(
+                for: UIFont.systemFont(ofSize: 22, weight: .bold))
+        }
+        static var flashAnswer: UIFont { UIFont.preferredFont(forTextStyle: .body) }
+        static var documentTitle: UIFont {
+            UIFontMetrics(forTextStyle: .title1).scaledFont(
+                for: UIFont.systemFont(ofSize: 28, weight: .bold))
+        }
         static var heading: UIFont { UIFont.preferredFont(forTextStyle: .headline) }
         static var body: UIFont { UIFont.preferredFont(forTextStyle: .body) }
         static var supporting: UIFont { UIFont.preferredFont(forTextStyle: .subheadline) }

@@ -31,9 +31,9 @@ final class ImpressAISettingsViewController: UITableViewController {
         title = V3L("AI 服务")
         tableView.backgroundColor = ImpressV3Appearance.page
         tableView.rowHeight = UITableView.automaticDimension
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
-            barButtonSystemItem: .add, target: self, action: #selector(addConnection))
-        navigationItem.rightBarButtonItem?.accessibilityLabel = V3L("添加 API 连接")
+        navigationItem.rightBarButtonItem = ImpressV3Appearance.navigationAction(
+            symbol: "plus", label: V3L("添加 API 连接"),
+            target: self, action: #selector(addConnection))
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -121,6 +121,8 @@ final class ImpressAISettingsViewController: UITableViewController {
         content.textProperties.font = ImpressV3Appearance.Typography.body
         content.secondaryTextProperties.font = ImpressV3Appearance.Typography.supporting
         content.secondaryTextProperties.numberOfLines = 3
+        content.imageProperties.tintColor = ImpressV3Appearance.listIconTint
+        content.imageProperties.maximumSize = CGSize(width: 20, height: 20)
         cell.contentConfiguration = content
         ImpressV3Appearance.styleGroupedCell(cell)
         cell.accessoryType = indexPath.section == 0 &&
@@ -588,9 +590,10 @@ final class ImpressAIModelsViewController: UITableViewController, UISearchResult
         navigationItem.searchController = modelSearch
         definesPresentationContext = true
         navigationItem.rightBarButtonItems = [
-            UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addManual)),
-            UIBarButtonItem(image: UIImage(systemName: "arrow.clockwise"), style: .plain,
-                            target: self, action: #selector(refreshModels))
+            ImpressV3Appearance.navigationAction(symbol: "plus",
+                label: V3L("添加模型"), target: self, action: #selector(addManual)),
+            ImpressV3Appearance.navigationAction(symbol: "arrow.clockwise",
+                label: V3L("刷新模型"), target: self, action: #selector(refreshModels))
         ]
     }
     override func viewWillAppear(_ animated: Bool) {
@@ -624,6 +627,8 @@ final class ImpressAIModelsViewController: UITableViewController, UISearchResult
         ui.secondaryText = wire + " · " + mode + " · " +
             (m.jsonVerified ? V3L("JSON 测试已通过") : V3L("尚未验证 JSON 输出"))
         ui.image = UIImage(systemName: m.jsonVerified ? "checkmark.shield" : "questionmark.circle")
+        ui.imageProperties.tintColor = ImpressV3Appearance.listIconTint
+        ui.imageProperties.maximumSize = CGSize(width: 20, height: 20)
         cell.contentConfiguration = ui
         ImpressV3Appearance.styleGroupedCell(cell)
         cell.accessoryType = .disclosureIndicator
@@ -1038,7 +1043,9 @@ final class ImpressAIModelChooser: UITableViewController, UISearchResultsUpdatin
             var ui = UIListContentConfiguration.cell()
             ui.text = V3L("使用业务默认模型")
             ui.image = UIImage(systemName: "arrow.uturn.backward")
-            cell.contentConfiguration = ui
+            ui.imageProperties.tintColor = ImpressV3Appearance.listIconTint
+        ui.imageProperties.maximumSize = CGSize(width: 20, height: 20)
+        cell.contentConfiguration = ui
             cell.accessoryType = selectedOverrideID == nil ? .checkmark : .none
             ImpressV3Appearance.styleGroupedCell(cell)
             return cell
@@ -1069,6 +1076,8 @@ final class ImpressAIModelChooser: UITableViewController, UISearchResultsUpdatin
             ? V3L("对话可选，建议先测试连接")
             : (m.jsonVerified ? V3L("JSON 已验证") : V3L("JSON 尚未验证，不能上传笔记"))
         ui.secondaryText = (c?.title ?? "") + " · " + state
+        ui.imageProperties.tintColor = ImpressV3Appearance.listIconTint
+        ui.imageProperties.maximumSize = CGSize(width: 20, height: 20)
         cell.contentConfiguration = ui
         cell.accessoryType = (onPick != nil
             ? selectedOverrideID == m.id

@@ -28,8 +28,9 @@ private enum WidgetWords {
     static var today: String { tr("今日", "今日", "Today") }
     static var days: String { tr("天", "天", "days") }
     static var noData: String {
-        tr("打开 Impress 查看评估记录", "開啟 Impress 查看評估記錄",
-           "Open Impress to load assessments")
+        tr("打开 Impress 的校准器同步；仍为空请检查共享权限",
+           "開啟 Impress 的校準器同步；仍為空請檢查共享權限",
+           "Open Impress > Calibration. If still empty, check App Groups.")
     }
     static var widgetName: String { tr("校准器", "校準器", "Calibration") }
     static var lastUpdate: String { tr("快照", "快照", "Snapshot") }

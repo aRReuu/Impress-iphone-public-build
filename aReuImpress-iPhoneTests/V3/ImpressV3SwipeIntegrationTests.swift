@@ -32,6 +32,43 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         }
     }
 
+    func testEditorAndBatchImportShareExactNativeSegmentedStyle() throws {
+        let editor = ImpressV3CardComposerViewController()
+        editor.loadViewIfNeeded()
+        let importer = ImpressV3BatchImportViewController()
+        importer.loadViewIfNeeded()
+        func find(_ root: UIView, named label: String) -> UISegmentedControl? {
+            if let control = root as? UISegmentedControl,
+               control.accessibilityLabel == label { return control }
+            for child in root.subviews {
+                if let result = find(child, named: label) { return result }
+            }
+            return nil
+        }
+        let card = try XCTUnwrap(find(editor.view, named: V3L("卡片类型")))
+        let batch = try XCTUnwrap(find(importer.view, named: V3L("导入格式")))
+        XCTAssertEqual(card.backgroundColor, batch.backgroundColor)
+        XCTAssertEqual(card.selectedSegmentTintColor, batch.selectedSegmentTintColor)
+        XCTAssertEqual(card.apportionsSegmentWidthsByContent,
+                       batch.apportionsSegmentWidthsByContent)
+        let action = try XCTUnwrap(importer.navigationItem.rightBarButtonItem)
+        XCTAssertEqual(action.style, .plain)
+        XCTAssertTrue(action.image?.isSymbolImage == true)
+        XCTAssertEqual(action.accessibilityLabel, V3L("预览"))
+        XCTAssertEqual(action.tintColor, ImpressV3Appearance.accent)
+    }
+
+    func testAIServiceListSymbolsUseNeutralSharedIconRole() throws {
+        let settings = ImpressAISettingsViewController()
+        settings.loadViewIfNeeded()
+        let cell = settings.tableView(settings.tableView,
+            cellForRowAt: IndexPath(row: 0, section: 2))
+        let content = try XCTUnwrap(cell.contentConfiguration as? UIListContentConfiguration)
+        XCTAssertEqual(content.imageProperties.tintColor,
+                       ImpressV3Appearance.listIconTint)
+        XCTAssertNotEqual(content.imageProperties.tintColor, UIColor.systemBlue)
+    }
+
     @MainActor
     func testContentHistoryIsEditorOnly() throws {
         let editor = ImpressV3CardComposerViewController(editingCardID: UUID())
@@ -69,6 +106,14 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         XCTAssertTrue(question.isSelectable)
         XCTAssertTrue(review.isQuestionTruncated)
         XCTAssertEqual(question.textContainer.lineBreakMode, .byTruncatingTail)
+        let questionFont = try XCTUnwrap(question.font)
+        XCTAssertTrue(questionFont.fontDescriptor.symbolicTraits.contains(.traitBold))
+        XCTAssertEqual(questionFont.pointSize,
+                       ImpressV3Appearance.Typography.flashQuestion.pointSize)
+        XCTAssertGreaterThanOrEqual(question.bounds.height,
+            questionFont.lineHeight * 3 + question.textContainerInset.top +
+                question.textContainerInset.bottom - 1,
+            "Before reveal the card must show three visible question lines")
         review.revealAnswerIfNeeded()
         try await Task.sleep(for: .milliseconds(700))
         review.layoutIfNeeded()
@@ -79,6 +124,9 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         let answer = try XCTUnwrap(allTextViews(review).first(where: { $0 !== question }))
         XCTAssertTrue(answer.isScrollEnabled)
         XCTAssertTrue(answer.isSelectable)
+        XCTAssertFalse(try XCTUnwrap(answer.font).fontDescriptor.symbolicTraits.contains(.traitBold))
+        XCTAssertEqual(answer.font?.pointSize,
+                       ImpressV3Appearance.Typography.flashAnswer.pointSize)
         XCTAssertGreaterThan(answer.contentSize.height, answer.bounds.height)
         XCTAssertLessThan(question.bounds.height, review.bounds.height * 0.55)
         XCTAssertTrue(review.answerIsRevealed)
@@ -93,6 +141,13 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         XCTAssertEqual(chat.navigationItem.rightBarButtonItems?
             .compactMap(\.accessibilityIdentifier),
             ["impress.ai.chat.new-discussion", "impress.ai.chat.features"])
+        XCTAssertNotNil(chat.navigationItem.rightBarButtonItems?.last?.menu,
+            "Chat features must be a native UIMenu rather than a pushed list")
+        let menu = try? XCTUnwrap(chat.navigationItem.rightBarButtonItems?.last?.menu)
+        XCTAssertTrue(menu?.children.contains(where: { $0.title == V3L("历史讨论") }) == true)
+        XCTAssertTrue(menu?.children.compactMap({ $0 as? UIMenu }).contains(where: {
+            $0.title == V3L("对话设置")
+        }) == true)
         func allViews(_ view: UIView) -> [UIView] {
             [view] + view.subviews.flatMap { allViews($0) }
         }

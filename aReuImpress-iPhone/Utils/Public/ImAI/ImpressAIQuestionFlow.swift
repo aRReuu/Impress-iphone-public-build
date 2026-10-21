@@ -133,7 +133,7 @@ final class ImpressAIQuestionGenerationViewController: UITableViewController {
         tableView.backgroundColor = ImpressV3Appearance.page
         tableView.allowsMultipleSelection = false
         navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: V3L("生成"), style: .done, target: self, action: #selector(startGeneration))
+            title: V3L("生成"), style: .plain, target: self, action: #selector(startGeneration))
         stepper.minimumValue = 1
         stepper.maximumValue = 20
         stepper.value = 5
@@ -425,7 +425,7 @@ final class ImpressAIQuestionPoolViewController: UITableViewController {
         title = V3L("问题候选池")
         tableView.backgroundColor = ImpressV3Appearance.page
         navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: V3L("加入卡片集"), style: .done, target: self, action: #selector(confirmImport))
+            title: V3L("加入卡片集"), style: .plain, target: self, action: #selector(confirmImport))
         updateImportButton()
     }
 
@@ -655,7 +655,7 @@ private final class ImpressAIQuestionEditor: UIViewController {
             evidence.heightAnchor.constraint(equalToConstant: 110)
         ])
         navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: V3L("保存"), style: .done, target: self, action: #selector(save))
+            title: V3L("保存"), style: .plain, target: self, action: #selector(save))
     }
     @objc private func save() {
         onSave(question.text ?? "", answer.text ?? "")

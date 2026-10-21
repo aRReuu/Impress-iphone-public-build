@@ -307,41 +307,55 @@ final class ImpressAINativeChatViewController: UIViewController,
 
     private func refreshModelPicker() {
         navigationItem.prompt = nil
-        let more = UIBarButtonItem(image: UIImage(systemName: "ellipsis"),
-            style: .plain, target: self, action: #selector(openChatFeatures))
+        let more = ImpressV3Appearance.navigationAction(
+            symbol: "ellipsis.circle", label: V3L("对话功能"),
+            target: nil, action: nil)
+        // A UIBarButtonItem menu takes precedence over its target/action.
+        // All feature choices are native inline menus, never a pushed list page.
+        more.menu = chatFeaturesMenu()
         more.accessibilityIdentifier = "impress.ai.chat.features"
-        more.accessibilityLabel = V3L("对话功能")
-        let fresh = UIBarButtonItem(image: UIImage(systemName: "square.and.pencil"),
-            style: .plain, target: self, action: #selector(startNewDiscussion))
+        let fresh = ImpressV3Appearance.navigationAction(
+            symbol: "square.and.pencil", label: V3L("新建讨论"),
+            target: self, action: #selector(startNewDiscussion))
         fresh.accessibilityIdentifier = "impress.ai.chat.new-discussion"
-        fresh.accessibilityLabel = V3L("新建讨论")
         navigationItem.rightBarButtonItems = [fresh, more]
     }
 
-    @objc private func openChatFeatures() {
-        var entries: [ImpressChatFeatureListViewController.Entry] = [
-            .init(title: V3L("模型"), symbol: "cpu", identifier: "model") {
-                [weak self] in self?.chooseConversationModel()
-            },
-            .init(title: V3L("历史讨论"), symbol: "clock.arrow.circlepath",
-                  identifier: "history") { [weak self] in self?.openDiscussionHistory() },
-            .init(title: V3L("提示词"), symbol: "text.alignleft",
-                  identifier: "prompt") { [weak self] in self?.openSessionPrompt() },
-            .init(title: V3L("本次材料"), symbol: "paperclip",
-                  identifier: "materials") { [weak self] in self?.reviewSessionMaterials() }
-        ]
+    private func chatFeaturesMenu() -> UIMenu {
+        var receipts: [UIMenuElement] = []
         if pendingDuplex != nil || !previousDuplex.isEmpty {
-            entries.append(.init(title: V3L("修订记录与回执"), symbol: "checklist",
-                identifier: "receipts") { [weak self] in self?.openDuplexReceipts() })
+            receipts.append(UIAction(title: V3L("修订记录与回执"),
+                image: UIImage(systemName: "checklist")) { [weak self] _ in
+                    self?.openDuplexReceipts()
+                })
         }
-        entries.append(.init(title: V3L("已删除会话修订回执"), symbol: "archivebox",
-            identifier: "archived-receipts") { [weak self] in
+        receipts.append(UIAction(title: V3L("已删除会话修订回执"),
+            image: UIImage(systemName: "archivebox")) { [weak self] _ in
                 self?.openArchivedDuplexReceipts()
-        })
-        entries.append(.init(title: V3L("使用说明"), symbol: "info.circle",
-            identifier: "introduction") { [weak self] in self?.showChatIntroduction() })
-        navigationController?.pushViewController(
-            ImpressChatFeatureListViewController(entries: entries), animated: true)
+            })
+        return UIMenu(children: [
+            UIAction(title: V3L("历史讨论"),
+                image: UIImage(systemName: "clock.arrow.circlepath")) { [weak self] _ in
+                    self?.openDiscussionHistory()
+                },
+            UIMenu(title: V3L("对话设置"), image: UIImage(systemName: "slider.horizontal.3"),
+                children: [
+                    UIAction(title: V3L("模型"), image: UIImage(systemName: "cpu")) {
+                        [weak self] _ in self?.chooseConversationModel()
+                    },
+                    UIAction(title: V3L("提示词"), image: UIImage(systemName: "text.alignleft")) {
+                        [weak self] _ in self?.openSessionPrompt()
+                    },
+                    UIAction(title: V3L("本次材料"), image: UIImage(systemName: "paperclip")) {
+                        [weak self] _ in self?.reviewSessionMaterials()
+                    }
+                ]),
+            UIMenu(title: V3L("历史回执"), image: UIImage(systemName: "archivebox"),
+                   children: receipts),
+            UIAction(title: V3L("使用说明"), image: UIImage(systemName: "info.circle")) {
+                [weak self] _ in self?.showChatIntroduction()
+            }
+        ])
     }
 
     private func showChatIntroduction() {
@@ -2019,7 +2033,7 @@ final class ImpressChatNoteSectionPicker: UITableViewController {
         title = V3L("选择笔记章节")
         tableView.backgroundColor = ImpressV3Appearance.page
         navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: V3L("使用所选"), style: .done,
+            title: V3L("使用所选"), style: .plain,
             target: self, action: #selector(acceptSelection))
         navigationItem.rightBarButtonItem?.accessibilityIdentifier =
             "impress.ai.chat.section-confirm"
@@ -3605,7 +3619,7 @@ final class ImpressDuplexNoteReplacementController: UIViewController {
         ])
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             title: V3L("预览并保存私有草稿"),
-            style: .done, target: self, action: #selector(saveScopedDraft))
+            style: .plain, target: self, action: #selector(saveScopedDraft))
         navigationItem.rightBarButtonItem?.accessibilityIdentifier =
             "impress.duplex.save-section-draft"
     }

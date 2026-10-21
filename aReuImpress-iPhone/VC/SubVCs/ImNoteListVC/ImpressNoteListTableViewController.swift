@@ -59,6 +59,13 @@ enum ImVaultListPresentation {
             if case let .document(value) = item { return value }
             return nil
         }
+        var stableID: String {
+            switch item {
+            case .folder(let path): return "folder:" + path
+            case .document(let doc):
+                return "document:" + doc.identity.vaultID + "/" + doc.identity.relativePath
+            }
+        }
     }
 
     private enum OutlineNode {
@@ -166,13 +173,52 @@ class ImpressNoteListTableViewController: ImBaseViewController
             rows, limit: externalVisibleLimit)
     }
 
-    private func setAllFoldersExpanded(_ expanded: Bool) {
-        expandedExternalFolders = expanded
-            ? Set(ImVaultListPresentation.folders(in: externalNotes)) : []
-        externalVisibleLimit = ImVaultListPresentation.pageSize
+    /// UIKit-managed row transitions instead of a flashing full-table reload.
+    /// Also handles the bounded load-more sentinel without losing source IDs.
+    private func animateOutlineChange(_ change: () -> Void) {
+        let before = visibleExternalRows.map(\.stableID) +
+            (hasMoreExternalRows ? ["more"] : [])
+        change()
         rebuildExternalRows()
-        tableView.reloadData()
-        updateVaultEmptyState()
+        let after = visibleExternalRows.map(\.stableID) +
+            (hasMoreExternalRows ? ["more"] : [])
+        let beforeSet = Set(before), afterSet = Set(after)
+        guard beforeSet.count == before.count, afterSet.count == after.count,
+              before.filter({ afterSet.contains($0) }) ==
+                  after.filter({ beforeSet.contains($0) }) else {
+            tableView.reloadData()
+            updateVaultEmptyState()
+            return
+        }
+        let removed = before.enumerated().compactMap { index, id in
+            afterSet.contains(id) ? nil : IndexPath(row: index, section: 0)
+        }
+        let added = after.enumerated().compactMap { index, id in
+            beforeSet.contains(id) ? nil : IndexPath(row: index, section: 0)
+        }
+        tableView.performBatchUpdates({
+            tableView.deleteRows(at: removed, with: .automatic)
+            tableView.insertRows(at: added, with: .automatic)
+        }, completion: { [weak self] _ in
+            guard let self else { return }
+            let visibleFolders = self.visibleExternalRows.enumerated().compactMap { i, row in
+                row.folderPath == nil ? nil : IndexPath(row: i, section: 0)
+            }
+            if !visibleFolders.isEmpty {
+                UIView.performWithoutAnimation {
+                    self.tableView.reloadRows(at: visibleFolders, with: .none)
+                }
+            }
+            self.updateVaultEmptyState()
+        })
+    }
+
+    private func setAllFoldersExpanded(_ expanded: Bool) {
+        animateOutlineChange {
+            expandedExternalFolders = expanded
+                ? Set(ImVaultListPresentation.folders(in: externalNotes)) : []
+            externalVisibleLimit = ImVaultListPresentation.pageSize
+        }
     }
 
     private var selectedNoteID : Int?
@@ -621,9 +667,15 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
             var content = UIListContentConfiguration.cell()
             content.text = row.title
             // The only symbol is the necessary expand/collapse disclosure.
-            content.image = folder == nil ? nil : UIImage(systemName:
-                (expanded || !externalSearchText.isEmpty) ? "chevron.down" : "chevron.right")
-            content.imageProperties.tintColor = ImpressV3Appearance.secondaryText
+            let chevron = (expanded || !externalSearchText.isEmpty)
+                ? "chevron.down" : "chevron.right"
+            content.image = folder == nil ? nil : UIImage(
+                systemName: chevron,
+                withConfiguration: UIImage.SymbolConfiguration(
+                    pointSize: ImpressV3Appearance.outlineChevronPointSize,
+                    weight: .medium))
+            content.imageProperties.tintColor = ImpressV3Appearance.listIconTint
+            content.imageProperties.maximumSize = CGSize(width: 12, height: 12)
             content.imageToTextPadding = 8
             content.axesPreservingSuperviewLayoutMargins = []
             content.directionalLayoutMargins = NSDirectionalEdgeInsets(
@@ -635,6 +687,7 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
             cell.contentConfiguration = content
             ImpressV3Appearance.styleGroupedCell(cell)
             cell.accessoryType = .none
+            cell.selectionStyle = folder == nil ? .default : .none
             cell.accessibilityLabel = row.title
             cell.accessibilityIdentifier = folder == nil
                 ? "impress.notes.file-row" : "impress.notes.folder-row"
@@ -674,12 +727,11 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
             if let path = row.folderPath {
                 // Search is an expanded projection, not a mutation of normal fold state.
                 guard externalSearchText.isEmpty else { return }
-                if !expandedExternalFolders.insert(path).inserted {
-                    expandedExternalFolders.remove(path)
+                animateOutlineChange {
+                    if !expandedExternalFolders.insert(path).inserted {
+                        expandedExternalFolders.remove(path)
+                    }
                 }
-                rebuildExternalRows()
-                tableView.reloadData()
-                updateVaultEmptyState()
                 return
             }
             guard let item = row.note else { return }

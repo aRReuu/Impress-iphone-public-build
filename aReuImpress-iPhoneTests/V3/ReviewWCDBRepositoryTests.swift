@@ -495,7 +495,7 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(finalSession.first?.pendingDuplex?.cardReceipt,
                        "F06 restored content version verified without replay")
         let versions = try await coldRepo.contentHistory(for: id)
-        XCTAssertEqual(versions.map(\\.contentRevision), [0, 1, 2])
+        XCTAssertEqual(versions.map(\.contentRevision), [0, 1, 2])
         let reviewEvents = try await coldRepo.reviewHistory(for: id)
         XCTAssertTrue(reviewEvents.isEmpty)
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)

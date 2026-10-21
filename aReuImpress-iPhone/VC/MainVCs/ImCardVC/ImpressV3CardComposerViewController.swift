@@ -205,7 +205,7 @@ final class ImpressV3CardComposerViewController: UIViewController, PHPickerViewC
         typePicker.selectedSegmentIndex = currentType == .standard ? 0 :
             (currentType == .multipleChoice ? 1 : 2)
         // Native control, but with stronger selected contrast and hierarchy.
-        ImpressV3Appearance.styleSegmentedControl(typePicker, prominent: true)
+        ImpressV3Appearance.styleSegmentedControl(typePicker, prominent: false)
         typePicker.accessibilityLabel = V3L("卡片类型")
         typePicker.addTarget(self, action: #selector(typeDidChange), for: .valueChanged)
         // The control labels already name the types; a second visible

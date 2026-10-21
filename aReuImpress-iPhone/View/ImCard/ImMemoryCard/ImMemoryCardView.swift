@@ -38,11 +38,6 @@ class ImMemoryCardView: UIView
         textView.textAlignment = .left
         textView.showsVerticalScrollIndicator = false
         textView.textContainerInset = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
-        // 设置卡片摘录回调
-        textView.onTextExtracted = { selectedText in
-            // 卡片摘录逻辑：可以添加到学习笔记或创建新的学习卡片
-            ImAlertController.alert(message: "已摘录到学习笔记：\(selectedText.prefix(20))...")
-        }
         return textView
     }()
 
@@ -63,11 +58,6 @@ class ImMemoryCardView: UIView
         textView.textAlignment = .left
         textView.isScrollEnabled = true
         textView.showsVerticalScrollIndicator = false
-        // 设置卡片答案摘录回调
-        textView.onTextExtracted = { selectedText in
-            // 卡片答案摘录逻辑
-            ImAlertController.alert(message: "已摘录答案到学习笔记：\(selectedText.prefix(20))...")
-        }
         return textView
     }()
 
@@ -98,6 +88,9 @@ class ImMemoryCardView: UIView
         } else {
             questionTextView.text = model.question
         }
+        if usesCompactV3Style {
+            ImpressV3Appearance.styleFlashcardText(questionTextView, question: true)
+        }
         updateQuestionTextViewHeight()
 
         // 更新答案内容
@@ -109,6 +102,7 @@ class ImMemoryCardView: UIView
             }
         default:
             answerTextView.setMarkdownText(model.answer ?? "")
+            if usesCompactV3Style { ImpressV3Appearance.styleFlashcardText(answerTextView, question: false) }
         }
     }
 
@@ -120,8 +114,8 @@ class ImMemoryCardView: UIView
         if v3Style {
             // High-priority question text is primary label color, not muted gray.
             questionTextView.textColor = ImpressV3Appearance.primaryText
-            questionTextView.font = ImpressV3Appearance.Typography.cardTitle
-            answerTextView.font = ImpressV3Appearance.Typography.body
+            questionTextView.font = ImpressV3Appearance.Typography.flashQuestion
+            answerTextView.font = ImpressV3Appearance.Typography.flashAnswer
             // Limit only the visual projection. Never truncate stored Markdown.
             questionTextView.isScrollEnabled = false
             questionTextView.textContainer.maximumNumberOfLines = 3
@@ -137,6 +131,7 @@ class ImMemoryCardView: UIView
         self.cardModel = model
         if v3Style {
             questionTextView.setMarkdownText(model.question ?? "")
+            ImpressV3Appearance.styleFlashcardText(questionTextView, question: true)
         } else {
             questionTextView.text = model.question
         }
@@ -230,6 +225,7 @@ class ImMemoryCardView: UIView
             currentAnswerView = answerImageView
         default: // .standard, .multipleChoice
             answerTextView.setMarkdownText(model.answer ?? "")
+            if usesCompactV3Style { ImpressV3Appearance.styleFlashcardText(answerTextView, question: false) }
             currentAnswerView = answerTextView
         }
         
@@ -250,13 +246,14 @@ class ImMemoryCardView: UIView
             return
         }
 
-        let maxWidth = cardView.bounds.width - 40 // 减去左右边距
-        guard maxWidth > 0 else {
-            return
-        }
-
-        let size = CGSize(width: maxWidth, height: CGFloat.greatestFiniteMagnitude)
-        let estimatedSize = questionTextView.sizeThatFits(size)
+        let viewportWidth = questionTextView.bounds.width > 0
+            ? questionTextView.bounds.width : cardView.bounds.width - 2 * defaultSpacing
+        let maxWidth = viewportWidth - questionTextView.textContainerInset.left -
+            questionTextView.textContainerInset.right -
+            2 * questionTextView.textContainer.lineFragmentPadding
+        guard maxWidth > 0 else { return }
+        let estimatedSize = questionTextView.sizeThatFits(
+            CGSize(width: viewportWidth, height: CGFloat.greatestFiniteMagnitude))
         var largestLine = questionTextView.font?.lineHeight ?? 25
         if let attributed = questionTextView.attributedText, attributed.length > 0 {
             attributed.enumerateAttribute(.font,
@@ -275,7 +272,12 @@ class ImMemoryCardView: UIView
         let maximum = usesCompactV3Style
             ? min(threeLines, split ? max(48, available * 0.42) : available)
             : estimatedSize.height
-        let target = min(estimatedSize.height, maximum)
+        let visibleLines = ImpressV3QuestionLayout.visibleLineCount(
+            questionTextView.attributedText, width: maxWidth)
+        let exactVisibleHeight = CGFloat(min(3, max(1, visibleLines))) * largestLine +
+            questionTextView.textContainerInset.top + questionTextView.textContainerInset.bottom + 3
+        let target = usesCompactV3Style
+            ? min(exactVisibleHeight, maximum) : min(estimatedSize.height, maximum)
         guard abs(questionTextViewHeightConstraint.constant - target) > 1.0 else { return }
         questionTextViewHeightConstraint.constant = target
         // 移除强制布局调用，避免在布局过程中触发新的布局周期
@@ -388,7 +390,11 @@ class ImMemoryCardView: UIView
 /// compact question projection shared by all V3 card types.
 enum ImpressV3QuestionLayout {
     static func isTruncated(_ text: NSAttributedString?, width: CGFloat) -> Bool {
-        guard let text, text.length > 0, width > 0 else { return false }
+        visibleLineCount(text, width: width) > 3
+    }
+
+    static func visibleLineCount(_ text: NSAttributedString?, width: CGFloat) -> Int {
+        guard let text, text.length > 0, width > 0 else { return 0 }
         let storage = NSTextStorage(attributedString: text)
         let layout = NSLayoutManager()
         let container = NSTextContainer(
@@ -403,6 +409,6 @@ enum ImpressV3QuestionLayout {
             count += 1
             if count > 3 { stop.pointee = true }
         }
-        return count > 3
+        return count
     }
 }

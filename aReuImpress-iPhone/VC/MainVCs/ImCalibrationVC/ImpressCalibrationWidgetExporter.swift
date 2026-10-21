@@ -12,6 +12,23 @@ enum ImpressCalibrationWidgetExporter {
                         "impress.calibration.year"]
     private static let publisher = SnapshotPublisher()
 
+    enum Availability: Equatable {
+        case ready, missingAppGroup, missingSnapshot, invalidSnapshot
+    }
+
+    /// Shared App Group is a signing entitlement, not a mere source-code flag.
+    /// An unsigned / improperly re-signed app cannot repair this in Swift.
+    static func availability() -> Availability {
+        guard let root = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: groupID) else { return .missingAppGroup }
+        guard let bytes = try? Data(contentsOf: root.appendingPathComponent(snapshotName))
+        else { return .missingSnapshot }
+        guard let snapshot = try? JSONDecoder().decode(CalibrationWidgetSnapshot.self, from: bytes),
+              CalibrationWidgetProjection.overview(from: snapshot, at: Date(),
+                calendar: Calendar.current) != nil else { return .invalidSnapshot }
+        return .ready
+    }
+
     static func publishFromAuthoritativeStore() async {
         do {
             let entries = try await ImpressCalibrationLocalStore.shared.history()
@@ -35,7 +52,11 @@ enum ImpressCalibrationWidgetExporter {
         func publishIfNewer(_ snapshot: CalibrationWidgetSnapshot) throws -> Bool {
             guard let root = FileManager.default.containerURL(
                 forSecurityApplicationGroupIdentifier: ImpressCalibrationWidgetExporter.groupID)
-            else { return false }
+            else {
+                throw NSError(domain: "ImpressWidgetAppGroup", code: 1,
+                    userInfo: [NSLocalizedDescriptionKey:
+                        "App Group group.areu.impress is unavailable to this signed process"])
+            }
             try FileManager.default.createDirectory(
                 at: root, withIntermediateDirectories: true)
             let url = root.appendingPathComponent(
