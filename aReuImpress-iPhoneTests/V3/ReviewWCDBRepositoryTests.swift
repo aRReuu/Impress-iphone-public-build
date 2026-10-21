@@ -318,8 +318,11 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             calculator: FSRS6ReviewCalculator())
         let cardID = UUID()
         let proposal = WCDBV3DuplexProposal(
-            cardID: cardID, cardContentRevision: 0,
-            cardBaseQuestion: "Original", cardEditedQuestion: "Changed",
+            sourceMessageID: nil, noteIdentity: nil,
+            noteBaseDigest: nil, noteEditedDigest: nil,
+            cardID: cardID, cardReviewRevision: 0, cardContentRevision: 0,
+            cardBaseQuestion: "Original", cardBaseAnswer: "Before",
+            cardEditedQuestion: "Changed", cardEditedAnswer: "After",
             state: ImDuplexApprovalState(noteSelected: false,
                 cardSelected: true, noteStatus: .pending, cardStatus: .applying))
         let controller = ImpressDuplexApprovalController(
