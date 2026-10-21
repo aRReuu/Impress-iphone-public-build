@@ -45,3 +45,7 @@
 ## 7. 2026-10-21 · 只读桌面 Widget 接入说明
 
 唯一需求权威 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md) §2.2；详细验收 [SMOKE_TEST_MATRIX.md](SMOKE_TEST_MATRIX.md) §9。周＝最近7本地日含今天，月＝最近30本地日含今天，年＝本自然年；三个 WidgetKind，各支持 Small/Medium。采用 **B（评估行为/记录覆盖）**，净分仅次要展示。**`CalibrationDayCheckIn.isComplete` 可在全部豁免且 `netScore=nil` 时成立**；`trendRecords()` 的未完成记录得分缺失不可代表零评估；请从 `ImpressCalibrationLocalStore.history()` 的四行为＋`moodAssessed` 投影完整/部分/未评估状态。App 在原账本成功回读后向 `group.areu.impress` 原子写最小匿名统计快照，Widget 只读且失败空态，不另建分数权威、数据库、备份或写入许可。WidgetKit Extension/entitlement/provisioning、Timeline、深链同一校准 Tab、真实 iPhone13/IPA、三语言/主题及恢复均需实证，当前 **NOT_RUN**。CAL-01～15 新公式/目标迁移/新提醒照旧 DEFERRED。
+
+## 8. 2026-10-21 · Widget 集成进度证据
+
+此前本文件“本次仅改文档/尚无 Widget Target”的话属于 **2026-10-21 定稿当时**的历史状态。现以 `e6b77b2` / Actions Run `39586231838` 为新的可重复代码证据：Widget Extension、周/月/年三独立配置、Small/Medium 六套布局、最小隐私快照、主 App 校准保存后投影、Deep Link 路由代码已合入，Portable Core 99、原生 XCTest 185、XCUITest 7、Simulator Debug/Release、iPhoneOS ARM64 与内含 Widget.appex 的 unsigned IPA 全部构建测试 PASS。**但真机桌面、侧载 App Group 签名、完整 W12 深链及设备同步尚未验收**。CAL-01～15 新计分/提醒仍 DEFERRED。

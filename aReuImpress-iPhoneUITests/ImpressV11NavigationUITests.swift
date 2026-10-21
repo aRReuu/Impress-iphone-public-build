@@ -23,6 +23,31 @@ final class ImpressV11NavigationUITests: XCTestCase {
         try validateNativeTabNavigation(in: app, capture: false)
     }
 
+    /// Open the real installed app through its registered URL scheme. This
+    /// tests the external WidgetKit tap route without a test-only navigation hook.
+    func testWidgetWeekMonthYearDeepLinksReusePrimaryCalibrationController() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)"]
+        app.launch()
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 25))
+        let periods: [(String, Int)] = [
+            ("week", 0), ("month", 1), ("year", 2)
+        ]
+        for (key, segmentIndex) in periods {
+            let url = try XCTUnwrap(URL(string: "impress://calibration/" + key))
+            app.open(url)
+            // Use the agreed four-Tab order, not localized title strings.
+            let tab = app.tabBars.buttons.element(boundBy: 2)
+            XCTAssertTrue(tab.waitForExistence(timeout: 20))
+            XCTAssertTrue(tab.isSelected,
+                "Widget link must navigate to existing calibration Tab for " + key)
+            let selector = app.segmentedControls["impress.calibration.period"]
+            XCTAssertTrue(selector.waitForExistence(timeout: 15))
+            XCTAssertTrue(selector.buttons.element(boundBy: segmentIndex).isSelected,
+                "Widget period identity must survive deep-link routing")
+        }
+    }
+
     /// Real UIKit navigation from a disposable Vault into an offline diagram,
     /// a user-selected node, full source preview and the normal Chat screen.
     /// No fake completion button, repository shortcut or network model call.
@@ -418,6 +443,11 @@ final class ImpressV11NavigationUITests: XCTestCase {
         applied.buttons["确定"].tap()
         let receipt = String(describing: fullDiff.value ?? "")
         XCTAssertTrue(receipt.contains("applied"))
+        // Keep the actual inverse-review route available, without silently
+        // undoing a user-approved write or conflating an offer with an undo.
+        let safeUndo = app.navigationBars.buttons["安全撤销"]
+        XCTAssertTrue(safeUndo.waitForExistence(timeout: 12))
+        XCTAssertTrue(safeUndo.isEnabled)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Impress-V1.1-continuous-double-target-CAS-approval"
         screenshot.lifetime = .keepAlways
@@ -444,6 +474,22 @@ final class ImpressV11NavigationUITests: XCTestCase {
             NSPredicate(format: "value CONTAINS %@", "经人工核查")).firstMatch
         XCTAssertTrue(savedNote.waitForExistence(timeout: 15),
             "Approved source edits must survive cold launch in the same disposable Vault")
+        // The reverse note -> original-card check is a real visible action.
+        // A changed relevant section must offer an explicit human decision,
+        // not silently rewrite the original card after a source edit.
+        app.buttons["更多笔记操作"].tap()
+        app.buttons["核查笔记更新是否影响原卡"].tap()
+        let impactSheet = app.sheets["核查关联原卡"]
+        XCTAssertTrue(impactSheet.waitForExistence(timeout: 20),
+            "A changed note section must produce a real original-card review")
+        impactSheet.buttons.element(boundBy: 0).tap()
+        let impact = app.textViews["impress.notes.source-impact.full-text"]
+        XCTAssertTrue(impact.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.buttons["impress.notes.source-impact.edit-original"]
+            .waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["impress.notes.source-impact.unaffected"]
+            .waitForExistence(timeout: 15))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
         // The real session (and its receipt history) must remain discoverable;
         // opening the source is not permission to upload another message.
         app.buttons["impress.notes.ai-discussion"].tap()

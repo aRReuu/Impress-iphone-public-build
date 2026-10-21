@@ -52,9 +52,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
         do { _ = try ImpressV3ReviewEnvironment.repository() }
         catch { showDatabaseUnavailable(); return }
         initRootVC()
-        if let url = connectionOptions.urlContexts.first?.url {
-            openCalibrationWidgetLink(url)
-        }
+        // Capture external Widget intent before normal startup routing. Apply
+        // it after queued notification delivery so this explicit tap wins,
+        // without erasing any pending notification or existing user draft.
+        let incomingWidgetURL = connectionOptions.urlContexts.first?.url
         // Silent V3 backup check: no file picker or cloud permission prompt.
         if !isolatedV11Fixture {
             Task(priority: .utility) {
@@ -66,6 +67,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
         ImpressCalibrationNotificationRouteInbox.shared.deliverIfPossible(
             in: window?.rootViewController)
         ImpressCalibrationReminderCoordinator.shared.requestReconciliation()
+        if let incomingWidgetURL { openCalibrationWidgetLink(incomingWidgetURL) }
         initKeyboard()
     }
     
@@ -77,7 +79,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
     /// Route by controller identity, not a fixed Tab index or new calibration store.
     private func openCalibrationWidgetLink(_ url: URL) {
         guard url.scheme == "impress", url.host == "calibration",
-              let key = url.pathComponents.dropFirst().first,
+              url.query == nil, url.fragment == nil,
+              url.pathComponents.count == 2,
+              let key = url.pathComponents.last,
               let period = CalibrationWidgetPeriod(rawValue: key),
               let tabs = window?.rootViewController as? ImTabBarViewController,
               let controllers = tabs.viewControllers,

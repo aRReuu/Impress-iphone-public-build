@@ -57,3 +57,9 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 ## 2026-10-21 · B 方案与闪卡交互增量缺口
 
 从 HEAD `a6051b46c78910cdb87ca8d16f8ccbd5b4467967` 的现有 Swift/Xcode 工程核验：`ImpressV3ReviewViewController` 卡内编辑/讨论默认建立，尚缺揭示后显隐门禁；`ImpressV3CardComposerViewController` 右上仍是文字保存；`ImpressCalibrationViewController` 有原生周/月/年图且 App entitlement 具有 App Group，但目前没有 WidgetKit Extension target。因此四子项 `CARD-08.a/UI-01.a/NAV-05.w/SAFE-08.w` 的源码与专项测试全属待施工，不是 DEVICE_BLOCKED。旧 QuickEdit 揭示前可见的断言必须替代，但来源/FSRS 安全测试不删。产品稿 §2.2/2.3、执行矩阵新增子项、SMOKE W01～W15 构成同一需求契约；CAL-01～15 原新算法仍 DEFERRED；85 主 ID/12 ACCEPT/6 OPEN/18 步 E2E/F01～F13 不更名、不减少。
+
+## 2026-10-21 · e6b77b2 实现差距复核
+
+最新已成功运行的证据：`e6b77b2` / Actions `39586231838`。WidgetKit Extension target、三 WidgetKind × Small/Medium 六布局源码、主应用的最小只读 App Group 数据投影、时间区间/日期状态 Core 测试、包含真实 `.appex` 的 unsigned ARM64 IPA 均**已经实现并构建验证**；此前“Widget Target 缺失”仅是定稿前历史缺口，不能再作为当前开发结论。原 UI 右上显隐、系统 checkmark 保存已通过原生 XCTest。复合文档 Excalidraw / Markmap / Canvas 曾失败的 XCUITest 此次全部通过；不能再写成当前 FAIL。
+
+后续门禁：真机签名/桌面 Widget 六布局、App Group 与侧载权限、深链真实点击（已新增专项测试待下一轮）、完整版18步 E2E 与全部 F01～F13 真实异常注入/复测、数据恢复与全业务设备 QA。只有精确 SHA + Run/实测证据才能升级对应状态，不可把 Core PASS 扩张为真机 PASS。

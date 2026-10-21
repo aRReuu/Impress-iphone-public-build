@@ -53,7 +53,7 @@ B-* 为**已有证据定位**（不能仅凭名称标 PASS）；P-* 为**待实�
 | P-M | `testStructuredSelectionMatchesVisibleSourceRanges`；`testCompositeMaterialsDoNotExpandConsent`（计划） |
 | P-V | `testSupportedCompositeFormatsRenderSelectAndRestore`；`testLegacyAnchorsSurviveParserUpgrade`；`testReadTypeExpansionDoesNotAuthorizeWrites`（计划） |
 | P-X | `testUIKnowledgeLoopAndReverseReviewAcrossColdLaunch`（计划，必须 XCUITest 连续操作，不以服务函数拼接冒充） |
-| P-W | `testCalibrationWidgetSixLayoutsAndStateProjection`、`testWidgetSafeReadOnlySnapshotAndRestore`、`testWidgetThreePeriodDeepLinks`、`testWidgetCivilDateBoundaries`（Widget/Core/Simulator/真机按层验收；均 NOT_RUN） |
+| P-W | **已实测：** `CalibrationWidgetProjectionTests`（8 项：DST、Gregorian 日期验证、全豁免 nil、部分评估、跨年、隐私与坏快照），e6b77b2 / Core PASS；**待新 CI：** `testWidgetWeekMonthYearDeepLinksReusePrimaryCalibrationController`；**待设备：** 六原生 Widget 布局、App Group entitlement/安装（不可将 Core PASS 冒充设备 PASS） |
 
 ## 3. 85 个稳定需求 ID
 
@@ -152,10 +152,10 @@ B-* 为**已有证据定位**（不能仅凭名称标 PASS）；P-* 为**待实�
 | 子项 | 父 ID | 施工范围 | 当前状态 | 验证 |
 | --- | --- | --- | --- | --- |
 | UI-03.a | UI-03/NAV-03/SAFE-03 | 笔记 Tab 一级页为 Obsidian 式原生折叠树；只显示名称、层级及必要 chevron，无图标/路径/摘要；覆盖全树搜索、来源身份、授权回读、分页与展开态 | IN_PROGRESS | 原生树形算法/控制器测试、SMOKE/设备视觉与 Vault 负向测试 |
-| CARD-08.a | CARD-08/CARD-13/CARD-09 | 卡内编辑/讨论只在揭示后同时显示；内容失效/换卡/未揭示隐藏且不可聚焦，保 FSRS | IN_PROGRESS（未施工） | P-R，修改 B-E 旧断言；ACCEPT-03/05 |
-| UI-01.a | UI-01/UI-03/UI-04 | 新增页保存为统一导航样式的 SF Symbols checkmark；保校验/防重复/VoiceOver | IN_PROGRESS（未施工） | P-R、ACCEPT-04，原生截图 |
-| NAV-05.w | NAV-05/UI-03/UI-04 | WidgetKit 周近7、月近30、年本年 × Small/Medium 六视图；记录状态 B 方案；三时段深链 | IN_PROGRESS（Widget target 尚不存在） | P-W，SMOKE W01～W06/W12～W14 |
-| SAFE-08.w | SAFE-08/SAFE-07/NAV-05 | 最小只读 App Group 统计快照、Timeline/WidgetCenter、跨日/恢复、签名与隐私 | IN_PROGRESS（未施工） | P-W，SMOKE W07～W11/W15 |
+| CARD-08.a | CARD-08/CARD-13/CARD-09 | 卡内编辑/讨论只在揭示后同时显示；内容失效/换卡/未揭示隐藏且不可聚焦，保 FSRS | CODE_DONE；原生 XCTest PASS（e6b77b2），设备视觉待验 | P-R；旧 B-E 揭示前断言已替换；ACCEPT-03/05 |
+| UI-01.a | UI-01/UI-03/UI-04 | 新增页保存为统一导航样式的 SF Symbols checkmark；保校验/防重复/VoiceOver | CODE_DONE；原生 XCTest PASS（e6b77b2），视觉/真机待验 | P-R、ACCEPT-04，原生截图待验 |
+| NAV-05.w | NAV-05/UI-03/UI-04 | WidgetKit 周近7、月近30、年本年 × Small/Medium 六视图；记录状态 B 方案；三时段深链 | CODE_DONE（target/六布局源码/unsigned IPA 已生成），原生六布局及真机未验 | P-W；W01～W06、W12 深链待实测、W14 unsigned 构建 PASS |
+| SAFE-08.w | SAFE-08/SAFE-07/NAV-05 | 最小只读 App Group 统计快照、Timeline/WidgetCenter、跨日/恢复、签名与隐私 | CODE_DONE（源码/Portable Core 部分 TEST_PASS），签名/真实 App Group 与恢复设备待验 | P-W；W07/W08/W11 Core 已验证、W09/W10/W15 需设备及负向证据 |
 | CHAT-03.a | CHAT-03 | 全本地会话搜索、正文命中定位、跨源上下文恢复 | NOT_STARTED | P-C |
 | CHAT-03.b | CHAT-03/10, SAFE-07 | 明确删除、未执行取消、已执行回执保留可达、防异步复活 | NOT_STARTED | P-C/B-B |
 | CHAT-06.a | CHAT-06, LOOP-03 | 真实层级/片段范围、父子去重、边界结构、源码映射 | IN_PROGRESS | P-M/B-L |
@@ -202,3 +202,10 @@ G4 同最终 SHA 全套 CI/证据/QA IPA；只有外部设备/Keychain/Files/授
 ## 2026-10-21 · 新增子项的验收边界
 
 仅在 `feature/impress-duplex-loop-v1` 的 `a6051b46c78910cdb87ca8d16f8ccbd5b4467967` 代码核对后定稿：`CARD-08.a/UI-01.a/NAV-05.w/SAFE-08.w` 全部 **IN_PROGRESS/实际新测试 NOT_RUN**。不得把原校准器已有周/月/年曲线或主 App App Group entitlement 误标为 Widget 已实现。旧 QuickEdit **查看答案前可见**测试断言必须以当前产品需求替代，同时保留来源安全与评分守卫；原 85 个主 ID、12 ACCEPT、6 OPEN、18步 E2E、F01～F13、CAL-01～15 DEFERRED 不增删。完整细节以产品稿 §2.2/2.3 和 SMOKE §9 为准。
+
+## 2026-10-21 · e6b77b2 实际 CI 证据（区分代码完成与验收完成）
+
+- **精确提交**：`e6b77b2430c9f3ca6568d4471c3a1e327cfd054a`；**GitHub Actions Run**：`39586231838`，**Conclusion SUCCESS**。Portable Swift Core **99 个 PASS**；iOS 原生 XCTest **185/185 PASS**；XCUITest **7/7 PASS**（含 Excalidraw、Markmap、JSON Canvas、现有连续双目标审批/冷启动往返）。
+- Debug 与 Release iOS Simulator PASS；unsigned Debug iPhoneOS ARM64 PASS；真实 `PlugIns/ImpressCalibrationWidgets.appex/ImpressCalibrationWidgets` 存在、Mach-O **arm64**、NSExtensionPointIdentifier 正确；IPA ZIP 自检 PASS。产物名 `Impress-V3.1-P0P2-e6b77b2430c9-unsigned.ipa`，大小 **7,430,753 字节**，SHA-256 `b7b1174a969103b1ec1dbf16b29aa8f7cf52b8d54a7b10d1146fcbbafba90b57`。
+- **仍然 NOT_RUN / DEVICE_BLOCKED**：真实 iPhone13 安装/签名与 App Group provisioning、实际 SpringBoard 添加/Small+Medium 六布局截图、Timeline 生效时间、真实文件提供者权限、真实 AI Key/HTTP。不能因 CI success 直接提升全量 ACCEPT-01～12/18 步/F01～F13 为 E2E_PASS。Debug QA Vault 与生产 Vault 权限绝不混淆。
+- **下一轮待运行**：`W12` 三时段真实系统 URL 深链 UI 测试；此前通过的双目标 UI E2E 将补强已批准源码重启回读、反向原卡核查和撤销入口检查。下一 SHA 的结果必须**重新归档**，不能继承 e6b77b2 的 PASS。

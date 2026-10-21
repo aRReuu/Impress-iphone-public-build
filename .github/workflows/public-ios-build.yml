@@ -104,7 +104,7 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/ImpressDebugSim" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee out/debug-simulator-build.log
-      - name: Run all scheme iOS XCTest
+      - name: Select available iPhone Simulator
         shell: bash
         run: |
           set -euo pipefail
@@ -122,18 +122,21 @@ jobs:
             echo "No available iPhone simulator" | tee out/simulator-error.log
             exit 1
           fi
-          # Run native XCTest and real-process XCUITest in separate xcodebuild
-          # sessions. On Xcode 27 the combined invocation may lose the native
-          # runner connection after the UI suite has finished, even when 7/7 UI
-          # tests passed. Isolate failures; neither suite is skipped.
-          # -collect-test-diagnostics never prevents a 600-second simctl
-          # sysdiagnose hang; normal xcresult assertions/screenshots are kept.
-          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination "platform=iOS Simulator,id=$SIM_ID" -derivedDataPath "$RUNNER_TEMP/ImpressDebugSim" -resultBundlePath "$PWD/out/ImpressNative.xcresult" -parallel-testing-enabled NO -collect-test-diagnostics never -only-testing:aReuImpress-iPhoneTests \
+          echo "IMPRESS_SIMULATOR_ID=$SIM_ID" >> "$GITHUB_ENV"
+      - name: Run native iOS XCTest
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination "platform=iOS Simulator,id=$IMPRESS_SIMULATOR_ID" -derivedDataPath "$RUNNER_TEMP/ImpressDebugSim" -resultBundlePath "$PWD/out/ImpressNative.xcresult" -parallel-testing-enabled NO -collect-test-diagnostics never -only-testing:aReuImpress-iPhoneTests \
              CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
              CODE_SIGN_ENTITLEMENTS="$GITHUB_WORKSPACE/.github/ci/ImpressSimulatorKeychainQA.entitlements" \
              test 2>&1 | tee out/simulator-native-xctest.log
           xcrun xcresulttool get test-results summary --path out/ImpressNative.xcresult --format json > out/native-test-summary.json
-          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination "platform=iOS Simulator,id=$SIM_ID" -derivedDataPath "$RUNNER_TEMP/ImpressDebugSim" -resultBundlePath "$PWD/out/ImpressUI.xcresult" -parallel-testing-enabled NO -collect-test-diagnostics never -only-testing:aReuImpress-iPhoneUITests \
+      - name: Run real-process iOS XCUITest
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination "platform=iOS Simulator,id=$IMPRESS_SIMULATOR_ID" -derivedDataPath "$RUNNER_TEMP/ImpressDebugSim" -resultBundlePath "$PWD/out/ImpressUI.xcresult" -parallel-testing-enabled NO -collect-test-diagnostics never -only-testing:aReuImpress-iPhoneUITests \
              CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
              CODE_SIGN_ENTITLEMENTS="$GITHUB_WORKSPACE/.github/ci/ImpressSimulatorKeychainQA.entitlements" \
              test 2>&1 | tee out/simulator-ui-xctest.log

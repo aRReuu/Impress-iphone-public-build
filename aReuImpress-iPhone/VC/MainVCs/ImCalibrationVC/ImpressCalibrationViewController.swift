@@ -73,6 +73,7 @@ final class ImpressCalibrationViewController: UITableViewController {
         detail.numberOfLines = 2
         detail.text = V3L("完成一次评估后，计算今日净得分。")
         period.selectedSegmentIndex = 0
+        period.accessibilityIdentifier = "impress.calibration.period"
         ImpressV3Appearance.styleSegmentedControl(period, prominent: false)
         chart.accessibilityIdentifier = "impress.calibration.trend"
         let container = UIStackView(arrangedSubviews: [headline, detail, period, chart])

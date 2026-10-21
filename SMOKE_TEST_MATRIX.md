@@ -174,3 +174,9 @@ Excalidraw compressed-json/有限 PNG/JPEG 的源码和测试已提交，但全�
 | W15 | 没有新计分/旧历史迁移/新通知策略；CAL 新规则仍 DEFERRED，原十八步/F01～F13 与备份无回归 |
 
 另需真实测试闪卡：未揭示两图标隐藏且不能聚焦，揭示后出现，进入编辑/讨论保持 cardID/队列，内容实际变化揭示失效再隐藏，换卡恢复初态，所有显隐不评分；新增页 `checkmark` 与统一导航样式、可访问性、表单校验/保存防重复/失败回读必须过 XCUITest。旧 `testQuickEditAndVerifiedSourceVisibleBeforeAnswerWithoutScoring` 的「揭示前可见」部分已被新需求取代，改断言而非删来源安全测试。
+
+### e6b77b2 运行证据登记（2026-10-21，不篡改 W01～W15 原始验收标准）
+
+Run `39586231838` / SHA `e6b77b2430c9f3ca6568d4471c3a1e327cfd054a`：**Portable Core 99 PASS / XCTest 185 PASS / XCUITest 7 PASS / Debug+Release Simulator PASS / unsigned iPhoneOS ARM64 与 Widget.appex 二进制、IPA ZIP/哈希 PASS**。W07/W08/W11 的纯状态/日期/隐私子测试获得 **CORE_PASS（仅 Core 证据）**；W14 的 unsigned 打包子步骤 **BUILD_PASS**，不等于真机可签名运行；W01～W06 原生 Widget 视觉/添加、W09 签名授权、W10 设备重启恢复、W12 真实系统路由及 W15 真机隐私 **NOT_RUN**。原 18 步 UI E2E 目前的连续测试覆盖双目标建议/审批/重启但不覆盖全部中断回滚和手动撤销，仍是 **PARTIAL_E2E_PASS**，不得标注完整 E2E_PASS。见 [Actions Run #39586231838](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39586231838)。
+
+产物 `Impress-V3.1-P0P2-e6b77b2430c9-unsigned.ipa`，SHA256 `b7b1174a969103b1ec1dbf16b29aa8f7cf52b8d54a7b10d1146fcbbafba90b57`。它是 **UNSIGNED**，必须独立合法签名并验证 Widget Extension 与 `group.areu.impress` 相同有效 entitlement 才能宣称设备可用。
