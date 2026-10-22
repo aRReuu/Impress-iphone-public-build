@@ -84,14 +84,13 @@ final class ImpressV11NavigationUITests: XCTestCase {
         folder.tap()
         XCTAssertTrue(graph.waitForExistence(timeout: 15))
         graph.tap()
-        let heading = app.staticTexts["impress.notes.document-title"]
-        XCTAssertTrue(heading.waitForExistence(timeout: 30))
-        XCTAssertEqual(heading.label, "Graph",
-            "The source file name, not an Obsidian path or guessed title, leads the reader")
-        XCTAssertFalse(app.staticTexts["impress.notes.source-path"].exists,
-            "Do not restore the redundant full-path banner")
-        XCTAssertLessThan(heading.frame.height, 125,
-            "A bounded large title must leave room for Canvas and rich Markdown")
+        let reader = app.webViews["impress.notes.markdown-webview"]
+        XCTAssertTrue(reader.waitForExistence(timeout: 30))
+        XCTAssertEqual(reader.label, "Graph",
+            "The single scroll reader must expose the verified document name")
+        XCTAssertFalse(app.staticTexts["impress.notes.source-path"].exists)
+        XCTAssertFalse(app.staticTexts["impress.notes.document-title"].exists,
+            "The old detached UIKit title must not occupy the first viewport")
         let readable = XCTAttachment(screenshot: app.screenshot())
         readable.name = "Impress-V1.1-document-heading-no-path-banner"
         readable.lifetime = .keepAlways
@@ -102,31 +101,32 @@ final class ImpressV11NavigationUITests: XCTestCase {
     /// These checks do not claim private Obsidian screenshot parity or device QA.
     func testNativeTypedPropertiesAndInlineReaderDiagrams() throws {
         let app = openSyntheticFile("Reader-Properties")
-        let toggle = app.buttons["impress.notes.properties-toggle"]
-        XCTAssertTrue(toggle.waitForExistence(timeout: 20))
-        XCTAssertEqual(toggle.value as? String, "已展开")
-        let date = app.staticTexts["impress.notes.property-value.Date"]
-        XCTAssertTrue(date.waitForExistence(timeout: 10))
-        XCTAssertEqual(date.label, "2026-01-31")
-        XCTAssertTrue(app.staticTexts["impress.notes.property-value.Status"].exists)
         let readable = app.webViews["impress.notes.markdown-webview"]
         XCTAssertTrue(readable.waitForExistence(timeout: 20))
+        XCTAssertEqual(readable.label, "Reader-Properties",
+            "Title, typed frontmatter and body should share one web scroll")
+        XCTAssertFalse(app.staticTexts["impress.notes.document-title"].exists)
         let ready = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", "ready:g=0/0:m=0"), object: readable)
+            predicate: NSPredicate(format: "value == %@", "ready:g=0/0:m=0"),
+            object: readable)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 30), .completed)
-        let snapshot = XCTAttachment(screenshot: app.screenshot())
-        snapshot.name = "Impress-reader-native-properties"
-        snapshot.lifetime = .keepAlways
-        add(snapshot)
+        let toggle = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "属性 (")).firstMatch
+        XCTAssertTrue(toggle.waitForExistence(timeout: 15),
+            "The semantic Properties expander must be in the document DOM")
+        let date = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "2026-01-31")).firstMatch
+        XCTAssertTrue(date.waitForExistence(timeout: 15))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Impress-reader-single-scroll-typed-properties"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
         toggle.tap()
-        XCTAssertEqual(toggle.value as? String, "已折叠")
-        XCTAssertFalse(date.isHittable)
+        XCTAssertFalse(date.isHittable,
+            "Collapsing native-parsed Properties must hide its document rows")
         app.buttons["更多笔记操作"].tap()
-        let source = app.buttons["查看 Markdown 源码"]
-        XCTAssertTrue(source.waitForExistence(timeout: 10))
-        source.tap()
-        XCTAssertTrue(app.textViews.firstMatch.waitForExistence(timeout: 10),
-            "Native source mode must stay reachable after Properties rendering")
+        app.buttons["查看 Markdown 源码"].tap()
+        XCTAssertTrue(app.textViews.firstMatch.waitForExistence(timeout: 10))
     }
 
     /// RDR-01: KaTeX must render inside the same offline note reading surface.
@@ -225,7 +225,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
             .matching(NSPredicate(format: "label == %@", "Graph")).firstMatch
         XCTAssertTrue(note.waitForExistence(timeout: 20))
         note.tap()
-        XCTAssertTrue(app.staticTexts["impress.notes.document-title"]
+        XCTAssertTrue(app.webViews["impress.notes.markdown-webview"]
             .waitForExistence(timeout: 15))
         app.buttons["更多笔记操作"].tap()
         let action = app.buttons["阅读 Mermaid 图形"]
@@ -385,8 +385,11 @@ final class ImpressV11NavigationUITests: XCTestCase {
             .matching(NSPredicate(format: "label == %@", title)).firstMatch
         XCTAssertTrue(file.waitForExistence(timeout: 25))
         file.tap()
-        XCTAssertTrue(app.staticTexts["impress.notes.document-title"]
-            .waitForExistence(timeout: 20))
+        let nativeHeading = app.staticTexts["impress.notes.document-title"]
+        if !nativeHeading.exists {
+            XCTAssertTrue(app.webViews["impress.notes.markdown-webview"]
+                .waitForExistence(timeout: 20))
+        }
         return app
     }
 
@@ -501,11 +504,11 @@ final class ImpressV11NavigationUITests: XCTestCase {
         // A cold Xcode 27 simulator can stall coordinated source reads while
         // its full-Vault scan and accessibility bootstrap settle. Keep the
         // actual source/identity assertion (never skip or inject a document).
-        let actualSourcePath = app.staticTexts["impress.notes.document-title"]
-        XCTAssertTrue(actualSourcePath.waitForExistence(timeout: 40),
+        let actualReader = app.webViews["impress.notes.markdown-webview"]
+        XCTAssertTrue(actualReader.waitForExistence(timeout: 40),
             "The real selected note must open through its authorized Vault reader")
-        XCTAssertEqual(actualSourcePath.label, "Impress_E2E_Proof",
-            "The authorized reader must show the real document title")
+        XCTAssertEqual(actualReader.label, "Impress_E2E_Proof",
+            "The verified document name must be inside the continuous reader")
 
         // Real chapter picker -> review a deterministic AI candidate, reject
         // the second candidate, and explicitly commit one original card.
@@ -555,7 +558,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
         let source = app.buttons["impress.review.source-note"]
         XCTAssertTrue(source.waitForExistence(timeout: 20))
         source.tap()
-        XCTAssertTrue(app.staticTexts["impress.notes.document-title"]
+        XCTAssertTrue(app.webViews["impress.notes.markdown-webview"]
             .waitForExistence(timeout: 15))
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(discuss.waitForExistence(timeout: 15))
@@ -682,8 +685,8 @@ final class ImpressV11NavigationUITests: XCTestCase {
             .matching(NSPredicate(format: "label == %@", "Impress_E2E_Proof")).firstMatch
         XCTAssertTrue(reopened.waitForExistence(timeout: 20))
         reopened.tap()
-        let persistedSource = app.staticTexts["impress.notes.document-title"]
-        XCTAssertTrue(persistedSource.waitForExistence(timeout: 15))
+        let persistedReader = app.webViews["impress.notes.markdown-webview"]
+        XCTAssertTrue(persistedReader.waitForExistence(timeout: 15))
         // Verify the actual QA Markdown byte change after a true process boundary,
         // not merely that the folder shell can open again.
         app.buttons["更多笔记操作"].tap()

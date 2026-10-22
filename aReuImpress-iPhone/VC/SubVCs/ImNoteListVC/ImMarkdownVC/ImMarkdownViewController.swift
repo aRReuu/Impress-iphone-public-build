@@ -3262,6 +3262,7 @@ final class ImpressMarkdownOfflineView: UIView, WKNavigationDelegate {
         sourceMarkdown = markdown
         activeCSS = css
         activeTitle = documentTitle
+        web.accessibilityLabel = documentTitle
         projectedFields = fields
         propertiesDiagnostic = diagnostic
         propertiesState = state
