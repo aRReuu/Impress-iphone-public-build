@@ -308,3 +308,15 @@ G4 同最终 SHA 全套 CI/证据/QA IPA；只有外部设备/Keychain/Files/授
 原 2026-10-23 表格将 Chat-UI、Composer、Streaming、附件技术方案合称 `SPEC_CONFIRMED`：**本条覆盖其最终状态**。已确认仅包括 ChatGPT iPhone 全体验作为主视觉参照、取消传统整行消息视觉、`+` 使用方案 B 与原数据/来源/授权门禁不变。Chat 布局内核、UIKit/SwiftUI 组合、Markdown 引擎、滚动/流式架构和具体性能阈值仍为 `TECH_DESIGN_OPEN`，不是 CODE_PENDING 已授权执行。可分别原型评估原生 UICollectionView / ChatLayout、SwiftStreamingMarkdown / Textual / Rill / 原生 TextKit2；需要记录合成 fixture、帧耗/内存/解析耗时、准确性、许可证与 IPA 增量，不依赖历史 CI 或社区声称。
 
 Excalidraw P0 的图中文字/节点真实可读和校准器 CLOSED 持久化门禁则为 `SPEC_CONFIRMED / CODE_PENDING`，不等待 Chat 技术讨论才能在现有安全分支按原审批推进。仍不允许更改 main/私库。
+
+## 2026-10-23 · Chat 渲染架构源码研究与可执行原型入口（未定版）
+
+| 研究单元 | 已有技术证据 | 需要执行的 A/B 实验 | 状态 |
+|---|---|---|---|
+| Chat 数据与流程切割 | WCDBV3ChatMessage 已有 stable messageID；当前 Chat controller 把 roleCell/整行色/回执/发送放于同一控制器 | 原 WCDB 加只读 presentation adapter；合成数据下保持跨源、撤销、审批、Chat history 的业务无回归 | SOURCE_AUDITED / NOT_RUN |
+| UI 容器 | reloadAndScroll 强制全表 reload 与 scrollToRow middle；ChatLayout 有自定义 UICollectionViewLayout 和 scroll snapshot | 原生 UICollectionView Diffable vs ChatLayout；消息块 item 复用、键盘、bottom-follow、上滑锁锚、长列表的差异 | SOURCE_AUDITED / A_B_NOT_RUN |
+| 流式解析/富文本 | Microsoft 对每个增长 snapshot 再解析；RillCore 增量 commitIndex 与稳定 NodeID；Textual 字符串变化即整体转换 | RillCore + 原生 Presenter 对比微软 StreamedMarkdownView；复杂 Markdown 结构、选择、语义等价、长回复 CPU/内存 | SOURCE_AUDITED / A_B_NOT_RUN |
+| SSE 传输 | 现有 converse 一次性文本，Provider 有 OpenAI/Anthropic/Gemini/DeepSeek 协议差异 | 离线 SSE 录制 Fixture 重放：断帧/半个 UTF8/多 data/终止与无终止/错误/取消，统一事件规范 | SOURCE_AUDITED / PROTOCOL_NOT_RUN |
+| 可见 UI 细节 | 当前大块 table row 破坏 GPT 式 AI 连续内容和右侧用户气泡 | 同型号手机深浅色/中文/英文状态矩阵、完整富文本/输入区/附件/流式场景逐像素与交互人工审查 | VISIBLE_GAP_CONFIRMED / DEVICE_NOT_RUN |
+
+选型顺序：Source audit -> zero-network synthetic fixtures -> isolated debug-only A/B prototype -> Core/parser property tests -> 真实 iPhone13 Instrument/视觉/触控与动态字 -> 明确决策 -> 最后才替换生产 Chat。用户仍保留继续讨论权利。既有 Chat/FSRS/知识来源/安全门禁冻结，非 Chat 的 Excalidraw 和校准 CLOSED 不受影响。

@@ -135,3 +135,29 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 当前 `ImpressChatMessageCell` 强制角色标签、普通 `UITextView` 与整行背景；`ImpressAIHTTPClient.converse` 以单次文本请求返回，是实际代码事实。选型不应直接等于换 `UITableView`：分别度量容器滚动/单元复用、Markdown 解析/布局、网络 SSE/取消/持久化。社区候选包括 MIT 的 `ekazaev/ChatLayout`（自适应单元＋稳定滚动，需关注 iOS 18 起 supplementary views 的维护变化）、`microsoft/SwiftStreamingMarkdown`（原生混合 Markdown/公式/代码/引用）、`gonzalezreal/textual`（新一代 SwiftUI 文本）、`joydle/rill`（脏尾增量 AST，社区成熟度仍需证明）、`exyte/Chat`（附件界面参考）；`oriveo/oriveo` 作为 AGPL-3.0-or-later 的多 Provider 混合 UIKit/SwiftUI 架构研究材料，禁止未经许可审查复制源码。参考 Gemini 的混排多模态、Claude 的成果分离阅读、DeepSeek 的模式切换时，不得冲淡 ChatGPT 作为 Impress 唯一主视觉标准或放入并不存在的产品能力。
 
 **严谨性能契约的试验要求**：无界 token 对整篇 Markdown 重解析、对全部历史列表 reload、每条消息一个 WKWebView、网络事件直接触发多次 AutoLayout、以及滚动位置每帧强制跳到底部均是需禁止或证明等效性能的高风险路径。固定长段中文/emoji/数学/代码/表格/不闭合围栏/附件/长聊天与随机 token 切块；测试最终文本 AST 与一次性解析结果一致、错误和取消不会误作 completed，校验 stable messageID、Dynamic Type、键盘、复制选择、前后台、缓存释放。分别在 iPhone13 用 Instruments/OSSignpost 测量 FPS/hitches、主线程时长、峰值/回落内存、滚动偏移与 IPA 增量，不填报未量实测数值。Chat `TECH_DESIGN_OPEN`；Excalidraw 与 CAL 产品规则仍冻结。
+
+## 2026-10-23 · Chat 流式阅读引擎源码对照（TECH_SPIKE_SOURCE_AUDITED，非技术定版）
+
+本轮依据公开项目的真实源码而非宣传页面再次核对：目标是达到 GPT / Gemini / DeepSeek 级别的完整流式对话界面，第三方库演示效果不足不意味着原生客户端不可实现。不得复制产品专有视觉资源或未经许可的实现。用户已经要求继续讨论，故不将以下实验架构晋升为 SPEC_FROZEN 或 CODE_DONE。
+
+**现有 Impress 的具体阻断点**：ImpressAINativeChatViewController.swift 的 reloadAndScroll 每次调用 UITableView.reloadData() 并强制 scrollToRow(at:.middle)；ImpressChatMessageCell 将每个回合渲染为一个带「我／AI」roleLabel 的 UITextView 和整行背景色；MarkdownKitRenderer 用 headline 首选字体且将全文解析为一个 NSAttributedString；ImpressAIHTTPClient.converse 在各 Provider 协议上等待完整结果，未建立 SSE 事件层；当前 WCDBV3ChatMessage 只有 role/text/status/provider 快照（既有 messageID 不应改变）。因此只调 UI token 无法获得真正的流式视图与滚动体验。
+
+**社区源码真实差异**：
+- ekazaev/ChatLayout (MIT) 是 UICollectionViewLayout，提供自适应 Cell、插入/变更、滚动位置保真；README 明确不提供键盘、输入框、Markdown、消息模型。可复用布局，不可误当成 ChatGPT UI 完整实现。
+- microsoft/SwiftStreamingMarkdown (MIT) 的 StreamedMarkdownView.swift 接收逐渐增长的文本完整快照，StreamedMarkdownController 对每一个快照调用 MarkdownParserImpl.parse(text:config:)，而后者新建 Document(parsing: ...)。优势是丰富的现成图文/LaTeX/代码视觉组件，但不能误称该实现已有真正只解析 dirty-tail 的算法；长回复性能须测量。
+- joydle/rill (MIT) 的 RillCore/Streaming/IncrementalParser.swift 维护 UTF8 commitIndex、committedBlocks 与 dirty tail，并复用 NodeID，适合原生增量 AST；但仓库目前仅有少量提交与有限社区经验。其 RillChat 演示仅单一示例会话、ScrollView/VStack 与逐 token scrollTo，不是可直接部署的千条消息容器。
+- gonzalezreal/textual (MIT) 依赖 Foundation AttributedString Markdown，StructuredText.swift 在 onChange(markup) 时重新构造整个 AttributedString；强项是选择/排版/富文本，不能作为有界 dirty-tail 解析器直接使用。
+- oriveo/oriveo (AGPL-3.0) 的 iOS Features/Chat/ARCHITECTURE.md 明确采用 SwiftUI shell + UIKit UICollectionView/ChatLayout、自定义代码与表格组件、完成块提交、独立 stick-to-bottom/runway、长文本折叠和有界 TextKit 测量。只能研究架构；未经版权/开源合规评审禁止直接移植源码。
+
+**候选非破坏性原型架构（待对比实验，不是最终库选型）**：
+1. TransportAdapter：各 Provider 把 SSE/事件流标准化为独立的 start / delta / reasoning-availability / completed / interrupted / error / cancelled 信号；不得将无终止事件的 EOF 直接改成 completed，也不得因 UI 需要假造 provider 推理内容。
+2. ChatRenderStore：保持 WCDB session/messageID/source/CAS 的唯一持久化权威，流式暂态保存在主业务状态之外的可取消缓存，持久 checkpoint 和完成回执遵守原幂等与费用授权；同一次响应只对应一个 stable assistant messageID。
+3. MarkdownBlockPipeline：完整原文 authoritative buffer -> UTF8 安全分块 -> dirty-tail AST -> [stable messageID + blockID + version] 的 RenderBlock。闭合块内容、测量尺寸与样式按主题/字号/容器宽度缓存，开放尾块单独更新；未知/半截 Markdown 仍可读，流结束后与一次性解析作等价比对。
+4. ChatTranscript：优先试验一条外层 UICollectionView 纵向滚动流；消息块（paragraph/list/code/table/math/attachment/footer）作为可独立更新的 item，按照用户右侧气泡与 AI 连续正文组合。首屏/中间数千消息无须同时创建所有 UIView。使用 Diffable stable ID 与 reconfigure（非 reloadData），只影响变更 item；不要每条消息嵌套一个 WKWebView，也不可每个流式字节重建完整 Cell 树。
+5. ScrollAnchorController：区分 FollowingBottom / ReadingHistory / KeyboardTransition / Restoring 四类原因；只有 FollowingBottom 才跟随新生成内容，用户向上阅读后保持 messageID + blockID + viewport 相对位置。横向代码/表格不应劫持纵向手势；键盘/Composer 尺寸变动不允许强制跳底。
+6. ContentPresenters：用户 Bubble、AI 原生段落、代码语法着色/复制、表格横向容器、数学块、引用/链接、图像/文件缩略、回执/状态是类型化可复用组件。Textual、RillUI、微软库应先用相同 Fixture 验证，再决定是否纳入单一可信最终呈现链；不要把不同 Markdown 引擎直接混拼进同一回复，造成内容不一致。
+7. Composer 单一现有 UITextView/发送/停止/Apple STT，使用 keyboardLayoutGuide、44pt 命中区域与动态高度。附件方案 B 按已确认条件实施，但在本技术试验中先使用完全合成的本地附件和离线事件，不调用收费服务。
+
+**待证明的性能与语义风险**：大消息 TextKit 自适应 Cell 全文重排、无换行超长文本、半截 fenced code/table/math、复杂 Unicode/中文候选、self-sizing Cell 高度变化、用户手动历史滚动被流式强制归零、全量 Diffable snapshot、图片内存回落、Markdown HTML/远程链接安全。需要用 Instrument 的 Time Profiler/Hangs/Hitches/Memory、os_signpost 与自动化帧采样在 iPhone13 比较；未实测不能写「60FPS 已达标」。最终与指定版本 ChatGPT iPhone、Gemini、DeepSeek 的同一合成内容做视觉/交互对照：ChatGPT 仍为主视觉标准，其他产品只对多模态/状态表达提供借鉴。
+
+**结论门禁**：以上 TECH_SPIKE_SOURCE_AUDITED，A/B PROTOTYPE_NOT_RUN，FINAL_LIBRARY_NOT_SELECTED，APP_CODE_UNCHANGED；不以 Github 开源项目 README 性能自述替代 Impress iPhone13 证据，不在此阶段修改 production Chat。

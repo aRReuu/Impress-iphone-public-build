@@ -340,3 +340,18 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 ## 2026-10-23 · Chat 门禁标注修订（尚未批准最终 UI 引擎）
 
 上一章 U18.chat-layout、U18.chat-stream、U18.chat-composer 等 Chat 子场景视为候选验收维度 `TEST_DESIGN_DRAFT / NOT_RUN`，**尚非已经定稿的 UIKit/SwiftUI/第三方库验收规格**。继续技术研究并通过同设备、同字体/明暗的合成 fixture 观测长回复稳定块渲染、表格/代码横向滚动、真正流式增量、滚动锚点、原生选择、键盘与内存回收，基准帧率与内存阈值待 iPhone13 测试定标；不因为框架 README 声称顺滑就标 PASS。系统附件选择方案 B 已确认，但 Picker/上传链的具体实现仍需能力门禁与集成测试。RDR-13/15/22 与 CAL.day-close/day-durability 的**非 Chat 产品要求继续冻结**，测试一律保持 NOT_RUN 直到实际执行。
+
+## 2026-10-23 · AI 完整流式对话容器技术验证增量（仅测试方案；全部 NOT_RUN）
+
+此处不增删原编号，属于 CHAT-01/05/06、UI-02、U18 等子项。测试前提为独立合成消息与**零网络 Mock Provider**，不使用用户私人聊天、真实 Vault、API Key 或付费模型。Chat 技术设计依然 TECH_DESIGN_OPEN。
+
+| 场景 | 输入与核验条件 | 状态 |
+|---|---|---|
+| CHAT-SPIKE-A | 0 / 100 / 1,000 / 5,000 条稳定 ID、插入/删除/恢复/定位、用户气泡/AI 结构块；滚动中前端仅更新可见项、不破坏消息 ID/字节 | NOT_RUN |
+| CHAT-SPIKE-B | 1KB / 16KB / 64KB 流式回复；慢 token、密集 token、批量、断帧、末尾未结束代码围栏/列表/表格/LaTeX；随机 UTF8/emoji/中文组合字符分块，最终 AST 等价完整解析 | NOT_RUN |
+| CHAT-SPIKE-C | ScrollAnchor：FollowBottom 与手动历史上滑；多次键盘开闭/输入法候选栏/Composer 伸缩/横向代码表格嵌套；保持相同 messageID+blockID 与内容内相对视口，不产生不可控跳底 | NOT_RUN |
+| CHAT-SPIKE-D | 取消/异常/EOF 未收到成功终止、重复事件、App 强杀与回启、Provider 能力不支持和材料撤权；未完成回复不能冒充 completed，不能重复自动收费或提交 | NOT_RUN |
+| CHAT-SPIKE-E | 用户消息复制/编辑、AI 结构化文本选择、代码复制、脚注/链接、数学公式、表格、图片/文件局部预览；Source ID/SHA 与选材授权不随显示引擎改变 | NOT_RUN |
+| CHAT-SPIKE-F | iPhone13 + iOS26，Light/Dark/System、Dynamic Type、简繁英/VoiceOver；Time Profiler/SwiftUI Instrument、Hangs/Hitches、峰值及释放后内存、Parser 工作量、布局测量、主线程 stall/帧数和完整视觉样本；附确切 SHA | DEVICE_BLOCKED / NOT_RUN |
+
+注意：性能阈值须由真机先取 baseline 再冻结目标；社区「流畅」「低内存」宣传或纯模拟器结果不能填 PASS。软件 POC 失败是 FAIL，不可当 DEVICE_BLOCKED。正式 build/IPA 与用户现有 18 步/ACCEPT/异常/Widget 验收仍需同 SHA 独立证明。
