@@ -284,3 +284,9 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 | RDR-12 | 普通首屏耗时、重渲染、快切旧内容取消、内存与长文滚动 | NOT_RUN |
 
 不得使用私人截图/笔记做公开 Fixtures。Core、Native XCTest、XCUITest、iPhone13 人工对照分开登记实际 PASS/FAIL/DEVICE_BLOCKED；未执行的一律不得改成 PASS。完成前必须确保同一最终源码 SHA 的 Actions PASS、IPA ZIP 完整性与 Widget 无回归。
+
+### 2026-10-22 · RDR 测试断言加强及明确剩余边界（最终 SHA 新 CI 待登记）
+
+本次代码新增 `ImpressFrontmatterReadingTests`、`ImpressVaultEmbedLocatorTests`、Properties/KaTeX/Mermaid/Markmap/Canvas/Excalidraw/一层 Markdown 嵌入进程测试。针对 **RDR-01/03/05/06**，不仅观察阅读器存在，还要求桥接报告实际图形成功/总数以及 KaTeX 节点计数；针对 **RDR-04/09/10**，原始 UTF8 范围、无效 YAML、源修订、路径穿越、外部 symlink、无效块定位及过深嵌入须负向拒绝。来源校验和 Chat 审批不依赖 HTML 文本逆向搜索。
+
+以上仍是 **新测试源码**，未在精确最终 SHA 执行并拿到 GitHub Actions 证明前不得改写既有 RDR 表格中的 `NOT_RUN`；RDR-07/12 的大字号 VoiceOver/真实性能基线仍需单独证据。DEVICE_BLOCKED 不可伪装为 PASS。

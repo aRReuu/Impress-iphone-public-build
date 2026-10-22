@@ -43,3 +43,10 @@ V3 WCDB为卡片/FSRS/Chat唯一权威；内容revision与调度revision独立�
 本轮只在 `feature/impress-duplex-loop-v1` 上施工。原有 MarkdownView 阅读层替换为一次初始化的受控离线 `WKWebView` 宿主，使用固定版本 `markdown-it 14.1.0` 与既有 Mermaid 11.12.2、Markmap 0.18.12 共享离线资源；支持 Markdown 语义列表、Mermaid/Markmap 围栏、KaTeX 离线公式的正文原位渲染，保留独立图形选材页。受授权当前 Vault 内的 Canvas/Excalidraw 文件通过有限图形读取桥在 Markdown 正文显示受限几何预览，完整元素/区域交互仍在独立原生阅读页。原生 Properties 使用 `ImpressFrontmatterReader` 提供类型化字段和 UTF8 偏移，只读、安全降级。原生 Canvas/Excalidraw 独立视图和 Chat 来源回读不变。
 
 **本段是源码施工记录，不是验收完成声明。** 参见 SMOKE 的 RDR-01～12。复杂 YAML、深度循环嵌入、未授权外部附件、插件自定义图形、Canvas/Excalidraw 图片元素完整呈现仍需单独验证。公式和受限图形嵌入目前只有源码实现，需凭同一 SHA 的 CI 和实际截图核验。真实 iPhone13 与 Obsidian 截图比对未完成；正式 Vault 写入门禁仍关闭。此后的 CI 必须绑定最终精确 SHA。
+
+## 2026-10-22 · Reader G4 受限嵌入与精确渲染断言
+
+- 复用已有受授权的原生 Canvas/Excalidraw 阅读；Markdown 内嵌图形仅绘制有界几何，选材仍须进入原生阅读器确认。
+- `![[同 Vault 文件.md]]` 与 `![[同 Vault 文件.md#章节]]` 在明确授权、唯一文件身份与有限体积下支持一层只读展示；第二层引用不继续读取，`#^块 ID` 未建立可靠块定位时明确拒绝，不猜测来源。内嵌文件变化可独立刷新显示投影；正式生产 Vault 写入仍关闭。
+- 离线 Markdown 主阅读器以结构化回执 `ready:g=<成功图形>/<预期图形>:m=<实际 KaTeX 节点数>` 提供测试诊断，不能用空 WebView 的 ready 作为成功证据。
+- 真实 iPhone13、Files/iCloud Provider、App Group 签名和与 Obsidian 私密截图的人工像素/布局核验在此执行环境均为 **DEVICE_BLOCKED**，不因此篡改自动化 PASS 的范围；未完成的大型动态插件、块定位与依赖循环仍明确保留安全降级。
