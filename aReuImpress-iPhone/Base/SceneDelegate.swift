@@ -42,6 +42,18 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
            ImpressCalibrationReminderCoordinator.isCalibrationTap(response) {
             ImpressCalibrationNotificationRouteInbox.shared.enqueue()
         }
+        #if DEBUG
+        // A standalone POC bypasses live WCDB, providers and the Vault entirely.
+        // It is reachable only through an explicit Simulator launch argument.
+        if ProcessInfo.processInfo.arguments.contains("-ImpressChatPOC") {
+            window?.rootViewController = UINavigationController(
+                rootViewController: ImpressChatPOCViewController())
+            window?.backgroundColor = ImpressV3Appearance.page
+            window?.makeKeyAndVisible()
+            initKeyboard()
+            return
+        }
+        #endif
         // Never open SQLite if an interrupted multi-file restore still needs
         // its durable rollback. AppDelegate attempts repair before Scene startup.
         guard !UserDefaults.standard.bool(

@@ -131,6 +131,8 @@
 		F4A100000000000000000002 /* ImpressAISettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4A100000000000000000012 /* ImpressAISettingsViewController.swift */; };
 		F4A100000000000000000003 /* ImpressAIQuestionFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4A100000000000000000013 /* ImpressAIQuestionFlow.swift */; };
 		F4A100000000000000000004 /* ImpressAINativeChatViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4A100000000000000000014 /* ImpressAINativeChatViewController.swift */; };
+		F7C100000000000000000001 /* ImpressChatPOCViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C100000000000000000002 /* ImpressChatPOCViewController.swift */; };
+		F7C100000000000000000003 /* ImpressChatPOCInteractionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C100000000000000000004 /* ImpressChatPOCInteractionUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -323,6 +325,8 @@
 		F4A100000000000000000012 /* ImpressAISettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressAISettingsViewController.swift; sourceTree = "<group>"; };
 		F4A100000000000000000013 /* ImpressAIQuestionFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressAIQuestionFlow.swift; sourceTree = "<group>"; };
 		F4A100000000000000000014 /* ImpressAINativeChatViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressAINativeChatViewController.swift; sourceTree = "<group>"; };
+		F7C100000000000000000002 /* ImpressChatPOCViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCViewController.swift; sourceTree = "<group>"; };
+		F7C100000000000000000004 /* ImpressChatPOCInteractionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCInteractionUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -374,6 +378,7 @@
 			isa = PBXGroup;
 			children = (
 				F5B100000000000000000002 /* ImpressV11NavigationUITests.swift */,
+				F7C100000000000000000004 /* ImpressChatPOCInteractionUITests.swift */,
 			);
 			path = "aReuImpress-iPhoneUITests";
 			sourceTree = "<group>";
@@ -385,6 +390,7 @@
 				F4A100000000000000000012 /* ImpressAISettingsViewController.swift */,
 				F4A100000000000000000013 /* ImpressAIQuestionFlow.swift */,
 				F4A100000000000000000014 /* ImpressAINativeChatViewController.swift */,
+				F7C100000000000000000002 /* ImpressChatPOCViewController.swift */,
 			);
 			path = ImAI;
 			sourceTree = "<group>";
@@ -1227,6 +1233,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F5B100000000000000000001 /* ImpressV11NavigationUITests.swift in Sources */,
+				F7C100000000000000000003 /* ImpressChatPOCInteractionUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1238,6 +1245,7 @@
 				F4A100000000000000000002 /* ImpressAISettingsViewController.swift in Sources */,
 				F4A100000000000000000003 /* ImpressAIQuestionFlow.swift in Sources */,
 				F4A100000000000000000004 /* ImpressAINativeChatViewController.swift in Sources */,
+				F7C100000000000000000001 /* ImpressChatPOCViewController.swift in Sources */,
 				F3A200000000000000000011 /* ImpressV3ReviewEnvironment.swift in Sources */,
 				F3A200000000000000000012 /* ImpressV3ReviewViewController.swift in Sources */,
 				F3A400000000000000000010 /* ImpressV3CardComposerViewController.swift in Sources */,
