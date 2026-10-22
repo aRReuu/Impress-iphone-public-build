@@ -1124,7 +1124,13 @@ extension ImVaultReadSync {
         // Inert raw HTML; full unmodified source remains available in Src mode.
         // Remove unsafe Markdown image syntax without affecting raw bytes;
         // only Obsidian ![[local]] embeds are resolved below under Vault scope.
-        let readableBody = ImpressFrontmatterReader.parse(source).body
+        let properties = ImpressFrontmatterReader.parse(source)
+        let readableBody = properties.body
+        // Malformed or advanced YAML stays visible for diagnosis. Do not
+        // infer attached resources from its untrusted property declarations.
+        if properties.state == .invalid || properties.state == .unsupported {
+            return ImVaultSafetyProjection.withoutUntrustedImages(readableBody)
+        }
         let formatted = ImVaultSafetyProjection.withCalloutHeadings(
             ImVaultSafetyProjection.withWikiLinks(readableBody))
         var preview = ImVaultSafetyProjection.withoutUntrustedImages(formatted)

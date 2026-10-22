@@ -1053,10 +1053,15 @@ final class ImVaultDocumentController: UIViewController {
             // MarkdownKit-rich rendering runs inside a WKWebView. Literal
             // HTML from shared notes is inert in this read-only projection,
             // while raw source remains untouched and inspectable separately.
-            let safeMarkdown = preparedMarkdown ??
-                ImVaultSafetyProjection.withoutUntrustedImages(
+            let fallback: String
+            if properties.state == .invalid || properties.state == .unsupported {
+                fallback = ImVaultSafetyProjection.withoutUntrustedImages(properties.body)
+            } else {
+                fallback = ImVaultSafetyProjection.withoutUntrustedImages(
                     ImVaultSafetyProjection.withCalloutHeadings(
                         ImVaultSafetyProjection.withWikiLinks(properties.body)))
+            }
+            let safeMarkdown = preparedMarkdown ?? fallback
             // Only the prepared projection has excluded all ordinary image
             // URLs and can allow data: image embeds. The initial fallback
             // prohibits all images, including remote images.
