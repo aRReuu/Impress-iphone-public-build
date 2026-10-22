@@ -67,10 +67,12 @@ actor ImpressCalibrationLocalStore {
         if let old = state.days[checkIn.dayID],
            old.goalsSnapshot != checkIn.goalsSnapshot {
             let todayID = CalibrationDayCheckIn.dayID(for: Date())
+            // Evaluate the throwing migration independently of the
+            // short-circuit Boolean expression; no implicit throwing RHS.
+            let migratedSnapshot = try old.migratedToReading(goals: state.goals).goalsSnapshot
             let migrationAllowed = old.isLegacyDay && !checkIn.isLegacyDay &&
                 checkIn.dayID == todayID &&
-                (try old.migratedToReading(goals: state.goals)).goalsSnapshot ==
-                    checkIn.goalsSnapshot &&
+                migratedSnapshot == checkIn.goalsSnapshot &&
                 checkIn.retiredCustomAssessment == old.assessments.first(where: {
                     $0.taskID == CalibrationIndicator.custom.rawValue
                 })
