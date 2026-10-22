@@ -2385,7 +2385,9 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
             throw ImpressExcalidrawReadError.tooLarge
         }
         artboard.frame = CGRect(x: 0, y: 0, width: width, height: height)
-        artboard.backgroundColor = .systemBackground
+        // Keep the scene's authored palette in either iOS appearance.
+        let canvasBackground = Self.color(source.appState?.viewBackgroundColor) ?? .white
+        artboard.backgroundColor = canvasBackground
         artboard.isAccessibilityElement = false
         artboard.shouldGroupAccessibilityChildren = false
         addSubview(artboard)
@@ -2425,7 +2427,35 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
                 control.layer.addSublayer(shape)
             }
             if element.type == "text" {
-                control.setTitle(element.text ?? "", for: .normal)
+                // UIKit UIButton title layout clipped multiline/bound labels
+                // and ignored the original drawing's font size and alignment.
+                // A dedicated UILabel preserves the visible source glyphs.
+                let label = UILabel()
+                label.text = element.text ?? ""
+                label.numberOfLines = 0
+                label.textAlignment = element.textAlign == "center" ? .center :
+                    (element.textAlign == "right" ? .right : .left)
+                let size = CGFloat(element.fontSize ?? 20)
+                label.font = element.fontFamily == 3 ?
+                    UIFont.monospacedSystemFont(ofSize: size, weight: .regular) :
+                    UIFont.systemFont(ofSize: size, weight: .regular)
+                label.textColor = Self.readableInk(Self.color(element.strokeColor),
+                                                  on: canvasBackground)
+                label.alpha = CGFloat(element.opacity ?? 100) / 100
+                label.isUserInteractionEnabled = false
+                let textWidth = max(1, rect.width - 6)
+                let measured = label.sizeThatFits(
+                    CGSize(width: textWidth, height: .greatestFiniteMagnitude)).height
+                let textHeight = max(max(1, rect.height - 6), measured)
+                let top = element.verticalAlign == "middle" ?
+                    max(3, (rect.height - textHeight) / 2) :
+                    (element.verticalAlign == "bottom" ?
+                        max(3, rect.height - textHeight - 3) : 3)
+                label.frame = CGRect(x: 3, y: top, width: textWidth, height: textHeight)
+                control.clipsToBounds = false
+                control.addSubview(label)
+                // A bound text node must be above its underlying filled shape.
+                control.layer.zPosition = 2
             } else if element.type == "image" {
                 if let picture = Self.localImage(for: element, in: source) {
                     let imageView = UIImageView(image: picture)
@@ -2580,6 +2610,20 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
               let raster = CGImageSourceCreateImageAtIndex(source, 0, nil)
               else { return nil }
         return UIImage(cgImage: raster)
+    }
+
+    private static func readableInk(_ preferred: UIColor?, on canvas: UIColor) -> UIColor {
+        guard let preferred else { return .black }
+        func luminance(_ c: UIColor) -> CGFloat {
+            var r: CGFloat = 0, g: CGFloat = 0
+            var b: CGFloat = 0, a: CGFloat = 0
+            guard c.getRed(&r, green: &g, blue: &b, alpha: &a) else { return 0.5 }
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b
+        }
+        let ink = luminance(preferred), background = luminance(canvas)
+        // Only override effectively invisible authored colors.
+        return abs(ink - background) < 0.28 ? (background < 0.5 ? .white : .black)
+                                             : preferred
     }
 
     private static func color(_ hex: String?) -> UIColor? {
