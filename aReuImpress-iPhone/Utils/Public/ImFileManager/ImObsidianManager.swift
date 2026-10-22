@@ -1052,68 +1052,107 @@ extension ImVaultReadSync {
         }, qos: .userInitiated, completion: completion)
     }
 
-    /// One-hop in-memory bridge: only already-authorized, regular local
-    /// Canvas/Excalidraw files may provide bounded geometry for offline view.
-    /// The original source version and path remain external to the WebView.
-    private static func safeCompositeEmbed(root: URL,
-                                           source: ImVaultFileIdentity,
-                                           name: String) -> (String, Int)? {
-        guard !name.isEmpty, !name.contains("#"), !name.contains("^"),
-              !name.contains("\\"), !name.contains(":"),
+    /// Render-only, one-hop Vault dependency. Graphics are projected to bounded
+    /// geometry, while a small referenced Markdown note may be read inline.
+    /// Neither projection can authorize Chat, link another Vault, or write a file.
+    private static func safeDocumentEmbed(root: URL,
+                                          source: ImVaultFileIdentity,
+                                          name: String) -> (String, Int)? {
+        guard !name.isEmpty, !name.contains("\\"), !name.contains(":"),
               !name.hasPrefix("/") else { return nil }
-        let candidate: ImVaultFileIdentity
-        if name.contains("/") {
+        let parts = name.split(separator: "#", maxSplits: 1,
+                               omittingEmptySubsequences: false)
+        guard let rawBase = parts.first, !rawBase.isEmpty else { return nil }
+        let fragment = parts.count == 2 ? String(parts[1]) : nil
+        // Block locators need their own precise AST mapping. Never select a
+        // vaguely similar text line as though it were an authenticated block.
+        guard fragment?.hasPrefix("^") != true else { return nil }
+        let baseName = String(rawBase)
+        let normalized: String = ImVaultDocumentFormat.detect(relativePath: baseName) == nil
+            ? baseName + ".md" : baseName
+        let target: ImVaultFileIdentity
+        if normalized.contains("/") {
             guard let id = try? ImVaultFileIdentity(
-                vaultID: source.vaultID, relativePath: name) else { return nil }
-            candidate = id
+                vaultID: source.vaultID, relativePath: normalized) else { return nil }
+            target = id
         } else {
-            guard let notes = try? ImVaultPrivateStore.loadIndex(vaultID: source.vaultID)
+            // Reuse the existing private Vault index. Never scan every file
+            // merely to display a Markdown note or resolve ambiguous names.
+            guard let matches = try? ImVaultPrivateStore.loadIndex(vaultID: source.vaultID)
                 .filter({ $0.identity.relativePath.split(separator: "/").last
-                    .map { String($0).caseInsensitiveCompare(name) == .orderedSame } == true }),
-                  notes.count == 1 else { return nil }
-            candidate = notes[0].identity
+                    .map { String($0).caseInsensitiveCompare(normalized) == .orderedSame } == true }),
+                  matches.count == 1 else { return nil }
+            target = matches[0].identity
         }
-        let format = candidate.documentFormat
-        guard format == .jsonCanvas || format == .excalidrawJSON ||
-              format == .excalidrawMarkdown else { return nil }
+        guard target != source else { return nil } // Direct self-embed is cyclic.
+        let format = target.documentFormat
+        guard [.markdown, .jsonCanvas, .excalidrawJSON,
+               .excalidrawMarkdown].contains(format) else { return nil }
+        guard fragment == nil || format == .markdown else { return nil }
         do {
-            let url = try fileURL(root: root, identity: candidate)
-            let info = try url.resourceValues(forKeys: [
+            let url = try fileURL(root: root, identity: target)
+            let metadata = try url.resourceValues(forKeys: [
                 .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
-            guard info.isRegularFile == true && info.isSymbolicLink != true,
-                  (info.fileSize ?? Int.max) <= 512 * 1024 else { return nil }
-            let document = try load(root: root, identity: candidate)
+            guard metadata.isRegularFile == true && metadata.isSymbolicLink != true,
+                  (metadata.fileSize ?? Int.max) <= 512 * 1024 else { return nil }
+            let document = try load(root: root, identity: target)
             guard document.sourceBytes.count <= 512 * 1024 else { return nil }
+            var queryCharacters = CharacterSet.urlQueryAllowed
+            queryCharacters.remove(charactersIn: "&=+#")
+            guard let encodedPath = target.relativePath.addingPercentEncoding(
+                withAllowedCharacters: queryCharacters) else { return nil }
+            let openOriginal = "\n[打开来源文件并独立选材](https://impress.invalid/wiki?target=" +
+                encodedPath + ")\n"
+            if format == .markdown {
+                let text: String
+                if let fragment, !fragment.isEmpty {
+                    let sections = ImpressMarkdownStructure.sections(in: document.markdown)
+                    let found = sections.filter { $0.heading == fragment }
+                    guard found.count == 1, let section = found.first else { return nil }
+                    text = section.rawUTF8
+                } else {
+                    text = ImpressFrontmatterReader.parse(document.markdown).body
+                }
+                guard text.utf8.count <= 20_000 else { return nil }
+                // Never recursively resolve second-level embeds: a nested
+                // dependency is deliberately inert until opened explicitly.
+                var nested = Array(text.utf8)
+                for item in ImpressVaultEmbedLocator.references(in: text).reversed() {
+                    nested.replaceSubrange(item.startUTF8..<item.endUTF8,
+                        with: Array("（嵌入深度限制：打开来源文件查看）".utf8))
+                }
+                let flattened = String(decoding: nested, as: UTF8.self)
+                let secure = ImVaultSafetyProjection.withoutUntrustedImages(
+                    ImVaultSafetyProjection.withCalloutHeadings(
+                        ImVaultSafetyProjection.withWikiLinks(flattened)))
+                let quoted = secure.components(separatedBy: .newlines)
+                    .map { "> " + $0 }.joined(separator: "\n")
+                return ("\n> **只读嵌入 · 来源需独立核查**\n>\n" +
+                    quoted + "\n" + openOriginal, document.sourceBytes.count)
+            }
             let kind: String
             let packed: Data
             switch format {
             case .jsonCanvas:
                 _ = try ImpressCanvasDocument.parse(document.sourceBytes)
-                kind = "impress-canvas"
                 packed = document.sourceBytes
+                kind = "impress-canvas"
             case .excalidrawJSON, .excalidrawMarkdown:
                 let scene = try ImpressExcalidrawScene.parse(document.sourceBytes,
                                                              format: format)
-                struct Envelope: Encodable {
-                    let elements: [ImpressExcalidrawElement]
-                }
-                packed = try JSONEncoder().encode(Envelope(
+                struct Geometry: Encodable { let elements: [ImpressExcalidrawElement] }
+                packed = try JSONEncoder().encode(Geometry(
                     elements: scene.elements.filter(\.isActive)))
                 kind = "impress-excalidraw"
-            default:
-                return nil
+            default: return nil
             }
             guard packed.count <= 640 * 1024 else { return nil }
-            var safeQuery = CharacterSet.urlQueryAllowed
-            safeQuery.remove(charactersIn: "&=+#")
-            guard let encoded = candidate.relativePath.addingPercentEncoding(
-                withAllowedCharacters: safeQuery) else { return nil }
-            let rendered = "~~~" + kind + "\n" +
-                packed.base64EncodedString() +
-                "\n~~~\n[查看独立图形与选材](https://impress.invalid/wiki?target=" +
-                encoded + ")\n"
+            let rendered = "~~~" + kind + "\n" + packed.base64EncodedString() +
+                "\n~~~\n" + openOriginal
             return (rendered, packed.count)
         } catch {
+            // Broken, moved, permission-revoked, or too-large dependency must
+            // never hide or corrupt the remainder of the host note.
             return nil
         }
     }
@@ -1180,18 +1219,18 @@ extension ImVaultReadSync {
             let name = named.trimmingCharacters(in: .whitespacesAndNewlines)
             let comps = name.split(separator: "/", omittingEmptySubsequences: false)
             var replacement = "（本地附件暂不可读：\(name)）"
-            let composite = [".canvas", ".excalidraw", ".excalidraw.md"].contains {
-                name.lowercased().hasSuffix($0)
-            }
-            if composite {
+            let actualName = name.components(separatedBy: "#").first ?? name
+            let ext = (actualName as NSString).pathExtension.lowercased()
+            let isImage = imageTypes[ext] != nil
+            if !isImage {
                 if composites < 3 && compositeBytes < 1_200_000,
-                   let item = safeCompositeEmbed(root: root, source: identity, name: name),
+                   let item = safeDocumentEmbed(root: root, source: identity, name: name),
                    compositeBytes + item.1 <= 1_200_000 {
                     replacement = item.0
                     composites += 1
                     compositeBytes += item.1
                 } else {
-                    replacement = "（图形嵌入缺失、不合法或超出安全限制：\(name)）"
+                    replacement = "（嵌入缺失、引用不明确、过深或超出限制：\(name)）"
                 }
             } else if embedded < 6 && total < 4 * 1024 * 1024,
                comps.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }),
