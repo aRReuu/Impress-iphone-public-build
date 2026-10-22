@@ -25,7 +25,13 @@ html,body{padding:0;margin:0;width:100%;overflow-x:hidden}
 .markdown-body .im-diagram.markmap svg{width:100%;height:320px;touch-action:pan-x pan-y pinch-zoom}
 .markdown-body .im-diagram-error{font-size:0.85em;color:var(--im-muted,#888);padding:0.7em}
 .markdown-body .im-diagram-error details pre{white-space:pre-wrap;word-break:break-word}
+
 .markdown-body blockquote{border-radius:0 8px 8px 0}
+.markdown-body blockquote.im-callout{background:var(--im-code,#8882);padding:12px 15px;
+ border-left:3px solid var(--im-link,#777);border-radius:8px}
+.markdown-body blockquote.im-callout-warning,.markdown-body blockquote.im-callout-caution{
+ border-left-color:var(--im-accent-quote,#777)}
+.markdown-body .im-callout-heading{font-weight:650}
 .markdown-body table{border-collapse:collapse}.markdown-body table td,.markdown-body table th{padding:7px 9px}
 .markdown-body pre{white-space:pre;overflow-x:auto}
 .markdown-body .katex-display{max-width:100%;overflow-x:auto;overflow-y:hidden;padding:.4em 0}

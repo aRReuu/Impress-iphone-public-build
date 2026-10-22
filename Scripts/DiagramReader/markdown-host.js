@@ -184,6 +184,17 @@ function drawNativeGeometry(host,encoded,kind) {
   }
 }
 
+function promoteCallouts() {
+  const kinds = new Set(["NOTE","TIP","IMPORTANT","WARNING","CAUTION","QUOTE","TODO"]);
+  for (const block of root.querySelectorAll("blockquote")) {
+    const heading = block.querySelector(":scope > p:first-child > strong:first-child");
+    if (!heading) continue;
+    const kind = (heading.textContent || "").trim().split(/\s*[·:]\s*/)[0].toUpperCase();
+    if (!kinds.has(kind)) continue;
+    block.classList.add("im-callout","im-callout-" + kind.toLowerCase());
+    heading.classList.add("im-callout-heading");
+  }
+}
 function markTasks() {
   for (const li of root.querySelectorAll("li")) {
     const direct = li.querySelector(":scope > p") || li;
@@ -252,6 +263,7 @@ window.renderImpressMarkdown = async (body, options) => {
     firstHeading.hidden = true; // Native document title already expresses this H1.
   }
   markTasks();
+  promoteCallouts();
   // Never make network requests for untrusted links or local Vault resources.
   // The native WKNavigationDelegate approves only explicit internal WikiLinks.
   const items = Array.from(root.querySelectorAll(".im-diagram[data-im-index]"));

@@ -358,11 +358,9 @@ enum ImpressV3Appearance {
         return base.withAlphaComponent(0.94)
     }
 
-    /// CSS is required because MarkdownView wraps a bundled WKWebView whose
-    /// vendor stylesheet fixes white backgrounds and dark ink. UIKit dynamic
-    /// UIColors do not penetrate HTML. CSS media queries switch in place as
-    /// the iPhone system appearance changes; do NOT touch third-party Pods,
-    /// reload user notes or inject CSS into the external DeepSeek website.
+    /// The local read-only WKWebView does not inherit UIKit dynamic colors.
+    /// Trusted central CSS provides Light/Dark semantic color and spacing,
+    /// without modifying note source or contacting third-party servers.
     /// Only trusted static CSS is injected into the local read-only Markdown.
     static let markdownReaderCSS: String = """
     :root {
@@ -434,6 +432,10 @@ enum ImpressV3Appearance {
     .markdown-body h1, .markdown-body h2, .markdown-body h3 {
       line-height: 1.32; letter-spacing: -0.35px;
       margin-top: 1.45em; margin-bottom: 0.7em;
+    }
+    .markdown-body h4, .markdown-body h5, .markdown-body h6 {
+      line-height: 1.38; letter-spacing: -0.16px; font-weight: 650;
+      margin-top: 1.23em; margin-bottom: 0.52em;
     }
     .markdown-body h1:first-child, .markdown-body h2:first-child {
       margin-top: 0.15em;

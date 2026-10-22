@@ -137,6 +137,20 @@ final class ImpressV11NavigationUITests: XCTestCase {
         add(image)
     }
 
+    /// RDR-05: a genuine Markmap code fence renders without the extra menu.
+    func testInlineMarkmapFenceRendersInReadingPosition() throws {
+        let app = openSyntheticFile("Reader-Markmap")
+        let web = app.webViews["impress.notes.markdown-webview"]
+        XCTAssertTrue(web.waitForExistence(timeout: 25))
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "ready"), object: web)
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 35), .completed)
+        let snapshot = XCTAttachment(screenshot: app.screenshot())
+        snapshot.name = "Impress-reader-inline-Markmap"
+        snapshot.lifetime = .keepAlways
+        add(snapshot)
+    }
+
     /// RDR-06: two bounded local composites render inside Markdown without
     /// opening their independent native readers or remote asset requests.
     func testInlineCanvasAndExcalidrawUseAuthorizedSyntheticVault() throws {
