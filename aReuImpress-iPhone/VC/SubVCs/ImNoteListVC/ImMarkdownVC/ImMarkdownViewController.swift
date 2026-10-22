@@ -3217,6 +3217,7 @@ final class ImpressMarkdownOfflineView: UIView, WKNavigationDelegate {
         super.traitCollectionDidChange(previous)
         if previous?.userInterfaceStyle != traitCollection.userInterfaceStyle ||
            previous?.preferredContentSizeCategory != traitCollection.preferredContentSizeCategory {
+            requestedVersion += 1
             render()
         }
     }
@@ -3264,7 +3265,7 @@ private final class ImpressMarkdownStateRelay: NSObject, WKScriptMessageHandler 
               let rendered = payload["rendered"] as? Int, (0...24).contains(rendered),
               let failed = payload["failures"] as? Int, (0...24).contains(failed),
               let maths = payload["mathCount"] as? Int, (0...512).contains(maths),
-              rendered <= total, failed <= total else { return }
+              rendered <= total, failed <= max(1, total) else { return }
         let evidence = state + ":g=" + String(rendered) + "/" + String(total) +
             ":m=" + String(maths)
         DispatchQueue.main.async { [weak self] in self?.onState?(evidence) }

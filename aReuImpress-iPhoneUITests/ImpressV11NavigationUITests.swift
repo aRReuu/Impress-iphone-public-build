@@ -151,6 +151,22 @@ final class ImpressV11NavigationUITests: XCTestCase {
         add(snapshot)
     }
 
+    /// RDR-06: a bounded Markdown embed keeps the source hierarchy visible
+    /// without recursively importing the entire Vault into the reading host.
+    func testInlineMarkdownSectionEmbedOpensInsideReader() throws {
+        let app = openSyntheticFile("Reader-Embedded")
+        let web = app.webViews["impress.notes.markdown-webview"]
+        XCTAssertTrue(web.waitForExistence(timeout: 25))
+        let ready = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "ready:g=0/0:m=0"),
+            object: web)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 35), .completed)
+        let snapshot = XCTAttachment(screenshot: app.screenshot())
+        snapshot.name = "Impress-reader-inline-Markdown-source-section"
+        snapshot.lifetime = .keepAlways
+        add(snapshot)
+    }
+
     /// RDR-06: two bounded local composites render inside Markdown without
     /// opening their independent native readers or remote asset requests.
     func testInlineCanvasAndExcalidrawUseAuthorizedSyntheticVault() throws {

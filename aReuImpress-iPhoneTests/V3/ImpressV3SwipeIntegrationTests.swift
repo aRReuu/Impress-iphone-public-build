@@ -1043,6 +1043,40 @@ final class ImpressR042AppearanceTests: XCTestCase {
             "The geometry passes through a bounded encoded in-memory projection")
     }
 
+
+    func testNativeMarkdownEmbedIsSourceBoundedAndCannotRecurse() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ImpressReaderMD-" + UUID().uuidString,
+                                    isDirectory: true)
+        let folder = root.appendingPathComponent("Study", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder,
+            withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let child = "# 背景\n不可包含。\n## 事实\n仅此段与子节。\n" +
+            "### 子节\n内层证据。\n# 后文\n不可包含。\n" +
+            "![[Study/Child.md]]\n"
+        try Data(child.utf8).write(to: folder.appendingPathComponent("Child.md"))
+        let parent = try ImVaultFileIdentity(
+            vaultID: "markdown-test", relativePath: "Study/Parent.md")
+        let selected = try ImVaultReadSync.safeMarkdownProjection(root: root,
+            identity: parent, source: "![[Study/Child.md#事实]]")
+        XCTAssertTrue(selected.contains("仅此段与子节"))
+        XCTAssertTrue(selected.contains("内层证据"))
+        XCTAssertFalse(selected.contains("不可包含"))
+        XCTAssertFalse(selected.contains("后文"))
+        XCTAssertTrue(selected.contains("打开来源文件并独立选材"))
+        let whole = try ImVaultReadSync.safeMarkdownProjection(root: root,
+            identity: parent, source: "![[Study/Child.md]]")
+        XCTAssertTrue(whole.contains("背景"))
+        XCTAssertTrue(whole.contains("嵌入深度限制"))
+        XCTAssertFalse(whole.contains("![[Study/Child.md]]"))
+        let unsafe = try ImVaultReadSync.safeMarkdownProjection(root: root,
+            identity: parent, source:
+            "![[Study/Parent.md]]\n![[Study/../private.md]]\n![[Study/Missing.md]]")
+        XCTAssertFalse(unsafe.contains("~~~impress-canvas"))
+        XCTAssertTrue(unsafe.contains("嵌入缺失"))
+    }
+
     func testLocalVaultMarkdownHasNativeDarkCSSWithoutRemoteNetworkInjection() {
         let css = ImpressV3Appearance.markdownReaderCSS
         XCTAssertTrue(css.contains("prefers-color-scheme: dark"))

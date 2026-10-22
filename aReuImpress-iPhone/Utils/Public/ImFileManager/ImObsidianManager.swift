@@ -140,6 +140,13 @@ enum ImpressV11UITestFixture {
                 "#### 多层结构\n- 第一层\n  - 第二层说明\n    - 第三层\n" +
                 "      1. 嵌套有序项目\n      2. 长文本自动折行，不应暴露源码标记\n" +
                 "- [ ] 待办\n- [x] 已完成\n> [!NOTE] 提示\n> 延续上下文\n",
+            "Study/Reader-Embedded.md":
+                "# Reader-Embedded\n下面是范围核查后的源文档：\n" +
+                "![[Study/Reader-Child.md#事实]]\n" +
+                "错误依赖：![[Study/Missing.md]]\n",
+            "Study/Reader-Child.md":
+                "# 背景\n省略的背景。\n## 事实\n只保留所选章节。\n" +
+                "## 细节\n该子节应归属事实。\n# 其他\n不应出现在选定范围。\n",
             "Study/Reader-Markmap.md":
                 "# Reader-Markmap\n## 结构阅读\n~~~markmap\n# 主题\n" +
                 "## 方向 A\n- 基本概念\n## 方向 B\n- 复习节点\n~~~\n",
