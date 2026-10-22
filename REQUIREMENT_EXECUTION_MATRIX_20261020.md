@@ -231,3 +231,17 @@ G4 同最终 SHA 全套 CI/证据/QA IPA；只有外部设备/Keychain/Files/授
 | CAL/SAFE-08.w | 保留上一版四项和 Widget v2 数据协议 | 新 UI 本身不能认证 iPhone App Group，真机 SpringBoard/签名继续 DEVICE_BLOCKED |
 
 所有项目均需以最终 SHA 的 Portable/Core + Native XCTest + XCUITest + iPhoneOS IPA 证据入账；文档 CODE_DONE 与待执行不同，绝不把先前 HEAD 的 PASS 当新版本 PASS。
+
+## 2026-10-22 · 阅读专项增量追踪（复用既有 85 ID）
+
+| 子项 | 归属 | 检验对象 | 开始状态 | 证据门禁 |
+|---|---|---|---|---|
+| UI-03.reader-a | UI-03/NAV-05 | 默认语义正文/嵌套列表/布局/主题 | IN_PROGRESS | RDR-01/02/07 |
+| UI-03.reader-b | UI-03/SAFE-03 | typed Properties/无效 YAML 局部诊断/源码可达 | IN_PROGRESS | RDR-03/04 |
+| UI-03.reader-c | UI-03/CHAT-06 | Mermaid/Markmap/Canvas/Excalidraw 真实呈现与嵌入 | IN_PROGRESS | RDR-05/06/08 |
+| SAFE-03.reader-a | SAFE-03/SAFE-04 | BOM/CRLF/范围/SHA 来源恒定 | IN_PROGRESS | RDR-04/09 |
+| SAFE-03.reader-b | SAFE-03/SAFE-07 | Vault 附件、缺件/路径/循环/拒绝外部网络 | IN_PROGRESS | RDR-06/10 |
+| CHAT-06.reader-a | CHAT-06/CHAT-09 | 阅读→精准选材→预览→Chat→恢复 | IN_PROGRESS | RDR-11 |
+| UI-03.reader-perf | UI-03/SAFE-08 | 首屏、长文、切换、缓存、退出回收 | NOT_RUN | RDR-07/12 |
+
+**2026-10-22 G1 源码事实**：`ImVaultDocumentController.renderBody` 的 Markdown 分支仍调用 `MarkdownView.load`；`ImpressMarkdownStructure` 保留标题和原始 UTF8 区间但不构成完整阅读 AST；`safeMarkdownProjection` 目前支持有限本地图片、WikiLink/Callout 安全显示投影；Mermaid/Markmap 是单独 `ImpressDiagramReaderController`，Canvas/Excalidraw 已有原生视图且不可删除。G2 更新属于需求确认，不等于代码实现或截图验收。

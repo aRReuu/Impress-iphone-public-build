@@ -269,3 +269,18 @@
 2. **UI-01 / UI-03 / SAFE-08**：所有顶部系统导航栏按钮（含笔记阅读器旧更多/搜索上下条、闪卡内编辑/讨论操作）统一动态 `UIColor.label` 中性色。色彩与字号由 `ImpressV3Appearance` 唯一配置，App / 系统子导航和临时 Modal 导航使用一致策略；蓝色仅用于具有明确选中语义的 Tab/Seg/图表强调，不允许顶部操作符号散落 `.systemBlue` 或 `funBtnColor`。
 3. **CHAT-01.a / CHAT-05.a（纯视觉）**：Chat 底部保持同一个现有 `UITextView`、发送/停止、STT、材料授权与草稿历史状态机，调整为接近 ChatGPT iPhone 输入体验的轻边框圆角浮动输入条：左侧加号、可伸展的多行文本/「询问任何问题」视觉 placeholder、右侧语音和高对比黑白圆形发送/停止；输入、键盘、浅色/深色背景自适应，不增加新业务层/新发送途径。暂不更改模型、材料、历史与双向写回逻辑，待进一步讨论。
 4. **交付证据**：原生 XCTest 必须验证四方向仅揭示后可见及未评分、拖动反馈可读、中性导航、Chat placeholder 与状态；真实 XCUITest 在正常卡片揭示后记录四向截图并保持原连续双向断言。系统原生可访问性和大字号不被图片样式替代。iPhone 13 真机视觉与 Widget App Group 签名仍须独立验收，未获得证据标 DEVICE_BLOCKED。此前 CAL 阅读四固定、情绪移除、Widget v2 的已实现代码保持不变。
+
+## 2026-10-22 · Obsidian 级阅读呈现专项（UI-03／SAFE-03／CHAT-06 子项）
+
+本节是当前既有需求的增量验收契约，优先于旧有“只调整 Markdown CSS 即可”的叙述；不增加第 86 个主需求 ID，不更改四 Tab、闪卡、Chat、校准器、数据库或生产 Vault 写入门禁。
+
+- **UI-03.reader-a**：打开授权 Markdown 默认是语义阅读视图，标题 H1～H6、嵌套列表/任务、引用/Callout、表格、代码与公式正确排版；清晰区分“阅读”与“源码”。重复文件标题不得遮挡真实正文；Light/Dark/System、Dynamic Type 和 VoiceOver 均可访问。
+- **UI-03.reader-b**：仅当首行是合法 YAML Frontmatter 边界时，解析类型化 Properties（名称/值/空值/日期/数值/布尔值/列表/标签/链接）；稳定顺序、展开/折叠。不能用 CSS 包装未经解析的 YAML；不合法或暂不支持的 YAML 要显示局部诊断和源码入口，不得修改原始字节。
+- **UI-03.reader-c**：Markdown 中明确的 Mermaid 代码围栏与本地可解析图形嵌入，必须在阅读位置显示真实内容；Canvas、Excalidraw、Markmap 继续复用现有受保护绘图/离线引擎及独立阅读、范围选材，不以纯 JSON/压缩数据冒充图纸。
+- **SAFE-03.reader-a**：原始 Vault 身份/相对路径/SHA/UTF-8 范围是唯一来源权威；任何属性剥离、图形替换、链接投影都只存在于只读显示层。BOM、混合换行、附件、WikiLink、块 ID 原样保存；显示层不能被用作写入 CAS 或 Chat 发送授权。
+- **SAFE-03.reader-b**：引用解析只允许当前已授权 Vault，不能猜测跨 Vault 同名；符号链接/越界/循环/过深/过大/缺件局部失败。禁止动态 Vault JS、CDN、未授权远程图片/链接和扩权。生产门禁 **ImVaultGuardedWrite.productionWriteEnabled = false** 不变。
+- **CHAT-06.reader-a**：阅读→章节/元素选材→核查来源与版本→完整预览→明确确认→进入 Chat→返回阅读；不默许整篇上传，保留旧历史/恢复/撤销。
+- **性能门禁**：正常笔记不扫描整库、不预热所有图形；重复渲染可取消、缓存按 Vault+版本有界。禁止未经测量填报耗时与内存。
+- **设备门禁**：六张私有对比截图不进入公开仓库；由合成 Fixtures 代表属性笔记、深层列表与图形。iPhone13 真机与 Obsidian 的逐项视觉比对缺证据时写 DEVICE_BLOCKED，不能以模拟器截图代替。
+
+验收证据详见既有 SMOKE_TEST_MATRIX.md 的 RDR-01～RDR-12，不对已有业务状态做推定。

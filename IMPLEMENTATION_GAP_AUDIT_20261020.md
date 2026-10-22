@@ -63,3 +63,16 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 最新已成功运行的证据：`e6b77b2` / Actions `39586231838`。WidgetKit Extension target、三 WidgetKind × Small/Medium 六布局源码、主应用的最小只读 App Group 数据投影、时间区间/日期状态 Core 测试、包含真实 `.appex` 的 unsigned ARM64 IPA 均**已经实现并构建验证**；此前“Widget Target 缺失”仅是定稿前历史缺口，不能再作为当前开发结论。原 UI 右上显隐、系统 checkmark 保存已通过原生 XCTest。复合文档 Excalidraw / Markmap / Canvas 曾失败的 XCUITest 此次全部通过；不能再写成当前 FAIL。
 
 后续门禁：真机签名/桌面 Widget 六布局、App Group 与侧载权限、深链真实点击（已新增专项测试待下一轮）、完整版18步 E2E 与全部 F01～F13 真实异常注入/复测、数据恢复与全业务设备 QA。只有精确 SHA + Run/实测证据才能升级对应状态，不可把 Core PASS 扩张为真机 PASS。
+
+## 2026-10-22 · 阅读视图代码审计与最小施工方案（G1）
+
+精确基线：`5fd40c7b10be27a3a25c700fbe69630222130c93`，Actions #39734503921 SUCCESS（该 Run **不包括本次重构**）。
+
+1. Frontmatter 直接进入 `renderBody` 的 Markdown 渲染串；现有 `ImpressMarkdownStructure` 仅跳过它的伪章节，没有 typed Properties 与阅读投影分离。需要真实类型解析、局部错误及源码访问，而非改 CSS。
+2. 嵌套列表首先核查 Markdown 原始语法与 `MarkdownView` HTML 生成，再校准 `ImpressV3Appearance.markdownReaderCSS` 缩进、行高、任务状态；源码模式不能作为阅读成功。
+3. `ImVaultSafetyProjection` 是保护外部图片与 WikiLink 的显示投影，不能用投影文本偏移当原始范围。`safeMarkdownProjection` 只解析内嵌图片且最多 6 项；未支持的 Canvas/Excalidraw 嵌入不应标为已实现。
+4. Canvas 与 Excalidraw 已有原生、可缩放、可选材的只读实现；离线 Mermaid/Markmap host.js 已实际渲染图形。优先复用，补 Markdown 插槽/受限资源桥，不重新开发绘图算法。
+5. `MarkdownView.load` 在每次展示时重配置底层 WKWebView；必须评估一次初始化与增量渲染的兼容性，避免显示预览后重复创建 web 内容进程。
+6. 保留来源回读、版本验证、正式写门禁=false、原有 UI E2E。新的复杂 YAML、插件自定义语法与不支持格式一律诊断而非伪造。
+
+**验收事实禁止越级**：Core 测试成功只证明解析；模拟器截图不等于用户截图视觉对齐；旧 Actions SUCCESS 不等于此次新 SHA SUCCESS；真正设备/Files Provider/App Group 验收必须独立标识。

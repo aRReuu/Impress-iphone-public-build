@@ -265,3 +265,22 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 - **U16 Chat 输入样式**：和手机常用原生聊天输入交互一致的圆角输入容器，左 +、输入、右麦克风、黑白发送/停止；空时视觉 placeholder、输入/草稿恢复时消失，多行/键盘安全区动态适配。单测检查外观，真实 XCUITest 仍保留历史/授权/修订原业务完整路径。
 
 已存在的 U01–U12、18步 E2E、W01–W15 和全部 F01～13 不删除；U13～U16 仅明确新增视觉验收条件，不能作为已有真机通过声明。
+
+## 2026-10-22 · RDR-01～RDR-12 阅读专项（新增子测试，原 ACCEPT/F01～F13 不变）
+
+| ID | 合成用例/断言 | 当前 |
+|---|---|---|
+| RDR-01 | 默认阅读、H1～H6、实际渲染非源码、无文件标题遮挡 | NOT_RUN |
+| RDR-02 | 深层混合嵌套列表/长中文折行/任务/代码围栏标题不泄漏 | NOT_RUN |
+| RDR-03 | 属性：顺序、字符串/日期/数字/布尔/列表/标签/链接/空值、折叠可访问 | NOT_RUN |
+| RDR-04 | 非法/不支持 YAML 局部诊断、源码查看、BOM/CRLF 原字节与 SHA 不变 | NOT_RUN |
+| RDR-05 | Mermaid 和 Markmap 真实离线 SVG/导图，局部异常隔离 | NOT_RUN |
+| RDR-06 | Canvas/Excalidraw 文件及 Markdown 受限嵌入真实图形；缺资源安全降级 | NOT_RUN |
+| RDR-07 | System/Light/Dark、大字、VoiceOver、长文连续滚动 | NOT_RUN |
+| RDR-08 | 拖拽/平移/放大、节点/分支/章节来源范围与视觉一致 | NOT_RUN |
+| RDR-09 | 图形/文字选材保留 Vault ID、相对路径、SHA 和真实 UTF8 范围 | NOT_RUN |
+| RDR-10 | 引用循环、重名、符号链接、越界、撤权、文件版本变化、禁止远程请求 | NOT_RUN |
+| RDR-11 | 真实进程：打开→选择→完整预览→确认进 Chat→返回→冷启恢复 | NOT_RUN |
+| RDR-12 | 普通首屏耗时、重渲染、快切旧内容取消、内存与长文滚动 | NOT_RUN |
+
+不得使用私人截图/笔记做公开 Fixtures。Core、Native XCTest、XCUITest、iPhone13 人工对照分开登记实际 PASS/FAIL/DEVICE_BLOCKED；未执行的一律不得改成 PASS。完成前必须确保同一最终源码 SHA 的 Actions PASS、IPA ZIP 完整性与 Widget 无回归。
