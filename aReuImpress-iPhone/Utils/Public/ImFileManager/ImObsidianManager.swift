@@ -1042,6 +1042,72 @@ extension ImVaultReadSync {
         }, qos: .userInitiated, completion: completion)
     }
 
+    /// One-hop in-memory bridge: only already-authorized, regular local
+    /// Canvas/Excalidraw files may provide bounded geometry for offline view.
+    /// The original source version and path remain external to the WebView.
+    private static func safeCompositeEmbed(root: URL,
+                                           source: ImVaultFileIdentity,
+                                           name: String) -> (String, Int)? {
+        guard !name.isEmpty, !name.contains("#"), !name.contains("^"),
+              !name.contains("\\"), !name.contains(":"),
+              !name.hasPrefix("/") else { return nil }
+        let candidate: ImVaultFileIdentity
+        if name.contains("/") {
+            guard let id = try? ImVaultFileIdentity(
+                vaultID: source.vaultID, relativePath: name) else { return nil }
+            candidate = id
+        } else {
+            guard let notes = try? ImVaultPrivateStore.loadIndex(vaultID: source.vaultID)
+                .filter({ $0.identity.relativePath.split(separator: "/").last
+                    .map { String($0).caseInsensitiveCompare(name) == .orderedSame } == true }),
+                  notes.count == 1 else { return nil }
+            candidate = notes[0].identity
+        }
+        let format = candidate.documentFormat
+        guard format == .jsonCanvas || format == .excalidrawJSON ||
+              format == .excalidrawMarkdown else { return nil }
+        do {
+            let url = try fileURL(root: root, identity: candidate)
+            let info = try url.resourceValues(forKeys: [
+                .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+            guard info.isRegularFile == true && info.isSymbolicLink != true,
+                  (info.fileSize ?? Int.max) <= 512 * 1024 else { return nil }
+            let document = try load(root: root, identity: candidate)
+            guard document.sourceBytes.count <= 512 * 1024 else { return nil }
+            let kind: String
+            let packed: Data
+            switch format {
+            case .jsonCanvas:
+                _ = try ImpressCanvasDocument.parse(document.sourceBytes)
+                kind = "impress-canvas"
+                packed = document.sourceBytes
+            case .excalidrawJSON, .excalidrawMarkdown:
+                let scene = try ImpressExcalidrawScene.parse(document.sourceBytes,
+                                                             format: format)
+                struct Envelope: Encodable {
+                    let elements: [ImpressExcalidrawElement]
+                }
+                packed = try JSONEncoder().encode(Envelope(
+                    elements: scene.elements.filter(\.isActive)))
+                kind = "impress-excalidraw"
+            default:
+                return nil
+            }
+            guard packed.count <= 640 * 1024 else { return nil }
+            var safeQuery = CharacterSet.urlQueryAllowed
+            safeQuery.remove(charactersIn: "&=+#")
+            guard let encoded = candidate.relativePath.addingPercentEncoding(
+                withAllowedCharacters: safeQuery) else { return nil }
+            let rendered = "~~~" + kind + "\n" +
+                packed.base64EncodedString() +
+                "\n~~~\n[查看独立图形与选材](https://impress.invalid/wiki?target=" +
+                encoded + ")\n"
+            return (rendered, packed.count)
+        } catch {
+            return nil
+        }
+    }
+
     static func safeMarkdownProjection(root: URL,
                                        identity: ImVaultFileIdentity,
                                        source: String) throws -> String {
@@ -1052,9 +1118,7 @@ extension ImVaultReadSync {
         let formatted = ImVaultSafetyProjection.withCalloutHeadings(
             ImVaultSafetyProjection.withWikiLinks(readableBody))
         var preview = ImVaultSafetyProjection.withoutUntrustedImages(formatted)
-        let embed = try NSRegularExpression(pattern: #"!\[\[([^\]]+)\]\]"#)
-        let allMatches = embed.matches(in: preview,
-            range: NSRange(preview.startIndex..., in: preview))
+        let allMatches = ImpressVaultEmbedLocator.references(in: preview)
         guard !allMatches.isEmpty else { return preview }
 
         // Scan only if needed, at most 4000 assets and max 6 images embedded.
@@ -1064,7 +1128,12 @@ extension ImVaultReadSync {
             "heic": "image/jpeg", "webp": "image/jpeg"
         ]
         var candidates: [String: [URL]] = [:]
-        if let enumerator = fm.enumerator(at: root,
+        let hasUnqualifiedImages = allMatches.contains {
+            let name = $0.target.components(separatedBy: "|").first ?? ""
+            return !name.contains("/") &&
+                imageTypes[(name as NSString).pathExtension.lowercased()] != nil
+        }
+        if hasUnqualifiedImages, let enumerator = fm.enumerator(at: root,
             includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
             options: [.skipsHiddenFiles]) {
             var examined = 0
@@ -1085,15 +1154,30 @@ extension ImVaultReadSync {
 
         var total = 0
         var embedded = 0
-        // Reverse replacement preserves original UTF-16 match offsets.
+        // Reverse byte replacements preserve the lexical ranges of the
+        // safe display projection, never interpreted as source-selection spans.
+        var projected = Array(preview.utf8)
+        var composites = 0
+        var compositeBytes = 0
         for match in allMatches.reversed() {
-            guard let wrapped = Range(match.range, in: preview),
-                  let inner = Range(match.range(at: 1), in: preview) else { continue }
-            let named = String(preview[inner]).components(separatedBy: "|").first ?? ""
+            let named = match.target.components(separatedBy: "|").first ?? ""
             let name = named.trimmingCharacters(in: .whitespacesAndNewlines)
             let comps = name.split(separator: "/", omittingEmptySubsequences: false)
-            var replacement = "（本地图片：\(name)）"
-            if embedded < 6 && total < 4 * 1024 * 1024,
+            var replacement = "（本地附件暂不可读：\(name)）"
+            let composite = [".canvas", ".excalidraw", ".excalidraw.md"].contains {
+                name.lowercased().hasSuffix($0)
+            }
+            if composite {
+                if composites < 3 && compositeBytes < 1_200_000,
+                   let item = safeCompositeEmbed(root: root, source: identity, name: name),
+                   compositeBytes + item.1 <= 1_200_000 {
+                    replacement = item.0
+                    composites += 1
+                    compositeBytes += item.1
+                } else {
+                    replacement = "（图形嵌入缺失、不合法或超出安全限制：\(name)）"
+                }
+            } else if embedded < 6 && total < 4 * 1024 * 1024,
                comps.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }),
                imageTypes[(name as NSString).pathExtension.lowercased()] != nil {
                 var file: URL?
@@ -1159,8 +1243,9 @@ extension ImVaultReadSync {
                     }
                 }
             }
-            preview.replaceSubrange(wrapped, with: replacement)
+            projected.replaceSubrange(match.startUTF8..<match.endUTF8,
+                                      with: Array(replacement.utf8))
         }
-        return preview
+        return String(decoding: projected, as: UTF8.self)
     }
 }
