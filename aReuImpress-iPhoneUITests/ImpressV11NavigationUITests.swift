@@ -121,6 +121,12 @@ final class ImpressV11NavigationUITests: XCTestCase {
         toggle.tap()
         XCTAssertEqual(toggle.value as? String, "已折叠")
         XCTAssertFalse(date.isHittable)
+        app.buttons["更多笔记操作"].tap()
+        let source = app.buttons["查看 Markdown 源码"]
+        XCTAssertTrue(source.waitForExistence(timeout: 10))
+        source.tap()
+        XCTAssertTrue(app.textViews.firstMatch.waitForExistence(timeout: 10),
+            "Native source mode must stay reachable after Properties rendering")
     }
 
     /// RDR-01: KaTeX must render inside the same offline note reading surface.

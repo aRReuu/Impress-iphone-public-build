@@ -1075,6 +1075,32 @@ final class ImpressR042AppearanceTests: XCTestCase {
             "![[Study/Parent.md]]\n![[Study/../private.md]]\n![[Study/Missing.md]]")
         XCTAssertFalse(unsafe.contains("~~~impress-canvas"))
         XCTAssertTrue(unsafe.contains("嵌入缺失"))
+
+        let change = "# 背景\n原文已更新。\n## 事实\n修订后内容。\n"
+        try Data(change.utf8).write(to: folder.appendingPathComponent("Child.md"),
+                                        options: .atomic)
+        let updated = try ImVaultReadSync.safeMarkdownProjection(root: root,
+            identity: parent, source: "![[Study/Child.md#事实]]")
+        XCTAssertTrue(updated.contains("修订后内容"))
+        XCTAssertFalse(updated.contains("内层证据"),
+            "A prior preview must not be a reusable source authority")
+        let block = try ImVaultReadSync.safeMarkdownProjection(root: root,
+            identity: parent, source: "![[Study/Child.md#^unverified]]")
+        XCTAssertTrue(block.contains("嵌入缺失"),
+            "Unverified block references must not guess a source line")
+
+        let external = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Impress-Out-" + UUID().uuidString + ".md")
+        try Data("PRIVATE OUTSIDE".utf8).write(to: external)
+        defer { try? FileManager.default.removeItem(at: external) }
+        try FileManager.default.createSymbolicLink(
+            at: folder.appendingPathComponent("Escaped.md"),
+            withDestinationURL: external)
+        let forbidden = try ImVaultReadSync.safeMarkdownProjection(root: root,
+            identity: parent, source: "![[Study/Escaped.md]]")
+        XCTAssertFalse(forbidden.contains("PRIVATE OUTSIDE"))
+        XCTAssertTrue(forbidden.contains("嵌入缺失"),
+            "A symlink escaping the authorized root cannot become read authority")
     }
 
     func testLocalVaultMarkdownHasNativeDarkCSSWithoutRemoteNetworkInjection() {
