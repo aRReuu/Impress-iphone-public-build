@@ -1,8 +1,5 @@
 import MarkdownIt from "markdown-it";
 import katex from "katex";
-import mermaid from "mermaid";
-import { Transformer } from "markmap-lib";
-import { Markmap } from "markmap-view";
 
 const root = document.getElementById("reader");
 const style = document.getElementById("impress-reading-css");
@@ -205,36 +202,31 @@ function markTasks() {
     direct.insertBefore(input, direct.firstChild);
   }
 }
-function removeLinks(container) {
-  for (const link of container.querySelectorAll("a")) {
-    const label = document.createElement("span");
-    label.textContent = link.textContent || "";
-    link.replaceWith(label);
+// A normal Markdown note does not initialize any diagram engine.
+// This fixed, bundled local script is added only for a real graph fence.
+let graphicsPromise;
+function localGraphics() {
+  if (window.ImpressMarkdownGraphics) return Promise.resolve(window.ImpressMarkdownGraphics);
+  if (!graphicsPromise) {
+    graphicsPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "graphs.js";
+      script.onload = () => window.ImpressMarkdownGraphics
+        ? resolve(window.ImpressMarkdownGraphics) : reject(Error("Missing bundled graph engine"));
+      script.onerror = () => reject(Error("Offline graph assets unavailable"));
+      document.head.append(script);
+    });
   }
+  return graphicsPromise;
 }
-async function drawMermaid(container, source, dark, id) {
-  mermaid.initialize({
-    startOnLoad: false, securityLevel: "strict", theme: dark ? "dark" : "default",
-    suppressErrorRendering: true, maxTextSize: 200000,
-    flowchart: { htmlLabels: false, useMaxWidth: false }
-  });
-  const result = await mermaid.render("im-read-graph-" + id, sanitizeDiagram(source));
-  container.replaceChildren();
-  const mount = document.createElement("div");
-  mount.innerHTML = result.svg;
-  removeLinks(mount);
-  container.append(mount);
+async function drawMermaid(host,source,dark,id) {
+  const renderer=await localGraphics();
+  await renderer.drawMermaid(host,sanitizeDiagram(source),dark,id);
 }
-async function drawMarkmap(container, source) {
-  const transformer = new Transformer();
-  const transformed = transformer.transform(cleanText(source));
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  container.replaceChildren(svg);
-  const map = Markmap.create(svg, { duration: 0, autoFit: true, maxWidth: 280 },
-    transformed.root);
-  liveMaps.push(map);
-  if (map?.fit) await map.fit();
-  removeLinks(container);
+async function drawMarkmap(host,source) {
+  const renderer=await localGraphics();
+  const instance=await renderer.drawMarkmap(host,cleanText(source));
+  liveMaps.push(instance);
 }
 
 window.renderImpressMarkdown = async (body, options) => {

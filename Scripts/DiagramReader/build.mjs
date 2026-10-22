@@ -39,6 +39,16 @@ await build({
 });
 cpSync(resolve(import.meta.dirname, "markdown-index.html"),
   resolve(markdownDestination, "index.html"));
+// Graph bundles are inert on ordinary notes and load by a same-folder
+// script tag only when Mermaid/Markmap is present.
+await build({
+  entryPoints: [resolve(import.meta.dirname, "markdown-graphs.js")],
+  outfile: resolve(markdownDestination, "graphs.js"),
+  bundle: true, platform: "browser", format: "iife", target: ["safari17"],
+  minify: true, legalComments: "linked",
+  define: { "process.env.NODE_ENV": '"production"' }, logLevel: "warning"
+});
+
 const markdownLicense = readFileSync(resolve(import.meta.dirname, "THIRD_PARTY_LICENSES.txt"), "utf8") +
   "\n=== MARKDOWN-IT LICENSE (14.1.0) ===\n" +
   readFileSync(resolve(import.meta.dirname, "MARKDOWN_IT_LICENSE.txt"), "utf8") + "\n";
@@ -57,7 +67,7 @@ for (const name of readdirSync(resolve(katexAssets, "fonts"))) {
   cpSync(resolve(katexAssets, "fonts", name), resolve(localFontDir, name));
 }
 const markdownManifest = {};
-for (const name of ["reader.js", "index.html", "katex.min.css", "THIRD_PARTY_LICENSES.txt"]) {
+for (const name of ["reader.js", "graphs.js", "index.html", "katex.min.css", "THIRD_PARTY_LICENSES.txt"]) {
   const data = readFileSync(resolve(markdownDestination, name));
   markdownManifest[name] = {
     size: data.byteLength, sha256: createHash("sha256").update(data).digest("hex")
