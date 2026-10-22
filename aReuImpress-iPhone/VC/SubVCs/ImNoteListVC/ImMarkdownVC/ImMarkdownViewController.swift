@@ -575,7 +575,7 @@ final class ImVaultDocumentController: UIViewController {
     private var hasAppearedOnce = false
     private var latestReadSerial = 0
     private let readingView = UITextView()
-    private let richView = MarkdownView()
+    private let richView = ImpressMarkdownOfflineView()
     private let readerHeader = UIStackView()
     private let propertyPanel = UIStackView()
     private let propertyToggle = UIButton(type: .system)
@@ -3102,6 +3102,149 @@ final class ImpressDiagramEventRelay: NSObject, WKScriptMessageHandler {
               let body = message.body as? [String: String],
               let state = body["state"],
               state == "ready" || state == "failed" else { return }
+        DispatchQueue.main.async { [weak self] in self?.onState?(state) }
+    }
+}
+
+
+// MARK: - G3 offline semantic Markdown body
+
+/// One local, non-persistent WebKit reading surface; Vault markdown is only
+/// a string argument to a bundled markdown-it engine, never executable JS,
+/// never a file URL, and never an authority for source edits or Chat consent.
+@MainActor
+final class ImpressMarkdownOfflineView: UIView, WKNavigationDelegate {
+    var onTouchLink: ((URLRequest) -> Bool)?
+    var isScrollEnabled: Bool {
+        get { web.scrollView.isScrollEnabled }
+        set { web.scrollView.isScrollEnabled = newValue }
+    }
+    private var sourceMarkdown = ""
+    private var activeCSS = ""
+    private var allowImages = false
+    private var isLoaded = false
+    private var requestedVersion: Int = 0
+    private let relay = ImpressMarkdownStateRelay()
+    private let web: WKWebView = {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
+        config.preferences.javaScriptCanOpenWindowsAutomatically = false
+        config.defaultWebpagePreferences.allowsContentJavaScript = true
+        return WKWebView(frame: .zero, configuration: config)
+    }()
+    private var allowedFolder: URL? {
+        Bundle.main.url(forResource: "index", withExtension: "html",
+            subdirectory: "MarkdownReader")?.deletingLastPathComponent()
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        web.translatesAutoresizingMaskIntoConstraints = false
+        web.navigationDelegate = self
+        web.allowsBackForwardNavigationGestures = false
+        web.isOpaque = false
+        web.backgroundColor = ImpressV3Appearance.surface
+        web.scrollView.backgroundColor = ImpressV3Appearance.surface
+        web.scrollView.contentInsetAdjustmentBehavior = .never
+        web.accessibilityIdentifier = "impress.notes.markdown-webview"
+        web.accessibilityValue = "loading"
+        web.configuration.userContentController.add(relay, name: "markdownState")
+        relay.onState = { [weak self] state in
+            self?.web.accessibilityValue = state
+        }
+        addSubview(web)
+        NSLayoutConstraint.activate([
+            web.leadingAnchor.constraint(equalTo: leadingAnchor),
+            web.trailingAnchor.constraint(equalTo: trailingAnchor),
+            web.topAnchor.constraint(equalTo: topAnchor),
+            web.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+        guard let folder = allowedFolder else {
+            web.accessibilityValue = "asset-missing"
+            return
+        }
+        web.loadFileURL(folder.appendingPathComponent("index.html"),
+                        allowingReadAccessTo: folder)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
+
+    func load(markdown: String, enableImage: Bool, css: String) {
+        guard markdown != sourceMarkdown || css != activeCSS ||
+              enableImage != allowImages || requestedVersion == 0 else { return }
+        sourceMarkdown = markdown
+        activeCSS = css
+        allowImages = enableImage
+        requestedVersion += 1
+        render()
+    }
+
+    private func render() {
+        guard isLoaded else { return }
+        let request = requestedVersion
+        let markdown = sourceMarkdown
+        let imagePolicy = allowImages
+        let options: [String: Any] = [
+            "css": activeCSS,
+            "dark": traitCollection.userInterfaceStyle == .dark,
+            "fontSize": UIFont.preferredFont(forTextStyle: .body).pointSize,
+            "allowImages": imagePolicy
+        ]
+        web.accessibilityValue = "loading"
+        web.callAsyncJavaScript(
+            "return await window.renderImpressMarkdown(markdown, options);",
+            arguments: ["markdown": markdown, "options": options],
+            in: nil, in: .page
+        ) { [weak self] result in
+            guard let self, self.requestedVersion == request else { return }
+            if case .failure = result { self.web.accessibilityValue = "failed" }
+        }
+    }
+    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+        super.traitCollectionDidChange(previous)
+        if previous?.userInterfaceStyle != traitCollection.userInterfaceStyle {
+            render()
+        }
+    }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        isLoaded = true
+        render()
+    }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!,
+                 withError error: Error) {
+        web.accessibilityValue = "failed"
+    }
+    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = action.request.url else {
+            decisionHandler(.cancel)
+            return
+        }
+        if action.navigationType == .linkActivated, url.scheme == "https",
+           url.host == "impress.invalid", url.path == "/wiki" {
+            _ = onTouchLink?(action.request)
+            decisionHandler(.cancel)
+            return
+        }
+        guard let folder = allowedFolder, url.isFileURL,
+              url.standardizedFileURL == folder.appendingPathComponent("index.html")
+                  .standardizedFileURL else {
+            decisionHandler(.cancel)
+            return
+        }
+        decisionHandler(.allow)
+    }
+}
+
+/// Only a bounded render status is reported across the JavaScript bridge.
+/// It has no way to request source bytes, Vault URLs, SQL, or Chat actions.
+private final class ImpressMarkdownStateRelay: NSObject, WKScriptMessageHandler {
+    var onState: ((String) -> Void)?
+    func userContentController(_ controller: WKUserContentController,
+                               didReceive message: WKScriptMessage) {
+        guard message.name == "markdownState",
+              let payload = message.body as? [String: Any],
+              let state = payload["state"] as? String,
+              ["ready", "partial", "failed"].contains(state) else { return }
         DispatchQueue.main.async { [weak self] in self?.onState?(state) }
     }
 }
