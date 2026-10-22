@@ -274,7 +274,7 @@ extension ImMarkdownViewController
                                          style: .plain,
                                          target: self,
                                          action: nil)
-        assistItem.tintColor = funBtnColor
+        assistItem.tintColor = ImpressV3Appearance.navigationActionInk
         assistItem.menu = initMoreMenuActions()
         navigationItem.rightBarButtonItems = [assistItem]
     }
@@ -477,14 +477,14 @@ extension ImMarkdownViewController: UISearchBarDelegate
                                        style: .plain,
                                        target: self,
                                        action: #selector(scrollToPreviousMatch))
-        previousItem.tintColor = funBtnColor
+        previousItem.tintColor = ImpressV3Appearance.navigationActionInk
 
         // 创建下一个按钮
         nextItem = UIBarButtonItem(image: UIImage(systemName: "chevron.down.circle.fill"),
                                    style: .plain,
                                    target: self,
                                    action: #selector(scrollToNextMatch))
-        nextItem.tintColor = funBtnColor
+        nextItem.tintColor = ImpressV3Appearance.navigationActionInk
 
         // 创建弹性空间
         let flexibleSpace = UIBarButtonItem(barButtonSystemItem: .flexibleSpace,

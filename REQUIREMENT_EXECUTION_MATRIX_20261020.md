@@ -220,3 +220,14 @@ G4 同最终 SHA 全套 CI/证据/QA IPA；只有外部设备/Keychain/Files/授
 | NAV-05.w / SAFE-08.w | CalibrationWidgetProjection v2 / Widget Extension | B方案覆盖 x/4、共享故障分因、唯一坐标绘图；真实 iPhone13 App Group 双 target 签名和六布局仍 DEVICE_BLOCKED |
 
 原 85 项主 ID 保持不变；历史 18 DEFERRED 数字已经因用户新授权发生范围覆盖，其余尚未解冻项不得顺带实施。记录 CODE_DONE 不能冒充 CI/真机 PASS，Chat 继续讨论。
+
+## 2026-10-22 · 本轮视觉修复与用户明确的 Chat 业务冻结
+
+| 增量 | 文件及现有复用 | 审批界限 / 分层证据 |
+| --- | --- | --- |
+| CARD-08.a/UI-04.r | ImpressV3ReviewViewController + ImpressV3RatingOverlay + ImpressV3Appearance | 四向显示/拖动对比度提升，原 Reveal/FSRS/CAS 不改，真实 XCUITest 截图与 Native 测试同 SHA |
+| UI-01.nav | ImpressV3Appearance + SceneDelegate + 旧 Markdown 顶部自设 tint | 全部系统顶部操作符号跟随 label 黑白；选中 Tab 仍用品牌蓝，Dark/Light 实测 |
+| CHAT-01.a | ImpressAINativeChatViewController composer 段（仅外观） | 黑白 44pt 发送键/加号/麦克风/伸展输入 + placeholder；发送业务、历史、模型与审批逻辑不得修改 |
+| CAL/SAFE-08.w | 保留上一版四项和 Widget v2 数据协议 | 新 UI 本身不能认证 iPhone App Group，真机 SpringBoard/签名继续 DEVICE_BLOCKED |
+
+所有项目均需以最终 SHA 的 Portable/Core + Native XCTest + XCUITest + iPhoneOS IPA 证据入账；文档 CODE_DONE 与待执行不同，绝不把先前 HEAD 的 PASS 当新版本 PASS。

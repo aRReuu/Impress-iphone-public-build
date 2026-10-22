@@ -262,3 +262,10 @@
 - **旧账本不得误译**：老 `custom`、`moodAssessed`、`moodLevel` 仅是历史兼容，不视为阅读。过往日期按原来的 mood 完成门禁与得分维持，旧 JSON/备份仍可解码。当天旧记录若进入新版本，仅在内存中将第四项转换为未评估的 reading，原 custom outcome 留 `retiredCustomAssessment` 审计；只有真正保存才更新当天 JSON，不批量重写历史得分。原额外加减分属于既有独立行为，不在本次未经讨论的移除范围。
 - **Widget 真机故障修复边界**：主 App 与 Extension 都声明 `group.areu.impress`，但当前 unsigned IPA 明确不等于可用的签名权限。Widget 必须分辨自身 `noGroup`、`noSnapshot`、`invalidSnapshot`，而不能都提示“无数据”。快照使用 schema v2，旧缓存需要在校准器入口同步后重新投影，空有效账本也能绘制空坐标并显示 0/4。安装时两进程需获相同 App Group 有效签名/Profile，缺证据不得称 DEVICE_PASS。
 - **验收和范围**：CAL-01～03 中上述四指标业务由本次用户明确有限解冻，其他 CAL/LOCAL 未讨论部分仍延期；原“18 项全数 DEFERRED”为历史数，不能作为当前新授权的有效结论。Chat 先进一步讨论，不在本批代码中重做 UI。
+
+## 2026-10-22 · 真机截图增量（本轮仅 UI，Chat 业务逻辑冻结）
+
+1. **CARD-08.a / UI-04**：揭示答案前不得出现评分入口。揭示并通过既有 FSRS 可评分门禁后，在卡片上方显示四等宽且高对比度的「← 困难 / ↑ 良好 / → 容易 / ↓ 重来」说明，不再依赖一整行浅灰小字。屏幕中央 SwipeCard 拖动反馈为实色语义反差徽标，字号/符号显著提升；不存在“点说明即评分”的新路径。长答案垂直滚动、回答揭示和单次 FSRS 仍由现有 SwipeCardStack/ReviewSessionCoordinator 保证。
+2. **UI-01 / UI-03 / SAFE-08**：所有顶部系统导航栏按钮（含笔记阅读器旧更多/搜索上下条、闪卡内编辑/讨论操作）统一动态 `UIColor.label` 中性色。色彩与字号由 `ImpressV3Appearance` 唯一配置，App / 系统子导航和临时 Modal 导航使用一致策略；蓝色仅用于具有明确选中语义的 Tab/Seg/图表强调，不允许顶部操作符号散落 `.systemBlue` 或 `funBtnColor`。
+3. **CHAT-01.a / CHAT-05.a（纯视觉）**：Chat 底部保持同一个现有 `UITextView`、发送/停止、STT、材料授权与草稿历史状态机，调整为接近 ChatGPT iPhone 输入体验的轻边框圆角浮动输入条：左侧加号、可伸展的多行文本/「询问任何问题」视觉 placeholder、右侧语音和高对比黑白圆形发送/停止；输入、键盘、浅色/深色背景自适应，不增加新业务层/新发送途径。暂不更改模型、材料、历史与双向写回逻辑，待进一步讨论。
+4. **交付证据**：原生 XCTest 必须验证四方向仅揭示后可见及未评分、拖动反馈可读、中性导航、Chat placeholder 与状态；真实 XCUITest 在正常卡片揭示后记录四向截图并保持原连续双向断言。系统原生可访问性和大字号不被图片样式替代。iPhone 13 真机视觉与 Widget App Group 签名仍须独立验收，未获得证据标 DEVICE_BLOCKED。此前 CAL 阅读四固定、情绪移除、Widget v2 的已实现代码保持不变。

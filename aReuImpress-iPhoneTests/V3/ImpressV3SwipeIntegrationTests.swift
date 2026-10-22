@@ -55,7 +55,48 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         XCTAssertEqual(action.style, .plain)
         XCTAssertTrue(action.image?.isSymbolImage == true)
         XCTAssertEqual(action.accessibilityLabel, V3L("预览"))
-        XCTAssertEqual(action.tintColor, ImpressV3Appearance.accent)
+        XCTAssertEqual(action.tintColor, ImpressV3Appearance.navigationActionInk)
+    }
+
+    func testNavigationChromeAndButtonsNeverUseSystemBlue() throws {
+        let host = ImNavigationViewController(rootViewController: UIViewController())
+        host.loadViewIfNeeded()
+        XCTAssertEqual(host.navigationBar.tintColor,
+                       ImpressV3Appearance.navigationActionInk)
+        XCTAssertNotEqual(host.navigationBar.tintColor, UIColor.systemBlue)
+        let action = ImpressV3Appearance.navigationAction(
+            symbol: "square.and.pencil", label: "编辑",
+            target: nil, action: nil)
+        XCTAssertEqual(action.tintColor, ImpressV3Appearance.navigationActionInk)
+        XCTAssertNotEqual(action.tintColor, UIColor.systemBlue)
+    }
+
+    @MainActor
+    func testFourRatingBadgesHaveOpaqueLegibleCenterOverlay() throws {
+        for (direction, name) in [
+            (SwipeDirection.left, V3L("困难")),
+            (.up, V3L("良好")),
+            (.right, V3L("容易")),
+            (.down, V3L("重来"))
+        ] {
+            let overlay = ImpressV3RatingOverlay(direction: direction)
+            overlay.frame = CGRect(x: 0, y: 0, width: 320, height: 440)
+            overlay.layoutIfNeeded()
+            let badge = try XCTUnwrap(overlay.subviews.first)
+            XCTAssertEqual(badge.backgroundColor,
+                           ImpressV3Appearance.reviewOverlaySurface)
+            XCTAssertGreaterThanOrEqual(badge.bounds.height, 60)
+            func labels(_ view: UIView) -> [UILabel] {
+                let own: [UILabel] = (view as? UILabel).map { [$0] } ?? []
+                return own + view.subviews.flatMap { labels($0) }
+            }
+            XCTAssertTrue(labels(overlay).contains(where: {
+                $0.text == name &&
+                $0.textColor == ImpressV3Appearance.reviewOverlayText
+            }))
+            XCTAssertFalse(overlay.isUserInteractionEnabled,
+                "Overlay may inform but must not grade a card by tapping")
+        }
     }
 
     func testAIServiceListSymbolsUseNeutralSharedIconRole() throws {
@@ -157,6 +198,69 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         XCTAssertTrue(ids.contains("impress.ai.chat.input"))
         XCTAssertFalse(ids.contains("impress.ai.chat.prompt"))
         XCTAssertFalse(ids.contains("impress.ai.chat.materials"))
+        let views = allViews(chat.view)
+        let send = views.compactMap { $0 as? UIButton }.first {
+            $0.accessibilityIdentifier == "impress.ai.chat.send"
+        }
+        XCTAssertEqual(send?.configuration?.baseBackgroundColor,
+                       ImpressV3Appearance.chatComposerSendFill)
+        XCTAssertNotEqual(send?.configuration?.baseBackgroundColor, UIColor.systemBlue)
+        let placeholder = views.compactMap { $0 as? UILabel }.first {
+            $0.accessibilityIdentifier == "impress.ai.chat.input-placeholder"
+        }
+        XCTAssertEqual(placeholder?.text, V3L("询问任何问题"))
+        XCTAssertFalse(placeholder?.isHidden ?? true)
+        let input = views.compactMap { $0 as? UITextView }.first {
+            $0.accessibilityIdentifier == "impress.ai.chat.input"
+        }
+        let actual = try? XCTUnwrap(input)
+        actual?.text = "Explain this"
+        if let actual { chat.textViewDidChange(actual) }
+        XCTAssertTrue(placeholder?.isHidden ?? false,
+            "Placeholder must not overlap a real draft or enter transmitted text")
+    }
+
+    func testRatingGuideIsRevealedOnlyWithCurrentAnswerAndNeverTapScores() async throws {
+        let store = try makeRepository()
+        let id = UUID()
+        let now = Date()
+        try await store.insertNewCard(
+            WCDBV3CardInput(cardID: id, question: "Grade after reveal?", answerText: "Only then."),
+            initial: FSRS6ReviewCalculator().newCardSnapshot(id: id, now: now),
+            now: now)
+        let review = ImpressV3ReviewViewController(repository: store)
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        window.rootViewController = ImNavigationViewController(rootViewController: review)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        review.loadViewIfNeeded()
+        let guide = try XCTUnwrap(review.view.subviews.first {
+            $0.accessibilityIdentifier == "impress.review.rating-guide"
+        } as? UIStackView)
+        XCTAssertTrue(guide.isHidden)
+        XCTAssertFalse(guide.isUserInteractionEnabled)
+        let stack = try XCTUnwrap(review.view.subviews.compactMap {
+            $0 as? SwipeCardStack
+        }.first)
+        XCTAssertTrue(try await eventually {
+            stack.topCard?.content is ImMemoryCardView
+        })
+        XCTAssertTrue(guide.isHidden, "No grading legend may be shown before the answer")
+        (stack.topCard?.content as? ImMemoryCardView)?.revealAnswerIfNeeded()
+        XCTAssertTrue(try await eventually { !guide.isHidden })
+        XCTAssertEqual(guide.arrangedSubviews.count, 4)
+        let expected = ["hard": V3L("困难"), "good": V3L("良好"),
+                        "easy": V3L("容易"), "again": V3L("重来")]
+        for child in guide.arrangedSubviews {
+            let labels = child.subviews.compactMap { $0 as? UILabel }
+            let label = try XCTUnwrap(labels.first)
+            let direction = try XCTUnwrap(label.accessibilityIdentifier?.split(separator: ".").last)
+            XCTAssertEqual(label.text, expected[String(direction)])
+            XCTAssertEqual(label.textColor, ImpressV3Appearance.reviewRatingGuideInk)
+        }
+        let events = try await store.reviewHistory(for: id)
+        XCTAssertTrue(events.isEmpty,
+            "Showing a bold rating guide never commits a review event")
     }
 
     private func makeRepository() throws -> ReviewWCDBRepository {

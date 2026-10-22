@@ -136,6 +136,17 @@ reader = source("aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdo
 ai_page = source("aReuImpress-iPhone/Utils/Public/ImAI/ImpressAISettingsViewController.swift")
 widget_export = source("aReuImpress-iPhone/VC/MainVCs/ImCalibrationVC/ImpressCalibrationWidgetExporter.swift")
 assert "styleFlashcardText" in style and "Typography.flashQuestion" in flash
+# Screenshot-regression gates: neutral native chrome, strong four-way
+# guidance and ChatGPT-style monochrome composer. Logic tests still run.
+assert "bar.tintColor = navigationActionInk" in style
+assert "item.tintColor = navigationActionInk" in style
+assert "reviewOverlayBadgeHeight: CGFloat = 64" in style
+assert "reviewRatingGuideInk" in style
+assert "chatComposerSendFill" in style
+assert "impress.review.rating-hint." in source(
+    "aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3ReviewViewController.swift")
+assert "config.baseBackgroundColor = ImpressV3Appearance.chatComposerSendFill" in chat
+assert "inputPlaceholder.isHidden" in chat
 assert "visibleLineCount(" in flash and "maximumNumberOfLines = 3" in flash
 assert "UIMenuController.shared.menuItems" not in extract and "extractSpecifiedContent" not in extract
 assert "styleSegmentedControl(typePicker, prominent: false)" in composer

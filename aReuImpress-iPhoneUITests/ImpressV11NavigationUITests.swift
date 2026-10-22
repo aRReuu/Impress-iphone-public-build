@@ -421,6 +421,17 @@ final class ImpressV11NavigationUITests: XCTestCase {
         XCTAssertTrue(reveal.waitForExistence(timeout: 20))
         reveal.tap()
         XCTAssertTrue(discuss.waitForExistence(timeout: 15))
+        // Real accessibility tree must show all four strong, separate rating
+        // indicators after revealing the card; they are not hidden gray text.
+        for key in ["hard", "good", "easy", "again"] {
+            let label = app.staticTexts["impress.review.rating-hint." + key]
+            XCTAssertTrue(label.waitForExistence(timeout: 15),
+                "Swipe rating guidance must be legible for " + key)
+        }
+        let ratingEvidence = XCTAttachment(screenshot: app.screenshot())
+        ratingEvidence.name = "Impress-V1.1-four-visible-rating-directions"
+        ratingEvidence.lifetime = .keepAlways
+        add(ratingEvidence)
         let source = app.buttons["impress.review.source-note"]
         XCTAssertTrue(source.waitForExistence(timeout: 20))
         source.tap()

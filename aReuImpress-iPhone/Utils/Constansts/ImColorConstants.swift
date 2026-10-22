@@ -305,11 +305,19 @@ enum ImpressV3Appearance {
     static let reviewActionSurface = UIColor.label.withAlphaComponent(0.10)
     static let reviewPrimarySurface = UIColor.label
     static let reviewPrimaryInk = UIColor.systemBackground
-    static let reviewOverlaySurface = UIColor { traits in
-        UIColor.secondarySystemGroupedBackground.resolvedColor(with: traits)
-            .withAlphaComponent(traits.userInterfaceStyle == .dark ? 0.97 : 0.95)
-    }
-    static let reviewOverlaySymbol = UIColor.secondaryLabel
+    // Gesture feedback stays legible over long gray card content at any angle.
+    // The outer SwipeCard controls fade; this badge must never be translucent.
+    static let reviewOverlaySurface = UIColor.label
+    static let reviewOverlaySymbol = UIColor.systemBackground
+    static let reviewOverlayText = UIColor.systemBackground
+    static let reviewRatingGuideSurface = UIColor.secondarySystemFill
+    static let reviewRatingGuideInk = UIColor.label
+    // Chat composer follows the same monochrome action treatment as navigation.
+    static let chatComposerSurface = UIColor.secondarySystemGroupedBackground
+    static let chatComposerBorder = UIColor.separator.withAlphaComponent(0.28)
+    static let chatComposerPlaceholder = UIColor.placeholderText
+    static let chatComposerSendFill = UIColor.label
+    static let chatComposerSendInk = UIColor.systemBackground
     static let optionSurface = UIColor.tertiarySystemGroupedBackground
     // Semantic colors already track the system theme. Feedback fills must
     // also resolve their alpha in the active trait (not cache light RGB).
@@ -325,6 +333,9 @@ enum ImpressV3Appearance {
     static let correctOptionSurface = feedbackSurface(safeTipColor)
     static let incorrectOptionSurface = feedbackSurface(reviewCellColor)
     static let accent = funBtnColor
+    /// Top navigation is neutral regardless of the selected accent or theme.
+    /// Keep blue only for deliberate selection state and non-navigation emphasis.
+    static let navigationActionInk = UIColor.label
     /// Informational glyphs are neutral; blue is reserved for an actionable accent.
     static let listIconTint = UIColor.secondaryLabel
     static let outlineChevronPointSize: CGFloat = 10
@@ -441,8 +452,16 @@ enum ImpressV3Appearance {
         bar.unselectedItemTintColor = secondaryText
     }
 
+    @MainActor
+    static func installGlobalNavigationChrome() {
+        // Includes temporary UINavigationController sheets, not only the
+        // primary ImNavigationViewController subclasses.
+        UINavigationBar.appearance().tintColor = navigationActionInk
+        UIBarButtonItem.appearance().tintColor = navigationActionInk
+    }
+
     static func styleNavigationBar(_ bar: UINavigationBar) {
-        bar.tintColor = accent
+        bar.tintColor = navigationActionInk
     }
 
     /// Only one owner for bar-action symbols, size and tint. Do not introduce
@@ -452,7 +471,7 @@ enum ImpressV3Appearance {
         let item = UIBarButtonItem(image: UIImage(systemName: symbol),
                                    style: .plain, target: target, action: action)
         item.accessibilityLabel = label
-        item.tintColor = accent
+        item.tintColor = navigationActionInk
         return item
     }
 
@@ -533,12 +552,16 @@ enum ImpressV3Appearance {
         static let calibrationWeekHeight: CGFloat = 118
         static let contentVersionImageHeight: CGFloat = 155
         static let calibrationWeekChartInset: CGFloat = 36
-        static let reviewOverlayBadgeHeight: CGFloat = 44
-        static let reviewOverlaySymbolSize: CGFloat = 17
+        static let reviewOverlayBadgeHeight: CGFloat = 64
+        static let reviewOverlaySymbolSize: CGFloat = 23
         static let reviewOverlayEdgeInset: CGFloat = 16
         static let reviewOverlayTopInset: CGFloat = 24
-        static let reviewOverlayContentHInset: CGFloat = 18
-        static let reviewOverlayContentVInset: CGFloat = 10
+        static let reviewOverlayContentHInset: CGFloat = 23
+        static let reviewOverlayContentVInset: CGFloat = 12
+        static let ratingLegendHeight: CGFloat = 44
+        static let ratingLegendSpacing: CGFloat = 6
+        static let chatComposerRadius: CGFloat = 28
+        static let chatComposerInnerInset: CGFloat = 8
         static let answerOptionHeight: CGFloat = 52
         static let maximumSegmentWidth: CGFloat = 440
         static let compactSegmentWidth: CGFloat = 320
@@ -705,6 +728,14 @@ enum ImpressV3Appearance {
         static var heading: UIFont { UIFont.preferredFont(forTextStyle: .headline) }
         static var body: UIFont { UIFont.preferredFont(forTextStyle: .body) }
         static var supporting: UIFont { UIFont.preferredFont(forTextStyle: .subheadline) }
+        static var ratingGuide: UIFont {
+            UIFontMetrics(forTextStyle: .subheadline).scaledFont(
+                for: UIFont.systemFont(ofSize: 15, weight: .semibold))
+        }
+        static var ratingFeedback: UIFont {
+            UIFontMetrics(forTextStyle: .title3).scaledFont(
+                for: UIFont.systemFont(ofSize: 20, weight: .bold))
+        }
         static var footnote: UIFont { UIFont.preferredFont(forTextStyle: .footnote) }
         static var caption: UIFont { UIFont.preferredFont(forTextStyle: .caption1) }
         static var micro: UIFont { UIFont.preferredFont(forTextStyle: .caption2) }
@@ -757,6 +788,7 @@ enum ImpressV3Language: String, CaseIterable {
     }
 
     private static let translations: [String: (traditional: String, english: String)] = [
+        "询问任何问题": ("詢問任何問題", "Ask anything"),
         "确认有限对话上下文": ("確認有限的對話上下文", "Confirm Limited Chat Context"),
         "本次仅向云端模型发送最近 16 条已完成对话及当前输入；更早的消息仍完整保存在本机，不代表模型已经读过。": ("這次僅向雲端模型傳送最近 16 則已完成訊息及目前輸入；較早訊息仍完整保留於本機，不代表模型已讀過。", "Only the latest 16 completed turns and the current input are sent to the provider. Earlier messages remain on your device and are not represented as read by the model."),
         "本次未传送的早期消息条数：": ("本次未傳送的較早訊息數量：", "Older Messages Not Sent: "),

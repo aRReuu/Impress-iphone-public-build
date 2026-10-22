@@ -26,6 +26,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate
                options connectionOptions: UIScene.ConnectionOptions)
     {
         guard let _ = (scene as? UIWindowScene) else { return }
+        // Install neutral navigation tint before primary or modal bars exist.
+        ImpressV3Appearance.installGlobalNavigationChrome()
 //        launchDelay()
         // connectionOptions can carry a cold-start tap before the system
         // notification delegate receives its callback.

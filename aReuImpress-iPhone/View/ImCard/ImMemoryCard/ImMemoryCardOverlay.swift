@@ -331,8 +331,8 @@ private class ImMemoryCardOverlayView: UIView
 }
 
 
-/// V3-only four-way swipe feedback. A quiet compact label replaces the
-/// legacy 64-point bitmap, 2-point colored stroke and large drop shadow.
+/// V3 four-way swipe feedback. An opaque semantic-ink badge and strong
+/// typographic hierarchy remain legible over the rotating/scrolled answer.
 /// The underlying SwipeCardStack still controls fade/drag and FSRS semantics.
 @MainActor
 final class ImpressV3RatingOverlay: UIView {
@@ -365,9 +365,9 @@ final class ImpressV3RatingOverlay: UIView {
 
         let text = UILabel()
         text.text = title
-        text.font = ImpressV3Appearance.Typography.supporting
+        text.font = ImpressV3Appearance.Typography.ratingFeedback
         text.adjustsFontForContentSizeCategory = true
-        text.textColor = ImpressV3Appearance.primaryText
+        text.textColor = ImpressV3Appearance.reviewOverlayText
         text.textAlignment = .center
 
         let content = UIStackView(arrangedSubviews: [image, text])
