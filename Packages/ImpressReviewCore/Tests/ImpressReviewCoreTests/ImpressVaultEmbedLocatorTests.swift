@@ -3,8 +3,9 @@ import XCTest
 
 final class ImpressVaultEmbedLocatorTests: XCTestCase {
     func testUTF8MixedNewlinesAndInlineCodeDoNotGuessSource() {
+        let tick = String(Character(UnicodeScalar(96)!))
         let source = "\u{FEFF}# Example\r\n![[Study/Diagram.canvas]]\r\n" +
-            "some \`![[ignored.canvas]]\` text\n" +
+            "some " + tick + "![[ignored.canvas]]" + tick + " text\n" +
             "~~~markdown\n![[inside-fence.excalidraw]]\n~~~\r\n" +
             "<!-- ![[comment.png]] -->\n" +
             "![[Drawing.excalidraw|绘图]] and ![[Photo.png]]\n"
@@ -20,8 +21,9 @@ final class ImpressVaultEmbedLocatorTests: XCTestCase {
     }
 
     func testEmbedsAreNotParsedInsideVariableLengthFences() {
-        let source = "   " + String(repeating: "\`", count: 4) + "md\n" +
-            "![[false.canvas]]\n" + String(repeating: "\`", count: 4) + "\n" +
+        let ticks = String(repeating: String(Character(UnicodeScalar(96)!)), count: 4)
+        let source = "   " + ticks + "md\n" +
+            "![[false.canvas]]\n" + ticks + "\n" +
             "    ![[indented-code.canvas]]\n" +
             "![[true.canvas]]\n"
         XCTAssertEqual(ImpressVaultEmbedLocator.references(in: source).map(\.target),
