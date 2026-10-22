@@ -138,7 +138,7 @@ extension ImCardViewController
         let leftItem = UIBarButtonItem.init(barButtonSystemItem: .close,
                                             target: self,
                                             action: #selector(exitVC))
-        leftItem.tintColor = funBtnColor
+        leftItem.tintColor = ImpressV3Appearance.navigationActionInk
         leftItem.accessibilityLabel = "关闭卡片复习"
         navigationItem.leftBarButtonItem = leftItem
     }

@@ -66,6 +66,7 @@ class ImGridViewController: ImBaseViewController {
         // 创建加载按钮，用于导航栏右侧
         loadButton = UIButton(type: .system)
         loadButton.setTitle("加载笔记", for: .normal)
+        loadButton.tintColor = ImpressV3Appearance.navigationActionInk
         loadButton.addTarget(self, action: #selector(loadButtonTapped), for: .touchUpInside)
         loadButton.frame = CGRect(x: 0, y: 0, width: 80, height: 30)
         navigationItem.rightBarButtonItem = UIBarButtonItem(customView: loadButton)

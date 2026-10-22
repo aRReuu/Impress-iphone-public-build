@@ -1012,6 +1012,7 @@ enum ImpressV3Language: String, CaseIterable {
         "本轮完成": ("本輪完成", "Session Complete"),
         "左·困难   上·良好   右·简单   下·再次": ("左·困難   上·良好   右·簡單   下·重來", "Left · Hard   Up · Good   Right · Easy   Down · Again"),
         "先回忆，再查看答案": ("先回憶，再查看答案", "Recall first, then reveal the answer"),
+        "向四个方向滑动卡片评分": ("向四個方向滑動卡片評分", "Swipe in four directions to grade"),
         "复习操作未完成": ("複習操作未完成", "Review Incomplete"),
         "无法读取 V3 复习数据": ("無法讀取 V3 複習資料", "Could Not Load Review Data"),
         "保存未成功，请重新滑动评分": ("儲存失敗，請重新滑動評分", "Could not save. Swipe again to rate."),
