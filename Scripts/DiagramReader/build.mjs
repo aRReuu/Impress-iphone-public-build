@@ -41,8 +41,7 @@ cpSync(resolve(import.meta.dirname, "markdown-index.html"),
   resolve(markdownDestination, "index.html"));
 const markdownLicense = readFileSync(resolve(import.meta.dirname, "THIRD_PARTY_LICENSES.txt"), "utf8") +
   "\n=== MARKDOWN-IT LICENSE (14.1.0) ===\n" +
-  "Copyright (c) 2014 Vitaly Puzrin, Alex Kocharin.\n" +
-  "The MIT License: permission is hereby granted, free of charge, to any person obtaining a copy of the software to use, copy, modify, merge, publish, distribute, sublicense and/or sell copies, provided the copyright and permission notice is included. THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND.\n";
+  readFileSync(resolve(import.meta.dirname, "MARKDOWN_IT_LICENSE.txt"), "utf8") + "\n";
 writeFileSync(resolve(markdownDestination, "THIRD_PARTY_LICENSES.txt"), markdownLicense);
 const markdownManifest = {};
 for (const name of ["reader.js", "index.html", "THIRD_PARTY_LICENSES.txt"]) {

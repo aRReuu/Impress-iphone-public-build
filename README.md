@@ -37,3 +37,9 @@ V3 WCDB为卡片/FSRS/Chat唯一权威；内容revision与调度revision独立�
 指定分支 `feature/impress-duplex-loop-v1` 已实现 Excalidraw LZ-String compressed-json 解析、受限原生绘图视口/内嵌 PNG/JPEG、选材后逐版本的 Chat 门禁及 F03/F04 中断人工只读恢复判定。相关 Swift Core/XCTest 已增加。工程新增 `aReuImpress-iPhoneUITests` 真实 UI 测试 Target，并纳入主 Scheme；该测试目前仅覆盖四 Tab 跳转、真实屏幕截图和冷启动，**不等于原冒烟矩阵的 18 步业务 E2E**。Mermaid、Markmap、复合格式完整阅读、故障矩阵整体与同 SHA QA IPA 仍需验收。
 
 继续用 `.github/workflows/public-ios-build.yml` 的 GitHub Actions 查看最新提交对应的独立 Swift Core、XCTest、Simulator、ARM64、未签名 IPA SHA-256。不得将旧 `39489025745` 的成功视为本次新代码交付。生产 Vault 写入始终禁用。
+
+## 2026-10-22 · 阅读器专项施工证据
+
+本轮只在 `feature/impress-duplex-loop-v1` 上施工。原有 MarkdownView 阅读层替换为一次初始化的受控离线 `WKWebView` 宿主，使用固定版本 `markdown-it 14.1.0` 与既有 Mermaid 11.12.2、Markmap 0.18.12 共享离线资源；支持 Markdown 语义列表和 Mermaid/Markmap 围栏的正文原位渲染，保留独立图形选材页。原生 Properties 使用 `ImpressFrontmatterReader` 提供类型化字段和 UTF8 偏移，只读、安全降级。原生 Canvas/Excalidraw 独立视图和 Chat 来源回读不变。
+
+**本段是源码施工记录，不是验收完成声明。** 参见 SMOKE 的 RDR-01～12。复杂 YAML、笔记内 Canvas/Excalidraw 嵌入、外部附件及数学公式的完整支持仍需单独验证。真实 iPhone13 与 Obsidian 截图比对未完成；正式 Vault 写入门禁仍关闭。此后的 CI 必须绑定最终精确 SHA。
