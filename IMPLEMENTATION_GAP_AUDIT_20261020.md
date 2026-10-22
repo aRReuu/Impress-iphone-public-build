@@ -114,3 +114,9 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 - **真正的关键风险是选字定位**：`ImpressMarkdownOfflineView` 目前的 WK 桥仅有 `markdownState`（状态报告）和 WikiLink 点击，**没有通用 Web text selection→源字节区间**的可信桥。当前 `ImpressMarkdownStructure` 可提供章节 UTF8，尚不足以为任意 DOM 文本选区构造精确 UTF8；若 S1 改结构后宣称能从纯 HTML 精确选字，则必然引入来源安全漏洞。必须新增来自 source AST/token 的映射及只读范围 re-read gate，未实现前标明「精准选字功能未验收」，不得删除既有章节选材以求省事。
 - **Excalidraw 类型误判与写入门禁同时修**：路径后缀分派不是完整 Obsidian 插件识别。增加只读展示分类时必须同步对“普通 md 路径却是画布源”的 generic Markdown draft 守卫；历史源身份与 backed-up Chat Key 不修改。仅当 Frontmatter + 可有界解压的 Drawing 数据并存才识别，不靠某个 `tags` 值猜。
 - **离线现状足以复用**：`Scripts/DiagramReader/build.mjs` 已打包固定版本 markdown-it 14.1.0、KaTeX 0.16.22、Mermaid 11.12.2、Markmap 0.18.12；CSP `default-src 'none'`、`connect-src 'none'`、`img-src data:`、WebKit nonpersistent 已存在。G3 不应推翻已有离线资产边界，调整资源 bundle 须重产 manifest/hash/licenses 并同 SHA 构建。单独 Excalidraw SVG 方案只做固定 fixture A/B 和依赖/许可证审查，不擅自加入 CDN、React 编辑器或新的网络访问能力。
+
+## 2026-10-22 · d9711284bfe2 最新源码与历史审计差异
+
+旧 G2 说明属于较早的施工时点，不能作为当前源码事实：Review 已不再定义 configureRatingGuide/ratingGuide 四枚控件；笔记一级页已将 refreshControl 置 nil；ImVaultDocumentController 对普通 Markdown 阅读态已隐藏原生 readerHeader，将文件标题、类型化 Properties 和正文交由单个 WKWebView 呈现。这些属于 SOURCE_AUDITED，不是 U17/U20 或 RDR 的真机 PASS。
+
+仍存在的可查缺口：Chat placeholder 与 UITextView 的垂直基线不同、输入区高度和附件布局/键盘边界需要实测；Markdown CSS 在 markdown-index.html 与统一 Appearance 内重叠、深层列表/任务 DOM 语义待验证；WK 桥仅上报图形状态与受控 WikiLink，不能可靠地把任意 DOM 选字映射为原始 UTF8，禁止猜测；Excalidraw 独立原生 UIButton/CAShapeLayer 缺复杂手绘/曲线/绑定文本的官方级视觉对照；部分真实 Markdown 嵌入图形的打开完整阅读/选材交互缺 E2E 证据；笔记索引多个 reloadData 路径尚需版本 diff。生产 Vault 写入门禁保持关闭，旧 CI 不冒充新验收。

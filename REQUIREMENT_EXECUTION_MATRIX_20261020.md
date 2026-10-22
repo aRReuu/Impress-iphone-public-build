@@ -273,3 +273,19 @@ G4 同最终 SHA 全套 CI/证据/QA IPA；只有外部设备/Keychain/Files/授
 | G3-S5 / SAFE-03 / UI-03 / NAV-03 | RDR-01～22 + UI smoke/CI/IPA/iPhone13 | 原 18 步业务/12 ACCEPT/F01～F13 零回归；同 SHA 可追溯，真机设备不冒充 CI | NOT_RUN |
 
 **次序门禁**：S1 不需要等新 Excalidraw 包选型即可先实现；S3 的显示分类与写入门禁必须先于 S4 的图形嵌入发布。G3 仅为这六截图产生的 reader 方案，不改变此前已冻结的闪卡/Chat/静默笔记刷新和正式 Vault 只读要求。架构确认不等于代码、构建、设备成功。
+
+## 2026-10-22 · d9711284bfe2 源码再审（最新执行状态）
+
+实际远端 HEAD d9711284bfe2cf8af9ada1b67d109747e30e52ff；与用户提供的旧基线 identical。最近成功 Actions 39782229904。旧版 G3 的 CODE_PENDING 是设计定稿时刻，不覆盖现 HEAD 的实际代码；CODE_EXISTING 也不是视觉 PASS。
+
+| 现有主需求 | HEAD 核验 | 下一门禁 |
+|---|---|---|
+| CHAT-01/05、U18 | 一个 UITextView/inputBar、44pt 四触控位、keyboardLayoutGuide、草稿与发送状态机已存在 | Composer 垂直基线/动态高度、键盘、附件复验；U18 NOT_RUN |
+| UI-03.reader、RDR-01～04/14/17～19 | 离线 markdown-it/KaTeX + Swift typed Properties + 单 WK 文档流已存在；DOM→原 UTF8 选字映射尚缺 | 语义/排版/滚动与来源复验；VISUAL_NOT_RUN |
+| UI-03.reader、RDR-05/06/13/15/20～22 | 已有离线 Mermaid/Markmap 与受限 Canvas/Excalidraw 内嵌、原生独立视图；RoughJS 级别保真未知 | 实图/嵌入/选材回归与离线官方 SVG A/B；NOT_RUN |
+| CARD-08/UI-04、U17 | 当前源码不再包含 configureRatingGuide、ratingGuide 四 chip | 真机方向提示与卡片高度 U17 NOT_RUN |
+| UI-03.a/NAV-03、U20/21 | 当前笔记列表 refreshControl=nil，但另有多处 reloadData | 有变化才更新、iCloud/Provider 与位置回归；U20/21 NOT_RUN |
+| SAFE-03/08、ACCEPT/F01～13/18步 | 原 Vault 只读门禁/双目标审批及 FSRS 隔离仍为权威 | 最终同 SHA E2E 未全覆盖，继续 NOT_RUN |
+| NAV-05.w/SAFE-08.w | Widget 基础代码已存在 | 侧载签名、App Group 与 iPhone13 六布局 DEVICE_BLOCKED |
+
+顺序：源码/需求审计→Chat 修复→Markdown 语义→图形真实呈现→其他 UI→最终同 SHA CI/截图/IPA。仅标实际已执行证据，禁止继承上次 PASS。

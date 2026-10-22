@@ -347,3 +347,15 @@
 5. **S5 统一验收**：RDR-01～RDR-22、既有 U/ACCEPT/F/18步与安全回归，在**同一个最终 SHA**下有可复现实证；iPhone13 与 Obsidian 结构视觉比对，缺设备证据即 DEVICE_BLOCKED。
 
 **G3 状态**：本次是 ARCHITECTURE_SPEC_APPROVED / CODE_PENDING / CI_NOT_RUN / DEVICE_NOT_RUN；仅 S1+S2 阅读器结构路线已冻结，不等于 Excalidraw 官方 npm 包型号、版本、bundled size 通过性能/许可审批。UI 方案不得再回退为「三个滚动层」或「整页大卡片」。原稳定需求 ID/ACCEPT/OPEN 和私库/main 的边界均不变。
+
+## 2026-10-22 · UI/UX 深度修复施工授权（当日最终指示）
+
+本节覆盖此前“仅定稿／暂缓 Chat 施工”的旧限制，但不变更 85 稳定 ID、四 Tab、FSRS、WCDB、知识闭环与 Vault 安全门禁。范围：Chat 布局和 Composer、Obsidian 级 Markdown、Excalidraw/Canvas/Mermaid/Markmap 只读呈现、闪卡/笔记/导航外观回归、同 SHA 自动化与 IPA。
+
+- Chat 继续复用唯一 UITextView、单一发送/停止/草稿状态机。Composer 的 glyph 视觉紧凑但热区 ≥44pt；placeholder 单行基线、长文增高与内部滚动、STT、已选材料、键盘/安全区/输入法/Dynamic Type 须全部核验。原生二级菜单保留模型、历史、提示词和选材能力。
+- Markdown 以离线 WKWebView + markdown-it + Swift typed Frontmatter 为基础，先语义解析、后 DOM/CSS；标题/Properties/正文一张连续文档。验证首 H1 去重、深层列表、任务、Callout、代码、表格、KaTeX、WikiLink、中英文及明暗与大字号；不得以仅调 CSS 宣称兼容。DOM 选中文字没有可信源 UTF8 映射时拒绝上传。
+- 复合图形必须真实渲染：原位嵌入可见，独立图形页可缩放/选择/回到 Chat；有效普通 md 中 Excalidraw 插件封装需有元数据与可有界解析的 Drawing 同时成立。来源身份与只读展示分类分离。已有原生 CAShapeLayer 和官方离线 SVG 候选以同一合成 fixture 做 A/B，评估许可、包体、性能、中文/曲线/手绘/文本/元素 ID，不加载 CDN/在线编辑器；未测不得宣称高保真完成。
+- 闪卡评分 chip 和显式笔记下拉刷新不得回归；全局动态中性色、紧凑控件与四 Tab/Widget 二维坐标同源保持。
+- 历史成功 SHA d9711284bfe2cf8af9ada1b67d109747e30e52ff、Actions 39782229904 仅是旧基线。新 U17～21、RDR-01～22、ACCEPT-01～12、18 步、F01～F13、Widget 的实际 PASS 只以最终同一 SHA 证据为准；未测保持 NOT_RUN，iPhone13/签名没有真机证据则 DEVICE_BLOCKED。
+
+仅允许公开工作分支 feature/impress-duplex-loop-v1；不改 main 或私有仓库。不上传真实 Obsidian 数据、密钥与私密截图。ImVaultGuardedWrite.productionWriteEnabled = false 永久不变。
