@@ -123,6 +123,22 @@ final class ImpressV11NavigationUITests: XCTestCase {
         XCTAssertFalse(date.isHittable)
     }
 
+    /// RDR-06: two bounded local composites render inside Markdown without
+    /// opening their independent native readers or remote asset requests.
+    func testInlineCanvasAndExcalidrawUseAuthorizedSyntheticVault() throws {
+        let app = openSyntheticFile("Reader-Composite")
+        let reader = app.webViews["impress.notes.markdown-webview"]
+        XCTAssertTrue(reader.waitForExistence(timeout: 25))
+        let ready = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "ready"), object: reader)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 35), .completed,
+            "Both embedded geometric documents must render within the offline reader")
+        let snapshot = XCTAttachment(screenshot: app.screenshot())
+        snapshot.name = "Impress-reader-inline-Canvas-Excalidraw"
+        snapshot.lifetime = .keepAlways
+        add(snapshot)
+    }
+
     func testMarkdownMermaidRendersInlineWithoutEnteringSeparateReader() throws {
         let app = openSyntheticFile("Graph")
         let rendered = app.webViews["impress.notes.markdown-webview"]

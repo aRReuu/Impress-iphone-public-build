@@ -1381,7 +1381,10 @@ final class ImVaultDocumentController: UIViewController {
             showVaultError("不安全的内部笔记链接", error: ImVaultSyncFailure.unsafePath)
             return
         }
-        let normalized = target.lowercased().hasSuffix(".md") ? target : target + ".md"
+        // A known Canvas/Excalidraw extension opens its existing native reader;
+        // only extensionless Obsidian links default to Markdown.
+        let normalized = ImVaultDocumentFormat.detect(relativePath: target) == nil
+            ? target + ".md" : target
         do {
             // Link resolution uses the identity of the authorized Vault,
             // never a title-only match against a different Vault or old WCDB.

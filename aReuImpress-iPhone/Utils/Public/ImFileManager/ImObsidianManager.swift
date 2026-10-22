@@ -140,6 +140,11 @@ enum ImpressV11UITestFixture {
                 "#### 多层结构\n- 第一层\n  - 第二层说明\n    - 第三层\n" +
                 "      1. 嵌套有序项目\n      2. 长文本自动折行，不应暴露源码标记\n" +
                 "- [ ] 待办\n- [x] 已完成\n> [!NOTE] 提示\n> 延续上下文\n",
+            "Study/Reader-Composite.md":
+                "# Reader-Composite\n## 内嵌 Canvas\n![[Study/Diagram.canvas]]\n" +
+                "## 内嵌 Excalidraw\n![[Study/Drawing.excalidraw]]\n" +
+                "## 源码不应投影\n" +
+                "```md\n![[Study/Missing.canvas]]\n```\n",
             "Study/Diagram.canvas":
                 "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":150,\"height\":85,\"text\":\"图形范围\"}],\"edges\":[]}",
             "Study/Drawing.excalidraw":
