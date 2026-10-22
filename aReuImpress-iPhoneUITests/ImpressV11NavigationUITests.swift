@@ -339,6 +339,17 @@ final class ImpressV11NavigationUITests: XCTestCase {
         sendSyntheticChatAndVerifyReply(app, message: "Analyze the approved Canvas node.")
     }
 
+    func testPlainMarkdownPluginEnvelopeRendersActualExcalidraw() throws {
+        let app = openSyntheticFile("Legacy-Drawing")
+        let element = app.buttons["impress.excalidraw.element.a"]
+        XCTAssertTrue(element.waitForExistence(timeout: 25),
+            "The ordinary .md plugin file must render a real native shape")
+        XCTAssertFalse(app.webViews["impress.notes.markdown-webview"].exists)
+        app.buttons["更多笔记操作"].tap()
+        XCTAssertTrue(app.buttons["所选绘图元素预览并加入 Chat"].exists)
+        XCTAssertFalse(app.buttons["编辑独立草稿"].exists)
+    }
+
     func testExcalidrawNativeReadSelectionAndChatRejectsUnselectedElement() throws {
         let app = openSyntheticFile("Drawing")
         let sourcePath = app.staticTexts["impress.notes.document-title"]

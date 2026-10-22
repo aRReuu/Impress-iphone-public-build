@@ -65,12 +65,16 @@ enum ImpressChatNoteUploadGate {
             throw ImVaultSyncFailure.conflict
         }
         let format = expectedIdentity.documentFormat
-        let sections = format == .markdown
+        let isPluginDrawing = format == .markdown &&
+            ImpressObsidianDrawingEnvelope.isSupportedDrawing(document.sourceBytes)
+        let sections = format == .markdown && !isPluginDrawing
             ? ImpressAISectionExtractor.sections(in: document.markdown) : []
         let canvas = format == .jsonCanvas
             ? try ImpressCanvasDocument.parse(document.sourceBytes) : nil
-        let drawing = (format == .excalidrawJSON || format == .excalidrawMarkdown)
-            ? try ImpressExcalidrawScene.parse(document.sourceBytes, format: format) : nil
+        let drawing = (format == .excalidrawJSON || format == .excalidrawMarkdown ||
+                       isPluginDrawing)
+            ? try ImpressExcalidrawScene.parse(document.sourceBytes,
+                format: isPluginDrawing ? .excalidrawMarkdown : format) : nil
         var bytes = 0
         for item in excerpts {
             bytes += item.excerpt.utf8.count
@@ -84,6 +88,22 @@ enum ImpressChatNoteUploadGate {
             }
             switch format {
             case .markdown:
+                if item.sourceFormat == "excalidraw-structure" {
+                    guard isPluginDrawing, let drawing,
+                          item.sourceStartUTF8 == nil, item.sourceEndUTF8 == nil,
+                          let ids = item.selectedCanvasNodeIDs, !ids.isEmpty,
+                          Set(ids).count == ids.count else {
+                        throw ImVaultSyncFailure.conflict
+                    }
+                    let selection = try drawing.selection(ids: Set(ids))
+                    guard selection.elements.count == ids.count,
+                          try selection.textContextJSON() == item.excerpt else {
+                        throw ImVaultSyncFailure.conflict
+                    }
+                    continue
+                }
+                // A drawing with .md suffix cannot be uploaded as plain text.
+                guard !isPluginDrawing else { throw ImVaultSyncFailure.conflict }
                 if item.sourceFormat == "mermaid-structure" ||
                    item.sourceFormat == "markmap-structure" {
                     let scoped: ImpressDiagramDocument

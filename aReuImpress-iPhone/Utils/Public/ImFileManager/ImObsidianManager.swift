@@ -1116,7 +1116,10 @@ extension ImVaultReadSync {
                 withAllowedCharacters: queryCharacters) else { return nil }
             let openOriginal = "\n[打开来源文件并独立选材](https://impress.invalid/wiki?target=" +
                 encodedPath + ")\n"
-            if format == .markdown {
+            let isPluginDrawing = format == .markdown &&
+                ImpressObsidianDrawingEnvelope.isSupportedDrawing(document.sourceBytes)
+            if isPluginDrawing && fragment != nil { return nil }
+            if format == .markdown && !isPluginDrawing {
                 let text: String
                 if let fragment, !fragment.isEmpty {
                     let sections = ImpressMarkdownStructure.sections(in: document.markdown)
@@ -1150,9 +1153,10 @@ extension ImVaultReadSync {
                 _ = try ImpressCanvasDocument.parse(document.sourceBytes)
                 packed = document.sourceBytes
                 kind = "impress-canvas"
-            case .excalidrawJSON, .excalidrawMarkdown:
+            case .excalidrawJSON, .excalidrawMarkdown, .markdown:
+                guard format != .markdown || isPluginDrawing else { return nil }
                 let scene = try ImpressExcalidrawScene.parse(document.sourceBytes,
-                                                             format: format)
+                    format: isPluginDrawing ? .excalidrawMarkdown : format)
                 struct Geometry: Encodable { let elements: [ImpressExcalidrawElement] }
                 packed = try JSONEncoder().encode(Geometry(
                     elements: scene.elements.filter(\.isActive)))

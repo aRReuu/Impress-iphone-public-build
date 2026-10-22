@@ -589,6 +589,24 @@ final class ImVaultDocumentController: UIViewController {
     private var canvasGraph: ImpressCanvasNativeView?
     private var drawingGraph: ImpressExcalidrawNativeView?
     private let documentTitleLabel = UILabel()
+    private var classifiedDrawingDigest = ""
+    private var isPluginDrawingMarkdown = false
+
+    /// A .md path stays .md for Vault identity/Chat keys. Only its display
+    /// projection changes after a valid, bounded Drawing-fence parse.
+    private func drawingDisplayFormat() -> ImVaultDocumentFormat? {
+        let format = document.identity.documentFormat
+        if format == .excalidrawMarkdown || format == .excalidrawJSON {
+            return format
+        }
+        guard format == .markdown else { return nil }
+        if classifiedDrawingDigest != document.digest {
+            classifiedDrawingDigest = document.digest
+            isPluginDrawingMarkdown =
+                ImpressObsidianDrawingEnvelope.isSupportedDrawing(document.sourceBytes)
+        }
+        return isPluginDrawingMarkdown ? .excalidrawMarkdown : nil
+    }
     private var documentTitleText: String {
         URL(fileURLWithPath: document.identity.relativePath)
             .deletingPathExtension().lastPathComponent
@@ -644,6 +662,8 @@ final class ImVaultDocumentController: UIViewController {
                 if latest.digest != self.document.digest {
                     self.document = latest
                     self.preparedMarkdown = nil
+                    self.documentTitleLabel.text = self.documentTitleText
+                    self.configureDocumentActions()
                     self.renderBody()
                     self.prepareLivePreview(for: latest)
                 } else if latest.identity.documentFormat == .markdown &&
@@ -659,7 +679,8 @@ final class ImVaultDocumentController: UIViewController {
     }
 
     private func prepareLivePreview(for current: ImVaultRawDocument) {
-        guard current.identity.documentFormat == .markdown else { return }
+        guard current.identity.documentFormat == .markdown,
+              drawingDisplayFormat() == nil else { return }
         ImVaultReadSync.shared.prepareAuthorizedPreview(current) { [weak self] result in
             guard let self, self.document.digest == current.digest,
                   self.document.identity == current.identity,
@@ -790,6 +811,13 @@ final class ImVaultDocumentController: UIViewController {
             canvasHost.leadingAnchor.constraint(equalTo: readingView.leadingAnchor),
             canvasHost.trailingAnchor.constraint(equalTo: readingView.trailingAnchor)
         ])
+        configureDocumentActions()
+        renderBody()
+        // Resolve only authorized, bounded previews; never update the Vault.
+        prepareLivePreview(for: document)
+    }
+
+    private func configureDocumentActions() {
         let draft = UIBarButtonItem(
             image: UIImage(systemName: "square.and.pencil"), style: .plain,
             target: self, action: #selector(editDraft))
@@ -836,7 +864,8 @@ final class ImVaultDocumentController: UIViewController {
                     [weak self] _ in self?.checkLinkedCardChanges()
                 }
         ])
-        if document.identity.documentFormat != .markdown {
+        if document.identity.documentFormat != .markdown ||
+           drawingDisplayFormat() != nil {
             // Readable complex files have no generic Markdown edit authority.
             var actions: [UIMenuElement] = [
                 UIAction(title: V3L("查看原始文件内容"),
@@ -849,8 +878,7 @@ final class ImVaultDocumentController: UIViewController {
                     image: UIImage(systemName: "square.stack")) {
                         [weak self] _ in self?.reviewSelectedCanvas()
                 })
-            } else if document.identity.documentFormat == .excalidrawJSON ||
-                      document.identity.documentFormat == .excalidrawMarkdown {
+            } else if drawingDisplayFormat() != nil {
                 actions.append(UIAction(title: V3L("所选绘图元素预览并加入 Chat"),
                     image: UIImage(systemName: "square.stack")) {
                         [weak self] _ in self?.reviewSelectedDrawing()
@@ -874,7 +902,8 @@ final class ImVaultDocumentController: UIViewController {
             }
             more.menu = UIMenu(children: actions)
         }
-        if document.identity.documentFormat == .markdown {
+        if document.identity.documentFormat == .markdown &&
+           drawingDisplayFormat() == nil {
             var extras: [UIMenuElement] = []
             if let diagrams = try? ImpressDiagramDocument.mermaidBlocks(
                 in: document.sourceBytes), !diagrams.isEmpty {
@@ -893,7 +922,8 @@ final class ImVaultDocumentController: UIViewController {
             more.menu = UIMenu(children: (more.menu?.children ?? []) + extras)
         }
         if sourceSectionDigest != nil &&
-           document.identity.documentFormat == .markdown {
+           document.identity.documentFormat == .markdown &&
+           drawingDisplayFormat() == nil {
             // Only a single verified section anchor may be offered. When
             // the section has moved or changed, the action fails closed
             // instead of guessing a similarly titled paragraph.
@@ -904,10 +934,6 @@ final class ImVaultDocumentController: UIViewController {
             more.menu = UIMenu(children: (more.menu?.children ?? []) + [section])
         }
         navigationItem.rightBarButtonItems = [discussion, more]
-        renderBody()
-        // Replaces only explicitly referenced local image embeds with bounded
-        // in-memory data URIs. Never reads outside this authorized Vault.
-        prepareLivePreview(for: document)
     }
 
     @objc private func toggleProperties() {
@@ -992,7 +1018,8 @@ final class ImVaultDocumentController: UIViewController {
     private func renderBody() {
         let properties = ImpressFrontmatterReader.parse(document.markdown)
         let singleScrollReading = !isSourceMode &&
-            document.identity.documentFormat == .markdown
+            document.identity.documentFormat == .markdown &&
+            drawingDisplayFormat() == nil
         // Markdown title, typed Properties and body now scroll as ONE WebKit
         // document. Separate UIKit header stays available in source/graph mode.
         contentTopWithHeader?.isActive = !singleScrollReading
@@ -1035,14 +1062,13 @@ final class ImVaultDocumentController: UIViewController {
                 readingView.text = V3L("Canvas 绘制范围过大或结构不合法；未修改源文件。请查看源码以核查实际内容。") +
                     "\n\n" + error.localizedDescription
             }
-        } else if document.identity.documentFormat == .excalidrawJSON ||
-                  document.identity.documentFormat == .excalidrawMarkdown {
+        } else if let drawingFormat = drawingDisplayFormat() {
             richView.isHidden = true
             readingView.isHidden = true
             canvasHost.isHidden = false
             do {
                 let scene = try ImpressExcalidrawScene.parse(document.sourceBytes,
-                    format: document.identity.documentFormat)
+                    format: drawingFormat)
                 let graph = try ImpressExcalidrawNativeView(source: scene)
                 canvasHost.subviews.forEach { $0.removeFromSuperview() }
                 graph.translatesAutoresizingMaskIntoConstraints = false
@@ -1114,8 +1140,7 @@ final class ImVaultDocumentController: UIViewController {
     /// A drawing selection stays tied to the exact Vault, SHA-256 and element
     /// IDs that the user saw. Preview never implies a model upload.
     @objc private func reviewSelectedDrawing() {
-        let format = document.identity.documentFormat
-        guard format == .excalidrawJSON || format == .excalidrawMarkdown,
+        guard let format = drawingDisplayFormat(),
               let ids = drawingGraph?.selectedIDs, !ids.isEmpty else {
             let alert = UIAlertController(title: V3L("请先选择绘图元素"),
                 message: V3L("轻点元素选择范围。选材本身不发送任何数据或图像。"),
@@ -1128,7 +1153,11 @@ final class ImVaultDocumentController: UIViewController {
         withVerifiedLiveDocument { [weak self] latest in
             guard let self else { return }
             guard latest.digest == expectedDigest,
-                  latest.identity.documentFormat == format else {
+                  (latest.identity.documentFormat == format ||
+                   (latest.identity.documentFormat == .markdown &&
+                    format == .excalidrawMarkdown &&
+                    ImpressObsidianDrawingEnvelope.isSupportedDrawing(
+                        latest.sourceBytes))) else {
                 self.showVaultError(V3L("绘图来源已变化，请重新选择"),
                     error: ImVaultSyncFailure.conflict)
                 return
@@ -1502,7 +1531,8 @@ final class ImVaultDocumentController: UIViewController {
     }
 
     @objc private func generateAIQuestions() {
-        guard document.identity.documentFormat == .markdown else {
+        guard document.identity.documentFormat == .markdown,
+              drawingDisplayFormat() == nil else {
             showVaultError(V3L("不支持从此复合格式直接生成问题"),
                 error: ImVaultSyncFailure.unsupportedComplexWrite)
             return
@@ -1518,8 +1548,7 @@ final class ImVaultDocumentController: UIViewController {
             reviewSelectedCanvas()
             return
         }
-        if document.identity.documentFormat == .excalidrawJSON ||
-           document.identity.documentFormat == .excalidrawMarkdown {
+        if drawingDisplayFormat() != nil {
             reviewSelectedDrawing()
             return
         }
@@ -1630,7 +1659,8 @@ final class ImVaultDocumentController: UIViewController {
     }
 
     @objc private func editDraft() {
-        guard document.identity.documentFormat.allowsGenericMarkdownDraft else {
+        guard document.identity.documentFormat.allowsGenericMarkdownDraft,
+              drawingDisplayFormat() == nil else {
             showVaultError(V3L("此格式仅允许阅读和选材"),
                 error: ImVaultSyncFailure.unsupportedComplexWrite)
             return
