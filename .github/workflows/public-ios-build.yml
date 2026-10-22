@@ -100,6 +100,10 @@ jobs:
           test -s ../../aReuImpress-iPhone/Resources/DiagramReader/reader.js
           test -s ../../aReuImpress-iPhone/Resources/MarkdownReader/reader.js
           test -s ../../aReuImpress-iPhone/Resources/MarkdownReader/graphs.js
+          test -s ../../aReuImpress-iPhone/Resources/MarkdownReader/katex.min.css
+          test -s ../../aReuImpress-iPhone/Resources/MarkdownReader/THIRD_PARTY_LICENSES.txt
+          test -d ../../aReuImpress-iPhone/Resources/MarkdownReader/fonts
+          test "$(find ../../aReuImpress-iPhone/Resources/MarkdownReader/fonts -name '*.woff2' -type f | wc -l | tr -d ' ')" -gt 0
           test -s ../../aReuImpress-iPhone/Resources/MarkdownReader/index.html
           cp ../../aReuImpress-iPhone/Resources/DiagramReader/manifest.json ../../out/diagram-engine-manifest.json
           cp ../../aReuImpress-iPhone/Resources/MarkdownReader/manifest.json ../../out/markdown-engine-manifest.json
