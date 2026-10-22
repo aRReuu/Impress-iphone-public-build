@@ -125,11 +125,11 @@ final class ImpressCalibrationViewController: UITableViewController {
             let pending = today.pendingIndicators.count
             let summary = try today.finalizedScore()
             if pending > 0 {
-                headline.text = String(format: V3L("今日待评估 %d / 5 项"), pending)
-                detail.text = "未评估不会自动扣分。情绪仅作观察，不参与加减分。"
+                headline.text = String(format: V3L("今日待评估 %d / 4 项"), pending)
+                detail.text = "四项固定行为；未评估不会自动扣分。"
             } else if let net = summary.netScore {
                 headline.text = String(format: V3L("今日净分 %@"), (net > 0 ? "+" : "") + String(net))
-                detail.text = "五项均已处理 · 本日提醒可停止 · 不代表个人价值"
+                detail.text = "四项均已处理 · 本日提醒可停止 · 不代表个人价值"
             } else {
                 headline.text = "今日已完成评估"
                 detail.text = "今天没有可计分任务，休息与豁免不会产生扣分。"
@@ -208,7 +208,7 @@ final class ImpressCalibrationViewController: UITableViewController {
     override func tableView(_ tableView: UITableView,
                             numberOfRowsInSection section: Int) -> Int {
         switch section {
-        case 0: return 5
+        case 0: return CalibrationIndicator.behaviorIndicators.count
         case 1: return 2
         default: return 1
         }
@@ -217,7 +217,7 @@ final class ImpressCalibrationViewController: UITableViewController {
     override func tableView(_ tableView: UITableView,
                             titleForHeaderInSection section: Int) -> String? {
         switch section {
-        case 0: return V3L("今日五项 · 点击进行评估")
+        case 0: return V3L("今日四项 · 点击进行评估")
         case 1: return V3L("额外行为修正（每种最多一次）")
         default: return V3L("未完成提醒")
         }
@@ -226,9 +226,9 @@ final class ImpressCalibrationViewController: UITableViewController {
     override func tableView(_ tableView: UITableView,
                             titleForFooterInSection section: Int) -> String? {
         switch section {
-        case 0: return "完成 +1 · 未完成 -1 · 休息或豁免 0。情绪仅观察；明确跳过也算已评估。"
+        case 0: return "睡眠、运动、饮食、阅读：完成 +1，未完成 -1，休息或豁免 0。"
         case 1: return "仅记录未在四项任务中计过分的额外行为，避免重复扣分。"
-        default: return "经系统授权后，在 20:00、22:00 提醒；完成当日五项后撤销剩余提醒。iOS 允许用户清除系统通知，无法创建永久置顶通知。"
+        default: return "经系统授权后，在 20:00、22:00 提醒；完成当日四项后撤销剩余提醒。iOS 允许用户清除系统通知，无法创建永久置顶通知。"
         }
     }
 
@@ -240,32 +240,25 @@ final class ImpressCalibrationViewController: UITableViewController {
         content.secondaryTextProperties.numberOfLines = 2
         cell.accessoryType = .disclosureIndicator
         if indexPath.section == 0 {
-            let kind = CalibrationIndicator.allCases[indexPath.row]
+            let kind = CalibrationIndicator.behaviorIndicators[indexPath.row]
             let names: [CalibrationIndicator: String] = [
-                .sleep: V3L("早睡"), .exercise: V3L("运动"), .nutrition: V3L("饮食"),
-                .mood: V3L("情绪"), .custom: V3L("自定义")]
+                .sleep: V3L("睡眠"), .exercise: V3L("运动"),
+                .nutrition: V3L("饮食"), .reading: V3L("阅读")]
             let icons: [CalibrationIndicator: String] = [
                 .sleep: "moon.stars", .exercise: "figure.run",
-                .nutrition: "fork.knife", .mood: "face.smiling", .custom: "slider.horizontal.3"]
+                .nutrition: "fork.knife", .reading: "book.closed"]
             content.text = names[kind]
             content.image = UIImage(systemName: icons[kind] ?? "circle")
             content.imageProperties.tintColor = ImpressV3Appearance.secondaryText
             if let record = checkIn {
-                if kind == .mood {
-                    let status = record.moodAssessed
-                        ? record.moodLevel.map { "已记录 \($0)/5（不计分）" } ?? "主动跳过（不计分）"
-                        : "尚未记录"
-                    content.secondaryText = status
-                } else {
-                    let status: String
-                    switch record.outcome(for: kind) {
-                    case .completed: status = "已完成 · +1"
-                    case .missed: status = V3L("未完成 · -1")
-                    case .excused: status = "休息 / 不适用 · 0"
-                    case .unrecorded: status = V3L("待评估")
-                    }
-                    content.secondaryText = record.goalsSnapshot.title(for: kind) + " · " + status
+                let status: String
+                switch record.outcome(for: kind) {
+                case .completed: status = V3L("已完成 · +1")
+                case .missed: status = V3L("未完成 · -1")
+                case .excused: status = V3L("休息 / 不适用 · 0")
+                case .unrecorded: status = V3L("待评估")
                 }
+                content.secondaryText = record.goalsSnapshot.title(for: kind) + " · " + status
             } else { content.secondaryText = V3L("载入中…") }
             cell.accessibilityIdentifier = "impress.calibration.indicator." + kind.rawValue
         } else if indexPath.section == 1 {
@@ -293,8 +286,8 @@ final class ImpressCalibrationViewController: UITableViewController {
         guard !loading else { return }
         switch indexPath.section {
         case 0:
-            let kind = CalibrationIndicator.allCases[indexPath.row]
-            kind == .mood ? chooseMood() : chooseOutcome(for: kind)
+            let kind = CalibrationIndicator.behaviorIndicators[indexPath.row]
+            chooseOutcome(for: kind)
         case 1: editExtra(positive: indexPath.row == 0)
         default: changeReminderMode()
         }
@@ -314,30 +307,6 @@ final class ImpressCalibrationViewController: UITableViewController {
                 self?.updateCheckIn { try $0.setOutcome(outcome, for: kind) }
             })
         }
-        menu.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
-        // iPad must anchor action sheets; iPhone uses the same native menu.
-        menu.popoverPresentationController?.sourceView = tableView
-        menu.popoverPresentationController?.sourceRect = CGRect(
-            x: tableView.bounds.midX, y: tableView.bounds.midY, width: 1, height: 1)
-        present(menu, animated: true)
-    }
-
-    private func chooseMood() {
-        let menu = UIAlertController(title: V3L("今日情绪 · 仅观察"),
-                                     message: "不以心情好坏评价自己，不参与每日得分。",
-                                     preferredStyle: .actionSheet)
-        for value in (1...5).reversed() {
-            menu.addAction(UIAlertAction(title: "记录 \(value) / 5", style: .default) {
-                [weak self] _ in
-                self?.updateCheckIn { try $0.setMood(value) }
-            })
-        }
-        menu.addAction(UIAlertAction(title: V3L("今天跳过"), style: .default) { [weak self] _ in
-            self?.updateCheckIn { try $0.setMood(nil, assessed: true) }
-        })
-        menu.addAction(UIAlertAction(title: V3L("清除评估"), style: .default) { [weak self] _ in
-            self?.updateCheckIn { try $0.setMood(nil, assessed: false) }
-        })
         menu.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
         // iPad must anchor action sheets; iPhone uses the same native menu.
         menu.popoverPresentationController?.sourceView = tableView
@@ -383,7 +352,7 @@ final class ImpressCalibrationViewController: UITableViewController {
                 let alert = UIAlertController(title: V3L("编辑四项行为标准"),
                     message: "尚未完成的当日计划可调整；目标变化的项目会重新标为待评估。已完成的日期保留原目标。",
                     preferredStyle: .alert)
-                for value in [values.sleep, values.exercise, values.nutrition, values.custom] {
+                for value in [values.sleep, values.exercise, values.nutrition, values.reading] {
                     alert.addTextField { $0.text = value }
                 }
                 alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
@@ -392,7 +361,8 @@ final class ImpressCalibrationViewController: UITableViewController {
                     let goals = CalibrationGoals(sleep: fields[0].text ?? "",
                                                  exercise: fields[1].text ?? "",
                                                  nutrition: fields[2].text ?? "",
-                                                 custom: fields[3].text ?? "")
+                                                 reading: fields[3].text ?? "",
+                                                 custom: values.custom)
                     Task {
                         do {
                             try await self.store.setGoals(goals)

@@ -209,3 +209,14 @@ G4 同最终 SHA 全套 CI/证据/QA IPA；只有外部设备/Keychain/Files/授
 - Debug 与 Release iOS Simulator PASS；unsigned Debug iPhoneOS ARM64 PASS；真实 `PlugIns/ImpressCalibrationWidgets.appex/ImpressCalibrationWidgets` 存在、Mach-O **arm64**、NSExtensionPointIdentifier 正确；IPA ZIP 自检 PASS。产物名 `Impress-V3.1-P0P2-e6b77b2430c9-unsigned.ipa`，大小 **7,430,753 字节**，SHA-256 `b7b1174a969103b1ec1dbf16b29aa8f7cf52b8d54a7b10d1146fcbbafba90b57`。
 - **仍然 NOT_RUN / DEVICE_BLOCKED**：真实 iPhone13 安装/签名与 App Group provisioning、实际 SpringBoard 添加/Small+Medium 六布局截图、Timeline 生效时间、真实文件提供者权限、真实 AI Key/HTTP。不能因 CI success 直接提升全量 ACCEPT-01～12/18 步/F01～F13 为 E2E_PASS。Debug QA Vault 与生产 Vault 权限绝不混淆。
 - **下一轮待运行**：`W12` 三时段真实系统 URL 深链 UI 测试；此前通过的双目标 UI E2E 将补强已批准源码重启回读、反向原卡核查和撤销入口检查。下一 SHA 的结果必须**重新归档**，不能继承 e6b77b2 的 PASS。
+
+## 2026-10-22 · 用户增量：CAL-01～03 有限解冻 / Widget 故障
+
+| 子项 | 位置 | 本次执行与下一步验证 |
+| --- | --- | --- |
+| CAL-01.reading | CalibrationCheckInCore, CalibrationLocalStore, CalibrationViewController | 新四项 sleep/exercise/nutrition/reading；四项即可结算；同 SHA Core/Native XCTest 待实际 CI |
+| CAL-02.legacy | 老 custom + mood Codable + 当天安全迁移 | 前三项保留、旧第四项原结果归档、阅读重新确认；旧历史得分不回算、备份仍可恢复 |
+| CAL-03.remove-mood | 当日 UI 与完成门禁 | 无情绪行/交互；历史旧完结规则仍适用 |
+| NAV-05.w / SAFE-08.w | CalibrationWidgetProjection v2 / Widget Extension | B方案覆盖 x/4、共享故障分因、唯一坐标绘图；真实 iPhone13 App Group 双 target 签名和六布局仍 DEVICE_BLOCKED |
+
+原 85 项主 ID 保持不变；历史 18 DEFERRED 数字已经因用户新授权发生范围覆盖，其余尚未解冻项不得顺带实施。记录 CODE_DONE 不能冒充 CI/真机 PASS，Chat 继续讨论。

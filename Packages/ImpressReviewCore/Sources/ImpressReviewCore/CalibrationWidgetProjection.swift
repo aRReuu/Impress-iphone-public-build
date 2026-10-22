@@ -21,7 +21,7 @@ public struct CalibrationWidgetDay: Codable, Equatable, Sendable, Identifiable {
 }
 
 public struct CalibrationWidgetSnapshot: Codable, Equatable, Sendable {
-    public static let currentVersion = 1
+    public static let currentVersion = 2
     public let schemaVersion: Int
     public let generatedAt: Date
     public let timeZoneID: String
@@ -44,7 +44,7 @@ public struct CalibrationWidgetSnapshot: Codable, Equatable, Sendable {
                   (1...9999).contains(year), (1...12).contains(month),
                   (1...31).contains(dayOfMonth),
                   seen.insert(day.dayID).inserted,
-                  (0...5).contains(day.assessedCount) else { return false }
+                  (0...4).contains(day.assessedCount) else { return false }
             var gregorian = Calendar(identifier: .gregorian)
             gregorian.timeZone = TimeZone(secondsFromGMT: 0)!
             guard let date = gregorian.date(from: DateComponents(
@@ -60,7 +60,7 @@ public struct CalibrationWidgetSnapshot: Codable, Equatable, Sendable {
                     return false
                 }
             case .finalized:
-                guard day.assessedCount == 5 else { return false }
+                guard day.assessedCount == 4 else { return false }
                 // Explicitly excused days can be finalized without a numeric score.
             }
         }
@@ -114,9 +114,10 @@ public enum CalibrationWidgetProjection {
         let lastKey = CalibrationDayCheckIn.dayID(for: today, calendar: calendar)
         var byDay = [String: CalibrationWidgetDay]()
         for entry in entries where entry.dayID >= firstKey && entry.dayID <= lastKey {
+            // Only four scored behaviors contribute to B-scheme coverage.
             let explicit = entry.assessments.filter {
                 $0.outcome != .unrecorded
-            }.count + (entry.moodAssessed ? 1 : 0)
+            }.count
             let state: CalibrationWidgetDayState =
                 entry.isComplete ? .finalized : (explicit > 0 ? .partial : .unrecorded)
             let score = entry.isComplete ? (try? entry.finalizedScore())?.netScore : nil

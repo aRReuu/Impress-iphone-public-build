@@ -38,3 +38,9 @@ App and XCTest targets now require iOS 26.0. CocoaPods and all CI compiler overr
 
 ## iOS 26 native STT candidate
 The iOS 26 branch adds Apple-only `SpeechAnalyzer` voice input, a new Settings page, isolated editor accessory and microphone-use reason. CI uses `.github/scripts/verify_apple_stt_contract.py` for static privacy/route checks and UIKit regression tests for transcription buffer and insertion rules. The unsigned candidate name uses `Impress-V3.3-<HEAD>-7icon-INCOMPLETE-unsigned.ipa` and is not directly installable. A green simulator test cannot prove microphone, available Apple models or cloud-independent recognition on iPhone 13; do not describe them as device-PASS.
+
+## 2026-10-22 · 实际 Widget 侧载签名与四指标排障
+
+当前 `aReuImpress-iPhone.entitlements` 和 `ImpressCalibrationWidgets.entitlements` 都指定 `group.areu.impress`，但通用 iPhoneOS CI 采用 `CODE_SIGNING_ALLOWED=NO CODE_SIGN_ENTITLEMENTS=` 产出 unsigned IPA，不能据此声称该组已被安装设备的两个进程授权。侧载工具重新签名后，必须核查主 App 和 `.appex` 分别具备同一 `com.apple.security.application-groups` 值、对应 Bundle ID/Team/Profile 能力，随后打开主 App 校准器执行单向共享投影与 Widget 刷新。若签名工具无法给扩展授予 App Group 权限，Swift 不可能绕过系统沙箱，应保留可诊断空态和 DEVICE_BLOCKED。不要往 GitHub 上传 .mobileprovision、证书、私密账本。
+
+新版本的 `CalibrationWidgetSnapshot.currentVersion=2`，兼容目录文件名仍为 `calibration-widget-v1.json`；老 5 口径缓存失效并重新投影，不重建计分器。现有 `checkins-v1.json` 原账本继续唯一权威；新四行为睡眠/运动/饮食/阅读，历史 custom/mood 保留在旧记录中，不参与新卡片输入。

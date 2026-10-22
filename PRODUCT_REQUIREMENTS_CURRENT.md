@@ -255,3 +255,10 @@
 6. **NAV-05.w/SAFE-08.w, W01–W15**：Widget 显示 `Open Impress to load assessments` 是**未能读取共享 App Group 投影**的空态，不是评分为 0。主 App 打开校准器时重新从唯一 `checkins-v1.json` 投影并尝试 WidgetCenter 刷新；UI 可区分共享容器不存在、快照缺失、失效三种原因。若自由签名或重新签名未包含**App 与 Extension 同一有效 App Group**，代码不可绕过 iOS 沙箱，必须提示设备签名检查；不得伪造打分点、复制账本或声明设备成功。
 
 **实施/验收**：检查本轮实际 SHA 的源代码、独立原生测试及真实 XCUITest；六种 Widget SpringBoard 截图、iPhone13 真实 App Group/侧载权限、动态字体/简繁英/明暗模式仍需实测。旧 85 主需求、12 ACCEPT、F01–F13、18 步 E2E、18 DEFERRED 不增删。生产 Vault 写门禁永久为 false。
+
+## 2026-10-22 · 新授权覆盖：四项固定校准 + Widget App Group
+
+- **此处优先于 §2.2 的 x/5 历史规则和 CAL-01～03 的旧待定说明**。校准器今日只显示睡眠、运动、饮食、阅读四项，分别 completed=+1 / missed=-1 / excused=0 / unrecorded=缺失。四项已明确处理方为完整评估，情绪不再需要输入，阅读替代原可编辑的“自定义”类别。目标内容可修改，但指标身份恒为 reading。Widget 今天显示 x/4，B 方案日/月/年覆盖与原二维灰线、蓝色均线、缺失断线继续使用同一个 CoreGraphics 绘制器。
+- **旧账本不得误译**：老 `custom`、`moodAssessed`、`moodLevel` 仅是历史兼容，不视为阅读。过往日期按原来的 mood 完成门禁与得分维持，旧 JSON/备份仍可解码。当天旧记录若进入新版本，仅在内存中将第四项转换为未评估的 reading，原 custom outcome 留 `retiredCustomAssessment` 审计；只有真正保存才更新当天 JSON，不批量重写历史得分。原额外加减分属于既有独立行为，不在本次未经讨论的移除范围。
+- **Widget 真机故障修复边界**：主 App 与 Extension 都声明 `group.areu.impress`，但当前 unsigned IPA 明确不等于可用的签名权限。Widget 必须分辨自身 `noGroup`、`noSnapshot`、`invalidSnapshot`，而不能都提示“无数据”。快照使用 schema v2，旧缓存需要在校准器入口同步后重新投影，空有效账本也能绘制空坐标并显示 0/4。安装时两进程需获相同 App Group 有效签名/Profile，缺证据不得称 DEVICE_PASS。
+- **验收和范围**：CAL-01～03 中上述四指标业务由本次用户明确有限解冻，其他 CAL/LOCAL 未讨论部分仍延期；原“18 项全数 DEFERRED”为历史数，不能作为当前新授权的有效结论。Chat 先进一步讨论，不在本批代码中重做 UI。

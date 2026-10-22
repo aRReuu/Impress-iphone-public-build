@@ -47,7 +47,7 @@ final class CalibrationWidgetProjectionTests: XCTestCase {
         XCTAssertTrue(view.weekDays.allSatisfy { $0.netScore == nil })
     }
 
-    func testPartialExplicitMissAndMoodSkipCountAsAssessmentsNotFailures() throws {
+    func testOnlyFourBehaviorInputsCountTowardsWidgetCoverage() throws {
         let now = date(2026, 10, 21)
         let partial = try entry("2026-10-20", outcome: .missed)
         let moodOnly = try entry("2026-10-21", mood: true)
@@ -58,9 +58,9 @@ final class CalibrationWidgetProjectionTests: XCTestCase {
         XCTAssertEqual(view.weekDays[5].assessedCount, 1)
         XCTAssertEqual(view.weekDays[5].state, .partial)
         XCTAssertNil(view.weekDays[5].netScore)
-        XCTAssertEqual(view.weekDays[6].assessedCount, 1)
-        XCTAssertEqual(view.weekDays[6].state, .partial)
-        XCTAssertEqual(CalibrationWidgetOverview.assessedDays(view.weekDays), 2)
+        XCTAssertEqual(view.weekDays[6].assessedCount, 0)
+        XCTAssertEqual(view.weekDays[6].state, .unrecorded)
+        XCTAssertEqual(CalibrationWidgetOverview.assessedDays(view.weekDays), 1)
         XCTAssertEqual(CalibrationWidgetOverview.finalizedDays(view.weekDays), 0)
     }
 
@@ -74,7 +74,7 @@ final class CalibrationWidgetProjectionTests: XCTestCase {
         let view = try XCTUnwrap(CalibrationWidgetProjection.overview(
             from: snap, at: now, calendar: calendar))
         XCTAssertEqual(view.weekDays.last?.state, .finalized)
-        XCTAssertEqual(view.weekDays.last?.assessedCount, 5)
+        XCTAssertEqual(view.weekDays.last?.assessedCount, 4)
         XCTAssertNil(view.weekDays.last?.netScore)
         XCTAssertEqual(view.yearMonths[9].assessedDays, 1)
         XCTAssertEqual(view.yearMonths[9].finalizedDays, 1)
@@ -267,7 +267,7 @@ final class CalibrationWidgetProjectionTests: XCTestCase {
         try october21.setOutcome(.missed, for: .exercise)
         records.append(october21)
         var september = try entry("2026-09-12", allExcused: true, mood: true)
-        try september.setOutcome(.completed, for: .custom)
+        try september.setOutcome(.completed, for: .reading)
         records.append(september)
         let scoreRecords = records.map(\.rawRecord)
         let snapshot = CalibrationWidgetProjection.snapshot(

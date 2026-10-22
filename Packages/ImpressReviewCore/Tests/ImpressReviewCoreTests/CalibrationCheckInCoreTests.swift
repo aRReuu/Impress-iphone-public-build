@@ -6,48 +6,70 @@ final class CalibrationCheckInCoreTests: XCTestCase {
         try CalibrationDayCheckIn(dayID: day, goals: CalibrationGoals())
     }
 
-    func testFiveIndicatorsMustBeReviewedButMoodNeverPunished() throws {
+    func testFourFixedInputsFinalizeWithoutMood() throws {
         var review = try newDay()
-        XCTAssertEqual(review.pendingIndicators.count, 5)
+        XCTAssertEqual(review.pendingIndicators.count, 4)
+        XCTAssertEqual(CalibrationIndicator.behaviorIndicators,
+                       [.sleep, .exercise, .nutrition, .reading])
         for kind in CalibrationIndicator.behaviorIndicators {
             try review.setOutcome(.completed, for: kind)
         }
-        XCTAssertEqual(review.pendingIndicators, [.mood])
-        XCTAssertNil(try review.finalizedScore().netScore)
-        try review.setMood(1) // Very bad day, yet no automatic penalty.
         XCTAssertTrue(review.isComplete)
         XCTAssertEqual(try review.finalizedScore().netScore, 4)
-        try review.setMood(5)
-        XCTAssertEqual(try review.finalizedScore().netScore, 4)
+        XCTAssertThrowsError(try review.setOutcome(.completed, for: .custom))
     }
 
-    func testExplicitMoodSkipCountsAsEvaluatedNotFailure() throws {
+    func testAllFourExcusedAreCompletedWithoutFakeZeroScore() throws {
         var review = try newDay()
         for kind in CalibrationIndicator.behaviorIndicators {
             try review.setOutcome(.excused, for: kind)
         }
-        try review.setMood(nil, assessed: true)
         XCTAssertTrue(review.isComplete)
-        XCTAssertNil(try review.finalizedScore().netScore) // No work scheduled is not zero.
+        XCTAssertNil(try review.finalizedScore().netScore)
     }
 
     func testUnrecordedDayCannotObtainAFinalScore() throws {
         var review = try newDay()
         try review.setOutcome(.completed, for: .sleep)
-        try review.setMood(3)
         XCTAssertFalse(review.isComplete)
         XCTAssertNil(try review.finalizedScore().netScore)
         XCTAssertEqual(review.pendingIndicators.count, 3)
     }
 
-    func testCustomGoalSnapshotAndFourTasksHaveStableIdentifiers() throws {
-        let goal = CalibrationGoals(custom: "写下一个小步骤")
-        var prior = try CalibrationDayCheckIn(dayID: "2026-10-17", goals: goal)
-        try prior.setOutcome(.completed, for: .custom)
-        XCTAssertEqual(prior.goalsSnapshot.custom, "写下一个小步骤")
-        XCTAssertEqual(prior.outcome(for: .custom), .completed)
-        XCTAssertEqual(Set(prior.assessments.map(\.taskID)).count, 4)
-        XCTAssertNotEqual(prior.goalsSnapshot.custom, CalibrationGoals(custom: "新目标").custom)
+    func testReadingIDAndLegacyCustomAreDistinctAndMigratedOnlyExplicitly() throws {
+        var current = try CalibrationDayCheckIn(dayID: "2026-10-22",
+            goals: CalibrationGoals(reading: "今日阅读一章"))
+        try current.setOutcome(.completed, for: .reading)
+        XCTAssertFalse(current.isLegacyDay)
+        XCTAssertEqual(Set(current.assessments.map(\.taskID)).count, 4)
+        let data = try JSONEncoder().encode(current)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var rows = try XCTUnwrap(object["assessments"] as? [[String: Any]])
+        let idx = try XCTUnwrap(rows.firstIndex(where: {
+            ($0["taskID"] as? String) == "reading"
+        }))
+        rows[idx]["taskID"] = "custom"
+        object["assessments"] = rows
+        var goals = try XCTUnwrap(object["goalsSnapshot"] as? [String: Any])
+        goals.removeValue(forKey: "reading")
+        goals["custom"] = "旧自定义目标"
+        object["goalsSnapshot"] = goals
+        object["moodAssessed"] = true
+        let legacy = try JSONDecoder().decode(CalibrationDayCheckIn.self,
+            from: JSONSerialization.data(withJSONObject: object))
+        XCTAssertTrue(legacy.isLegacyDay)
+        XCTAssertEqual(legacy.goalsSnapshot.custom, "旧自定义目标")
+        XCTAssertEqual(legacy.outcome(for: .custom), .completed)
+        XCTAssertTrue(legacy.isComplete)
+        XCTAssertEqual(try legacy.finalizedScore().netScore, 1)
+        let converted = try legacy.migratedToReading(
+            goals: CalibrationGoals(reading: "新阅读目标"))
+        XCTAssertFalse(converted.isLegacyDay)
+        XCTAssertEqual(converted.outcome(for: .reading), .unrecorded)
+        XCTAssertEqual(converted.retiredCustomAssessment?.outcome, .completed)
+        XCTAssertEqual(converted.goalsSnapshot.reading, "新阅读目标")
+        XCTAssertNil(try converted.finalizedScore().netScore)
     }
 
     func testBonusAndPenaltyRequireSpecificReasonAndRemainBounded() throws {
@@ -100,11 +122,11 @@ final class CalibrationCheckInCoreTests: XCTestCase {
         try review.setOutcome(.completed, for: .sleep)
         try review.setOutcome(.missed, for: .custom)
         try review.replaceGoalsForOpenDay(
-            CalibrationGoals(custom: "完成一次明确的个人计划"))
+            CalibrationGoals(reading: "完成一次明确的阅读计划"))
         XCTAssertEqual(review.outcome(for: .sleep), .completed)
         XCTAssertEqual(review.outcome(for: .custom), .unrecorded)
         XCTAssertFalse(review.isComplete)
-        XCTAssertEqual(review.goalsSnapshot.custom, "完成一次明确的个人计划")
+        XCTAssertEqual(review.goalsSnapshot.reading, "完成一次明确的阅读计划")
     }
 
     func testCompletedDayGoalSnapshotCannotBeRewritten() throws {
@@ -115,7 +137,7 @@ final class CalibrationCheckInCoreTests: XCTestCase {
         try review.setMood(3)
         let previous = review.goalsSnapshot
         try review.replaceGoalsForOpenDay(
-            CalibrationGoals(custom: "尝试覆盖历史目标"))
+            CalibrationGoals(reading: "尝试覆盖历史目标"))
         XCTAssertEqual(review.goalsSnapshot, previous)
         XCTAssertEqual(try review.finalizedScore().netScore, 4)
     }
@@ -125,6 +147,6 @@ final class CalibrationCheckInCoreTests: XCTestCase {
         XCTAssertThrowsError(try review.setMood(7))
         XCTAssertThrowsError(try review.setOutcome(.completed, for: .mood))
         XCTAssertThrowsError(try CalibrationDayCheckIn(dayID: "2026-10-18",
-                            goals: CalibrationGoals(custom: "   ")))
+                            goals: CalibrationGoals(reading: "   ")))
     }
 }

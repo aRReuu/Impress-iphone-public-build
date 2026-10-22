@@ -247,3 +247,12 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 - **U06/U07：XCUITEST_PASS（本测试覆盖范围）**。实际合成测试 Vault 文件夹原生展开／折叠／重新展开、打开文档名、详情不含完整路径栏的可见路径；不等于 120 项分页、全部字号/语言及真机交互视觉已经完整验证。
 - 下一轮 `P0-B` 连续可见 UI 扩展在该成功工作流结束后才进行：从本地历史讨论返回已经审批、已独立撤销的原卡，先验揭示锁，再明确揭示并使用真实卡片水平滑动执行 FSRS，冷启动确认不会立刻重复到期。**新增断言的 SOURCE/TEST_ONLY，此处不是 PASS；只有其自身新 SHA 的 CI 结果可认证。**
 - 真正的完整 18 步 UI（备份 ZIP 恢复、外部并发合法修改冲突）、完整 F01–F13、iPhone 13 六布局 SpringBoard、主 App/Extension 同一有效 App Group 签名、Files/iCloud、Keychain/真实 provider HTTP 仍分别 NOT_RUN 或 DEVICE_BLOCKED。CAL-01–15/LOCAL-01–03 共18项 DEFERRED 不解冻；`productionWriteEnabled=false` 不变。
+
+## 2026-10-22 · CAL-R01～R04 新验收范围（先施工，再按同 SHA 登记）
+
+- CAL-R01：固定四行睡眠/运动/饮食/阅读，不存在“自定义”/“情绪”今日入口；未评估无净分，四项处理后停止当日提醒；Widget 今日 x/4。
+- CAL-R02：旧 JSON 无 reading 字段解码、日期/来源历史保持，遗留 custom 从不暗换 reading；今天旧格式必须有独立的迁移审计和安全保存，旧完成状态历史不重算；Native 存储/备份回读测试。
+- CAL-R03：Widget schema v2 防止五项旧缓存混读；未授权 App Group/未同步快照/无效时区快照分因；共享有效但无评分时仍展示合法空笛卡尔坐标。
+- CAL-R04：同一净分源、同一绘制器周/月/年 × Small/Medium，实际 SpringBoard 截图、签名后双进程 App Group、刷新和深链；Simulator/Core PASS 不能代替 iPhone13 DEVICE_PASS。
+
+这是增量验收要求而非已通过声明；ACCEPT-01～12、F01～13、18步、W01～W15 既有编号和生产 Vault 禁写门禁不变。

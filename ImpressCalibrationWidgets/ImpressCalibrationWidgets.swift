@@ -27,13 +27,28 @@ private enum WidgetWords {
     static var unknown: String { tr("未记录", "未記錄", "Unrecorded") }
     static var today: String { tr("今日", "今日", "Today") }
     static var days: String { tr("天", "天", "days") }
-    static var noData: String {
-        tr("打开 Impress 的校准器同步；仍为空请检查共享权限",
-           "開啟 Impress 的校準器同步；仍為空請檢查共享權限",
-           "Open Impress > Calibration. If still empty, check App Groups.")
+    static func unavailable(_ reason: WidgetProjectionProblem?) -> String {
+        switch reason {
+        case .noGroup:
+            return tr("Widget 无 App Group 权限；请检查 App 和扩展的签名",
+                      "Widget 無 App Group 權限；請檢查 App 和擴充的簽署",
+                      "Widget App Group access denied. Check both signatures.")
+        case .noSnapshot, nil:
+            return tr("共享快照未同步；打开 Impress 的校准器",
+                      "共用快照未同步；開啟 Impress 的校準器",
+                      "No shared snapshot. Open Impress > Calibration.")
+        case .invalidSnapshot:
+            return tr("快照版本或时区失效；请打开校准器重新同步",
+                      "快照版本或時區失效；請開啟校準器重新同步",
+                      "Snapshot invalid or timezone changed. Reopen Calibration.")
+        }
     }
     static var widgetName: String { tr("校准器", "校準器", "Calibration") }
     static var lastUpdate: String { tr("快照", "快照", "Snapshot") }
+}
+
+private enum WidgetProjectionProblem {
+    case noGroup, noSnapshot, invalidSnapshot
 }
 
 private struct CalibrationEntry: TimelineEntry {
@@ -41,13 +56,15 @@ private struct CalibrationEntry: TimelineEntry {
     let period: CalibrationWidgetPeriod
     let overview: CalibrationWidgetOverview?
     let plot: CalibrationWidgetCartesianPlot?
+    let problem: WidgetProjectionProblem?
 }
 
 private struct CalibrationProvider: TimelineProvider {
     let period: CalibrationWidgetPeriod
 
     func placeholder(in context: Context) -> CalibrationEntry {
-        CalibrationEntry(date: Date(), period: period, overview: nil, plot: nil)
+        CalibrationEntry(date: Date(), period: period, overview: nil, plot: nil,
+                         problem: nil)
     }
 
     func getSnapshot(in context: Context,
@@ -67,17 +84,26 @@ private struct CalibrationProvider: TimelineProvider {
 
     private func makeEntry(at now: Date) -> CalibrationEntry {
         guard let root = FileManager.default.containerURL(
-                forSecurityApplicationGroupIdentifier: "group.areu.impress"),
-              let data = try? Data(contentsOf: root.appendingPathComponent(
-                "calibration-widget-v1.json")),
-              let snapshot = try? JSONDecoder().decode(
+                forSecurityApplicationGroupIdentifier: "group.areu.impress") else {
+            return CalibrationEntry(date: now, period: period, overview: nil, plot: nil,
+                                    problem: .noGroup)
+        }
+        guard let data = try? Data(contentsOf: root.appendingPathComponent(
+                "calibration-widget-v1.json")) else {
+            return CalibrationEntry(date: now, period: period, overview: nil, plot: nil,
+                                    problem: .noSnapshot)
+        }
+        guard let snapshot = try? JSONDecoder().decode(
                 CalibrationWidgetSnapshot.self, from: data),
               let overview = CalibrationWidgetProjection.overview(
-                from: snapshot, at: now, calendar: Calendar.current)
-        else { return CalibrationEntry(date: now, period: period, overview: nil, plot: nil) }
+                from: snapshot, at: now, calendar: Calendar.current) else {
+            return CalibrationEntry(date: now, period: period, overview: nil, plot: nil,
+                                    problem: .invalidSnapshot)
+        }
         let plot = CalibrationWidgetProjection.cartesianPlot(
             from: snapshot, period: period, at: now, calendar: Calendar.current)
-        return CalibrationEntry(date: now, period: period, overview: overview, plot: plot)
+        return CalibrationEntry(date: now, period: period, overview: overview, plot: plot,
+                                problem: nil)
     }
 }
 
@@ -149,7 +175,7 @@ private struct CalibrationWidgetView: View {
                 .minimumScaleFactor(0.7)
             } else {
                 Spacer(minLength: 2)
-                Text(WidgetWords.noData)
+                Text(WidgetWords.unavailable(entry.problem))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
@@ -172,7 +198,7 @@ private struct CalibrationWidgetView: View {
             let today = overview.weekDays.last
             // Coverage stays primary even on a fully assessed or all-excused day.
             // Replacing 5/5 with a generic "assessed" label hides the B metric.
-            Text("\(WidgetWords.today) \(today?.assessedCount ?? 0)/5")
+            Text("\(WidgetWords.today) \(today?.assessedCount ?? 0)/4")
                 .font(.system(size: small ? 18 : 22, weight: .semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)

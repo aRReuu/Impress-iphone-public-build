@@ -39,7 +39,8 @@ actor ImpressCalibrationLocalStore {
         var state = try load()
         state.goals = value
         let todayID = CalibrationDayCheckIn.dayID(for: Date(), calendar: Calendar.current)
-        if var today = state.days[todayID], !today.isComplete {
+        if var today = state.days[todayID],
+           !today.isComplete, !today.isLegacyDay {
             try today.replaceGoalsForOpenDay(value)
             state.days[todayID] = today
         }
@@ -51,7 +52,12 @@ actor ImpressCalibrationLocalStore {
                  calendar: Calendar = .current) throws -> CalibrationDayCheckIn {
         let state = try load()
         let dayID = CalibrationDayCheckIn.dayID(for: date, calendar: calendar)
-        return try state.days[dayID] ?? CalibrationDayCheckIn(dayID: dayID, goals: state.goals)
+        if let stored = state.days[dayID] {
+            let todayID = CalibrationDayCheckIn.dayID(for: Date(), calendar: calendar)
+            return stored.isLegacyDay && dayID == todayID
+                ? try stored.migratedToReading(goals: state.goals) : stored
+        }
+        return try CalibrationDayCheckIn(dayID: dayID, goals: state.goals)
     }
 
     func save(_ checkIn: CalibrationDayCheckIn) throws {
@@ -60,7 +66,17 @@ actor ImpressCalibrationLocalStore {
         var state = try load()
         if let old = state.days[checkIn.dayID],
            old.goalsSnapshot != checkIn.goalsSnapshot {
-            throw ImpressCalibrationStoreError.conflictingDaySnapshot
+            let todayID = CalibrationDayCheckIn.dayID(for: Date())
+            let migrationAllowed = old.isLegacyDay && !checkIn.isLegacyDay &&
+                checkIn.dayID == todayID &&
+                (try old.migratedToReading(goals: state.goals)).goalsSnapshot ==
+                    checkIn.goalsSnapshot &&
+                checkIn.retiredCustomAssessment == old.assessments.first(where: {
+                    $0.taskID == CalibrationIndicator.custom.rawValue
+                })
+            guard migrationAllowed else {
+                throw ImpressCalibrationStoreError.conflictingDaySnapshot
+            }
         }
         state.days[checkIn.dayID] = checkIn
         try persist(state)
@@ -74,8 +90,8 @@ actor ImpressCalibrationLocalStore {
         try load().days.values.sorted { $0.dayID < $1.dayID }
     }
 
-    /// Non-finalized days must NOT acquire a numeric Y-value merely because
-    /// their four behavior rows happened to be filled before mood was assessed.
+    /// Historical legacy days retain their old mood-closeout scoring gate;
+    /// live days close after all four behaviors are explicitly assessed.
     func trendRecords() throws -> [CalibrationDailyRecord] {
         try history().map { entry in
             if entry.isComplete { return entry.rawRecord }
@@ -101,8 +117,10 @@ actor ImpressCalibrationLocalStore {
         try state.goals.validate()
         for (dayID, checkIn) in state.days {
             guard dayID == checkIn.dayID,
-                  Set(checkIn.assessments.map(\.taskID)) ==
-                    Set(CalibrationIndicator.behaviorIndicators.map(\.rawValue)),
+                  (Set(checkIn.assessments.map(\.taskID)) ==
+                       Set(CalibrationIndicator.behaviorIndicators.map(\.rawValue)) ||
+                   Set(checkIn.assessments.map(\.taskID)) ==
+                       Set(CalibrationIndicator.legacyBehaviorIndicators.map(\.rawValue))),
                   checkIn.assessments.count == 4 else {
                 throw ImpressCalibrationStoreError.invalidArchive
             }
