@@ -215,9 +215,9 @@ final class CalibrationWidgetProjectionTests: XCTestCase {
         // A malformed producer could leave structurally valid future scores
         // in shared cache; a Widget must not reveal them as completed history.
         let future = [
-            CalibrationWidgetDay(dayID: "2026-10-22", assessedCount: 5,
+            CalibrationWidgetDay(dayID: "2026-10-22", assessedCount: 4,
                                  state: .finalized, netScore: 19),
-            CalibrationWidgetDay(dayID: "2026-12-01", assessedCount: 5,
+            CalibrationWidgetDay(dayID: "2026-12-01", assessedCount: 4,
                                  state: .finalized, netScore: -4)
         ]
         let snapshot = CalibrationWidgetSnapshot(

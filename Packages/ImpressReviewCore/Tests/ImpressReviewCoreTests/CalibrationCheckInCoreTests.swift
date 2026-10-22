@@ -39,6 +39,9 @@ final class CalibrationCheckInCoreTests: XCTestCase {
     func testReadingIDAndLegacyCustomAreDistinctAndMigratedOnlyExplicitly() throws {
         var current = try CalibrationDayCheckIn(dayID: "2026-10-22",
             goals: CalibrationGoals(reading: "今日阅读一章"))
+        for indicator in [CalibrationIndicator.sleep, .exercise, .nutrition] {
+            try current.setOutcome(.excused, for: indicator)
+        }
         try current.setOutcome(.completed, for: .reading)
         XCTAssertFalse(current.isLegacyDay)
         XCTAssertEqual(Set(current.assessments.map(\.taskID)).count, 4)
@@ -120,11 +123,11 @@ final class CalibrationCheckInCoreTests: XCTestCase {
     func testChangingOpenDayGoalInvalidatesOnlyChangedItem() throws {
         var review = try newDay()
         try review.setOutcome(.completed, for: .sleep)
-        try review.setOutcome(.missed, for: .custom)
+        try review.setOutcome(.missed, for: .reading)
         try review.replaceGoalsForOpenDay(
             CalibrationGoals(reading: "完成一次明确的阅读计划"))
         XCTAssertEqual(review.outcome(for: .sleep), .completed)
-        XCTAssertEqual(review.outcome(for: .custom), .unrecorded)
+        XCTAssertEqual(review.outcome(for: .reading), .unrecorded)
         XCTAssertFalse(review.isComplete)
         XCTAssertEqual(review.goalsSnapshot.reading, "完成一次明确的阅读计划")
     }
