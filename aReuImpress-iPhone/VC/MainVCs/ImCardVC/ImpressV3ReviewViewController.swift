@@ -29,10 +29,7 @@ final class ImpressV3ReviewViewController: UIViewController {
     private let cardStack = SwipeCardStack()
     private let revealButton = UIButton(type: .system)
     private let statusLabel = UILabel()
-    /// Persistent four-direction guide; it appears only after a verified reveal.
-    /// It never grades on tap: the existing SwipeCardStack owns FSRS events.
-    private let ratingGuide = UIStackView()
-    private var ratingGuideHeight: NSLayoutConstraint?
+    /// The compact status line carries the mapping; only SwipeCardStack can rate.
     private let currentCardActions = UIStackView()
     /// Dedicated tag for the card-local edit/discussion row; not a separate toolbar.
     private static let cardActionRowTag = 941226
@@ -147,54 +144,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         return false
     }
 
-    private func configureRatingGuide() {
-        ratingGuide.axis = .horizontal
-        ratingGuide.distribution = .fillEqually
-        ratingGuide.alignment = .fill
-        ratingGuide.spacing = ImpressV3Appearance.Metrics.ratingLegendSpacing
-        ratingGuide.translatesAutoresizingMaskIntoConstraints = false
-        ratingGuide.accessibilityIdentifier = "impress.review.rating-guide"
-        ratingGuide.isUserInteractionEnabled = false
-        ratingGuide.isHidden = true
-        ratingGuide.accessibilityElementsHidden = true
-        for (direction, symbol, title) in [
-            ("hard", "arrow.left", V3L("困难")),
-            ("good", "arrow.up", V3L("良好")),
-            ("easy", "arrow.right", V3L("容易")),
-            ("again", "arrow.down", V3L("重来"))
-        ] {
-            let glyph = UIImageView(image: UIImage(systemName: symbol,
-                withConfiguration: UIImage.SymbolConfiguration(
-                    pointSize: 16, weight: .semibold)))
-            glyph.tintColor = ImpressV3Appearance.reviewRatingGuideInk
-            glyph.contentMode = .scaleAspectFit
-            glyph.isAccessibilityElement = false
-            let label = UILabel()
-            label.text = title
-            label.font = ImpressV3Appearance.Typography.ratingGuide
-            label.textColor = ImpressV3Appearance.reviewRatingGuideInk
-            label.textAlignment = .center
-            label.adjustsFontForContentSizeCategory = true
-            label.adjustsFontSizeToFitWidth = true
-            label.minimumScaleFactor = 0.75
-            label.accessibilityIdentifier = "impress.review.rating-hint." + direction
-            let chip = UIStackView(arrangedSubviews: [glyph, label])
-            chip.axis = .horizontal
-            chip.alignment = .center
-            chip.distribution = .fill
-            chip.spacing = 4
-            chip.isLayoutMarginsRelativeArrangement = true
-            chip.layoutMargins = UIEdgeInsets(top: 5, left: 6, bottom: 5, right: 6)
-            chip.backgroundColor = ImpressV3Appearance.reviewRatingGuideSurface
-            chip.layer.cornerRadius = 12
-            glyph.widthAnchor.constraint(equalToConstant: 16).isActive = true
-            glyph.heightAnchor.constraint(equalToConstant: 16).isActive = true
-            ratingGuide.addArrangedSubview(chip)
-        }
-    }
-
     private func setupNativeLayout() {
-        configureRatingGuide()
         cardStack.translatesAutoresizingMaskIntoConstraints = false
         revealButton.translatesAutoresizingMaskIntoConstraints = false
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -248,6 +198,7 @@ final class ImpressV3ReviewViewController: UIViewController {
         statusLabel.numberOfLines = 0
         statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         statusLabel.text = V3L("正在准备复习…")
+        statusLabel.accessibilityIdentifier = "impress.review.rating-summary"
 
         completionLabel.font = ImpressV3Appearance.Typography.body
         completionLabel.textColor = ImpressV3Appearance.secondaryText
@@ -261,15 +212,12 @@ final class ImpressV3ReviewViewController: UIViewController {
         repeatButton.isHidden = true
 
         view.addSubview(statusLabel)
-        view.addSubview(ratingGuide)
         view.addSubview(currentCardActions)
         view.addSubview(cardStack)
         view.addSubview(revealButton)
         view.addSubview(busyIndicator)
         view.addSubview(completionLabel)
         view.addSubview(repeatButton)
-        let guideHeight = ratingGuide.heightAnchor.constraint(equalToConstant: 0)
-        ratingGuideHeight = guideHeight
         NSLayoutConstraint.activate([
             statusLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
             statusLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
@@ -277,11 +225,7 @@ final class ImpressV3ReviewViewController: UIViewController {
             statusLabel.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
             currentCardActions.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
             currentCardActions.centerYAnchor.constraint(equalTo: statusLabel.centerYAnchor),
-            ratingGuide.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 4),
-            ratingGuide.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
-            ratingGuide.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-            guideHeight,
-            cardStack.topAnchor.constraint(equalTo: ratingGuide.bottomAnchor, constant: 8),
+            cardStack.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 8),
             cardStack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
             cardStack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
             cardStack.bottomAnchor.constraint(equalTo: revealButton.topAnchor, constant: -8),
@@ -462,11 +406,6 @@ final class ImpressV3ReviewViewController: UIViewController {
     /// Hiding the container removes both the hit region and accessibility children.
     /// Each queued card starts hidden and only its currently revealed front face can show it.
     private func setCurrentCardActionsRevealed(_ revealed: Bool) {
-        ratingGuide.isHidden = !revealed
-        ratingGuide.accessibilityElementsHidden = !revealed
-        ratingGuideHeight?.constant = revealed
-            ? (traitCollection.preferredContentSizeCategory.isAccessibilityCategory
-               ? 62 : ImpressV3Appearance.Metrics.ratingLegendHeight) : 0
         guard let actions = cardStack.topCard?.viewWithTag(Self.cardActionRowTag) else { return }
         actions.isHidden = !revealed
         actions.isUserInteractionEnabled = revealed
@@ -495,7 +434,9 @@ final class ImpressV3ReviewViewController: UIViewController {
                 self.setCurrentCardActionsRevealed(revealed && self.canRateCurrentCard)
                 self.revealButton.isHidden = revealed
                 self.statusLabel.text = revealed
-                    ? V3L("向四个方向滑动卡片评分")
+                    ? V3L("向四个方向滑动卡片评分") + "：←" + V3L("困难") +
+                        " · ↑" + V3L("良好") + " · →" + V3L("容易") +
+                        " · ↓" + V3L("重来")
                     : V3L("先回忆，再查看答案")
                 self.updateNavigationActions()
             } catch {
@@ -701,7 +642,10 @@ final class ImpressV3ReviewViewController: UIViewController {
         detail.navigationItem.rightBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .done, target: self,
             action: #selector(closeFullQuestion))
+        detail.navigationItem.rightBarButtonItem?.tintColor =
+            ImpressV3Appearance.navigationActionInk
         let nav = ImNavigationViewController(rootViewController: detail)
+        ImpressV3Appearance.styleNavigationBar(nav.navigationBar)
         nav.modalPresentationStyle = .pageSheet
         present(nav, animated: true)
     }

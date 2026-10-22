@@ -84,7 +84,7 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
             overlay.layoutIfNeeded()
             let badge = try XCTUnwrap(overlay.subviews.first)
             XCTAssertEqual(badge.backgroundColor,
-                           ImpressV3Appearance.reviewOverlaySurface)
+                           ImpressV3Appearance.reviewOverlaySurface(for: direction))
             XCTAssertGreaterThanOrEqual(badge.bounds.height, 60)
             func labels(_ view: UIView) -> [UILabel] {
                 let own: [UILabel] = (view as? UILabel).map { [$0] } ?? []
@@ -92,7 +92,7 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
             }
             XCTAssertTrue(labels(overlay).contains(where: {
                 $0.text == name &&
-                $0.textColor == ImpressV3Appearance.reviewOverlayText
+                $0.textColor == ImpressV3Appearance.reviewOverlayInk(for: direction)
             }))
             XCTAssertFalse(overlay.isUserInteractionEnabled,
                 "Overlay may inform but must not grade a card by tapping")
@@ -220,7 +220,7 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
             "Placeholder must not overlap a real draft or enter transmitted text")
     }
 
-    func testRatingGuideIsRevealedOnlyWithCurrentAnswerAndNeverTapScores() async throws {
+    func testSwipeSummaryReplacesFourChipsAndNeverTapScores() async throws {
         let store = try makeRepository()
         let id = UUID()
         let now = Date()
@@ -234,35 +234,27 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
         review.loadViewIfNeeded()
-        let guide = try XCTUnwrap(review.view.subviews.first {
+        XCTAssertFalse(review.view.subviews.contains {
             $0.accessibilityIdentifier == "impress.review.rating-guide"
-        } as? UIStackView)
-        XCTAssertTrue(guide.isHidden)
-        XCTAssertFalse(guide.isUserInteractionEnabled)
+        }, "The redundant chip row and reserved space must be removed")
+        let summary = try XCTUnwrap(review.view.subviews.first {
+            $0.accessibilityIdentifier == "impress.review.rating-summary"
+        } as? UILabel)
+        XCTAssertFalse(summary.text?.contains(V3L("困难")) ?? false)
         let stack = try XCTUnwrap(review.view.subviews.compactMap {
             $0 as? SwipeCardStack
         }.first)
-        let hasCard = try await eventually {
+        XCTAssertTrue(try await eventually {
             stack.topCard?.content is ImMemoryCardView
-        }
-        XCTAssertTrue(hasCard)
-        XCTAssertTrue(guide.isHidden, "No grading legend may be shown before the answer")
+        })
         (stack.topCard?.content as? ImMemoryCardView)?.revealAnswerIfNeeded()
-        let guidanceVisible = try await eventually { !guide.isHidden }
-        XCTAssertTrue(guidanceVisible)
-        XCTAssertEqual(guide.arrangedSubviews.count, 4)
-        let expected = ["hard": V3L("困难"), "good": V3L("良好"),
-                        "easy": V3L("容易"), "again": V3L("重来")]
-        for child in guide.arrangedSubviews {
-            let labels = child.subviews.compactMap { $0 as? UILabel }
-            let label = try XCTUnwrap(labels.first)
-            let direction = try XCTUnwrap(label.accessibilityIdentifier?.split(separator: ".").last)
-            XCTAssertEqual(label.text, expected[String(direction)])
-            XCTAssertEqual(label.textColor, ImpressV3Appearance.reviewRatingGuideInk)
-        }
+        XCTAssertTrue(try await eventually {
+            [V3L("困难"), V3L("良好"), V3L("容易"), V3L("重来")].allSatisfy {
+                summary.text?.contains($0) == true
+            }
+        })
         let events = try await store.reviewHistory(for: id)
-        XCTAssertTrue(events.isEmpty,
-            "Showing a bold rating guide never commits a review event")
+        XCTAssertTrue(events.isEmpty, "Exposing guidance must not submit a rating")
     }
 
     private func makeRepository() throws -> ReviewWCDBRepository {

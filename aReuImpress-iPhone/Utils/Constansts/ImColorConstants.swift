@@ -307,11 +307,16 @@ enum ImpressV3Appearance {
     static let reviewPrimaryInk = UIColor.systemBackground
     // Gesture feedback stays legible over long gray card content at any angle.
     // The outer SwipeCard controls fade; this badge must never be translucent.
-    static let reviewOverlaySurface = UIColor.label
-    static let reviewOverlaySymbol = UIColor.systemBackground
-    static let reviewOverlayText = UIColor.systemBackground
-    static let reviewRatingGuideSurface = UIColor.secondarySystemFill
-    static let reviewRatingGuideInk = UIColor.label
+    /// Four opaque gesture colors reuse the original direction palette.
+    static func reviewOverlaySurface(for direction: SwipeDirection) -> UIColor {
+        direction.toLevelColor
+    }
+
+    static func reviewOverlayInk(for direction: SwipeDirection) -> UIColor {
+        // System red/blue/green carry contrasting black glyphs in both modes.
+        // The neutral Again badge reverses the dynamic label color.
+        direction == .down ? UIColor.systemBackground : UIColor.black
+    }
     // Chat composer follows the same monochrome action treatment as navigation.
     static let chatComposerSurface = UIColor.secondarySystemGroupedBackground
     static let chatComposerBorder = UIColor.separator.withAlphaComponent(0.28)
@@ -562,8 +567,11 @@ enum ImpressV3Appearance {
         static let reviewOverlayContentVInset: CGFloat = 12
         static let ratingLegendHeight: CGFloat = 44
         static let ratingLegendSpacing: CGFloat = 6
-        static let chatComposerRadius: CGFloat = 28
-        static let chatComposerInnerInset: CGFloat = 8
+        static let chatComposerRadius: CGFloat = 24
+        static let chatComposerInnerInset: CGFloat = 4
+        static let chatComposerTextVerticalInset: CGFloat = 6
+        static let chatComposerTextHorizontalInset: CGFloat = 2
+        static let chatComposerGlyphPointSize: CGFloat = 18
         static let answerOptionHeight: CGFloat = 52
         static let maximumSegmentWidth: CGFloat = 440
         static let compactSegmentWidth: CGFloat = 320

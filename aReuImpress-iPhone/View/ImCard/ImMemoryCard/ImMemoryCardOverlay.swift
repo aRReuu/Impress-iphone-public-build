@@ -352,7 +352,7 @@ final class ImpressV3RatingOverlay: UIView {
 
         let badge = UIView()
         badge.translatesAutoresizingMaskIntoConstraints = false
-        badge.backgroundColor = ImpressV3Appearance.reviewOverlaySurface
+        badge.backgroundColor = ImpressV3Appearance.reviewOverlaySurface(for: direction)
         badge.layer.cornerRadius = ImpressV3Appearance.Metrics.reviewOverlayBadgeHeight / 2
         badge.clipsToBounds = true
 
@@ -360,14 +360,14 @@ final class ImpressV3RatingOverlay: UIView {
             withConfiguration: UIImage.SymbolConfiguration(
                 pointSize: ImpressV3Appearance.Metrics.reviewOverlaySymbolSize,
                 weight: .medium)))
-        image.tintColor = ImpressV3Appearance.reviewOverlaySymbol
+        image.tintColor = ImpressV3Appearance.reviewOverlayInk(for: direction)
         image.contentMode = .scaleAspectFit
 
         let text = UILabel()
         text.text = title
         text.font = ImpressV3Appearance.Typography.ratingFeedback
         text.adjustsFontForContentSizeCategory = true
-        text.textColor = ImpressV3Appearance.reviewOverlayText
+        text.textColor = ImpressV3Appearance.reviewOverlayInk(for: direction)
         text.textAlignment = .center
 
         let content = UIStackView(arrangedSubviews: [image, text])
