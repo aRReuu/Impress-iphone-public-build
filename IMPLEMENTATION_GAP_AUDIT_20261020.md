@@ -98,3 +98,11 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 5. **阅读架构比较（待用户同意选型）**：A）只换 `swift-markdown`/MarkdownUI 等原生渲染，适合普通 Markdown AST，却需额外自行实现 Obsidian Dialect、图形、源范围、Excalidraw；不建议单独替代全链。B）复用现有离线 `WKWebView + markdown-it`，统一渲染 DOM 与 CSS tokens、完善真实嵌入、原生来源索引和 Properties 布局；作为低风险基础方案。C）对 Excalidraw 高保真部分，在原生适配与官方 `@excalidraw/excalidraw` 离线只读 exportToSvg/轻量视图之间，基于覆盖率、离线包体、启动/内存、iPhone13 性能、元素命中选择、许可和来源映射完成技术试验后再决策。**禁止同时长期维护两套不一致的画布业务引擎**；共享事实身份/坐标/选材契约，渲染可替换。
 
 6. **验收阻断**：未能取得当前安装包完整 SHA、真实 Excalidraw 示例和同设备屏幕记录前，无法归因到某一条代码。当前仅锁定用户**要实现什么**及候选方案，正式代码不动、旧 PASS 不挪用、新实机回归保持 NOT_RUN。保留独立 Vault 只读、安全型 HTML、不运行插件 JS/Dataview、禁止 CDN、无自动外网访问及 `ImVaultGuardedWrite.productionWriteEnabled = false`。
+
+### G2 技术定位补录：为何源码有阅读器却仍出现截图中的巨大卡片、偏移与画布失真
+
+- **叠层几何证据**：`ImVaultDocumentController` 在 header 单独放 `documentTitleLabel` 和 `propertyPanel`，正文再给 `richView` 配统一 `screenInset`；`ImpressV3Appearance.styleVaultDocument(richView)` 明确为整块正文设置 `surface` 和 `Radius.card`，而 `markdownReaderCSS` 又设置 `.markdown-body` 的 `padding: 24px 20px 44px`、标题 `margin-top: 1.45em`，`markdown-index.html` 另外维护嵌套列表/CSS。多个不同坐标系统与大内边距叠加，是截图「每篇笔记被大卡片框住、文字密度低、列表层次错位」的可查证原因之一；新验收应删除整页大卡片外观、采用统一 viewport 与 typography tokens，测量一次排版，而非盲目加 CSS 权重。
+
+- **画布保真度确有技术上限**：现有 `ImpressExcalidrawNativeView` 将每个元素变成 `UIButton`，`CAShapeLayer` 只以简单 `UIBezierPath` 绘制矩形/椭圆/菱形/折线/箭头/手绘直连线；文本使用系统 body font，颜色处理主要针对 7 位十六进制值，复杂粗糙笔触、绑定文字、曲线/笔压、箭头端样式和插件式多层图形未必保真。因此“已经绘出形状”不能当成“达到 Excalidraw/Obsidian 级渲染”；优先做实际真实合成场景与官方 SVG 输出的画面对照，再决定采用高保真离线渲染器还是继续完善原生实现。
+
+- **潜在格式误判（需真实文件验证）**：当前 `ImVaultDocumentFormat.detect(relativePath:)` 仅以 `.excalidraw.md` 后缀识别画布；若 Obsidian 插件生成的是普通 `.md` 文件却内含 `excalidraw-plugin: parsed` + 有效 Drawing code fence，则会被路径分类为普通 Markdown 并在阅读视图显示 `Excalidraw Data`。此为**代码可证的潜在失配路径**，尚不能断言就是用户截图文件：必须验证完整相对文件名/合法 drawing payload/安装 SHA。新增有限只读内容特征判别时，要同步阻止把 Excalidraw 封装文档误交给普通 Markdown 写入器；`tags: excalidraw` 单独出现不应自动视为有效画布。具体签名方案仍需用户确认技术路径后实施。

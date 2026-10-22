@@ -259,3 +259,5 @@ G4 同最终 SHA 全套 CI/证据/QA IPA；只有外部设备/Keychain/Files/授
 | SAFE-03/CHAT-06 | `ImVaultSafetyProjection` / `ImpressVaultEmbedLocator` / 现有 Chat 选材恢复 | 继续严格确认预览映射/范围/版本、无网络/无写入扩权；高保真引擎仅替换显示层 | RDR-09/10/11/15 / **REGRESSION_REQUIRED** |
 
 **优先级**：先修正与用户指示矛盾的文档（已提交则只表示 SPEC_FROZEN）→ 阅读技术试验和选型讨论 → 实际代码 UI/渲染施工 → 自动化与相同 SHA 打包 → iPhone13 原图实测。不得利用旧 CI、文档状态或旧安装包宣称完成。新截图为用户私有输入，不同步到公开仓库。
+
+**G2.1 已核源码细节（非完成状态）**：`ImpressV3Appearance.styleVaultDocument` 使整篇 WK 读者形成二次深色圆角卡片；`markdownReaderCSS` + `markdown-index.html` + 原生 header 叠加间距。Excalidraw Native 现按元素生成 `UIButton/CAShapeLayer` 和简化 UIBezierPath（非官方 RoughJS 绘图）；`ImVaultDocumentFormat.detect` 仅识别 `.excalidraw.md` 后缀而不检测普通 `.md` 有效绘图 payload。必须在 RDR-13/14/16 校验「普通 .md 内有效插件图形」「真实粗糙曲线/箭头/字体保真」「无巨型嵌套圆角卡片」，但这些是 TECH_REVIEW_REQUIRED，不能自行将猜测的用户文件后缀写为事实。

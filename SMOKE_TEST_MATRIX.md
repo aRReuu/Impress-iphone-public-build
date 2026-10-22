@@ -300,7 +300,7 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 | U19 | 「题干全文」及所有 UIKit 导航/Modal 顶部（含笔记/源码/编辑/Chat）动态中性色；System、Light、Dark、文字大字号；未误改 Tab/Segment 选中蓝 | NOT_RUN |
 | U20 | 笔记一级页不存在 `UIRefreshControl`、下拉刷新触发/进度 UI；上下正常滑动不卡顿，前后台/页面返回有变化自动更新、没变化不 reload 整表 | NOT_RUN |
 | U21 | iCloud/Provider 外部增删改名/嵌套目录与 Vault 更换/撤权：异步版本核验、局部 diff、取消旧请求、保留搜索/折叠/滚动位置；不显示另一 Vault 旧内容 | NOT_RUN |
-| RDR-13 | 真正的 `.excalidraw.md` + `compressed-json` + 独立 `.excalidraw` + 普通 Markdown 中 `![[...excalidraw.md]]`：实际显示绘图节点/图形（不是 `Excalidraw Data` 源文本），局部缺件可诊断 | NOT_RUN |
+| RDR-13 | 原生 `.excalidraw`、`.excalidraw.md`、**普通 `.md` 中有合法 `excalidraw-plugin` 元数据及有效 Drawing fence**（只读特征识别，单纯标签不触发），加压缩 JSON 与 `![[...]]`：必须出现真实图形；带曲线/箭头/嵌字/旋转/组的保真对照和缺件局部失败，不得显示 `Excalidraw Data` 充当图纸，且不得为源格式新增写权限 | NOT_RUN |
 | RDR-14 | 中文 CSS 笔记：Props、H1/H2、嵌套有序与无序、代码、软硬换行、缩进导引线、列表项目含多段落；同一 fixture 下比对 Obsidian 参考截图结构与像素层级 | NOT_RUN |
 | RDR-15 | Excalidraw 元素/组/区域、Canvas 节点、Mermaid、Markmap 的实际渲染成功率 + 源身份/SHA/真实范围 + 授权 Chat 往返；不可只凭桥接 `ready` 判定 | NOT_RUN |
 | RDR-16 | iPhone13（记录安装 IPA 完整 SHA/Actions Run）与同字号、主题、宽度的 Obsidian 参考逐项对比：Properties 不遮挡、无重复标题、整页不出现巨型容器边框；设备缺失标 DEVICE_BLOCKED | NOT_RUN |
