@@ -3,6 +3,7 @@ import ImpressReviewCore
 
 enum ImpressCalibrationStoreError: Error {
     case conflictingDaySnapshot
+    case closedDayImmutable
     case unsupportedVersion
     case durabilityFailure
     case invalidArchive
@@ -64,6 +65,15 @@ actor ImpressCalibrationLocalStore {
         // Validation rejects malformed dates, duplicate outcomes, and invalid moods.
         _ = try checkIn.finalizedScore()
         var state = try load()
+        // The persisted record is authoritative, not a mutable UI snapshot.
+        // Identical retries are idempotent; every different CLOSED record
+        // (including adjustments, mood and legacy migration) is immutable.
+        if let old = state.days[checkIn.dayID], old.isComplete {
+            guard old == checkIn else {
+                throw ImpressCalibrationStoreError.closedDayImmutable
+            }
+            return
+        }
         if let old = state.days[checkIn.dayID],
            old.goalsSnapshot != checkIn.goalsSnapshot {
             let todayID = CalibrationDayCheckIn.dayID(for: Date())

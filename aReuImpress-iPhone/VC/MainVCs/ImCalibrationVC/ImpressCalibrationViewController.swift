@@ -1,7 +1,7 @@
 import UIKit
 import ImpressReviewCore
 
-/// Five-indicator daily check-in + week/month/year trends.
+/// Four-indicator daily check-in + week/month/year trends.
 /// No separate FSRS scoring, no native AI, no edits to Obsidian files.
 @MainActor
 final class ImpressCalibrationViewController: UITableViewController {
@@ -204,33 +204,44 @@ final class ImpressCalibrationViewController: UITableViewController {
         }
     }
 
-    override func numberOfSections(in tableView: UITableView) -> Int { 3 }
+    // The entire assessment section ceases to exist after a durable close.
+    // Extra adjustments remain visible but are read-only for CLOSED days.
+    private var dayClosed: Bool { checkIn?.isComplete == true }
+    private var extraSection: Int { dayClosed ? 0 : 1 }
+    private var reminderSection: Int { dayClosed ? 1 : 2 }
+
+    override func numberOfSections(in tableView: UITableView) -> Int {
+        dayClosed ? 2 : 3
+    }
 
     override func tableView(_ tableView: UITableView,
                             numberOfRowsInSection section: Int) -> Int {
-        switch section {
-        case 0: return CalibrationIndicator.behaviorIndicators.count
-        case 1: return 2
-        default: return 1
+        if !dayClosed && section == 0 {
+            return CalibrationIndicator.behaviorIndicators.count
         }
+        return section == extraSection ? 2 : 1
     }
 
     override func tableView(_ tableView: UITableView,
                             titleForHeaderInSection section: Int) -> String? {
-        switch section {
-        case 0: return V3L("今日四项 · 点击进行评估")
-        case 1: return V3L("额外行为修正（每种最多一次）")
-        default: return V3L("未完成提醒")
+        if !dayClosed && section == 0 { return V3L("今日四项 · 点击进行评估") }
+        if section == extraSection {
+            return dayClosed ? V3L("额外行为修正 · 已结算（只读）") :
+                               V3L("额外行为修正（每种最多一次）")
         }
+        return V3L("未完成提醒")
     }
 
     override func tableView(_ tableView: UITableView,
                             titleForFooterInSection section: Int) -> String? {
-        switch section {
-        case 0: return "睡眠、运动、饮食、阅读：完成 +1，未完成 -1，休息或豁免 0。"
-        case 1: return "仅记录未在四项任务中计过分的额外行为，避免重复扣分。"
-        default: return "经系统授权后，在 20:00、22:00 提醒；完成当日四项后撤销剩余提醒。iOS 允许用户清除系统通知，无法创建永久置顶通知。"
+        if !dayClosed && section == 0 {
+            return "睡眠、运动、饮食、阅读：完成 +1，未完成 -1，休息或豁免 0。"
         }
+        if section == extraSection {
+            return dayClosed ? "当日 CLOSED：不得修改评分与额外修正。" :
+                               "仅记录未在四项任务中计过分的额外行为，避免重复扣分。"
+        }
+        return "经系统授权后，在 20:00、22:00 提醒；完成当日四项后撤销剩余提醒。iOS 允许用户清除系统通知，无法创建永久置顶通知。"
     }
 
     override func tableView(_ tableView: UITableView,
@@ -239,8 +250,11 @@ final class ImpressCalibrationViewController: UITableViewController {
                                                  for: indexPath)
         var content = UIListContentConfiguration.subtitleCell()
         content.secondaryTextProperties.numberOfLines = 2
-        cell.accessoryType = .disclosureIndicator
-        if indexPath.section == 0 {
+        cell.accessoryType = dayClosed && indexPath.section == extraSection
+            ? .none : .disclosureIndicator
+        cell.selectionStyle = dayClosed && indexPath.section == extraSection
+            ? .none : .default
+        if !dayClosed && indexPath.section == 0 {
             let kind = CalibrationIndicator.behaviorIndicators[indexPath.row]
             let names: [CalibrationIndicator: String] = [
                 .sleep: V3L("睡眠"), .exercise: V3L("运动"),
@@ -262,7 +276,7 @@ final class ImpressCalibrationViewController: UITableViewController {
                 content.secondaryText = record.goalsSnapshot.title(for: kind) + " · " + status
             } else { content.secondaryText = V3L("载入中…") }
             cell.accessibilityIdentifier = "impress.calibration.indicator." + kind.rawValue
-        } else if indexPath.section == 1 {
+        } else if indexPath.section == extraSection {
             let positive = indexPath.row == 0
             content.text = positive ? V3L("额外加分 +1") : V3L("额外减分 -1")
             content.image = UIImage(systemName: positive ? "plus.circle" : "minus.circle")
@@ -285,16 +299,17 @@ final class ImpressCalibrationViewController: UITableViewController {
                             didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         guard !loading else { return }
-        switch indexPath.section {
-        case 0:
-            let kind = CalibrationIndicator.behaviorIndicators[indexPath.row]
-            chooseOutcome(for: kind)
-        case 1: editExtra(positive: indexPath.row == 0)
-        default: changeReminderMode()
+        if !dayClosed && indexPath.section == 0 {
+            chooseOutcome(for: CalibrationIndicator.behaviorIndicators[indexPath.row])
+        } else if indexPath.section == extraSection {
+            if !dayClosed { editExtra(positive: indexPath.row == 0) }
+        } else if indexPath.section == reminderSection {
+            changeReminderMode()
         }
     }
 
     private func chooseOutcome(for kind: CalibrationIndicator) {
+        guard !dayClosed else { return }
         let menu = UIAlertController(title: "评估 · " + (checkIn?.goalsSnapshot.title(for: kind) ?? ""),
                                      message: nil, preferredStyle: .actionSheet)
         let options: [(String, CalibrationTaskOutcome)] = [
@@ -328,6 +343,7 @@ final class ImpressCalibrationViewController: UITableViewController {
     }
 
     private func editExtra(positive: Bool) {
+        guard !dayClosed else { return }
         let alert = UIAlertController(title: positive ? V3L("额外加分") : V3L("额外减分"),
                                       message: "只记录计划之外的具体行为，不能重复计算今日任务。",
                                       preferredStyle: .alert)

@@ -160,6 +160,44 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
         XCTAssertEqual(history.count, 1)
     }
 
+    func testClosedDayRejectsDifferentLedgerWritesAndPreservesDurability() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cal-closed-" + UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let ledger = ImpressCalibrationLocalStore(
+            storageURL: directory.appendingPathComponent("ledger.json"))
+        var day = try await ledger.checkIn()
+        for kind in CalibrationIndicator.behaviorIndicators {
+            try day.setOutcome(.completed, for: kind)
+        }
+        try day.setManualAdjustment(positive: true, reason: "计划外运动")
+        try await ledger.save(day)
+        XCTAssertTrue(day.isComplete)
+        let before = try await ledger.archiveData()
+        // Repeated button taps are truly idempotent, not a second write.
+        try await ledger.save(day)
+        XCTAssertEqual(before, try await ledger.archiveData())
+
+        var changed = day
+        try changed.setOutcome(.missed, for: .reading)
+        do {
+            try await ledger.save(changed)
+            XCTFail("CLOSED daily record must reject direct actor overwrite")
+        } catch ImpressCalibrationStoreError.closedDayImmutable {
+            // Expected.
+        }
+        var changedExtra = day
+        try changedExtra.setManualAdjustment(positive: false, reason: "冲动修改")
+        do {
+            try await ledger.save(changedExtra)
+            XCTFail("CLOSED extra score must be immutable")
+        } catch ImpressCalibrationStoreError.closedDayImmutable {
+            // Expected.
+        }
+        XCTAssertEqual(before, try await ledger.archiveData())
+        XCTAssertEqual(try await ledger.history(), [day])
+    }
+
     func testCalibrationArchiveRoundTripAndCorruptionRejection() async throws {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("cal-archive-" + UUID().uuidString, isDirectory: true)
