@@ -1,5 +1,7 @@
 # Impress · 校准器既有实现记录与 V1.1 入口迁移契约
 
+> **当前规则提示**：文末 2026-10-23 四项睡眠/运动/饮食/阅读 + 完成后 CLOSED 锁定优先于本文旧五项/x/5 说明。
+
 > 产品权威唯一为 [PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md)。本文件不再自称独立业务权威。唯一工作分支`feature/impress-duplex-loop-v1`；旧`feature/impress-vault-device-write-qa`与`feature/impress-v3-r04-2-build`只属历史，禁止据其施工。
 > 2026-10-21 追加批准只读 B 方案周/月/年桌面 Widget（Small/Medium），归 NAV-05.w/SAFE-08.w；第三 Tab/既有校准数据/原周月年应用内图不变，不恢复闪卡首页周图。CAL-01～15 **新方案仍 DEFERRED**（计分公式、迁移、新图表、新提醒未解冻）；原定稿阶段仅改文档，后续已获准实施，当前二维同源 Widget 代码见 §9。
 
@@ -54,3 +56,9 @@
 ## 9. 2026-10-21 · 同源 Cartesian 图表实际代码（新提交，完整 CI 待验）
 
 `35dd7a0` 在唯一产品稿替换先前状态点／矩阵展示为同源二维折线图；`7c28b74` 抽取 App 原 `ImpressCalibrationTrendChart.draw` 内 CoreGraphics 几何为 `CalibrationCartesianTrendRenderer.draw`，原 App 实际调用同一绘图函数，WidgetKit 经 `CalibrationCartesianTrendRenderer.image` 绘制后嵌入 SwiftUI。`CalibrationWidgetProjection.cartesianPlot` 只使用既有只读快照的有效净分，周/月7日均线、年3月平滑依旧按原校准图口径，不对部分/无得分/全豁免虚构0；行为评估覆盖数据仍置于主标题。已添加纯 Core 缺失/正负分/月均/异常时区测试，**此处只登记 CODE_SUBMITTED；最终 CI/Widget 六尺寸设备截图/真实侧载未确认前不得标 TEST_PASS/DEVICE_PASS**。
+
+## 2026-10-23 · 最新冻结：四项评分、当日 CLOSED 和同源 Widget（覆盖历史五项口径）
+
+2026-10-21 §2/§7 中旧五项、情绪门禁、x/5、CAL 新项目一律 DEFERRED 是**历史基线**。当前明确生效四项为 **睡眠、运动、饮食、阅读**；completed +1、missed -1、excused 0、unrecorded 表示待评估，未记录不得补零。情绪和自定义的老数据保留历史兼容，不误译为新的阅读，原先额外加/减分最多各一次和既有算法保持（仅当日关闭前允许修正），不得批量重写历史账本。App 与 Widget 显示今日 x/4，灰色原始得分线/蓝色均线、零线、断线、周/月/年几何仍共享同一个 CalibrationCartesianTrendRenderer。
+
+**CLOSED 是保存层契约**：当天四项均明确已处理且 LocalStore 保存并回读成功才进入 CLOSED。当天四项录入 Section（包括 header/footer）隐藏，详情仍显示净分/覆盖率/二维图、只读额外修正；不得通过直接 store.save、旧 UI、并发提交、当天目标变化、通知路由或 Widget 写入重开/重算。actor 在修改前以当前持久旧记录的 isComplete 拒绝不同结果，允许完全相同的幂等重试；存储失败不隐藏录入状态。跨日、时区、迁移、备份/恢复与 AppGroup 只读快照必须由已有数据权威协调，通知完成当天不重复催促。新增子测试见 SMOKE 的 CAL.day-close 与 CAL.day-durability；此前测试与视觉 PASS 不证明新规则已完成。

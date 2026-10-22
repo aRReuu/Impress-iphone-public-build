@@ -1,5 +1,7 @@
 # Impress — Public iPhone Development Branch
 
+> **最新状态见文末 2026-10-23 交接**：Chat 已授权隔离 POC、生产渲染引擎未定版；Excalidraw P0 与校准器四项当日 CLOSED 需求已定版，历史 B0/五指标说明不能覆盖最新要求。
+
 > **V1.1 开工前定稿，非功能交付。** 唯一产品权威：[PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md)。本轮只更新现有稿件，新界面/复杂格式尚未据此实施或验收。
 
 唯一工作仓库为`aRReuu/Impress-iphone-public-build`，唯一开发分支`feature/impress-duplex-loop-v1`；不改main/私库，不创建分支，不同步私库、不替换原版AppIcon。`SOURCE_MANIFEST.json`中的历史上游只供追溯，不是修改私库的授权。
@@ -50,3 +52,11 @@ V3 WCDB为卡片/FSRS/Chat唯一权威；内容revision与调度revision独立�
 - `![[同 Vault 文件.md]]` 与 `![[同 Vault 文件.md#章节]]` 在明确授权、唯一文件身份与有限体积下支持一层只读展示；第二层引用不继续读取，`#^块 ID` 未建立可靠块定位时明确拒绝，不猜测来源。内嵌文件变化可独立刷新显示投影；正式生产 Vault 写入仍关闭。
 - 离线 Markdown 主阅读器以结构化回执 `ready:g=<成功图形>/<预期图形>:m=<实际 KaTeX 节点数>` 提供测试诊断，不能用空 WebView 的 ready 作为成功证据。
 - 真实 iPhone13、Files/iCloud Provider、App Group 签名和与 Obsidian 私密截图的人工像素/布局核验在此执行环境均为 **DEVICE_BLOCKED**，不因此篡改自动化 PASS 的范围；未完成的大型动态插件、块定位与依赖循环仍明确保留安全降级。
+
+## 2026-10-23 · 最新交接：定版与待选型的清晰分界
+
+**请从唯一产品稿末尾《V1.1 下一阶段交接》开始阅读**，旧的 B0、三 Tab、五指标、Chat 只改外观等历史信息不得覆盖最新决策。用户已授权在公开分支 feature/impress-duplex-loop-v1 **实际施工隔离 Debug Chat POC-01/02**，但尚未确定最终 Chat 渲染/布局库、没有授权把 POC 直接替换为生产 Chat。Chat 视觉目标是 ChatGPT iPhone 完整对话体验（参考 Gemini/DeepSeek/Claude 的复杂流式表达），底部 + 的相册/文件/拍照为方案 B；旧会话、审批、Vault、WCDB、FSRS 均不动。详细技术候选、路径与证据门禁在执行矩阵、差距审计及 SMOKE 最后章节，不新建另一套产品稿。
+
+**其他已定稿、可独立施工**：Excalidraw P0 必须真实显示中文任务文字/绑定文本与复杂图形，不是只有几何边框；校准器 x/4 四项结算成功后当日 CLOSED，隐藏四项 Section 并在持久层禁止二次修改，Widget 同源二维图不变；保留笔记 Markdown 连续阅读、四 Tab、全局原生导航/Flashcard UI 回归与原验收矩阵。
+
+本次交接前的最后已核源码 HEAD 为 6f2370dadb473ebb4c2987f517dfc705e29991a8，最近完整成功旧 Run 39782229904 对应 d9711284bfe2。**本次是文档同步，并非新的 POC/Excalidraw/CAL 源码已完成或 CI/IPA 已通过**。后续提交必须在同一精确 SHA 运行可验证的 Portable Core、Native XCTest、XCUITest、Debug/Release Simulator、ARM64 与 IPA ZIP/Widget 检查；真实设备单独登记 DEVICE_BLOCKED。生产 Vault 禁写 constant = false、不改私库/main、不新建删除分支、原 AppIcon 不动。

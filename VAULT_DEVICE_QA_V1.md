@@ -1,5 +1,7 @@
 # Impress · V1.1 设备、复杂文档与受控写回 QA
 
+> **当前有效校准器验收为四项 x/4**，请以文末 2026-10-23 更新覆盖早期五项测试步骤；Chat POC 暂不代替生产/设备验收。
+
 > 产品权威：[PRODUCT_REQUIREMENTS_CURRENT.md](PRODUCT_REQUIREMENTS_CURRENT.md)。仅指定开发分支`feature/impress-duplex-loop-v1`。本次是QA规程定稿，不是已执行设备报告。物理iPhone13、真实Keychain/HTTP、Files/iCloud仍须独立证据。
 > `ImVaultGuardedWrite.productionWriteEnabled = false`。Release不能修改正式Obsidian原件；Debug也不获日常Vault写权限。能显示/选择复杂文档不等于授权修改该格式。
 
@@ -74,3 +76,11 @@ Excalidraw 仅从当前授权文档读取合法受限数据，外部图片、SVG
 7. 逐项记录用户授权设备的 iOS 版本、实际签名配置、主 App/Extension entitlement（**不要贴私钥/完整 profile**）、Git SHA、IPA 文件 SHA-256、测试日期、六布局原生截图、复现步骤和结果。没有这些证据时 W01–W15 只能 `CODE_DONE` 或 `SIMULATOR_PASS`，不能升 `DEVICE_PASS`。
 
 真实 iPhone13 的 STT 麦克风、Files/iCloud 实际权限、Keychain/OpenCode Free HTTPS 和正式 Vault 安全限制仍是其它独立验收项；不能因为 Widget 恢复显示就一并标绿。
+
+## 2026-10-23 · 当前有效 QA 状态：Chat POC、四项校准与 Excalidraw
+
+本节覆盖上方历史 Widget 检查步骤中的“当日五指标、x/5”说法：**当前有效评分项仅睡眠、运动、饮食、阅读四项（x/4）**。旧 custom/mood 只是兼容旧历史记录，不可作为新日期第五项，不能把缺失补 0。四项全部明确结算并在唯一 checkins-v1.json 成功保存回读后，UI 隐藏整个四项 section，存储层 CLOSED 当日任何更改拒绝，额外修正不能再编辑；Widget 周/月/年原二维同源图/Small/Medium 六布局仍按最小只读 App Group 投影回归。不能把源码 entitlement 相同等同于侧载签名授权已成功。
+
+下一阶段 Chat **独立 Debug POC** 只允许合成 Mock 消息、文件及截图，不传用户任何当前聊天历史、Vault、截图或密钥到公开仓库，也不能运行真实 Provider 费用请求；不更改正式 Chat 数据库。iPhone13 上以相同 Fixture 对照流式输入、键盘/候选、轻重 Markdown、上下滚动、文件预览和最少触控 44pt；用 Instruments/OSSignpost 确证延迟/卡顿/内存/复用，设备不可用标 DEVICE_BLOCKED，不能用模拟器帧数填设备 PASS。
+
+独立 Excalidraw 视觉验收须核实源 text/bound text 是否真正以正确颜色、字形、几何关系显示；用户私有对比图只可在授权设备作为人工观察材料，不入 GitHub。此前“看见边框即成功”无效。所有测试以精确代码 SHA+Run+Fixture+证据与真实结论逐项登记；保留生产 Vault 绝对禁写、独立 Debug QA Vault 受限写回及现有 F01～F13/18步。

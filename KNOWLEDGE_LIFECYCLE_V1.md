@@ -66,3 +66,11 @@ G1界面→G2格式/选材→G3 P0-A～D及真实UI闭环→G4同SHA自动化/IP
 Excalidraw 解码使用有界 LZ-String Base64（`compressed-json`），普通 JSON 与 Obsidian 封装沿用 `ImVaultFileIdentity`。图形元素选材预览保留真实 Vault ID、相对路径、源 SHA 与元素 ID；Chat 发送前重新读取真实源并重算结构摘要，只传经明确确认的文本/几何结构，不传图片像素。旧 `WCDBV3ChatContextReference` 继续兼容，以 `sourceFormat=excalidraw-structure` 区分新来源。显示图形不等于模型获得视觉输入能力。
 
 恢复策略新增 F03/F04 的 *只读人工判定*：保存 `applying` 意图后中断，会阻断执行按钮；人工核查已批准快照与 Vault SHA 或卡片内容版本，能证明已应用才补回执，未证明则保留未知或冲突；核查路径绝不自动重放。当前为局部实现，Mermaid/Markmap、18 步 UI E2E 和整组异常强杀测试仍未完成。
+
+## 2026-10-23 · Chat 技术原型与现有知识闭环的边界
+
+产品唯一权威仍为 PRODUCT_REQUIREMENTS_CURRENT.md 最新章节。后续 Chat POC 只研究 **对话 UI 与离线合成流式呈现**，不是第二套知识生命周期、AI 会话数据库或模型路由器；POC-01/02 不允许修改既有 WCDBV3ChatSession、WCDBV3ChatMessage 的编解码格式和历史、墓碑、备份、审批/撤销状态。使用仅 Debug/测试可达的纯合成 PresentationModel、独立消息 block ID 与模拟事件源。原 sourceID/sourceRevision/UTF8 范围、approved-material 范围和生产 Vault 回读门禁原样保持。
+
+未来真实集成前须设计**单一来源事实与双层投影**：原始完整 message 文本 + stable messageID 为可恢复的权威；增量 AST、UI Block ID、测量缓存和渲染状态均是可重建显示投影。来自 Provider 的不完整文字不可擅自被标记 completed，更不能进入“指定已完成 AI 回复→局部建议→双目标审批→回读”写入链。停止、异常、旧请求回调、切换 Provider、删除会话与冷启冲突，都必须沿用已有 CAS/墓碑/已批准范围，明确区分“只读可见的部分内容”和“可授权提交的完整答复”。所有 POC 网络请求为 Mock 零费用。
+
+系统附件方案 B 以后接生产必须将相册/文件/拍照的本地文件与已有 Vault 结构材料分开建身份及权限；用户只挑选未发网，向 Provider 实际发出的结构遵循每家模型/端点能力矩阵。显示图像不等于模型实际已获得视觉输入；无法保证同意范围或能力时安全拒绝。原 Chat、卡片、笔记、FSRS 和双目标提案均不得因渲染器替换而重建。

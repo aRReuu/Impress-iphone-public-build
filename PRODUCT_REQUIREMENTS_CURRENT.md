@@ -1,5 +1,7 @@
 # Impress · 当前唯一产品需求与执行契约
 
+> **2026-10-23 当前生效交接索引**：请优先阅读文末《V1.1 下一阶段交接》。Chat 产品目标及隔离 POC 范围已确认，但最终 Chat 技术选型仍 OPEN；Excalidraw P0、校准器四项 CLOSED 已冻结。先前同模块相反表述只作历史。
+
 > **版本：V1.1 · 当前唯一需求权威（已进入实施与分层验收）。** 用户最新指示 > 本文件 > 执行矩阵 > 架构/验收说明 > 历史记录。旧开工前仅更新文档的门禁已由后续用户施工授权取代；需求确认不等于功能或真机验收通过。
 > **唯一仓库/分支：** `aRReuu/Impress-iphone-public-build` / `feature/impress-duplex-loop-v1`。原定稿代码基线：`b7f5101187e37cffca87091bfd665eeaa94b9f59`，当时 CI Run `39443303363`；后续已有实施并于 `355656de` / Run #100 获得分层 CI 成功。二维 Widget 最新代码为 `7c28b74`，其完整 CI #39600533287 正在进行；开工前文件口径只保留作为历史证据，任何验收须用对应实际 SHA。
 > **安全：** 不修改 main/私库，不新建分支，不用 Remote Desktop Commander，不 reset/clean/强推/删除历史，不提交私人笔记、截图、数据库、Key、证书；不替换原版 AppIcon、不自动收费。`ImVaultGuardedWrite.productionWriteEnabled = false`。只允许独立临时 fixture/明确授权的 Debug QA Vault 测试写入。
@@ -398,3 +400,37 @@
 - **技术可用性原则**：保留消息持久状态唯一事实权威；流式事件和屏幕刷新分离；使用稳定 messageID、仅可见单元/未封闭 Markdown 尾部更新、后台解析与有界缓存，滚动不能强制回到底部；文本、代码、数学、表格、附件均有可靠布局和离线/来源约束。测试包括长会话、快速增量、混合输入法、键盘多次开闭、前后台切换、取消/失败/冷启动和内存回收。候选库自述的 benchmark 不得当作本机性能 PASS。
 
 **仍然定版的非 Chat 范围**：Excalidraw 的 P0 图内文本/视觉保真门禁、四项校准当日 CLOSED 持久化不可修改及 section 隐藏、原阅读器和四 Tab 安全范围；均不因 Chat 暂缓选型而变回 OPEN。允许独立施工已确认的非 Chat 功能，但不得擅自确定 Chat UI 引擎或更改该模块源码。Chat 当前状态为 `PRODUCT_REFERENCE_CONFIRMED / TECH_DESIGN_OPEN / CODE_NOT_CHANGED_THIS_TURN`。
+
+## 2026-10-23 · V1.1 下一阶段交接：产品定稿与 Chat POC 施工授权
+
+本节是**截至本次交接最新生效的执行口径**，覆盖同一主题中较早的“Chat 仅改外观、不可修改代码”“Chat 技术已经定版”和“所有 CAL 项目仍 DEFERRED”等相反表述。早期章节是历史，不作当前施工命令。原有 **85 个稳定主需求 ID、ACCEPT-01～12、F01～F13、U01～U21、RDR-01～RDR-22、Widget W01～W15** 及相关证据均不得删除/重编号。本节不代表业务源码已施工或通过 CI。
+
+### 决策状态（必须区分三个不同层级）
+
+| 主题 | 用户已经确认 | 仍未决定 / 不可冒充 |
+|---|---|---|
+| Chat 产品目标 | ChatGPT iPhone 作为完整视觉与交互主基准；Gemini、DeepSeek、Claude 可参考结构化内容、流式交互和多模态细节；取消“我/AI”标签、整行背景等传统 IM 呈现 | 不存在已批准的某个具体 UIKit/SwiftUI/第三方框架或可照搬的闭源实现 |
+| Chat 附件 | **方案 B**：输入区“+”提供相册、文件、拍照；笔记、卡片、章节、图形材料留在顶部二级菜单 | Provider 能力矩阵、具体附件编码与权限实现须在集成阶段通过独立测试；选择附件不代表已发送/已被模型理解 |
+| Chat 技术工作 | **授权实际开发隔离的 Debug/合成数据 POC-01～POC-02**，其验证范围与安全边界本节冻结，后续可按测试结果推进 POC-03～POC-06 | **最终 Chat 生产架构仍为 TECH_DESIGN_OPEN**；原型代码/测试通过不得自动替换正式 Chat 或宣称完整交付 |
+| Excalidraw | P0；不仅轮廓，还必须有可读的中文任务文字、绑定文字、图层/箭头/图片；已有来源核验不可破坏 | 官方 SVG 或完善原生绘制二选一仍需相同图纸 A/B；未测不能标高保真 PASS |
+| 校准器 | 睡眠、运动、饮食、阅读四项有效结算后且成功持久化，当日 CLOSED；隐藏四项 section（包含 header/footer），当日不可改分/额外修正；结果/二维图/Widget 保留 | 旧五指标、x/5、情绪/自定义是历史兼容，不是当前界面；关闭不可仅依赖隐藏控件 |
+
+### Chat POC 技术工作：已经准许施工的范围
+
+1. **POC-01（第一个必做可运行切片）**：在指定公开开发分支内构建 Debug-only 或独立测试宿主的真实交互式 AI 对话界面；不能替换生产 Chat。采用完全合成消息与 Mock Provider，不依赖 Key、付费模型、真实 Vault。用户消息右侧气泡、AI 连续正文无角色标签、可变高度、自适应、主纵向滚动、原生单一 UITextView Composer（Apple STT 不加第二状态机），可操作发送/停止模拟状态。优先以 UIKit UICollectionView + stable ID 建立基准实现，可与 ChatLayout 做 A/B；技术库还未冻结。
+2. **POC-02（同一最小垂直切片）**：离线流式回放，展示真实增量文本；一条 AI 回复分解为可增量更新的段落、标题、列表、代码块、表格、公式等类型化内容块。已封闭块稳定、开放尾块按需更新，发送/接收事件与屏幕刷新解耦。验证任意 Unicode/UTF-8、中文/emoji、未闭合 Markdown 围栏及不完整公式；最终解析与完整文本的一次性解析语义等价。测试连接 UI，不仅 Core 单测；不把模拟打字动画冒充真实 Provider SSE。
+3. **POC-03～04（POC-01/02 合格后）**：键盘与安全区、Composer 动态高度、跟随底部/主动上滑保位/历史定位、代码与表格横向滚动、文本选择/复制、图片/文件本地合成预览、取消/错误/重试、冷启动恢复模拟等。所有交互必须真正可触达，不只做布局快照。
+4. **POC-05（原型真实性能门禁）**：相同 Fixture 下对比 UIKit 原生 UICollectionView/ChatLayout、增量解析路径及必要时的单个受控离线 WKWebView 备选；报告 0/100/1,000/5,000 消息、1KB/16KB/64KB 回复，流式高峰、滚动锚点、CPU/主线程阻塞、内存峰值/回落和包体变化。只能将有来源的 Instruments/自动化结果标 PASS；iPhone13 缺实证标 DEVICE_BLOCKED，不得编造固定 60fps 成绩。
+5. **POC-06（方案定版门禁）**：将功能正确性、视觉比对、可达性、性能、许可证及依赖体积放在一张对比表；明确选择消息列表、增量 AST、富文本 Presenter、滚动控制、状态恢复的唯一实现组合。在用户仍要求讨论期间，原型成功不自动构成对正式 Chat 生产迁移的批准。
+
+候选依据与限制：ChatLayout 是布局组件，不含 Composer/键盘/Markdown；Microsoft SwiftStreamingMarkdown 接收增长的全文 snapshot 并重新解析，不天然只增量解析尾部；RillCore 的 commitIndex/NodeID 增量 AST 值得 A/B，但社区成熟度尚需验证；Textual 适合富文本/选择、不等于增量解析引擎；Oriveo AGPL 仅限研究架构，**未经许可证审查不得复制**。不把多个 Markdown 库简单叠加导致两套内容事实权威；不能为普通回复的每条消息创建独立 WKWebView。
+
+**数据与交付门禁**：WCDB session、messageID、FSRS、来源身份、原 Vault SHA、Chat 批准/回读/撤销/墓碑与当前 Provider 费用授权机制不得被 POC 修改或迁移。流式 pending/partial/failed/cancelled 不能被标为 completed，更不得触发 Chat→双目标写入。未来生产 SSE 必须按 Provider 分协议适配，且不能在本 POC 阶段自动联网、上传附件或扣费。对话内容不得执行脚本、远程 CDN 或任意文件操作。
+
+### 非 Chat 已冻结任务与本轮优先级
+
+- **P0 Excalidraw**：独立合成图形精准复现 text element、bound text、strokeColor/透明度、旋转/图层/frame/图片；优先排查暗夜主题白字叠在浅色画布等真实问题。与官方许可可接受的离线 SVG 导出做对照，再选单一绘图显示权威，SourceSHA/elementID 与 generic Markdown 写入拒绝不变。
+- **P1 校准器 CLOSED**：最后一项提交成功并回读后隐藏当天四项评估 Section；LocalStore actor 在持久化层以旧 isComplete 拒绝任何改变 CLOSED 当日结果的并发/重复/外部调用，允许幂等同值重试但不允许重开；额外加减分仅在关闭前编辑。历史、备份、时区、Widget x/4、同源笛卡尔图与提醒均回归。
+- **原有其余任务**：Markdown/复合文档的 RDR-01～RDR-22、Chat/闪卡/笔记导航的 U 系列、ACCEPT、18 步、F 系列及 W 系列仍有效；独立工作流可以在不触碰生产 Chat 的前提下施工已经冻结的非 Chat 改动。
+
+**最终交付**：独立变更可测试后增量提交，最新同一代码 SHA 的 Portable Core、Native XCTest、XCUITest、Debug/Release Simulator、iPhoneOS ARM64、Widget、unsigned IPA/ZIP/manifest/SHA256 完整性均须有真实结果。POC 和 DOC_ONLY 提交不能用历史 Run 39782229904 冒充新测试 PASS；真机 iPhone13 的安装、签名、Provider、多语言/主题和视觉仍须 DEVICE 实测。私有仓库、main、真实 Vault、AppIcon 不动，不新增分支，productionWriteEnabled = false 永久保留。

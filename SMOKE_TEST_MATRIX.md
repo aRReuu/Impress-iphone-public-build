@@ -355,3 +355,20 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 | CHAT-SPIKE-F | iPhone13 + iOS26，Light/Dark/System、Dynamic Type、简繁英/VoiceOver；Time Profiler/SwiftUI Instrument、Hangs/Hitches、峰值及释放后内存、Parser 工作量、布局测量、主线程 stall/帧数和完整视觉样本；附确切 SHA | DEVICE_BLOCKED / NOT_RUN |
 
 注意：性能阈值须由真机先取 baseline 再冻结目标；社区「流畅」「低内存」宣传或纯模拟器结果不能填 PASS。软件 POC 失败是 FAIL，不可当 DEVICE_BLOCKED。正式 build/IPA 与用户现有 18 步/ACCEPT/异常/Widget 验收仍需同 SHA 独立证明。
+
+## 2026-10-23 · V1.1 下一阶段 POC-01/02 验收清单（最新执行依据）
+
+以下是现有 CHAT-01/05/06、UI-02、U18 之下的 **隔离 POC 验证子项**，非第 86 个产品主 ID；所有项目当前均 NOT_RUN。只用合成数据、零联网 Mock、无密钥/私人图片或 Vault 文件。测试需包含至少一条真实运行的 UI 事件路径和独立解析器测试，不能只验证静态 Swift 字符串。
+
+| 子项 | 必须实测的断言 | 当前 |
+|---|---|---|
+| CHAT-SPIKE-A / POC-01 | Debug 原型可实际进入、输入模拟提问、显示右对齐用户气泡与无“我/AI”角色标签的 AI 文档、可滚动/暂停/继续/停止；数据变化时不能整表 reload 或强制滚到中间 | NOT_RUN |
+| CHAT-SPIKE-B / POC-02 | 1KB/16KB/64KB 标准与随机分块回复；中文/emoji/组合字符/UTF-8 边界、标题、嵌套列表、未闭合及闭合代码、GFM 表格、行内/块级公式、引用/链接；增量最终 AST 与完整解析一致 | NOT_RUN |
+| CHAT-SPIKE-C / POC-03 | 0/100/1,000/5,000 条历史，稳定 messageID+blockID、仅变化的可见块更新；跟随底部或阅读历史切换；代码/表格横向手势、键盘/候选栏与输入高度动态变化不发生跳跃 | NOT_RUN |
+| CHAT-SPIKE-D / POC-03/04 | Mock 事件乱序/重复/半帧/正常终止/缺结束符/EOF/取消/失败/重启；部分答复绝不作为 completed 进入审批准入；不产生网络请求或重复收费 | NOT_RUN |
+| CHAT-SPIKE-E / POC-04 | 富文本可选择/复制、代码复制、公式/表格可读、附件合成预览/移除；页面持久状态与现有 WCDB/来源安全/角色信息解耦，原生产会话数据字节不变 | NOT_RUN |
+| CHAT-SPIKE-F / POC-05 | 相同 Fixture 做 UIKit/ChatLayout、增量 AST 与备选组件 A/B；iPhone13 上测 UI hitches/CPU/峰值与回落内存、主线程布局、ChatGPT iPhone 相同 OS/字体/主题视觉交互比对；无真机则 DEVICE_BLOCKED | NOT_RUN |
+| RDR-13/15/22 | 合成 Excalidraw 真实文字/绑定/色彩/缩放/图层可读，与官方 SVG 离线对照、元素 ID 与 SHA 保真；仅轮廓不可 PASS | NOT_RUN |
+| CAL.day-close / CAL.day-durability | 睡眠/运动/饮食/阅读四项全部保存才 CLOSED；完全隐藏 section、额外修正只读，actor 拒绝 CLOSED 再写、并发/回启/跨日/Widget x/4 不回归 | NOT_RUN |
+
+单元级建议：Core parser 的随机 chunking 属性测试（完整结果 vs. 一次性）；滚动锚点 geometry 测试；主线程/缓存/文本测量负载测试；UI 原型输入、发送、停止、历史上滑、键盘动作 XCUITest，并输出合成截图到测试产物（不提交用户截图）。记录提交完整 SHA、确切测试名、Fixture 名、截图/日志位置、预期/实际、PASS/FAIL/NOT_RUN/DEVICE_BLOCKED。**POC PASS 不能证明完整 Chat、现有业务 18 步、Provider 实网、真实 iPhone13 或 IPA 最终交付；**最终旧版 ACCEPT/F01～13/U/RDR/Widget 不可因原型通过而自动更新。

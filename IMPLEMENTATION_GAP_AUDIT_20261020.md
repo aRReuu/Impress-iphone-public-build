@@ -161,3 +161,15 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 **待证明的性能与语义风险**：大消息 TextKit 自适应 Cell 全文重排、无换行超长文本、半截 fenced code/table/math、复杂 Unicode/中文候选、self-sizing Cell 高度变化、用户手动历史滚动被流式强制归零、全量 Diffable snapshot、图片内存回落、Markdown HTML/远程链接安全。需要用 Instrument 的 Time Profiler/Hangs/Hitches/Memory、os_signpost 与自动化帧采样在 iPhone13 比较；未实测不能写「60FPS 已达标」。最终与指定版本 ChatGPT iPhone、Gemini、DeepSeek 的同一合成内容做视觉/交互对照：ChatGPT 仍为主视觉标准，其他产品只对多模态/状态表达提供借鉴。
 
 **结论门禁**：以上 TECH_SPIKE_SOURCE_AUDITED，A/B PROTOTYPE_NOT_RUN，FINAL_LIBRARY_NOT_SELECTED，APP_CODE_UNCHANGED；不以 Github 开源项目 README 性能自述替代 Impress iPhone13 证据，不在此阶段修改 production Chat。
+
+## 2026-10-23 · V1.1 下一阶段交接：最小技术切片与阻断点
+
+**源代码事实**（预施工 HEAD 6f2370dadb473ebb4c2987f517dfc705e29991a8）：ImpressAINativeChatViewController 使用 UITableView；ImpressChatMessageCell roleLabel 固定“我／AI”、按用户/AI 设置整行背景；reloadAndScroll() 执行 reloadData() 和 scrollToRow(.middle)；MarkdownKitRenderer 以 NSAttributedString 一次性富文本覆盖整个正文；ImpressAIHTTPClient.converse 等完整响应，没有统一 SSE 增量消息流。不能把这些接口继续作为最终 ChatGPT 式整个对话流的完成实现。
+
+**必须检验而非提前定库**：
+- 使用 UICollectionView 一条外层纵向滚动流，按稳定 messageID+blockID 更新流式内容。初始 POC 可先建立原生布局基准，再和 ChatLayout 做对照；不得一次性将 ChatLayout/Microsoft/Rill/Textual 全部加进 production 并混成三套解析器。
+- 文本传输、状态保存、增量 AST、布局测量、可见单元和滚动锚点必须分层：禁止每 token 全表 reload、每条普通消息一个 WKWebView、每个开放 Markdown 片段解析整个历史消息。已封闭内容块尺寸缓存，开放尾块容许回退；严格处理未闭合表格/围栏/公式与不同 Unicode 切块。
+- Microsoft SwiftStreamingMarkdown 原版 streaming 源每次给全文快照、重新解析；RillCore 有 UTF8 commitIndex/NodeID 但社区成熟度尚须验证；Textual 重置源时重生成 AttributedString。三者均非现成完整 GPT/Gemini/DeepSeek 页面。Oriveo iOS 实例说明 UIKit UICollectionView/ChatLayout 与流式 Block Presenter 的架构可行，但 AGPL 实现不可未经许可证审查复制。
+- 只为真正不适合原生渲染的复杂组件开局部滚动与视图，优先验证文本选择/代码/表格/公式的原生可用性；可保留单个受控离线 WebKit 整页渲染的 A/B 对照，但不能缺测便宣称它劣于 UIKit。
+
+**当前未执行**：POC-01/02/03/04/05/06 均 NOT_RUN；没有新的 iPhone13 CPU/FPS/内存与对照截图结果。下一会话首先应提交可构建可执行的隔离 POC-01/02 后再进行反馈，而非继续大量只读评述。Chat 生产替换需要单独定版门禁。Excalidraw P0 真实任务文字和 CAL 当日 CLOSED 已冻结，可在不影响 Chat 的独立提交中并行施工。

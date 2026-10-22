@@ -320,3 +320,21 @@ Excalidraw P0 的图中文字/节点真实可读和校准器 CLOSED 持久化门
 | 可见 UI 细节 | 当前大块 table row 破坏 GPT 式 AI 连续内容和右侧用户气泡 | 同型号手机深浅色/中文/英文状态矩阵、完整富文本/输入区/附件/流式场景逐像素与交互人工审查 | VISIBLE_GAP_CONFIRMED / DEVICE_NOT_RUN |
 
 选型顺序：Source audit -> zero-network synthetic fixtures -> isolated debug-only A/B prototype -> Core/parser property tests -> 真实 iPhone13 Instrument/视觉/触控与动态字 -> 明确决策 -> 最后才替换生产 Chat。用户仍保留继续讨论权利。既有 Chat/FSRS/知识来源/安全门禁冻结，非 Chat 的 Excalidraw 和校准 CLOSED 不受影响。
+
+## 2026-10-23 · V1.1 下一阶段交接执行矩阵（最新生效）
+
+**授权边界**：Chat 最终技术方案尚未确定，但隔离 Debug POC-01/02 已被允许实际施工。不得把 POC_PASS、CODE_DONE、XCUITEST_PASS、DEVICE_PASS、E2E_PASS 合并成单一状态；历史 G3-S1/02 和 2026-10-22“Chat 不改业务”在最新交接范围发生冲突时，以产品稿最新章节为准。以下 POC 标识都是现有 CHAT/UI 主 ID 的测试子项，不增加稳定需求主 ID。
+
+| 工作单元 | 既有 ID/当前源码事实 | 本阶段施工动作 | 门禁与本次状态 |
+|---|---|---|---|
+| B0 基线与文档 | 当前工作分支 HEAD 基线 6f2370dadb473ebb4c2987f517dfc705e29991a8；最近实际完整成功 Run 39782229904 属于 d9711284bfe2 | 同步产品权威/本矩阵/SMOKE/差距/README/QA，不更改代码 | DOC_ONLY；新 CI NOT_RUN |
+| POC-01 消息容器 | CHAT-01/05、UI-02；现有 ImpressAINativeChatViewController 仍使用 UITableView 和整行 roleLabel | 隔离 Debug 真实交互消息视图；stable messageID、右侧用户气泡、AI 连续文档、原生 Composer；对比原生 UICollectionView/ChatLayout | TECH_POC_AUTHORIZED / IMPLEMENTATION_NOT_RUN |
+| POC-02 流式内容 | CHAT-05/06；MarkdownKitRenderer 全文 NSAttributedString；converse 当前一次性回复 | 零网络 Stream Fixture + dirty-tail AST / block presenters，代码、表格、公式与不完整片段、取消/完成可见 | TECH_POC_AUTHORIZED / IMPLEMENTATION_NOT_RUN |
+| POC-03/04 交互完备 | U18、CHAT-02；当前 reloadAndScroll 全表 reload 并强制居中 | 底部跟随/手动保位、键盘、输入动态高度、附件本地预览与文本选择、故障/恢复 | POC_DEPENDENT / NOT_RUN |
+| POC-05/06 方案评估 | U18、CHAT-01/05/06 | 真机 iPhone13 工具测量、视觉对照、依赖许可证、运行结果及唯一最终技术选择 | TECH_SELECTION_OPEN / DEVICE_NOT_RUN |
+| Excalidraw 高保真 | UI-03.reader-c、SAFE-03、RDR-13/15/22；现有 UIButton + CAShapeLayer 只能证明基础轮廓 | 中文任务文字/绑定/画布/旋转/图片/分组验证与官方 SVG A/B，修复现有展示缺口，不解冻写入 | SPEC_FROZEN / FIX_REQUIRED / TEST_NOT_RUN |
+| 校准器当日关闭 | CAL-01～03、NAV-05.w、SAFE-08.w；isComplete 存在，但 LocalStore.save 可改已完整的天 | 旧快照 actor 写门禁、第四项成功后隐藏 section、额外分冻结，x/4 Widget 与提醒回归 | SPEC_FROZEN / FIX_REQUIRED / TEST_NOT_RUN |
+| 全局/业务回归 | CARD-08、NAV-03、U01～21、RDR-01～22、ACCEPT-01～12、F01～13、W01～15 | 不重复造原业务；缺口实测/回归/补证据 | IN_PROGRESS / E2E_NOT_RUN |
+| G4 同 SHA 完整交付 | Actions/IPA/App+Widget/设备 | Core→XCTest→XCUITest→Sim/ARM64→IPA→签名/设备证据 | PENDING；旧成功 SHA 不冒充新功能通过 |
+
+推进次序：先 POC-01/02 独立可运行垂直切片，分层证明之后才扩 POC-03～06；Excalidraw 与 CAL 属于独立可执行队列，可并行但不能互相覆盖更改。Chat 生产替换属于**下一道独立门禁**，不能在 POC-01/02 首次成功时悄悄实施。原四 Tab、WCDB、FSRS、APP Group、Production Vault 禁写与权限边界不改变。
