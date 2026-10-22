@@ -242,12 +242,14 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         let stack = try XCTUnwrap(review.view.subviews.compactMap {
             $0 as? SwipeCardStack
         }.first)
-        XCTAssertTrue(try await eventually {
+        let hasCard = try await eventually {
             stack.topCard?.content is ImMemoryCardView
-        })
+        }
+        XCTAssertTrue(hasCard)
         XCTAssertTrue(guide.isHidden, "No grading legend may be shown before the answer")
         (stack.topCard?.content as? ImMemoryCardView)?.revealAnswerIfNeeded()
-        XCTAssertTrue(try await eventually { !guide.isHidden })
+        let guidanceVisible = try await eventually { !guide.isHidden }
+        XCTAssertTrue(guidanceVisible)
         XCTAssertEqual(guide.arrangedSubviews.count, 4)
         let expected = ["hard": V3L("困难"), "good": V3L("良好"),
                         "easy": V3L("容易"), "again": V3L("重来")]
