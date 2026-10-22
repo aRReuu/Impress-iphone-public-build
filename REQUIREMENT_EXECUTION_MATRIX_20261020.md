@@ -266,10 +266,10 @@ G4 同最终 SHA 全套 CI/证据/QA IPA；只有外部设备/Keychain/Files/授
 
 | 切片 / 既有主 ID | 触及已有源码 | 目标变更与不可妥协验收 | 状态 |
 |---|---|---|---|
-| G3-S1 / UI-03.reader-a/b | \`ImVaultDocumentController\`, \`ImpressMarkdownOfflineView\`, \`markdown-host.js\`, \`markdown-index.html\`, \`ImpressV3Appearance\` | Markdown title+typed Properties+正文=一个 WK 可滚动 DOM 流；UIKit 只留固定导航；不再调用整页 \`styleVaultDocument\`；不破坏 source/canvas 分支 | SPEC_APPROVED / CODE_PENDING |
-| G3-S2 / UI-03.reader-a / CHAT-06.reader-a | \`markdown-it\` CSS/token + \`ImpressMarkdownStructure\` + Chat material picker | CSS 嵌套、标题去重、AST source UTF8 map、选区来源回读/预览/授权；无可靠范围不自动发送 | SPEC_APPROVED / CODE_PENDING |
-| G3-S3 / UI-03.reader-c / SAFE-03.reader-b | \`ImVaultDocumentFormat.detect\`, \`ImpressFrontmatterReader\`, \`ImpressExcalidrawScene\`, generic Markdown draft guards | 后缀优先+普通 md 内有效 plugin/fence 的只读识别；源未变/无效写入安全拒绝；官方 Excalidraw SVG A/B 技术试验 | TECH_SPIKE_PENDING |
-| G3-S4 / UI-03.reader-c / CHAT-06.reader-a | \`ImpressVaultEmbedLocator\`, \`prepareAuthorizedPreview\`, DiagramReader/Canvas/Excalidraw 视图 | 图形原位真实预览、独立交互页、缩放/区域选材/原始 SHA 核查，单文件缺件不干扰正文 | SPEC_APPROVED / CODE_PENDING |
+| G3-S1 / UI-03.reader-a/b | `ImVaultDocumentController`, `ImpressMarkdownOfflineView`, `markdown-host.js`, `markdown-index.html`, `ImpressV3Appearance` | Markdown title+typed Properties+正文=一个 WK 可滚动 DOM 流；UIKit 只留固定导航；不再调用整页 `styleVaultDocument`；不破坏 source/canvas 分支 | SPEC_APPROVED / CODE_PENDING |
+| G3-S2 / UI-03.reader-a / CHAT-06.reader-a | `markdown-it` CSS/token + `ImpressMarkdownStructure` + Chat material picker | CSS 嵌套、标题去重、AST source UTF8 map、选区来源回读/预览/授权；无可靠范围不自动发送 | SPEC_APPROVED / CODE_PENDING |
+| G3-S3 / UI-03.reader-c / SAFE-03.reader-b | `ImVaultDocumentFormat.detect`, `ImpressFrontmatterReader`, `ImpressExcalidrawScene`, generic Markdown draft guards | 后缀优先+普通 md 内有效 plugin/fence 的只读识别；源未变/无效写入安全拒绝；官方 Excalidraw SVG A/B 技术试验 | TECH_SPIKE_PENDING |
+| G3-S4 / UI-03.reader-c / CHAT-06.reader-a | `ImpressVaultEmbedLocator`, `prepareAuthorizedPreview`, DiagramReader/Canvas/Excalidraw 视图 | 图形原位真实预览、独立交互页、缩放/区域选材/原始 SHA 核查，单文件缺件不干扰正文 | SPEC_APPROVED / CODE_PENDING |
 | G3-S5 / SAFE-03 / UI-03 / NAV-03 | RDR-01～22 + UI smoke/CI/IPA/iPhone13 | 原 18 步业务/12 ACCEPT/F01～F13 零回归；同 SHA 可追溯，真机设备不冒充 CI | NOT_RUN |
 
 **次序门禁**：S1 不需要等新 Excalidraw 包选型即可先实现；S3 的显示分类与写入门禁必须先于 S4 的图形嵌入发布。G3 仅为这六截图产生的 reader 方案，不改变此前已冻结的闪卡/Chat/静默笔记刷新和正式 Vault 只读要求。架构确认不等于代码、构建、设备成功。

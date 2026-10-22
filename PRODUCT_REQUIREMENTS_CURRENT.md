@@ -313,29 +313,29 @@
 
 ### G3-A：页面信息架构——一张连续文档，一次滚动
 
-- 笔记详情外壳保留 **UIKit 原生导航栏**（返回、更多、讨论及编辑等现有授权操作；全部动态中性色）。在 Markdown **阅读模式**，仅使用一个本地、非持久化 \`WKWebView\` 承载文档可滚动内容；不要再由固定在 WK 之上的独立 \`readerHeader\` / \`documentTitleLabel\` / \`propertyPanel\` 与下方 \`richView\` 拼成不同滚动层。页面没有「整篇深色圆角卡片」、重复容器阴影、第二条内部滚动轨道。源码模式保留现有原文视图并可随时返回阅读，不把显示投影写回 Vault。
+- 笔记详情外壳保留 **UIKit 原生导航栏**（返回、更多、讨论及编辑等现有授权操作；全部动态中性色）。在 Markdown **阅读模式**，仅使用一个本地、非持久化 `WKWebView` 承载文档可滚动内容；不要再由固定在 WK 之上的独立 `readerHeader` / `documentTitleLabel` / `propertyPanel` 与下方 `richView` 拼成不同滚动层。页面没有「整篇深色圆角卡片」、重复容器阴影、第二条内部滚动轨道。源码模式保留现有原文视图并可随时返回阅读，不把显示投影写回 Vault。
 - 阅读流顺序为：**唯一文档标题（inline title）→ 可折叠 Properties（若有）→ Markdown 原正文（包含其真实章节标题）→ 原位受限嵌入图形**。文件名与正文首个 H1 同名且为首个真实正文块时只呈现一个视觉标题，但**不能抹掉**源 H1 的锚点、章节、真实 UTF-8 范围；其他不同名 H1 仍完整呈现。空属性时不显示大占位；格式异常只显示局部诊断和「查看源码」入口。字号与标题层级跟随 Dynamic Type。
 - 所有正文、Properties、标题共享一套左右留白基线、页面底色和版式 Token。默认连续阅读而非多张卡片；代码块、Callout、表格、局部图形**可以拥有局部语义容器**，但不可为整篇正文重复加背景与圆角。长表格/代码块允许局部水平滚动，不能强迫整页水平滚动。真实图形区域按来源比例呈现，并提供可点击放大入口。
-- Properties 必须由现有 \`ImpressFrontmatterReader\` **先在 Swift 解析为类型化只读投影**，仅把受控的名称、类型、显示值、合法 WikiLink 目标等必要字段交给 Web 阅读层，以 \`textContent\` / 安全 DOM 构建，绝不能把 YAML 直接当可信 HTML 插入；一键折叠、展开，保存本机 UI 展开状态但不改源文件。用户点击属性中的合法 WikiLink 交由原生已授权 Vault 路由。
+- Properties 必须由现有 `ImpressFrontmatterReader` **先在 Swift 解析为类型化只读投影**，仅把受控的名称、类型、显示值、合法 WikiLink 目标等必要字段交给 Web 阅读层，以 `textContent` / 安全 DOM 构建，绝不能把 YAML 直接当可信 HTML 插入；一键折叠、展开，保存本机 UI 展开状态但不改源文件。用户点击属性中的合法 WikiLink 交由原生已授权 Vault 路由。
 - 唯一阅读滚动主线允许折叠属性和返回 Chat/选材后**按原滚动锚点恢复**；文档 SHA 变化时回读并重建相同身份范围，找不到锚点才回到最近有效上下文/顶部，不按标题猜测。主题/字体变化重新布局，不清空历史、卡片或模型材料。
 
 ### G3-B：正文样式与语义——先保证结构，再调整像素
 
-- 现有离线 \`WKWebView + markdown-it\` 是 Markdown 结构与 HTML 排版的基础；现有 \`KaTeX\` / \`Mermaid\` / \`Markmap\` 原资源可复用。去除 \`ImpressV3Appearance.styleVaultDocument(richView)\` 造成的正文整块圆角背景；合并 \`ImpressV3Appearance.markdownReaderCSS\` 与 \`markdown-index.html\` 中互相叠加的 body/reader padding、标题 margin、list/blockquote/item CSS。所有颜色/字号/间距/圆角必须集中定义，页面级 CSS 只负责布局适配，不散落重复 token。各级标题、粗细、中文换行、软硬换行、多层有/无序列表与任务列表、Callout/引用、表格、代码、公式都须有可复现 fixture。
-- CSS 截图类笔记的期望流为：视觉大标题「CSS选择器」→ 可折叠属性（mindmap-plugin 等）→ 原始标题「CSS--Cascading Style Sheet」→ 「@规则定义」→ 真实逐级缩进及连接线/任务结构；不能出现独立巨大正文卡片或与首屏无关的空洞。有效 \`.excalidraw.md\` 的默认阅读结果是画布，**不是**插件帮助文字/\`Excalidraw Data\`/\`Text Elements\` 文本；插件原始资料始终能从「查看源码」访问。
+- 现有离线 `WKWebView + markdown-it` 是 Markdown 结构与 HTML 排版的基础；现有 `KaTeX` / `Mermaid` / `Markmap` 原资源可复用。去除 `ImpressV3Appearance.styleVaultDocument(richView)` 造成的正文整块圆角背景；合并 `ImpressV3Appearance.markdownReaderCSS` 与 `markdown-index.html` 中互相叠加的 body/reader padding、标题 margin、list/blockquote/item CSS。所有颜色/字号/间距/圆角必须集中定义，页面级 CSS 只负责布局适配，不散落重复 token。各级标题、粗细、中文换行、软硬换行、多层有/无序列表与任务列表、Callout/引用、表格、代码、公式都须有可复现 fixture。
+- CSS 截图类笔记的期望流为：视觉大标题「CSS选择器」→ 可折叠属性（mindmap-plugin 等）→ 原始标题「CSS--Cascading Style Sheet」→ 「@规则定义」→ 真实逐级缩进及连接线/任务结构；不能出现独立巨大正文卡片或与首屏无关的空洞。有效 `.excalidraw.md` 的默认阅读结果是画布，**不是**插件帮助文字/`Excalidraw Data`/`Text Elements` 文本；插件原始资料始终能从「查看源码」访问。
 - 具体字体数值与行高以 iPhone 13 / Light / Dark / 放大字的合成 fixture 实测对齐为准，先确立同级对齐、文本密度、列宽、可读性；禁通过全局无限缩字或隐藏源代码块伪造截图相似度。
 
 ### G3-C：复合文档路由与真实图形
 
-- 格式判定分为 **持久身份**（Vault ID + 真实相对路径 + 原始 SHA）与**只读展示分类**（普通 Markdown、Excalidraw 图形、Canvas 图形、Mermaid/Markmap 等），不得以渲染类别偷偷重写身份或旧 Chat Key。后缀 \`.excalidraw\` / \`.excalidraw.md\` 优先，但**普通 \`.md\` 中经合法 Frontmatter \`excalidraw-plugin\` 特征与有效 Drawing fence/有界解压并重核验**的合法插件文档也可只读归类为画布；只有 \`tags: excalidraw\` 或普通文本声明绝不能误判。失败或模糊时提供可诊断来源说明与源码入口，不暗自猜数据。
-- 此类**普通 \`.md\` 但实际为 Excalidraw 容器**必须在 generic Markdown 编辑/受控回写入口增加内容型拒写门禁，不因后缀是 md 就批准普通修订；生产 Vault 写入总门禁仍为 \`ImVaultGuardedWrite.productionWriteEnabled = false\`。分类依据随每次源版本 SHA 变化重新核验。
-- 单独打开 Canvas/Excalidraw 使用专业图形阅读界面，支持 Fit-to-content、双指缩放/平移、按元素/框架/范围选取与来源核查；Markdown 中 \`![[...]]\` **在原位显示真实图像/图形预览**（有界、懒加载、无外网），点击进入完整的交互式图形阅读页做范围选择，避免嵌套 Web/UIScrollView 与正文竖向滚动手势抢占。缺件在该嵌入位置局部提示，不抹掉其他文字。
-- Excalidraw 高保真渲染**先比较既有原生 UIButton/CAShapeLayer 路径与官方开源 \`exportToSvg\` 离线打包适配**。验收样本至少涵盖文本/绑定文本、矩形/椭圆/菱形、箭头/曲线、Roughness/笔触/填充、旋转、层叠、中文、组/框架、合法内嵌 PNG/JPEG、压缩/普通数据。记录 bundle 增量、iPhone13 绘制内存/帧率/启动、许可证、离线网络禁用、元素 ID 命中与 Chat 选材映射。**通过验证后只保留一个图形视觉事实权威**，不得长期让原生与 SVG 给出两种不一致的图形内容。
+- 格式判定分为 **持久身份**（Vault ID + 真实相对路径 + 原始 SHA）与**只读展示分类**（普通 Markdown、Excalidraw 图形、Canvas 图形、Mermaid/Markmap 等），不得以渲染类别偷偷重写身份或旧 Chat Key。后缀 `.excalidraw` / `.excalidraw.md` 优先，但**普通 `.md` 中经合法 Frontmatter `excalidraw-plugin` 特征与有效 Drawing fence/有界解压并重核验**的合法插件文档也可只读归类为画布；只有 `tags: excalidraw` 或普通文本声明绝不能误判。失败或模糊时提供可诊断来源说明与源码入口，不暗自猜数据。
+- 此类**普通 `.md` 但实际为 Excalidraw 容器**必须在 generic Markdown 编辑/受控回写入口增加内容型拒写门禁，不因后缀是 md 就批准普通修订；生产 Vault 写入总门禁仍为 `ImVaultGuardedWrite.productionWriteEnabled = false`。分类依据随每次源版本 SHA 变化重新核验。
+- 单独打开 Canvas/Excalidraw 使用专业图形阅读界面，支持 Fit-to-content、双指缩放/平移、按元素/框架/范围选取与来源核查；Markdown 中 `![[...]]` **在原位显示真实图像/图形预览**（有界、懒加载、无外网），点击进入完整的交互式图形阅读页做范围选择，避免嵌套 Web/UIScrollView 与正文竖向滚动手势抢占。缺件在该嵌入位置局部提示，不抹掉其他文字。
+- Excalidraw 高保真渲染**先比较既有原生 UIButton/CAShapeLayer 路径与官方开源 `exportToSvg` 离线打包适配**。验收样本至少涵盖文本/绑定文本、矩形/椭圆/菱形、箭头/曲线、Roughness/笔触/填充、旋转、层叠、中文、组/框架、合法内嵌 PNG/JPEG、压缩/普通数据。记录 bundle 增量、iPhone13 绘制内存/帧率/启动、许可证、离线网络禁用、元素 ID 命中与 Chat 选材映射。**通过验证后只保留一个图形视觉事实权威**，不得长期让原生与 SVG 给出两种不一致的图形内容。
 
 ### G3-D：来源、Chat 与安全的独立事实权威
 
-- HTML/DOM/Canvas/SVG 和 typed Properties 都是**仅供显示的数据投影**，不授予读写或模型上下文权限。章节/文本/节点/图形的可选范围由可信 Swift 解析/源映射提供 \`vaultID + relativePath + SHA256 + sourceStartUTF8/sourceEndUTF8\` 或稳定元素 ID；WebKit 点击和文本选取只传**有界索引/ID**，原生重新读取授权文件与 SHA、复核该范围，再进入「完整预览 → 明确同意 → Chat」。没有可信 UTF-8 映射时不得用渲染 textContent 全文搜索反向猜片段；显示「无法可靠定位选区」而非静默上传。
-- 受控 \`WKScriptMessageHandler\` 仅允许折叠/属性 WikiLink/选中范围/展开图形等明确动作；所有回调重新检查文档身份、版本及指令参数，禁止通过 HTML/JS 调用文件路径、Keychain、Vault 原文读取、网络和任意模型发送。保留离线 CSP、HTML disabled、nonPersistent store、不加载 CDN/外网、图形资源预算与现有撤权/签名/版本/CAS 门禁。
+- HTML/DOM/Canvas/SVG 和 typed Properties 都是**仅供显示的数据投影**，不授予读写或模型上下文权限。章节/文本/节点/图形的可选范围由可信 Swift 解析/源映射提供 `vaultID + relativePath + SHA256 + sourceStartUTF8/sourceEndUTF8` 或稳定元素 ID；WebKit 点击和文本选取只传**有界索引/ID**，原生重新读取授权文件与 SHA、复核该范围，再进入「完整预览 → 明确同意 → Chat」。没有可信 UTF-8 映射时不得用渲染 textContent 全文搜索反向猜片段；显示「无法可靠定位选区」而非静默上传。
+- 受控 `WKScriptMessageHandler` 仅允许折叠/属性 WikiLink/选中范围/展开图形等明确动作；所有回调重新检查文档身份、版本及指令参数，禁止通过 HTML/JS 调用文件路径、Keychain、Vault 原文读取、网络和任意模型发送。保留离线 CSP、HTML disabled、nonPersistent store、不加载 CDN/外网、图形资源预算与现有撤权/签名/版本/CAS 门禁。
 - 性能规则：一篇正常笔记一个阅读 WKWebView，图形按需初始化；变更检测有界取消、缓存按 Vault 身份和 SHA；打开普通笔记不能引入全图 Mermaid/Excalidraw 预加载。关闭/快速切换后旧异步渲染不能覆盖当前文档。iPhone13 真机长文、前后台、恢复滚动、暗夜切换必须测量。
 
 ### G3-E：施工顺序与结论边界
