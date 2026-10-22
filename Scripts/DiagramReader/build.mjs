@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 
@@ -42,16 +42,35 @@ cpSync(resolve(import.meta.dirname, "markdown-index.html"),
 const markdownLicense = readFileSync(resolve(import.meta.dirname, "THIRD_PARTY_LICENSES.txt"), "utf8") +
   "\n=== MARKDOWN-IT LICENSE (14.1.0) ===\n" +
   readFileSync(resolve(import.meta.dirname, "MARKDOWN_IT_LICENSE.txt"), "utf8") + "\n";
-writeFileSync(resolve(markdownDestination, "THIRD_PARTY_LICENSES.txt"), markdownLicense);
+const licensedMarkdown = markdownLicense + "\n=== KATEX LICENSE (0.16.22) ===\n" +
+  readFileSync(resolve(import.meta.dirname, "KATEX_LICENSE.txt"), "utf8") + "\n";
+writeFileSync(resolve(markdownDestination, "THIRD_PARTY_LICENSES.txt"), licensedMarkdown);
+// KaTeX runs entirely offline. WOFF2 is available on the iOS 26 floor,
+// avoiding copies of legacy TTF and WOFF variants in a small IPA.
+const katexAssets = resolve(import.meta.dirname, "node_modules", "katex", "dist");
+cpSync(resolve(katexAssets, "katex.min.css"),
+  resolve(markdownDestination, "katex.min.css"));
+const localFontDir = resolve(markdownDestination, "fonts");
+mkdirSync(localFontDir, { recursive: true });
+for (const name of readdirSync(resolve(katexAssets, "fonts"))) {
+  if (!name.endsWith(".woff2")) continue;
+  cpSync(resolve(katexAssets, "fonts", name), resolve(localFontDir, name));
+}
 const markdownManifest = {};
-for (const name of ["reader.js", "index.html", "THIRD_PARTY_LICENSES.txt"]) {
+for (const name of ["reader.js", "index.html", "katex.min.css", "THIRD_PARTY_LICENSES.txt"]) {
   const data = readFileSync(resolve(markdownDestination, name));
   markdownManifest[name] = {
     size: data.byteLength, sha256: createHash("sha256").update(data).digest("hex")
   };
 }
+for (const name of readdirSync(localFontDir).filter((n) => n.endsWith(".woff2"))) {
+  const data = readFileSync(resolve(localFontDir, name));
+  markdownManifest["fonts/" + name] = {
+    size: data.byteLength, sha256: createHash("sha256").update(data).digest("hex")
+  };
+}
 markdownManifest.engines = {
-  "markdown-it": "14.1.0", mermaid: "11.12.2",
+  "markdown-it": "14.1.0", katex: "0.16.22", mermaid: "11.12.2",
   "markmap-lib": "0.18.12", "markmap-view": "0.18.12"
 };
 markdownManifest.runtimePolicy = "offline-read-only";

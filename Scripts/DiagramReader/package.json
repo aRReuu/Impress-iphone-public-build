@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "markdown-it": "14.1.0",
+    "katex": "0.16.22",
     "mermaid": "11.12.2",
     "markmap-lib": "0.18.12",
     "markmap-view": "0.18.12"

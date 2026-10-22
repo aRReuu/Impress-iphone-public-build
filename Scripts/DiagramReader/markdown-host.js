@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import katex from "katex";
 import mermaid from "mermaid";
 import { Transformer } from "markmap-lib";
 import { Markmap } from "markmap-view";
@@ -20,6 +21,59 @@ const report = (state, diagramCount, failures) => {
     state, diagramCount, failures
   });
 };
+
+
+// Safe, local TeX projection. Input is data, never trusted HTML or arbitrary JS.
+markdown.inline.ruler.before("escape", "impress_math_inline", (state, silent) => {
+  const src=state.src, start=state.pos;
+  if(src[start]!=="$" || src[start+1]==="$" || src[start+1]===" ")return false;
+  let end=start+1;
+  while((end=src.indexOf("$",end))!==-1) {
+    if(src[end-1]!=="\\" && src[end-1]!==" " && end>start+1)break;
+    end++;
+  }
+  if(end<0)return false;
+  if(!silent) {
+    const token=state.push("im_math_inline","math",0);
+    token.content=src.slice(start+1,end);
+  }
+  state.pos=end+1;
+  return true;
+});
+markdown.block.ruler.before("fence","impress_math_display",
+  (state,startLine,endLine,silent) => {
+    const first=state.src.slice(state.bMarks[startLine]+state.tShift[startLine],
+      state.eMarks[startLine]).trim();
+    if(first!=="$")return false;
+    let close=startLine+1;
+    while(close<endLine) {
+      const value=state.src.slice(state.bMarks[close]+state.tShift[close],
+        state.eMarks[close]).trim();
+      if(value==="$")break;
+      close++;
+    }
+    if(close===endLine)return false;
+    if(!silent) {
+      const token=state.push("im_math_display","math",0);
+      token.block=true;
+      token.content=state.getLines(startLine+1,close,0,true);
+      token.map=[startLine,close+1];
+    }
+    state.line=close+1;
+    return true;
+  });
+function renderMath(source, displayMode) {
+  const tex=String(source||"");
+  if(tex.length>10000)return "<span class=\"im-diagram-error\">公式过长，请查看源码。</span>";
+  try {
+    return katex.renderToString(tex,{displayMode,throwOnError:false,
+      trust:false,strict:"ignore",maxExpand:200,maxSize:12});
+  } catch (_) {
+    return "<span class=\"im-diagram-error\">公式语法不可读。</span>";
+  }
+}
+markdown.renderer.rules.im_math_inline=(tokens,idx)=>renderMath(tokens[idx].content,false);
+markdown.renderer.rules.im_math_display=(tokens,idx)=>renderMath(tokens[idx].content,true);
 
 const originalFence = markdown.renderer.rules.fence ||
   ((tokens, index, options, env, self) => self.renderToken(tokens, index, options));
