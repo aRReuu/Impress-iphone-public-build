@@ -5,7 +5,7 @@ import ImpressReviewCore
 /// Isolated zero-network vertical slice. Launch with -ImpressChatPOC.
 /// Never instantiated by the production Chat navigation or persistence path.
 @MainActor
-final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, UIScrollViewDelegate {
+final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, UICollectionViewDelegate, UIScrollViewDelegate {
     private struct Turn {
         let id: UUID
         let isUser: Bool
@@ -189,6 +189,7 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
             }
             self?.finish()
         }
+        updateAction()
     }
 
     private func append(_ text: String) {
