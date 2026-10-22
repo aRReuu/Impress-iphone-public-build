@@ -98,7 +98,10 @@ jobs:
           npm install --no-audit --no-fund --ignore-scripts
           npm run build
           test -s ../../aReuImpress-iPhone/Resources/DiagramReader/reader.js
+          test -s ../../aReuImpress-iPhone/Resources/MarkdownReader/reader.js
+          test -s ../../aReuImpress-iPhone/Resources/MarkdownReader/index.html
           cp ../../aReuImpress-iPhone/Resources/DiagramReader/manifest.json ../../out/diagram-engine-manifest.json
+          cp ../../aReuImpress-iPhone/Resources/MarkdownReader/manifest.json ../../out/markdown-engine-manifest.json
       - name: Build Debug iOS Simulator
         shell: bash
         run: |

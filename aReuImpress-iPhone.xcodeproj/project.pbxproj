@@ -13,6 +13,7 @@
 		F6C000000000000000000003 /* Widget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = F6C000000000000000000007 /* Widget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, CodeSignOnCopy, ); }; };
 		F6C000000000000000000004 /* Core in Widget Frameworks */ = {isa = PBXBuildFile; productRef = F6C000000000000000000017 /* ImpressReviewCore */; };
 		F5B200000000000000000012 /* DiagramReader in Resources */ = {isa = PBXBuildFile; fileRef = F5B200000000000000000011 /* DiagramReader */; };
+		F5B300000000000000000012 /* MarkdownReader in Resources */ = {isa = PBXBuildFile; fileRef = F5B300000000000000000011 /* MarkdownReader */; };
 		F5B100000000000000000001 /* ImpressV11NavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B100000000000000000002 /* ImpressV11NavigationUITests.swift */; };
 		F3D300000000000000000010 /* ImpressSpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D300000000000000000020 /* ImpressSpeechService.swift */; };
 		F3D300000000000000000011 /* ImpressSpeechInputUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D300000000000000000021 /* ImpressSpeechInputUI.swift */; };
@@ -183,6 +184,7 @@
 		F6C000000000000000000008 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F6C000000000000000000009 /* Widget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ImpressCalibrationWidgets.entitlements; sourceTree = "<group>"; };
 		F5B200000000000000000011 /* DiagramReader */ = {isa = PBXFileReference; lastKnownFileType = folder; path = DiagramReader; sourceTree = "<group>"; };
+		F5B300000000000000000011 /* MarkdownReader */ = {isa = PBXFileReference; lastKnownFileType = folder; path = MarkdownReader; sourceTree = "<group>"; };
 		F5B100000000000000000002 /* ImpressV11NavigationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressV11NavigationUITests.swift; sourceTree = "<group>"; };
 		F5B100000000000000000003 /* aReuImpress-iPhoneUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "aReuImpress-iPhoneUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F3D300000000000000000020 /* ImpressSpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressSpeechService.swift; sourceTree = "<group>"; };
@@ -652,6 +654,7 @@
 				38DE72E22E9A235D00E8909F /* ImCard */,
 				3895E16F293B8C1D006939DA /* Assets.xcassets */,
 				F5B200000000000000000011 /* DiagramReader */,
+				F5B300000000000000000011 /* MarkdownReader */,
 				38134EC92978EF4100EE8786 /* Main.storyboard */,
 				3895E171293B8C1D006939DA /* LaunchScreen.storyboard */,
 			);
@@ -1154,6 +1157,7 @@
 				3895E173293B8C1D006939DA /* LaunchScreen.storyboard in Resources */,
 				3895E170293B8C1D006939DA /* Assets.xcassets in Resources */,
 				F5B200000000000000000012 /* DiagramReader in Resources */,
+				F5B300000000000000000012 /* MarkdownReader in Resources */,
 				38134ECB2978EF4100EE8786 /* Main.storyboard in Resources */,
 				38DE72E82E9A23EC00E8909F /* imcard_hard@2x.png in Resources */,
 				38DE72E92E9A23EC00E8909F /* imcard_easy@2x.png in Resources */,
