@@ -176,7 +176,8 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
         let before = try await ledger.archiveData()
         // Repeated button taps are truly idempotent, not a second write.
         try await ledger.save(day)
-        XCTAssertEqual(before, try await ledger.archiveData())
+        let retriedBytes = try await ledger.archiveData()
+        XCTAssertEqual(before, retriedBytes)
 
         var changed = day
         try changed.setOutcome(.missed, for: .reading)
@@ -194,8 +195,10 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
         } catch ImpressCalibrationStoreError.closedDayImmutable {
             // Expected.
         }
-        XCTAssertEqual(before, try await ledger.archiveData())
-        XCTAssertEqual(try await ledger.history(), [day])
+        let finalBytes = try await ledger.archiveData()
+        let finalHistory = try await ledger.history()
+        XCTAssertEqual(before, finalBytes)
+        XCTAssertEqual(finalHistory, [day])
     }
 
     func testCalibrationArchiveRoundTripAndCorruptionRejection() async throws {

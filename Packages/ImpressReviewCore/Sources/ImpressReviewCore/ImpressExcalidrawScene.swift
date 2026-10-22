@@ -22,6 +22,13 @@ public struct ImpressExcalidrawElement: Codable, Sendable, Equatable {
     public let strokeWidth: Double?
     public let opacity: Double?
     public let text: String?
+    /// Native Excalidraw typography and bound-text metadata.
+    public let fontSize: Double?
+    public let fontFamily: Int?
+    public let textAlign: String?
+    public let verticalAlign: String?
+    public let lineHeight: Double?
+    public let containerId: String?
     public let points: [[Double]]?
     public let groupIds: [String]?
     public let frameId: String?
@@ -63,11 +70,16 @@ public struct ImpressExcalidrawSelection: Sendable {
     }
 }
 
+public struct ImpressExcalidrawAppState: Decodable, Sendable {
+    public let viewBackgroundColor: String?
+}
+
 public struct ImpressExcalidrawScene: Decodable, Sendable {
     public let type: String?
     public let version: Int?
     public let elements: [ImpressExcalidrawElement]
     public let files: [String: ImpressExcalidrawEmbeddedFile]?
+    public let appState: ImpressExcalidrawAppState?
 
     private static let fence = String(Character(UnicodeScalar(96)!))
 
@@ -164,6 +176,8 @@ public struct ImpressExcalidrawScene: Decodable, Sendable {
                   element.angle.map({ $0.isFinite }) ?? true,
                   element.opacity.map({ $0.isFinite && (0...100).contains($0) }) ?? true,
                   element.strokeWidth.map({ $0.isFinite && (0...100).contains($0) }) ?? true,
+                  element.fontSize.map({ $0.isFinite && (1...320).contains($0) }) ?? true,
+                  element.lineHeight.map({ $0.isFinite && (0.5...5).contains($0) }) ?? true,
                   element.points.map({ $0.count <= 20_000 &&
                     $0.allSatisfy { point in
                         point.count >= 2 && point[0].isFinite &&

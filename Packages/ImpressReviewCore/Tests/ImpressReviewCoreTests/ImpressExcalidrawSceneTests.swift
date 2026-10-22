@@ -91,6 +91,27 @@ struct ImpressExcalidrawSceneTests {
         }
     }
 
+    @Test func boundChineseTextRetainsFontGeometryAndAppCanvas() throws {
+        let json = """
+        {"type":"excalidraw","appState":{"viewBackgroundColor":"#fffefb"},
+         "elements":[
+          {"id":"container","type":"rectangle","x":0,"y":0,"width":320,"height":180},
+          {"id":"task","type":"text","x":12,"y":16,"width":280,"height":100,
+           "containerId":"container","fontSize":32,"fontFamily":2,
+           "textAlign":"center","verticalAlign":"middle",
+           "strokeColor":"#252525","text":"阅读任务：中文与 emoji 🧠"}]}
+        """
+        let scene = try ImpressExcalidrawScene.parse(Data(json.utf8),
+            format: .excalidrawJSON)
+        #expect(scene.appState?.viewBackgroundColor == "#fffefb")
+        let label = try #require(scene.elements.first { $0.id == "task" })
+        #expect(label.fontSize == 32)
+        #expect(label.containerId == "container")
+        #expect(label.textAlign == "center")
+        #expect(label.text?.contains("阅读任务") == true)
+        #expect(try scene.selection(ids: ["task"]).textContextJSON().contains("阅读任务"))
+    }
+
     @Test func duplicateIDsAndInvalidGeometryFailClosed() throws {
         let corrupt = """
         {"type":"excalidraw","elements":[
