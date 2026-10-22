@@ -140,6 +140,8 @@ enum ImpressV11UITestFixture {
                 "#### 多层结构\n- 第一层\n  - 第二层说明\n    - 第三层\n" +
                 "      1. 嵌套有序项目\n      2. 长文本自动折行，不应暴露源码标记\n" +
                 "- [ ] 待办\n- [x] 已完成\n> [!NOTE] 提示\n> 延续上下文\n",
+            "Study/Reader-Math.md":
+                "# Reader-Math\n公式：$E=mc^2$\n\n$\na+b=c\n$\n",
             "Study/Reader-Composite.md":
                 "# Reader-Composite\n## 内嵌 Canvas\n![[Study/Diagram.canvas]]\n" +
                 "## 内嵌 Excalidraw\n![[Study/Drawing.excalidraw]]\n" +

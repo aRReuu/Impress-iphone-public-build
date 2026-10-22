@@ -123,6 +123,20 @@ final class ImpressV11NavigationUITests: XCTestCase {
         XCTAssertFalse(date.isHittable)
     }
 
+    /// RDR-01: KaTeX must render inside the same offline note reading surface.
+    func testMathMarkdownUsesBundledOfflineReader() throws {
+        let app = openSyntheticFile("Reader-Math")
+        let reader = app.webViews["impress.notes.markdown-webview"]
+        XCTAssertTrue(reader.waitForExistence(timeout: 25))
+        let ready = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "ready"), object: reader)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 35), .completed)
+        let image = XCTAttachment(screenshot: app.screenshot())
+        image.name = "Impress-reader-inline-KaTeX"
+        image.lifetime = .keepAlways
+        add(image)
+    }
+
     /// RDR-06: two bounded local composites render inside Markdown without
     /// opening their independent native readers or remote asset requests.
     func testInlineCanvasAndExcalidrawUseAuthorizedSyntheticVault() throws {
