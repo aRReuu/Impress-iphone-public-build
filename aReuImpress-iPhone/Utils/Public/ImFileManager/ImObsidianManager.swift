@@ -144,7 +144,7 @@ enum ImpressV11UITestFixture {
                 "# Reader-Markmap\n## 结构阅读\n~~~markmap\n# 主题\n" +
                 "## 方向 A\n- 基本概念\n## 方向 B\n- 复习节点\n~~~\n",
             "Study/Reader-Math.md":
-                "# Reader-Math\n公式：$E=mc^2$\n\n$\na+b=c\n$\n",
+                "# Reader-Math\n公式：$E=mc^2$\n\n$$\na+b=c\n$$\n",
             "Study/Reader-Composite.md":
                 "# Reader-Composite\n## 内嵌 Canvas\n![[Study/Diagram.canvas]]\n" +
                 "## 内嵌 Excalidraw\n![[Study/Drawing.excalidraw]]\n" +
