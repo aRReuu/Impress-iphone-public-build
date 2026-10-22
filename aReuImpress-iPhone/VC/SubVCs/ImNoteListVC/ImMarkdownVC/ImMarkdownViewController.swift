@@ -1065,7 +1065,8 @@ final class ImVaultDocumentController: UIViewController {
             // system appearance without re-reading or modifying Vault files.
             richView.load(markdown: safeMarkdown,
                           enableImage: preparedMarkdown != nil,
-                          css: ImpressV3Appearance.markdownReaderCSS)
+                          css: ImpressV3Appearance.markdownReaderCSS,
+                          documentTitle: documentTitleText)
         }
         readingView.textAlignment = .left
     }
@@ -3121,6 +3122,7 @@ final class ImpressMarkdownOfflineView: UIView, WKNavigationDelegate {
     }
     private var sourceMarkdown = ""
     private var activeCSS = ""
+    private var activeTitle = ""
     private var allowImages = false
     private var isLoaded = false
     private var requestedVersion: Int = 0
@@ -3168,11 +3170,14 @@ final class ImpressMarkdownOfflineView: UIView, WKNavigationDelegate {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
 
-    func load(markdown: String, enableImage: Bool, css: String) {
+    func load(markdown: String, enableImage: Bool, css: String,
+              documentTitle: String) {
         guard markdown != sourceMarkdown || css != activeCSS ||
+              documentTitle != activeTitle ||
               enableImage != allowImages || requestedVersion == 0 else { return }
         sourceMarkdown = markdown
         activeCSS = css
+        activeTitle = documentTitle
         allowImages = enableImage
         requestedVersion += 1
         render()
@@ -3185,6 +3190,7 @@ final class ImpressMarkdownOfflineView: UIView, WKNavigationDelegate {
         let imagePolicy = allowImages
         let options: [String: Any] = [
             "css": activeCSS,
+            "documentTitle": activeTitle,
             "dark": traitCollection.userInterfaceStyle == .dark,
             "fontSize": UIFont.preferredFont(forTextStyle: .body).pointSize,
             "allowImages": imagePolicy
@@ -3201,7 +3207,8 @@ final class ImpressMarkdownOfflineView: UIView, WKNavigationDelegate {
     }
     override func traitCollectionDidChange(_ previous: UITraitCollection?) {
         super.traitCollectionDidChange(previous)
-        if previous?.userInterfaceStyle != traitCollection.userInterfaceStyle {
+        if previous?.userInterfaceStyle != traitCollection.userInterfaceStyle ||
+           previous?.preferredContentSizeCategory != traitCollection.preferredContentSizeCategory {
             render()
         }
     }

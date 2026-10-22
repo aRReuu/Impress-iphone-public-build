@@ -131,6 +131,15 @@ enum ImpressV11UITestFixture {
                 "mermaid\nflowchart LR\nA[观察] --> B[验证]\nC[不可上传]\n" +
                 fence + "\n## Markmap\n### 机制\n### 反例\n" +
                 "- 证据主分支\n  - 经过审核的子节点\n  - 未获批准的兄弟分支\n",
+            "Study/Reader-Properties.md":
+                "---\nmindmap-plugin: basic\ntags:\n  - focus\n  - review\n" +
+                "Date: 2026-01-31\nStatus:\nActive: false\nCount: 3\n" +
+                "Next: \"[[Graph|图形笔记]]\"\n---\n" +
+                "# Reader-Properties\n## 正文说明\n本段不是属性。\n",
+            "Study/Reader-Nested.md":
+                "#### 多层结构\n- 第一层\n  - 第二层说明\n    - 第三层\n" +
+                "      1. 嵌套有序项目\n      2. 长文本自动折行，不应暴露源码标记\n" +
+                "- [ ] 待办\n- [x] 已完成\n> [!NOTE] 提示\n> 延续上下文\n",
             "Study/Diagram.canvas":
                 "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":150,\"height\":85,\"text\":\"图形范围\"}],\"edges\":[]}",
             "Study/Drawing.excalidraw":

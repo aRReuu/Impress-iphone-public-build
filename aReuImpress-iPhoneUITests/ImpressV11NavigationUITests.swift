@@ -98,6 +98,48 @@ final class ImpressV11NavigationUITests: XCTestCase {
         add(readable)
     }
 
+    /// RDR-01/RDR-03/RDR-05: real application process, synthetic Vault only.
+    /// These checks do not claim private Obsidian screenshot parity or device QA.
+    func testNativeTypedPropertiesAndInlineReaderDiagrams() throws {
+        let app = openSyntheticFile("Reader-Properties")
+        let toggle = app.buttons["impress.notes.properties-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 20))
+        XCTAssertEqual(toggle.value as? String, "已展开")
+        let date = app.staticTexts["impress.notes.property-value.Date"]
+        XCTAssertTrue(date.waitForExistence(timeout: 10))
+        XCTAssertEqual(date.label, "2026-01-31")
+        XCTAssertTrue(app.staticTexts["impress.notes.property-value.Status"].exists)
+        let readable = app.webViews["impress.notes.markdown-webview"]
+        XCTAssertTrue(readable.waitForExistence(timeout: 20))
+        let ready = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "ready"), object: readable)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 30), .completed)
+        let snapshot = XCTAttachment(screenshot: app.screenshot())
+        snapshot.name = "Impress-reader-native-properties"
+        snapshot.lifetime = .keepAlways
+        add(snapshot)
+        toggle.tap()
+        XCTAssertEqual(toggle.value as? String, "已折叠")
+        XCTAssertFalse(date.isHittable)
+    }
+
+    func testMarkdownMermaidRendersInlineWithoutEnteringSeparateReader() throws {
+        let app = openSyntheticFile("Graph")
+        let rendered = app.webViews["impress.notes.markdown-webview"]
+        XCTAssertTrue(rendered.waitForExistence(timeout: 25))
+        let ready = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "ready"), object: rendered)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 35), .completed,
+                       "The inline Markdown Mermaid must render from bundled JS")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Impress-reader-inline-Mermaid"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.buttons["更多笔记操作"].tap()
+        XCTAssertTrue(app.buttons["阅读 Mermaid 图形"].waitForExistence(timeout: 10),
+            "The existing independently selectable source-scoped diagram must survive")
+    }
+
     /// Real UIKit navigation from a disposable Vault into an offline diagram,
     /// a user-selected node, full source preview and the normal Chat screen.
     /// No fake completion button, repository shortcut or network model call.

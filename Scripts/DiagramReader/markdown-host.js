@@ -110,8 +110,15 @@ window.renderImpressMarkdown = async (body, options) => {
   });
   liveMaps = [];
   diagrams.length = 0;
-  style.textContent = String(options?.css || "");
+  const fontSize = Math.max(12, Math.min(42, Number(options?.fontSize) || 17));
+  style.textContent = String(options?.css || "") +
+    "\n.markdown-body{font-size:" + fontSize + "px!important;}";
   root.innerHTML = markdown.render(plain);
+  const firstHeading = root.firstElementChild;
+  if (firstHeading?.tagName === "H1" && String(options?.documentTitle || "").trim() ===
+      firstHeading.textContent.trim()) {
+    firstHeading.hidden = true; // Native document title already expresses this H1.
+  }
   markTasks();
   // Never make network requests for untrusted links or local Vault resources.
   // The native WKNavigationDelegate approves only explicit internal WikiLinks.
