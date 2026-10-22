@@ -112,7 +112,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
         let readable = app.webViews["impress.notes.markdown-webview"]
         XCTAssertTrue(readable.waitForExistence(timeout: 20))
         let ready = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", "ready"), object: readable)
+            predicate: NSPredicate(format: "value == %@", "ready:g=0/0:m=0"), object: readable)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 30), .completed)
         let snapshot = XCTAttachment(screenshot: app.screenshot())
         snapshot.name = "Impress-reader-native-properties"
@@ -129,7 +129,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
         let reader = app.webViews["impress.notes.markdown-webview"]
         XCTAssertTrue(reader.waitForExistence(timeout: 25))
         let ready = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", "ready"), object: reader)
+            predicate: NSPredicate(format: "value == %@", "ready:g=0/0:m=2"), object: reader)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 35), .completed)
         let image = XCTAttachment(screenshot: app.screenshot())
         image.name = "Impress-reader-inline-KaTeX"
@@ -143,7 +143,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
         let web = app.webViews["impress.notes.markdown-webview"]
         XCTAssertTrue(web.waitForExistence(timeout: 25))
         let expectation = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", "ready"), object: web)
+            predicate: NSPredicate(format: "value == %@", "ready:g=1/1:m=0"), object: web)
         XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 35), .completed)
         let snapshot = XCTAttachment(screenshot: app.screenshot())
         snapshot.name = "Impress-reader-inline-Markmap"
@@ -158,7 +158,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
         let reader = app.webViews["impress.notes.markdown-webview"]
         XCTAssertTrue(reader.waitForExistence(timeout: 25))
         let ready = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", "ready"), object: reader)
+            predicate: NSPredicate(format: "value == %@", "ready:g=2/2:m=0"), object: reader)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 35), .completed,
             "Both embedded geometric documents must render within the offline reader")
         let snapshot = XCTAttachment(screenshot: app.screenshot())
@@ -172,7 +172,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
         let rendered = app.webViews["impress.notes.markdown-webview"]
         XCTAssertTrue(rendered.waitForExistence(timeout: 25))
         let ready = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", "ready"), object: rendered)
+            predicate: NSPredicate(format: "value == %@", "ready:g=1/1:m=0"), object: rendered)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 35), .completed,
                        "The inline Markdown Mermaid must render from bundled JS")
         let screenshot = XCTAttachment(screenshot: app.screenshot())

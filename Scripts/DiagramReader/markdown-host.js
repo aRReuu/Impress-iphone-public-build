@@ -13,9 +13,9 @@ const cleanText = (source) => String(source || "")
 const diagrams = [];
 let serial = 0;
 let liveMaps = [];
-const report = (state, diagramCount, failures) => {
+const report = (state, diagramCount, failures, rendered = 0, mathCount = 0) => {
   window.webkit?.messageHandlers?.markdownState?.postMessage({
-    state, diagramCount, failures
+    state, diagramCount, failures, rendered, mathCount
   });
 };
 
@@ -41,12 +41,12 @@ markdown.block.ruler.before("fence","impress_math_display",
   (state,startLine,endLine,silent) => {
     const first=state.src.slice(state.bMarks[startLine]+state.tShift[startLine],
       state.eMarks[startLine]).trim();
-    if(first!=="$")return false;
+    if(first!=="$$")return false;
     let close=startLine+1;
     while(close<endLine) {
       const value=state.src.slice(state.bMarks[close]+state.tShift[close],
         state.eMarks[close]).trim();
-      if(value==="$")break;
+      if(value==="$$")break;
       close++;
     }
     if(close===endLine)return false;
@@ -297,6 +297,10 @@ window.renderImpressMarkdown = async (body, options) => {
     }
   }
   if (epoch === serial) {
-    report(failures ? "partial" : "ready", items.length, failures);
+    const rendered = items.filter((item) => item.querySelector("svg")).length;
+    const actualFailures = Math.max(failures, items.length - rendered);
+    const mathCount = root.querySelectorAll(".katex").length;
+    report(actualFailures ? "partial" : "ready",
+      items.length, actualFailures, rendered, mathCount);
   }
 };

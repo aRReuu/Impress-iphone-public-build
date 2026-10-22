@@ -3159,8 +3159,8 @@ final class ImpressMarkdownOfflineView: UIView, WKNavigationDelegate {
         web.accessibilityIdentifier = "impress.notes.markdown-webview"
         web.accessibilityValue = "loading"
         web.configuration.userContentController.add(relay, name: "markdownState")
-        relay.onState = { [weak self] state in
-            self?.web.accessibilityValue = state
+        relay.onState = { [weak self] report in
+            self?.web.accessibilityValue = report
         }
         addSubview(web)
         NSLayoutConstraint.activate([
@@ -3259,7 +3259,14 @@ private final class ImpressMarkdownStateRelay: NSObject, WKScriptMessageHandler 
         guard message.name == "markdownState",
               let payload = message.body as? [String: Any],
               let state = payload["state"] as? String,
-              ["ready", "partial", "failed"].contains(state) else { return }
-        DispatchQueue.main.async { [weak self] in self?.onState?(state) }
+              ["ready", "partial", "failed"].contains(state),
+              let total = payload["diagramCount"] as? Int, (0...24).contains(total),
+              let rendered = payload["rendered"] as? Int, (0...24).contains(rendered),
+              let failed = payload["failures"] as? Int, (0...24).contains(failed),
+              let maths = payload["mathCount"] as? Int, (0...512).contains(maths),
+              rendered <= total, failed <= total else { return }
+        let evidence = state + ":g=" + String(rendered) + "/" + String(total) +
+            ":m=" + String(maths)
+        DispatchQueue.main.async { [weak self] in self?.onState?(evidence) }
     }
 }
