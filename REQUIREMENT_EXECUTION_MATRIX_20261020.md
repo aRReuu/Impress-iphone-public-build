@@ -225,7 +225,7 @@ G4 同最终 SHA 全套 CI/证据/QA IPA；只有外部设备/Keychain/Files/授
 
 | 增量 | 文件及现有复用 | 审批界限 / 分层证据 |
 | --- | --- | --- |
-| CARD-08.a/UI-04.r | ImpressV3ReviewViewController + ImpressV3RatingOverlay + ImpressV3Appearance | 四向显示/拖动对比度提升，原 Reveal/FSRS/CAS 不改，真实 XCUITest 截图与 Native 测试同 SHA |
+| CARD-08.a/UI-04.r | ImpressV3ReviewViewController / ratingGuide + ImpressV3RatingOverlay + ImpressV3Appearance | **旧四胶囊方案作废**；移除 ratingGuide 行并扩张 cardStack；单行/自适应状态说明提示映射，拖动单方向语义色；Reveal/FSRS 不改；U13/U14/U17 及真实截图未执行 |
 | UI-01.nav | ImpressV3Appearance + SceneDelegate + 旧 Markdown 顶部自设 tint | 全部系统顶部操作符号跟随 label 黑白；选中 Tab 仍用品牌蓝，Dark/Light 实测 |
 | CHAT-01.a | ImpressAINativeChatViewController composer 段（仅外观） | 黑白 44pt 发送键/加号/麦克风/伸展输入 + placeholder；发送业务、历史、模型与审批逻辑不得修改 |
 | CAL/SAFE-08.w | 保留上一版四项和 Widget v2 数据协议 | 新 UI 本身不能认证 iPhone App Group，真机 SpringBoard/签名继续 DEVICE_BLOCKED |
@@ -245,3 +245,17 @@ G4 同最终 SHA 全套 CI/证据/QA IPA；只有外部设备/Keychain/Files/授
 | UI-03.reader-perf | UI-03/SAFE-08 | 首屏、长文、切换、缓存、退出回收 | NOT_RUN | RDR-07/12 |
 
 **2026-10-22 G1 源码事实**：`ImVaultDocumentController.renderBody` 的 Markdown 分支仍调用 `MarkdownView.load`；`ImpressMarkdownStructure` 保留标题和原始 UTF8 区间但不构成完整阅读 AST；`safeMarkdownProjection` 目前支持有限本地图片、WikiLink/Callout 安全显示投影；Mermaid/Markmap 是单独 `ImpressDiagramReaderController`，Canvas/Excalidraw 已有原生视图且不可删除。G2 更新属于需求确认，不等于代码实现或截图验收。
+
+## 2026-10-22 · 六图复核需求 × 代码 × 证据（最新冻结；本轮文档写入，不等于修复）
+
+| 子项（复用主 ID） | 当前精确源码指向 | 源码与产品差距 | 下一验收门禁 / 状态 |
+|---|---|---|---|
+| CARD-08/UI-04 | `ImpressV3ReviewViewController.configureRatingGuide` / `setCurrentCardActionsRevealed` / `ImpressV3RatingOverlay` | 当前存在 `ratingGuide` 四个独立 chip、显示后持久占高；需要撤销并扩大卡面，恢复四方向彩色单标签 | U13/U14/U17 / **FIX_REQUIRED** |
+| CHAT-01/05 UI-02 | `ImpressAINativeChatViewController` composer / `inputBar` / keyboardLayoutGuide | 当前四个 44pt 宽控件 + padding 造成总体臃肿；保留 44pt 点击区但缩减视觉/间距、正确垂直对齐、靠近键盘 | U16/U18 / **FIX_REQUIRED** |
+| UI-01.nav | `ImpressV3Appearance`、题干全文 Controller 与所有独立 Navigation | 全局色口径虽已定义，所有顶栏/Modal 未完成真机逐页灰度验收 | U15/U19 / **AUDIT_REQUIRED** |
+| UI-03.a NAV-03 | `ImpressNoteListTableViewController.tableViewSetting/refreshNotes/viewWillAppear` | 真实 `UIRefreshControl` 仍挂载，多个无条件 `reloadData`；移除手刷、增量 diff 和静默变化核验 | U20/U21 / **FIX_REQUIRED** |
+| UI-03.reader-a/b | `ImVaultDocumentController.renderBody` / `ImpressMarkdownOfflineView` / `markdown-host.js` / `markdown-index.html` | 已有离线 WebKit+markdown-it 与 typed Properties；仍缺同级布局/嵌套排版及无双重边框的 Obsidian 视觉验收 | RDR-01/02/03/07/14/16 / **TECH_REVIEW_PENDING** |
+| UI-03.reader-c | `ImVaultDocumentFormat.detect` / `ImpressExcalidrawScene` / `ImpressExcalidrawNativeView` | 已识别 `.excalidraw.md`，存在原生画布分支；截图所见仍是源文本，须比对安装 SHA、实际格式、bundle、解码及嵌入路径；不能据代码存在宣称图形通过 | RDR-06/08/13/15/16 / **DEVICE_FAIL_REPORTED; REPRO_PENDING** |
+| SAFE-03/CHAT-06 | `ImVaultSafetyProjection` / `ImpressVaultEmbedLocator` / 现有 Chat 选材恢复 | 继续严格确认预览映射/范围/版本、无网络/无写入扩权；高保真引擎仅替换显示层 | RDR-09/10/11/15 / **REGRESSION_REQUIRED** |
+
+**优先级**：先修正与用户指示矛盾的文档（已提交则只表示 SPEC_FROZEN）→ 阅读技术试验和选型讨论 → 实际代码 UI/渲染施工 → 自动化与相同 SHA 打包 → iPhone13 原图实测。不得利用旧 CI、文档状态或旧安装包宣称完成。新截图为用户私有输入，不同步到公开仓库。

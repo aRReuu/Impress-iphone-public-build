@@ -82,3 +82,19 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 已排查到旧 XCUITest 仅等待 `ready`，即使图形未出现在 DOM 也可能误判；`markdown-host.js` 中 `$$` 块公式分隔符曾被误写为 `$`。当前修复正由新源码 SHA 的 CI 验证：Bridge 回传实际 SVG/KaTeX 计数，UI 不再把空渲染器当成正确图形。既有图形选材/Chat 来源授权单独走原生 SHA 回读，不依赖此指标授权传输。普通笔记不主动加载 Mermaid/Markmap；只在检测到相应代码围栏时加载离线打包资源。
 
 当前嵌入 Markdown 的边界是**同一已授权 Vault、只读一层、20KB 文本投影、确切唯一章节**。未知块 ID、外链、循环、嵌套插件及范围不明依赖都必须局部降级。安全降级不等于 Obsidian 所有插件能力已交付。
+
+## 2026-10-22 · 六截图后 G2：真实代码分叉与架构候选（只记录，不实施）
+
+基线为本次复核打开的 `feature/impress-duplex-loop-v1`；最终实际 SHA 需在下一次 CI/设备记录，不沿用历史 PASS。
+
+1. **Markdown 并非完全无阅读引擎**：`ImVaultDocumentController.richView = ImpressMarkdownOfflineView()`；这个本地 `WKWebView` 由打包 `MarkdownReader/index.html` 初始化，`markdown-host.js` 通过 `markdown-it` 输出 HTML，并结合 KaTeX 与惰性加载 Mermaid/Markmap。旧文件仍 `import MarkdownView`，但当前 `renderBody` 调用的是新封装 `richView.load`。执行矩阵中的「MarkdownView.load」为早期源码快照说明，不得作为本 HEAD 的精确调用类型。**真实缺口**是 Markdown token/DOM/CSS + native Properties/标题页面的组合布局、嵌入与实际构建资源覆盖，没有经私有截图同设备视觉验收。
+
+2. **截图文字层级错位有明确结构风险**：页面 native `documentTitleLabel` 与可折叠 `propertyPanel` 放在 `readerHeader`；Properties 用额外圆角 surface，正文又在下方 `richView` 与独立 inset 体系；`markdown-index.html`/Appearance CSS 可能叠加块 margin、列表 padding、嵌套 list item 的行高；不能把这种跨层 UI 差异仅归因于字体或一种 Markdown 解析器。
+
+3. **Excalidraw 的格式分派已有初步代码，但截图只见数据**：`ImVaultDocumentFormat.detect` 优先判定 `.excalidraw.md`；`renderBody` 将 `.excalidrawJSON/.excalidrawMarkdown` 路由到 `ImpressExcalidrawScene.parse` 和 `ImpressExcalidrawNativeView`。实际旧 IPA、文档被当普通 MD 打开、解码失败、源码模式、缺少图形资产/元素类型、内嵌引用的回退分支均需用文件路径/运行日志/测试精准定位。当前失败样式不应被说明为正常的 Obsidian 画布。严禁把插件压缩正文替换成无来源授权的纯文本传给模型。
+
+4. **卡片/目录/Chat 的源码反证**：`ImpressV3ReviewViewController.configureRatingGuide` 明确建立四个 chip，`setCurrentCardActionsRevealed` 恢复固定高度；`ImpressNoteListTableViewController.tableViewSetting` 明确创建 `UIRefreshControl`，多个刷新路径 `tableView.reloadData`；Chat composer 的 Material/STT/Send 按钮分别固定 44pt 宽，外框/内间距和 keyboardLayoutGuide 共同导致肉眼臃肿。都属于实际代码未按最新反馈改正，不能再以“UI 已完成”关闭问题。
+
+5. **阅读架构比较（待用户同意选型）**：A）只换 `swift-markdown`/MarkdownUI 等原生渲染，适合普通 Markdown AST，却需额外自行实现 Obsidian Dialect、图形、源范围、Excalidraw；不建议单独替代全链。B）复用现有离线 `WKWebView + markdown-it`，统一渲染 DOM 与 CSS tokens、完善真实嵌入、原生来源索引和 Properties 布局；作为低风险基础方案。C）对 Excalidraw 高保真部分，在原生适配与官方 `@excalidraw/excalidraw` 离线只读 exportToSvg/轻量视图之间，基于覆盖率、离线包体、启动/内存、iPhone13 性能、元素命中选择、许可和来源映射完成技术试验后再决策。**禁止同时长期维护两套不一致的画布业务引擎**；共享事实身份/坐标/选材契约，渲染可替换。
+
+6. **验收阻断**：未能取得当前安装包完整 SHA、真实 Excalidraw 示例和同设备屏幕记录前，无法归因到某一条代码。当前仅锁定用户**要实现什么**及候选方案，正式代码不动、旧 PASS 不挪用、新实机回归保持 NOT_RUN。保留独立 Vault 只读、安全型 HTML、不运行插件 JS/Dataview、禁止 CDN、无自动外网访问及 `ImVaultGuardedWrite.productionWriteEnabled = false`。

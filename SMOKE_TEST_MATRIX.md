@@ -259,8 +259,8 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 
 ## 2026-10-22 · U13～U16 真机截图对应 UI 验收补充
 
-- **U13 四方向提示**：标准卡未揭示仅出现「查看答案」，rating-guide 隐藏；揭示后显示四个独立高对比度箭头/标签、辅助功能可定位；该操作不评分，不改变 FSRS，真实截图附带到 XCUITest 产物。
-- **U14 中央拖动反馈**：四个方向各以大号箭头和高对比黑白徽标在卡片中央随拖动出现，原卡可回弹；滚动长答案不触发上下 FSRS；无旧位图大边框或额外入口。
+- **U13 四方向提示（最新覆盖）**：揭示前无评分入口、仅先回忆文字；揭示后**没有任何四枚 chip/按钮/分立方向栏或空占位**，同一轻量状态文字显示「←困难/↑良好/→容易/↓重来」，仅通过真实滑动评分；辅助功能可读非按钮说明。
+- **U14 中央拖动反馈（最新覆盖）**：四向分别仅一个在可见卡片中央出现的语义彩色标签（现有四级 token，对比度支持明暗模式），未达阈值预览可辨、取消回弹；长答案独立滚动不触发垂直 FSRS；必须实测只有一张卡一次提交。
 - **U15 导航统一**：全局导航动作及 Modal/原 Markdown 旧顶部按钮在 System/Light/Dark 下使用动态 label 色，不再有系统蓝色顶栏图标；不影响底部 Tab 的蓝色选中语义，iPhone13 截图需要补充。
 - **U16 Chat 输入样式**：和手机常用原生聊天输入交互一致的圆角输入容器，左 +、输入、右麦克风、黑白发送/停止；空时视觉 placeholder、输入/草稿恢复时消失，多行/键盘安全区动态适配。单测检查外观，真实 XCUITest 仍保留历史/授权/修订原业务完整路径。
 
@@ -290,3 +290,19 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 本次代码新增 `ImpressFrontmatterReadingTests`、`ImpressVaultEmbedLocatorTests`、Properties/KaTeX/Mermaid/Markmap/Canvas/Excalidraw/一层 Markdown 嵌入进程测试。针对 **RDR-01/03/05/06**，不仅观察阅读器存在，还要求桥接报告实际图形成功/总数以及 KaTeX 节点计数；针对 **RDR-04/09/10**，原始 UTF8 范围、无效 YAML、源修订、路径穿越、外部 symlink、无效块定位及过深嵌入须负向拒绝。来源校验和 Chat 审批不依赖 HTML 文本逆向搜索。
 
 以上仍是 **新测试源码**，未在精确最终 SHA 执行并拿到 GitHub Actions 证明前不得改写既有 RDR 表格中的 `NOT_RUN`；RDR-07/12 的大字号 VoiceOver/真实性能基线仍需单独证据。DEVICE_BLOCKED 不可伪装为 PASS。
+
+## 2026-10-22 · 六张真机反馈：U17～U21 与 RDR-13～RDR-16 增量（均 NOT_RUN）
+
+| ID | 必须以**当前构建 SHA**验证的断言 | 当前 |
+|---|---|---|
+| U17 | 标准/长问答卡揭示前后均不存在独立四向控件、无 `ratingGuide` 垂直空档；卡片顶部位置回收旧栏高度且未遮挡题干/揭示入口；截图比较实际 cardStack 高度 | NOT_RUN |
+| U18 | Chat 键盘开合、候选栏、单行/多行/附件/停止态：placeholder 垂直居中，底边正确贴近键盘安全区，控件视觉紧凑且至少 44pt 热区，无多余浮动外框与跳动 | NOT_RUN |
+| U19 | 「题干全文」及所有 UIKit 导航/Modal 顶部（含笔记/源码/编辑/Chat）动态中性色；System、Light、Dark、文字大字号；未误改 Tab/Segment 选中蓝 | NOT_RUN |
+| U20 | 笔记一级页不存在 `UIRefreshControl`、下拉刷新触发/进度 UI；上下正常滑动不卡顿，前后台/页面返回有变化自动更新、没变化不 reload 整表 | NOT_RUN |
+| U21 | iCloud/Provider 外部增删改名/嵌套目录与 Vault 更换/撤权：异步版本核验、局部 diff、取消旧请求、保留搜索/折叠/滚动位置；不显示另一 Vault 旧内容 | NOT_RUN |
+| RDR-13 | 真正的 `.excalidraw.md` + `compressed-json` + 独立 `.excalidraw` + 普通 Markdown 中 `![[...excalidraw.md]]`：实际显示绘图节点/图形（不是 `Excalidraw Data` 源文本），局部缺件可诊断 | NOT_RUN |
+| RDR-14 | 中文 CSS 笔记：Props、H1/H2、嵌套有序与无序、代码、软硬换行、缩进导引线、列表项目含多段落；同一 fixture 下比对 Obsidian 参考截图结构与像素层级 | NOT_RUN |
+| RDR-15 | Excalidraw 元素/组/区域、Canvas 节点、Mermaid、Markmap 的实际渲染成功率 + 源身份/SHA/真实范围 + 授权 Chat 往返；不可只凭桥接 `ready` 判定 | NOT_RUN |
+| RDR-16 | iPhone13（记录安装 IPA 完整 SHA/Actions Run）与同字号、主题、宽度的 Obsidian 参考逐项对比：Properties 不遮挡、无重复标题、整页不出现巨型容器边框；设备缺失标 DEVICE_BLOCKED | NOT_RUN |
+
+**旧用例替代**：2026-10-22 旧 U13 的“四枚可见 chip”以及旧 U14“仅黑白标签”断言均失效，必须修改自动化使其要求**没有四枚 chip**并验证四种语义颜色。禁止为了兼容旧断言重新增加显式控件。首要验证路径为当前真实安装 IPA、`ImVaultDocumentFormat.detect` 与对应渲染分支；截图不代表当前 HEAD 已运行，必须记录完整 SHA，才能在真实代码缺陷、旧安装包和资源装载故障间正确归因。保留原 U01–U16、RDR-01～RDR-12、18 步、ACCEPT-01～12、F01～F13 和 Widget 验收，所述新门禁不是 PASS。
