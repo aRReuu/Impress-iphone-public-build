@@ -205,3 +205,22 @@ private extension String {
         String(repeating: self, count: count)
     }
 }
+    
+/// Treat valid Obsidian plugin drawings stored under a plain .md suffix as
+/// read-only composite documents, without changing the actual Vault identity.
+public enum ImpressObsidianDrawingEnvelope {
+    public static func isSupportedDrawing(_ bytes: Data) -> Bool {
+        guard bytes.count <= 8 * 1024 * 1024,
+              let source = String(data: bytes, encoding: .utf8) else { return false }
+        let frontmatter = ImpressFrontmatterReader.parse(source)
+        guard frontmatter.state == .valid,
+              frontmatter.fields.contains(where: { field in
+                  field.name.lowercased() == "excalidraw-plugin" &&
+                      field.values.contains(where: { $0.lowercased() == "parsed" })
+              }) else { return false }
+        // A metadata tag alone must never trigger a drawing: validate the
+        // bounded, decompressed Drawing fence and all element IDs/geometries.
+        return (try? ImpressExcalidrawScene.parse(bytes,
+            format: .excalidrawMarkdown)) != nil
+    }
+}

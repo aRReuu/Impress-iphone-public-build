@@ -160,7 +160,13 @@ enum ImpressV11UITestFixture {
             "Study/Diagram.canvas":
                 "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":150,\"height\":85,\"text\":\"图形范围\"}],\"edges\":[]}",
             "Study/Drawing.excalidraw":
-                "{\"type\":\"excalidraw\",\"elements\":[{\"id\":\"a\",\"type\":\"rectangle\",\"x\":0,\"y\":0,\"width\":150,\"height\":90,\"strokeColor\":\"#4f93b3\"},{\"id\":\"private\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":160,\"height\":90,\"text\":\"Unapproved\"}]}"
+                "{\"type\":\"excalidraw\",\"elements\":[{\"id\":\"a\",\"type\":\"rectangle\",\"x\":0,\"y\":0,\"width\":150,\"height\":90,\"strokeColor\":\"#4f93b3\"},{\"id\":\"private\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":160,\"height\":90,\"text\":\"Unapproved\"}]}",
+            "Study/Legacy-Drawing.md":
+                "---\nexcalidraw-plugin: parsed\ntags: [excalidraw]\n---\n" +
+                "# Text Elements\nOnly a text index\n# Drawing\n" +
+                fence + "json\n" +
+                "{\"type\":\"excalidraw\",\"elements\":[{\"id\":\"a\",\"type\":\"rectangle\",\"x\":0,\"y\":0,\"width\":150,\"height\":90,\"strokeColor\":\"#4f93b3\"}]}" +
+                "\n" + fence + "\n"
         ]
         for (name, contents) in files {
             let destination = root.appendingPathComponent(name)

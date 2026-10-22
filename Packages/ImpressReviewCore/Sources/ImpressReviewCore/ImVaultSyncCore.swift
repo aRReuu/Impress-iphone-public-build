@@ -99,6 +99,8 @@ public struct ImVaultDraft: Codable, Equatable, Sendable {
               String(data: originalBytes, encoding: .utf8) == baseText else {
             throw ImVaultCoreError.invalidDraft
         }
+        guard !ImpressObsidianDrawingEnvelope.isSupportedDrawing(originalBytes)
+        else { throw ImVaultCoreError.invalidDraft }
         self.identity = identity
         self.baseText = baseText
         self.baseRawData = originalBytes
@@ -152,7 +154,9 @@ public struct ImVaultDraft: Codable, Equatable, Sendable {
         guard identity.documentFormat.allowsGenericMarkdownDraft,
               ImVaultDigest.sha256(baseRawData) == baseDigest,
               String(data: baseRawData, encoding: .utf8) == baseText,
-              proposedBytes.count <= 8 * 1024 * 1024 else {
+              proposedBytes.count <= 8 * 1024 * 1024,
+              !ImpressObsidianDrawingEnvelope.isSupportedDrawing(baseRawData),
+              !ImpressObsidianDrawingEnvelope.isSupportedDrawing(proposedBytes) else {
             throw ImVaultCoreError.invalidDraft
         }
     }

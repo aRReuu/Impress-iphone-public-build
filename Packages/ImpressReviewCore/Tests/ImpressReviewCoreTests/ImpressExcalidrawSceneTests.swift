@@ -106,5 +106,26 @@ struct ImpressExcalidrawSceneTests {
                 format: .excalidrawJSON).selection(ids: ["not-present"])
         }
     }
+    @Test func plainMdObsidianDrawingIsReadableButDeniedByGenericDraft() throws {
+        let fence = String(repeating: String(Character(UnicodeScalar(96)!)), count: 3)
+        let drawing = "---\nexcalidraw-plugin: parsed\ntags: [excalidraw]\n---\n" +
+            "# Text Elements\nOnly a text index\n# Drawing\n" +
+            fence + "json\n" + rawJSON + "\n" + fence + "\n"
+        let bytes = Data(drawing.utf8)
+        #expect(ImpressObsidianDrawingEnvelope.isSupportedDrawing(bytes))
+        let source = try ImVaultFileIdentity(vaultID: "fixture",
+            relativePath: "Drawing.md")
+        #expect(source.documentFormat == .markdown)
+        #expect(throws: ImVaultCoreError.invalidDraft) {
+            try ImVaultDraft(identity: source, baseText: drawing)
+        }
+        #expect(!ImpressObsidianDrawingEnvelope.isSupportedDrawing(Data(
+            "---\ntags: [excalidraw]\n---\n" .utf8)))
+        let forged = drawing.replacingOccurrences(of: "\"type\":\"excalidraw\"",
+            with: "\"type\":\"unknown\"")
+        #expect(!ImpressObsidianDrawingEnvelope.isSupportedDrawing(Data(forged.utf8)))
+    }
+
+
 }
 
