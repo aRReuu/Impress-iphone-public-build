@@ -199,6 +199,16 @@ jobs:
           test -s "$APP/DiagramReader/index.html"
           test -s "$APP/DiagramReader/manifest.json"
           test -s "$APP/DiagramReader/THIRD_PARTY_LICENSES.txt"
+          # The installable Payload must carry the complete new offline reader,
+          # not only the legacy independent diagram resource bundle.
+          test -s "$APP/MarkdownReader/index.html"
+          test -s "$APP/MarkdownReader/reader.js"
+          test -s "$APP/MarkdownReader/graphs.js"
+          test -s "$APP/MarkdownReader/katex.min.css"
+          test -s "$APP/MarkdownReader/THIRD_PARTY_LICENSES.txt"
+          test -s "$APP/MarkdownReader/manifest.json"
+          test -d "$APP/MarkdownReader/fonts"
+          test "$(find "$APP/MarkdownReader/fonts" -name '*.woff2' -type f | wc -l | tr -d ' ')" -gt 0
           # WidgetKit is part of the actual installable artifact, not just Swift sources.
           WIDGET="$APP/PlugIns/ImpressCalibrationWidgets.appex"
           test -d "$WIDGET"
