@@ -306,6 +306,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
             expandFolders, collapseFolders, connectVault, inspectSaved, disconnectVault
         ])
         vaultItem.accessibilityLabel = V3L("Vault · 只读")
+        vaultItem.tintColor = ImpressV3Appearance.navigationActionInk
         navigationItem.rightBarButtonItem = vaultItem
     }
     
@@ -556,8 +557,7 @@ extension ImpressNoteListTableViewController: UISearchBarDelegate
         let controller = UISearchController.init(searchResultsController: nil)
         controller.searchBar.placeholder = V3L("搜索笔记或文件夹")
         controller.searchBar.delegate = self
-        controller.searchBar.tintColor = ImpressV3ReviewEnvironment.pilotEnabled
-            ? ImpressV3Appearance.accent : titleColor
+        controller.searchBar.tintColor = ImpressV3Appearance.navigationActionInk
         controller.obscuresBackgroundDuringPresentation = false
         navigationItem.searchController = controller
         navigationItem.hidesSearchBarWhenScrolling = false

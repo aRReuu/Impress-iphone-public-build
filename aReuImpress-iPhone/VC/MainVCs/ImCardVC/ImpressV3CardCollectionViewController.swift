@@ -55,6 +55,7 @@ final class ImpressV3CardCollectionViewController: UITableViewController, UISear
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             image: UIImage(systemName: "plus"), menu: UIMenu(children: [create, batch, history]))
         navigationItem.rightBarButtonItem?.accessibilityLabel = V3L("卡片管理")
+        navigationItem.rightBarButtonItem?.tintColor = ImpressV3Appearance.navigationActionInk
         reloadCards()
     }
 

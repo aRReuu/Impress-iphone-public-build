@@ -29,6 +29,7 @@ final class ImpressCalibrationViewController: UITableViewController {
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "indicator")
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             title: V3L("编辑目标"), style: .plain, target: self, action: #selector(editGoals))
+        navigationItem.rightBarButtonItem?.tintColor = ImpressV3Appearance.navigationActionInk
         configureHeader()
         period.addTarget(self, action: #selector(periodChanged), for: .valueChanged)
         NotificationCenter.default.addObserver(

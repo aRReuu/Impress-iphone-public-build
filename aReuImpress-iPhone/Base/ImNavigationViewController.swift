@@ -9,6 +9,12 @@ class ImNavigationViewController: UINavigationController {
         ImpressV3Appearance.styleNavigationBar(navigationBar)
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // UIKit may recreate bars when a modal or appearance mode changes.
+        ImpressV3Appearance.styleNavigationBar(navigationBar)
+    }
+
     override func pushViewController(_ viewController: UIViewController, animated: Bool) {
         if !children.isEmpty {
             viewController.hidesBottomBarWhenPushed = true

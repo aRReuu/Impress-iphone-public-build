@@ -933,6 +933,8 @@ final class ImVaultDocumentController: UIViewController {
             }
             more.menu = UIMenu(children: (more.menu?.children ?? []) + [section])
         }
+        discussion.tintColor = ImpressV3Appearance.navigationActionInk
+        more.tintColor = ImpressV3Appearance.navigationActionInk
         navigationItem.rightBarButtonItems = [discussion, more]
     }
 

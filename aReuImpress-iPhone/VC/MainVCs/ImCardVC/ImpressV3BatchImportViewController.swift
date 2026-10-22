@@ -82,6 +82,7 @@ final class ImpressV3BatchImportViewController: UIViewController, UIDocumentPick
         view.backgroundColor = ImpressV3Appearance.page
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
+        navigationItem.leftBarButtonItem?.tintColor = ImpressV3Appearance.navigationActionInk
         navigationItem.rightBarButtonItem = ImpressV3Appearance.navigationAction(
             symbol: "doc.text.magnifyingglass", label: V3L("预览"),
             target: self, action: #selector(preview))
@@ -294,6 +295,8 @@ final class ImpressV3BatchVaultPickerViewController: UITableViewController {
             barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
         search.obscuresBackgroundDuringPresentation = false
         search.searchResultsUpdater = self
+        search.searchBar.tintColor = ImpressV3Appearance.navigationActionInk
+        navigationItem.leftBarButtonItem?.tintColor = ImpressV3Appearance.navigationActionInk
         navigationItem.searchController = search
         ImVaultReadSync.shared.refresh { [weak self] result in
             guard let self else { return }
@@ -372,6 +375,7 @@ final class ImpressV3BatchPreviewViewController: UITableViewController {
         tableView.estimatedRowHeight = 78
         let commit = UIBarButtonItem(title: V3L("全部导入"), style: .plain,
                                      target: self, action: #selector(commitBatch))
+        commit.tintColor = ImpressV3Appearance.navigationActionInk
         commitButton = commit
         navigationItem.rightBarButtonItem = commit
         refreshValidation()
