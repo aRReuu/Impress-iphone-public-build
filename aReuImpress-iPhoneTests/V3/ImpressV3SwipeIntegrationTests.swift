@@ -209,6 +209,11 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
             $0.accessibilityIdentifier == "impress.ai.chat.input-placeholder"
         }
         XCTAssertEqual(placeholder?.text, V3L("询问任何问题"))
+        let inputField = views.compactMap { $0 as? UITextView }.first {
+            $0.accessibilityIdentifier == "impress.ai.chat.input"
+        }
+        XCTAssertEqual(inputField?.textContainerInset.top,
+                       ImpressV3Appearance.Metrics.chatComposerTextVerticalInset)
         XCTAssertFalse(placeholder?.isHidden ?? true)
         let input = views.compactMap { $0 as? UITextView }.first {
             $0.accessibilityIdentifier == "impress.ai.chat.input"
@@ -244,15 +249,17 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         let stack = try XCTUnwrap(review.view.subviews.compactMap {
             $0 as? SwipeCardStack
         }.first)
-        XCTAssertTrue(try await eventually {
+        let hasCard = try await eventually {
             stack.topCard?.content is ImMemoryCardView
-        })
+        }
+        XCTAssertTrue(hasCard)
         (stack.topCard?.content as? ImMemoryCardView)?.revealAnswerIfNeeded()
-        XCTAssertTrue(try await eventually {
+        let hasFourDirections = try await eventually {
             [V3L("困难"), V3L("良好"), V3L("容易"), V3L("重来")].allSatisfy {
                 summary.text?.contains($0) == true
             }
-        })
+        }
+        XCTAssertTrue(hasFourDirections)
         let events = try await store.reviewHistory(for: id)
         XCTAssertTrue(events.isEmpty, "Exposing guidance must not submit a rating")
     }
@@ -838,6 +845,8 @@ final class ImpressR041NativeNavigationTests: XCTestCase {
         XCTAssertEqual(notes.tableView.backgroundColor, ImpressV3Appearance.page)
         XCTAssertEqual(notes.tableView.estimatedRowHeight,
                        ImpressV3Appearance.Metrics.noteRowEstimatedHeight)
+        XCTAssertNil(notes.tableView.refreshControl,
+            "No pull-to-refresh control should be mounted on the Vault outline")
     }
 
     func testSpeechInputTextMutationRespectsUTF16SelectionAndNoDataLoss() throws {

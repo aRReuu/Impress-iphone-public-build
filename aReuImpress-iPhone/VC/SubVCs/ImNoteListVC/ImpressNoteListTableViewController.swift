@@ -154,6 +154,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
     private var showingPartialIndex = false
     private var externalReadGate = ImVaultAsyncReadGate()
     private var externalError: String?
+    private var lastSilentRefreshRequest = Date.distantPast
     // One visible, bounded source navigation at a time. The source content is
     // still read ONLY through the scoped NSFileCoordinator gate.
     private var pendingExternalSourceOpen: UUID?
@@ -255,10 +256,9 @@ class ImpressNoteListTableViewController: ImBaseViewController
         title = V3L("笔记")
         navigationItem.searchController?.searchBar.placeholder = V3L("搜索笔记或文件夹")
         setupNavigationBarItems()
-        tableView.reloadData()
         navigationItem.largeTitleDisplayMode = .always
         if ImVaultReadOnlyProbe.shared.hasAuthorizedBookmark && !externalLoading {
-            refreshNotes()
+            requestSilentRefresh()
         }
     }
     
@@ -401,6 +401,14 @@ class ImpressNoteListTableViewController: ImBaseViewController
     @objc private func handleVaultForeground(_ notification: Notification) {
         // A covered/hidden Notes view should not perform a large Vault scan.
         guard view.window != nil else { return }
+        requestSilentRefresh()
+    }
+
+    /// Coalesce foreground and navigation re-entry without a visible
+    /// pull-to-refresh affordance or redundant table invalidation.
+    private func requestSilentRefresh() {
+        guard Date().timeIntervalSince(lastSilentRefreshRequest) >= 0.8 else { return }
+        lastSilentRefreshRequest = Date()
         refreshNotes()
     }
 
@@ -412,7 +420,7 @@ class ImpressNoteListTableViewController: ImBaseViewController
             if externalReadGate.changeSource(to: vaultID) {
                 externalLoading = false
                 externalNotes = []
-            expandedExternalFolders.removeAll()
+                expandedExternalFolders.removeAll()
                 externalVisibleLimit = ImVaultListPresentation.pageSize
                 showingCachedIndex = false
                 showingPartialIndex = false
@@ -455,21 +463,27 @@ class ImpressNoteListTableViewController: ImBaseViewController
                       ImVaultReadOnlyProbe.shared.authorizedVaultID == vaultID,
                       self.externalReadGate.accepts(token) else { return }
                 self.externalLoading = false
+                let wasProvisional = self.showingCachedIndex || self.showingPartialIndex
                 self.showingCachedIndex = false
                 self.showingPartialIndex = false
                 switch result {
                 case let .success(index):
-                    self.externalNotes = index.notes
                     self.externalError = nil
+                    if self.externalNotes != index.notes {
+                        self.animateOutlineChange { self.externalNotes = index.notes }
+                    } else if wasProvisional {
+                        UIView.performWithoutAnimation {
+                            self.tableView.reloadSections(IndexSet(integer: 0), with: .none)
+                        }
+                        self.updateVaultEmptyState()
+                    }
+                    // Same identity/mtime/size: zero table invalidation.
                 case let .failure(error):
-                    // No automatic fallback to retired local WCDB notes.
-                    self.externalNotes = []
+                    // Keep the previously verified same-Vault index on
+                    // transient provider failures. Never expose old Vaults.
                     self.externalError = error.localizedDescription
+                    if self.externalNotes.isEmpty { self.updateVaultEmptyState() }
                 }
-                self.rebuildExternalRows()
-                self.tableView.refreshControl?.endRefreshing()
-                self.tableView.reloadData()
-                self.updateVaultEmptyState()
             }
         } else {
             externalReadGate.changeSource(to: nil)
@@ -483,7 +497,6 @@ class ImpressNoteListTableViewController: ImBaseViewController
             externalError = nil
             rebuildExternalRows()
             updateVaultEmptyState()
-            tableView.refreshControl?.endRefreshing()
             tableView.reloadData()
         }
     }
@@ -618,9 +631,7 @@ extension ImpressNoteListTableViewController:UITableViewDataSource,UITableViewDe
         tableView.delegate = self
         tableView.dataSource = self
         tableView.tableFooterView = UIView(frame: .zero)
-        let refresh = UIRefreshControl()
-        refresh.addTarget(self, action: #selector(refreshNotes), for: .valueChanged)
-        tableView.refreshControl = refresh
+        tableView.refreshControl = nil
     }
     
     func numberOfSections(in tableView: UITableView) -> Int {
@@ -821,7 +832,7 @@ extension ImpressNoteListTableViewController
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _, _, _ in
                 guard let self = self else { return }
-                self.tableView.reloadData()
+                if !self.externalMode { self.tableView.reloadData() }
                 // 确保自动滚动逻辑只在需要时执行一次
                 if self.canScrollToSelect {
                     self.canScrollToSelect = false

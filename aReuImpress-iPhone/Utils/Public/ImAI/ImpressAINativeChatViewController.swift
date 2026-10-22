@@ -421,10 +421,10 @@ final class ImpressAINativeChatViewController: UIViewController,
         messageInput.backgroundColor = ImpressV3Appearance.surface
         messageInput.layer.cornerRadius = ImpressV3Appearance.Radius.field
         messageInput.textContainerInset = UIEdgeInsets(
-            top: ImpressV3Appearance.Metrics.fieldPadding,
-            left: ImpressV3Appearance.Metrics.fieldPadding,
-            bottom: ImpressV3Appearance.Metrics.fieldPadding,
-            right: ImpressV3Appearance.Metrics.fieldPadding)
+            top: ImpressV3Appearance.Metrics.chatComposerTextVerticalInset,
+            left: ImpressV3Appearance.Metrics.chatComposerTextHorizontalInset,
+            bottom: ImpressV3Appearance.Metrics.chatComposerTextVerticalInset,
+            right: ImpressV3Appearance.Metrics.chatComposerTextHorizontalInset)
         messageInput.delegate = self
         messageInput.accessibilityLabel = V3L("消息内容")
         messageInput.accessibilityIdentifier = "impress.ai.chat.input"
@@ -441,7 +441,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         NSLayoutConstraint.activate([
             inputPlaceholder.leadingAnchor.constraint(
                 equalTo: messageInput.leadingAnchor,
-                constant: ImpressV3Appearance.Metrics.fieldPadding +
+                constant: ImpressV3Appearance.Metrics.chatComposerTextHorizontalInset +
                     messageInput.textContainer.lineFragmentPadding),
             inputPlaceholder.trailingAnchor.constraint(
                 lessThanOrEqualTo: messageInput.trailingAnchor, constant: -8),
@@ -454,7 +454,7 @@ final class ImpressAINativeChatViewController: UIViewController,
             var config = UIButton.Configuration.filled()
             config.image = UIImage(systemName: "arrow.up")
             config.cornerStyle = .capsule
-            config.buttonSize = .medium
+            config.buttonSize = .small
             // ChatGPT-like compact monochrome send control, never the blue
             // system accent used by selection. This does not alter Send/Stop.
             config.baseBackgroundColor = ImpressV3Appearance.chatComposerSendFill
@@ -474,13 +474,15 @@ final class ImpressAINativeChatViewController: UIViewController,
             .resolvedColor(with: traitCollection).cgColor
         inputBar.layer.borderWidth = 0.5
         composerColumn.axis = .vertical
-        composerColumn.spacing = 4
+        composerColumn.spacing = 2
         composerRow.axis = .horizontal
-        composerRow.alignment = .bottom
-        composerRow.spacing = 2
+        composerRow.alignment = .center
+        composerRow.spacing = 0
         var add = UIButton.Configuration.plain()
         add.image = UIImage(systemName: "plus",
-            withConfiguration: UIImage.SymbolConfiguration(pointSize: 21, weight: .regular))
+            withConfiguration: UIImage.SymbolConfiguration(
+                pointSize: ImpressV3Appearance.Metrics.chatComposerGlyphPointSize,
+                weight: .regular))
         add.baseForegroundColor = ImpressV3Appearance.primaryText
         materialButton.configuration = add
         materialButton.accessibilityLabel = V3L("添加材料")
@@ -489,7 +491,9 @@ final class ImpressAINativeChatViewController: UIViewController,
                                  for: .touchUpInside)
         var dictation = UIButton.Configuration.plain()
         dictation.image = UIImage(systemName: "mic",
-            withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular))
+            withConfiguration: UIImage.SymbolConfiguration(
+                pointSize: ImpressV3Appearance.Metrics.chatComposerGlyphPointSize,
+                weight: .regular))
         dictation.baseForegroundColor = ImpressV3Appearance.primaryText
         speechButton.configuration = dictation
         speechButton.accessibilityLabel = V3L("语音输入转文字")
@@ -542,9 +546,9 @@ final class ImpressAINativeChatViewController: UIViewController,
                 equalTo: view.safeAreaLayoutGuide.trailingAnchor,
                 constant: -ImpressV3Appearance.Metrics.screenInset),
             inputBar.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor,
-                                             constant: -8),
-            composerColumn.topAnchor.constraint(equalTo: inputBar.topAnchor, constant: 6),
-            composerColumn.bottomAnchor.constraint(equalTo: inputBar.bottomAnchor, constant: -6),
+                                             constant: -4),
+            composerColumn.topAnchor.constraint(equalTo: inputBar.topAnchor, constant: 3),
+            composerColumn.bottomAnchor.constraint(equalTo: inputBar.bottomAnchor, constant: -3),
             composerColumn.leadingAnchor.constraint(equalTo: inputBar.leadingAnchor,
                 constant: ImpressV3Appearance.Metrics.chatComposerInnerInset),
             composerColumn.trailingAnchor.constraint(equalTo: inputBar.trailingAnchor,
