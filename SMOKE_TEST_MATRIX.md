@@ -306,3 +306,16 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 | RDR-16 | iPhone13（记录安装 IPA 完整 SHA/Actions Run）与同字号、主题、宽度的 Obsidian 参考逐项对比：Properties 不遮挡、无重复标题、整页不出现巨型容器边框；设备缺失标 DEVICE_BLOCKED | NOT_RUN |
 
 **旧用例替代**：2026-10-22 旧 U13 的“四枚可见 chip”以及旧 U14“仅黑白标签”断言均失效，必须修改自动化使其要求**没有四枚 chip**并验证四种语义颜色。禁止为了兼容旧断言重新增加显式控件。首要验证路径为当前真实安装 IPA、`ImVaultDocumentFormat.detect` 与对应渲染分支；截图不代表当前 HEAD 已运行，必须记录完整 SHA，才能在真实代码缺陷、旧安装包和资源装载故障间正确归因。保留原 U01–U16、RDR-01～RDR-12、18 步、ACCEPT-01～12、F01～F13 和 Widget 验收，所述新门禁不是 PASS。
+
+## 2026-10-22 · G3 连续阅读器新增判定 RDR-17～RDR-22（当前全部 NOT_RUN）
+
+| ID | 结构/来源/图形验收 | 当前 |
+|---|---|---|
+| RDR-17 | **唯一纵向滚动源**：Markdown 标题/类型化 Properties/正文/嵌入同一个 WK 文档随手指完整连贯滚动；无固定 header 与正文二次滚动、无整篇圆角暗色大卡片。长文首屏、属性折叠及 Dynamic Type 不跳变/不遮挡操作按钮。 | NOT_RUN |
+| RDR-18 | 同名首 H1 与文件名**视觉只出现一个标题**但源 H1 仍可通过原 UTF8 锚点精确选材；不同名 H1 不得消失；Properties 折叠/展开、主题变化及返回 Chat 后滚动锚点/折叠状态按 Vault+SHA 保持。 | NOT_RUN |
+| RDR-19 | 选中文字/章节后只能得到真实源 UTF8 范围（复杂中文、emoji、CRLF、BOM、WikiLink/Frontmatter 投影），JS DOM 不能反向猜源范围；未映射安全拒绝；完整预览及授权后进 Chat，变更 SHA 必须失败并重选。 | NOT_RUN |
+| RDR-20 | 正常 \`.md\` + 明确合法 \`excalidraw-plugin: parsed\` 等插件 Frontmatter **及有效 Drawing fence**识别为只读 Excalidraw；仅 tag/虚假文字不得误判，分类随 SHA 重新判定；此类容器严禁 generic Markdown 写入（包括已授权 Debug QA），原生产门禁不变。 | NOT_RUN |
+| RDR-21 | \`![[合法.excalidraw.md]]\`/\`![[合法.canvas]]\` 在 Markdown 原位输出真实有界图形预览，不泄漏压缩数据/插件文字；点击进入可缩放、选材的独立图形页，缺件/撤权/循环/网络引用仅局部安全失败，其他文本照常阅读。 | NOT_RUN |
+| RDR-22 | 真实文档合成集：Excalidraw 手绘/曲线/笔触/箭头/多字形/旋转/图层/本地图片/frames A/B 对照官方导出；记录 bundle 体积、iPhone13 资源性能、许可证与离线审计，锁定视觉实现后重新跑图形/Chat 与完整回归。 | NOT_RUN |
+
+**扩展门禁**：RDR-17～22 只是 RDR-01～16 的补充，不允许替代原 RDR-13/14 的可见画布/排版验收或原 U13～21 的 UI 需求。不使用用户私有截图或私人 Vault 文件作为公开 Fixture。原始二进制安装包必须附真实完整 SHA，未运行不写 PASS。

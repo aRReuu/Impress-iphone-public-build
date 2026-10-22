@@ -106,3 +106,11 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 - **画布保真度确有技术上限**：现有 `ImpressExcalidrawNativeView` 将每个元素变成 `UIButton`，`CAShapeLayer` 只以简单 `UIBezierPath` 绘制矩形/椭圆/菱形/折线/箭头/手绘直连线；文本使用系统 body font，颜色处理主要针对 7 位十六进制值，复杂粗糙笔触、绑定文字、曲线/笔压、箭头端样式和插件式多层图形未必保真。因此“已经绘出形状”不能当成“达到 Excalidraw/Obsidian 级渲染”；优先做实际真实合成场景与官方 SVG 输出的画面对照，再决定采用高保真离线渲染器还是继续完善原生实现。
 
 - **潜在格式误判（需真实文件验证）**：当前 `ImVaultDocumentFormat.detect(relativePath:)` 仅以 `.excalidraw.md` 后缀识别画布；若 Obsidian 插件生成的是普通 `.md` 文件却内含 `excalidraw-plugin: parsed` + 有效 Drawing code fence，则会被路径分类为普通 Markdown 并在阅读视图显示 `Excalidraw Data`。此为**代码可证的潜在失配路径**，尚不能断言就是用户截图文件：必须验证完整相对文件名/合法 drawing payload/安装 SHA。新增有限只读内容特征判别时，要同步阻止把 Excalidraw 封装文档误交给普通 Markdown 写入器；`tags: excalidraw` 单独出现不应自动视为有效画布。具体签名方案仍需用户确认技术路径后实施。
+
+## 2026-10-22 · G3 实施前技术边界（基于实际现存数据流）
+
+- **单滚动结构切割点**：\`ImVaultDocumentController\` 目前布局是 \`readerHeader\` 在上 + \`readingView\` / \`richView\` / \`canvasHost\` 相同内容矩形。将默认 \`.markdown && !isSourceMode\` 改为 WK 原生内文档 title/Properties/body 的一体化滚动，源码/Canvas/独立 Excalidraw 可继续拥有自己的内容 host 与导航；不要为了改 HTML 把全部 Canvas 自有手势迁入同一页。
+- **已有 YAML 安全事实权威**：\`ImpressFrontmatterReader.parse\` 返回 \`state/fields/body/bodyStartUTF8/diagnostic\`，各 \`field\` 自带 \`kind/values/rawValue/startUTF8/endUTF8\`。Swift 做 typed parse 与失效诊断，再将白名单的只读属性展示模型送入 WK；不可另写一套 JS YAML parser 造成解释冲突。属性展开状态是纯 UI，而不是对真实 YAML 的修改。
+- **真正的关键风险是选字定位**：\`ImpressMarkdownOfflineView\` 目前的 WK 桥仅有 \`markdownState\`（状态报告）和 WikiLink 点击，**没有通用 Web text selection→源字节区间**的可信桥。当前 \`ImpressMarkdownStructure\` 可提供章节 UTF8，尚不足以为任意 DOM 文本选区构造精确 UTF8；若 S1 改结构后宣称能从纯 HTML 精确选字，则必然引入来源安全漏洞。必须新增来自 source AST/token 的映射及只读范围 re-read gate，未实现前标明「精准选字功能未验收」，不得删除既有章节选材以求省事。
+- **Excalidraw 类型误判与写入门禁同时修**：路径后缀分派不是完整 Obsidian 插件识别。增加只读展示分类时必须同步对“普通 md 路径却是画布源”的 generic Markdown draft 守卫；历史源身份与 backed-up Chat Key 不修改。仅当 Frontmatter + 可有界解压的 Drawing 数据并存才识别，不靠某个 \`tags\` 值猜。
+- **离线现状足以复用**：\`Scripts/DiagramReader/build.mjs\` 已打包固定版本 markdown-it 14.1.0、KaTeX 0.16.22、Mermaid 11.12.2、Markmap 0.18.12；CSP \`default-src 'none'\`、\`connect-src 'none'\`、\`img-src data:\`、WebKit nonpersistent 已存在。G3 不应推翻已有离线资产边界，调整资源 bundle 须重产 manifest/hash/licenses 并同 SHA 构建。单独 Excalidraw SVG 方案只做固定 fixture A/B 和依赖/许可证审查，不擅自加入 CDN、React 编辑器或新的网络访问能力。
