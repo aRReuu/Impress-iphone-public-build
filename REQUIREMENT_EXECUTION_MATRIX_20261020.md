@@ -302,3 +302,9 @@ G4 同最终 SHA 全套 CI/证据/QA IPA；只有外部设备/Keychain/Files/授
 | CAL-DAY-CLOSED | CalibrationDayCheckIn.isComplete 已存在；UI 始终 3 个 section、今日四项始终显示；store.save 未拒旧完成日变更 | 四项全部结算且保存成功 -> 当天隐藏四项 section 并锁定整日业务结果，store actor 原子拒绝复写，额外修正只读，Widget/跨日/恢复检验 | SPEC_CONFIRMED / CODE_PENDING |
 
 注意：2026-10-22 文档中的「Chat 本批只动外观、不动业务」已被 2026-10-23 最新确认的系统附件及真实流式需求所覆盖；但保留既有 WCDB/Source/FSRS 与 Vault 写入门禁。历史 PASS 不继承，仍然只允许公开开发分支，不得碰 main/私库。
+
+## 2026-10-23 · 后续用户明确纠偏：Chat 技术未定版
+
+原 2026-10-23 表格将 Chat-UI、Composer、Streaming、附件技术方案合称 `SPEC_CONFIRMED`：**本条覆盖其最终状态**。已确认仅包括 ChatGPT iPhone 全体验作为主视觉参照、取消传统整行消息视觉、`+` 使用方案 B 与原数据/来源/授权门禁不变。Chat 布局内核、UIKit/SwiftUI 组合、Markdown 引擎、滚动/流式架构和具体性能阈值仍为 `TECH_DESIGN_OPEN`，不是 CODE_PENDING 已授权执行。可分别原型评估原生 UICollectionView / ChatLayout、SwiftStreamingMarkdown / Textual / Rill / 原生 TextKit2；需要记录合成 fixture、帧耗/内存/解析耗时、准确性、许可证与 IPA 增量，不依赖历史 CI 或社区声称。
+
+Excalidraw P0 的图中文字/节点真实可读和校准器 CLOSED 持久化门禁则为 `SPEC_CONFIRMED / CODE_PENDING`，不等待 Chat 技术讨论才能在现有安全分支按原审批推进。仍不允许更改 main/私库。

@@ -336,3 +336,7 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 | CAL.day-durability | store 直接传入不同 CLOSED 结果必须拒绝；重复保存幂等、后台重开、并发、多次触发、旧记录迁移、跨日和时区变化、备份恢复、Widget 投影/当日提醒不回归 | NOT_RUN |
 
 所有 UI 截图须来自合成 Fixture 并附精确 SHA、设备、模式、失败证据；私人用户对比照片/真实 Vault 文件不得进入公开仓库。新旧两个 SHA 的截图不可混证；同最终 SHA 的 XCTest/XCUITest/IPA 需再次执行。
+
+## 2026-10-23 · Chat 门禁标注修订（尚未批准最终 UI 引擎）
+
+上一章 U18.chat-layout、U18.chat-stream、U18.chat-composer 等 Chat 子场景视为候选验收维度 `TEST_DESIGN_DRAFT / NOT_RUN`，**尚非已经定稿的 UIKit/SwiftUI/第三方库验收规格**。继续技术研究并通过同设备、同字体/明暗的合成 fixture 观测长回复稳定块渲染、表格/代码横向滚动、真正流式增量、滚动锚点、原生选择、键盘与内存回收，基准帧率与内存阈值待 iPhone13 测试定标；不因为框架 README 声称顺滑就标 PASS。系统附件选择方案 B 已确认，但 Picker/上传链的具体实现仍需能力门禁与集成测试。RDR-13/15/22 与 CAL.day-close/day-durability 的**非 Chat 产品要求继续冻结**，测试一律保持 NOT_RUN 直到实际执行。

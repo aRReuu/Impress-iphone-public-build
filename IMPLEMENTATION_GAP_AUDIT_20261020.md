@@ -129,3 +129,9 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 4. **校准日锁定缺持久化守卫**：CalibrationDayCheckIn.isComplete 是 computed 判定，setOutcome 允许直接更改；ImpressCalibrationLocalStore.save(checkIn) 可覆盖同日已完成记录；ImpressCalibrationViewController.tableView 固定3节、四项永远展示，并可通过额外行为按钮修改。必须在 Actor 保存层对已有完整当天 snapshot 添加拒改、UI 以保存成功的 CLOSED 投影动态隐藏四项录入节并禁用额外修正；只隐藏 section 将留下重入漏洞。
 
 本节仅为源码事实与新的产品判定；截至此确认未提交对应修复代码，不把上一轮 CI 当作本轮 PASS。
+
+## 2026-10-23 · Chat 渲染框架候选与风险（研究结论，不是开发交付）
+
+当前 `ImpressChatMessageCell` 强制角色标签、普通 `UITextView` 与整行背景；`ImpressAIHTTPClient.converse` 以单次文本请求返回，是实际代码事实。选型不应直接等于换 `UITableView`：分别度量容器滚动/单元复用、Markdown 解析/布局、网络 SSE/取消/持久化。社区候选包括 MIT 的 `ekazaev/ChatLayout`（自适应单元＋稳定滚动，需关注 iOS 18 起 supplementary views 的维护变化）、`microsoft/SwiftStreamingMarkdown`（原生混合 Markdown/公式/代码/引用）、`gonzalezreal/textual`（新一代 SwiftUI 文本）、`joydle/rill`（脏尾增量 AST，社区成熟度仍需证明）、`exyte/Chat`（附件界面参考）；`oriveo/oriveo` 作为 AGPL-3.0-or-later 的多 Provider 混合 UIKit/SwiftUI 架构研究材料，禁止未经许可审查复制源码。参考 Gemini 的混排多模态、Claude 的成果分离阅读、DeepSeek 的模式切换时，不得冲淡 ChatGPT 作为 Impress 唯一主视觉标准或放入并不存在的产品能力。
+
+**严谨性能契约的试验要求**：无界 token 对整篇 Markdown 重解析、对全部历史列表 reload、每条消息一个 WKWebView、网络事件直接触发多次 AutoLayout、以及滚动位置每帧强制跳到底部均是需禁止或证明等效性能的高风险路径。固定长段中文/emoji/数学/代码/表格/不闭合围栏/附件/长聊天与随机 token 切块；测试最终文本 AST 与一次性解析结果一致、错误和取消不会误作 completed，校验 stable messageID、Dynamic Type、键盘、复制选择、前后台、缓存释放。分别在 iPhone13 用 Instruments/OSSignpost 测量 FPS/hitches、主线程时长、峰值/回落内存、滚动偏移与 IPA 增量，不填报未量实测数值。Chat `TECH_DESIGN_OPEN`；Excalidraw 与 CAL 产品规则仍冻结。

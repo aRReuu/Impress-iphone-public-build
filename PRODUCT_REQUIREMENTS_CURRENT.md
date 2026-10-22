@@ -387,3 +387,14 @@
 关闭是持久化数据契约：以存储层旧值 isComplete 作为不可变门禁，写操作需原子回读并拒绝 CLOSED 的变更；UI 隐藏不是安全保证。保持完整旧日/迁移/备份语义，跨日按 Calendar/时区明确关联、Widget 与提醒投影从唯一账本读取；不允许因重启、旧 backup 恢复、并发任务、时区切换而把同一天已结算数据意外重开。存储失败不得假装 CLOSED、不得隐藏未成功提交的行。
 
 **验收状态**：CHAT-UI、附件/流式、Excalidraw 真实内容、CAL CLOSED 全部 SPEC_CONFIRMED / IMPLEMENTATION_NOT_RUN / CI_NOT_RUN / DEVICE_NOT_RUN。原 Vault 生产写回 productionWriteEnabled = false 继续冻结。
+
+## 2026-10-23 · 最新纠偏：Chat 技术方案暂不定版（覆盖上段 Chat 已定稿表述）
+
+用户明确要求：**其他已确认需求可以定版，但 Chat 继续进行技术讨论。** 因此上文 ChatGPT 式 UI、系统附件等章节只有确定的产品方向与单项偏好，并**不意味着消息容器、第三方框架、Markdown 渲染引擎、流式刷新粒度、全量交互清单已获得技术定版或施工授权**。本段在 Chat 技术定版状态上优先于同日较早的「已确认」标题及执行矩阵的 `SPEC_CONFIRMED` 总称。
+
+- **已确认的 Chat 约束（不等于实现方案）**：以 ChatGPT iPhone 移动端整体观感/交互为唯一主视觉参照；用户消息和 AI 回复不能继续沿用整行分色＋「我/AI」标签；原生输入、历史/来源/审批与 FSRS/WCDB 数据不能回归。底部加号采用已确认的 **方案 B**（相册/文件/拍照）；既有笔记/卡片/章节/图形材料留在二级菜单。上传前须显式授权，Provider 能力检查及免费验证边界保持。
+- **Chat 开放决策**：UICollectionView 原生 CompositionalLayout vs. ChatLayout；UIKit 消息 Cell vs. UIHostingConfiguration 的混合粒度；消息正文采用 Microsoft SwiftStreamingMarkdown、Textual、Rill、TextKit 2 等何种解析/渲染方式；增量 Markdown 的稳定块、动态高度、滚动锚点、流式传输/回复状态、资源与内存预算，尚须以独立合成 Fixture、iPhone13 实测与许可证审计比较。不得把初选写成强制依赖或「Chat 已完成」。
+- **候选开源参考，不自动引入生产**：`ekazaev/ChatLayout` (MIT，动态布局、滚动保位；键盘和 composer 不提供)；`exyte/Chat` (SwiftUI、媒体选取，偏传统聊天)；`microsoft/SwiftStreamingMarkdown` (MIT，原生 SwiftUI Streaming Markdown、公式/代码/引用)；`gonzalezreal/textual` (MIT，MarkdownUI 新一代文本渲染，需实测成熟度)；`joydle/rill` (MIT，仅脏尾增量解析，较新且尚需压力验证)；`oriveo/oriveo` (AGPL-3.0-or-later，仅研究 UIKit transcript + SwiftUI shell + streaming bypass diffing 的架构，未经许可证审查不得复制)。最终源码依赖应以 A/B 和许可证决定。
+- **技术可用性原则**：保留消息持久状态唯一事实权威；流式事件和屏幕刷新分离；使用稳定 messageID、仅可见单元/未封闭 Markdown 尾部更新、后台解析与有界缓存，滚动不能强制回到底部；文本、代码、数学、表格、附件均有可靠布局和离线/来源约束。测试包括长会话、快速增量、混合输入法、键盘多次开闭、前后台切换、取消/失败/冷启动和内存回收。候选库自述的 benchmark 不得当作本机性能 PASS。
+
+**仍然定版的非 Chat 范围**：Excalidraw 的 P0 图内文本/视觉保真门禁、四项校准当日 CLOSED 持久化不可修改及 section 隐藏、原阅读器和四 Tab 安全范围；均不因 Chat 暂缓选型而变回 OPEN。允许独立施工已确认的非 Chat 功能，但不得擅自确定 Chat UI 引擎或更改该模块源码。Chat 当前状态为 `PRODUCT_REFERENCE_CONFIRMED / TECH_DESIGN_OPEN / CODE_NOT_CHANGED_THIS_TURN`。
