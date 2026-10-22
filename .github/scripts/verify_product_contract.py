@@ -136,15 +136,24 @@ reader = source("aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImMarkdownVC/ImMarkdo
 ai_page = source("aReuImpress-iPhone/Utils/Public/ImAI/ImpressAISettingsViewController.swift")
 widget_export = source("aReuImpress-iPhone/VC/MainVCs/ImCalibrationVC/ImpressCalibrationWidgetExporter.swift")
 assert "styleFlashcardText" in style and "Typography.flashQuestion" in flash
-# Screenshot-regression gates: neutral native chrome, strong four-way
-# guidance and ChatGPT-style monochrome composer. Logic tests still run.
+# Screenshot-regression gates: neutral native chrome, four distinct
+# drag-only feedback colors, larger card space and a single quiet instruction.
+# The previous four-chip guide is explicitly retired; never require it again.
 assert "bar.tintColor = navigationActionInk" in style
 assert "item.tintColor = navigationActionInk" in style
 assert "reviewOverlayBadgeHeight: CGFloat = 64" in style
-assert "reviewRatingGuideInk" in style
+assert "reviewOverlaySurface(for direction:" in style
+assert "reviewOverlayInk(for direction:" in style
+overlay = source("aReuImpress-iPhone/View/ImCard/ImMemoryCard/ImMemoryCardOverlay.swift")
+assert "reviewOverlaySurface(for: direction)" in overlay
+assert "reviewOverlayInk(for: direction)" in overlay
 assert "chatComposerSendFill" in style
-assert "impress.review.rating-hint." in source(
-    "aReuImpress-iPhone/VC/MainVCs/ImCardVC/ImpressV3ReviewViewController.swift")
+assert "ratingGuide" not in review, "Old four rating chips were restored"
+assert "impress.review.rating-summary" in review, "Single guidance text is missing"
+assert 'V3L("困难")' in review and 'V3L("重来")' in review
+assert "UIRefreshControl()" not in list_notes, "Obsidian outline must not pull-to-refresh"
+assert "tableView.refreshControl = nil" in list_notes
+assert "chatComposerTextVerticalInset" in chat
 assert "config.baseBackgroundColor = ImpressV3Appearance.chatComposerSendFill" in chat
 assert "inputPlaceholder.isHidden" in chat
 assert "visibleLineCount(" in flash and "maximumNumberOfLines = 3" in flash
