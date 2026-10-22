@@ -576,6 +576,13 @@ final class ImVaultDocumentController: UIViewController {
     private var latestReadSerial = 0
     private let readingView = UITextView()
     private let richView = MarkdownView()
+    private let readerHeader = UIStackView()
+    private let propertyPanel = UIStackView()
+    private let propertyToggle = UIButton(type: .system)
+    private let propertyScroll = UIScrollView()
+    private let propertyRows = UIStackView()
+    private var propertyScrollHeight: NSLayoutConstraint?
+    private var propertiesExpanded = true
     private let canvasHost = UIView()
     private var canvasGraph: ImpressCanvasNativeView?
     private var drawingGraph: ImpressExcalidrawNativeView?
@@ -677,6 +684,45 @@ final class ImVaultDocumentController: UIViewController {
         readingView.setContentHuggingPriority(.defaultLow, for: .vertical)
         documentTitleLabel.accessibilityIdentifier = "impress.notes.document-title"
         documentTitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        readerHeader.axis = .vertical
+        readerHeader.alignment = .fill
+        readerHeader.spacing = ImpressV3Appearance.Metrics.rowSpacing
+        readerHeader.translatesAutoresizingMaskIntoConstraints = false
+        readerHeader.addArrangedSubview(documentTitleLabel)
+        propertyPanel.axis = .vertical
+        propertyPanel.alignment = .fill
+        propertyPanel.spacing = 4
+        propertyPanel.isLayoutMarginsRelativeArrangement = true
+        propertyPanel.layoutMargins = UIEdgeInsets(top: 6, left: 12, bottom: 6, right: 12)
+        propertyPanel.backgroundColor = ImpressV3Appearance.surface
+        propertyPanel.layer.cornerRadius = ImpressV3Appearance.Radius.field
+        propertyPanel.isHidden = true
+        propertyToggle.setTitleColor(ImpressV3Appearance.primaryText, for: .normal)
+        propertyToggle.contentHorizontalAlignment = .leading
+        propertyToggle.titleLabel?.font = ImpressV3Appearance.Typography.footnote
+        propertyToggle.titleLabel?.adjustsFontForContentSizeCategory = true
+        propertyToggle.accessibilityIdentifier = "impress.notes.properties-toggle"
+        propertyToggle.addTarget(self, action: #selector(toggleProperties), for: .touchUpInside)
+        propertyToggle.heightAnchor.constraint(greaterThanOrEqualToConstant: 34).isActive = true
+        propertyPanel.addArrangedSubview(propertyToggle)
+        propertyScroll.showsVerticalScrollIndicator = true
+        propertyScroll.accessibilityIdentifier = "impress.notes.properties-scroll"
+        propertyRows.axis = .vertical
+        propertyRows.alignment = .fill
+        propertyRows.spacing = 10
+        propertyRows.translatesAutoresizingMaskIntoConstraints = false
+        propertyScroll.addSubview(propertyRows)
+        NSLayoutConstraint.activate([
+            propertyRows.topAnchor.constraint(equalTo: propertyScroll.contentLayoutGuide.topAnchor),
+            propertyRows.bottomAnchor.constraint(equalTo: propertyScroll.contentLayoutGuide.bottomAnchor),
+            propertyRows.leadingAnchor.constraint(equalTo: propertyScroll.contentLayoutGuide.leadingAnchor),
+            propertyRows.trailingAnchor.constraint(equalTo: propertyScroll.contentLayoutGuide.trailingAnchor),
+            propertyRows.widthAnchor.constraint(equalTo: propertyScroll.frameLayoutGuide.widthAnchor)
+        ])
+        propertyScrollHeight = propertyScroll.heightAnchor.constraint(equalToConstant: 0)
+        propertyScrollHeight?.isActive = true
+        propertyPanel.addArrangedSubview(propertyScroll)
+        readerHeader.addArrangedSubview(propertyPanel)
         readingView.translatesAutoresizingMaskIntoConstraints = false
         richView.translatesAutoresizingMaskIntoConstraints = false
         canvasHost.translatesAutoresizingMaskIntoConstraints = false
@@ -699,7 +745,7 @@ final class ImVaultDocumentController: UIViewController {
             self?.followWikiLink(target)
             return false
         }
-        view.addSubview(documentTitleLabel)
+        view.addSubview(readerHeader)
         view.addSubview(readingView)
         view.addSubview(richView)
         view.addSubview(canvasHost)
@@ -709,10 +755,10 @@ final class ImVaultDocumentController: UIViewController {
         let bottom = ImpressV3Appearance.Metrics.compactInset
         let gap = ImpressV3Appearance.Metrics.rowSpacing
         NSLayoutConstraint.activate([
-            documentTitleLabel.topAnchor.constraint(equalTo: safe.topAnchor, constant: top),
-            documentTitleLabel.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: inset),
-            documentTitleLabel.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -inset),
-            readingView.topAnchor.constraint(equalTo: documentTitleLabel.bottomAnchor, constant: gap),
+            readerHeader.topAnchor.constraint(equalTo: safe.topAnchor, constant: top),
+            readerHeader.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: inset),
+            readerHeader.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -inset),
+            readingView.topAnchor.constraint(equalTo: readerHeader.bottomAnchor, constant: gap),
             readingView.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -bottom),
             readingView.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: inset),
             readingView.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -inset),
@@ -845,7 +891,88 @@ final class ImVaultDocumentController: UIViewController {
         prepareLivePreview(for: document)
     }
 
+    @objc private func toggleProperties() {
+        propertiesExpanded.toggle()
+        let projection = ImpressFrontmatterReader.parse(document.markdown)
+        updatePropertyPanel(projection)
+    }
+
+    /// A native typed Properties component. The web renderer only receives
+    /// the YAML-free body; this view never converts typed values into writes.
+    private func updatePropertyPanel(_ projection: ImpressFrontmatterReading) {
+        let visible = document.identity.documentFormat == .markdown &&
+            !isSourceMode && (!projection.fields.isEmpty || projection.diagnostic != nil)
+        propertyPanel.isHidden = !visible
+        guard visible else { return }
+        propertyRows.arrangedSubviews.forEach {
+            propertyRows.removeArrangedSubview($0)
+            $0.removeFromSuperview()
+        }
+        for (index, field) in projection.fields.enumerated() {
+            let row = UIStackView()
+            row.axis = .horizontal
+            row.alignment = .top
+            row.spacing = 10
+            row.accessibilityIdentifier = "impress.notes.property." + String(index)
+            let key = UILabel()
+            key.text = field.name
+            key.numberOfLines = 2
+            key.font = ImpressV3Appearance.Typography.footnote
+            key.adjustsFontForContentSizeCategory = true
+            key.textColor = ImpressV3Appearance.secondaryText
+            key.widthAnchor.constraint(equalToConstant: 116).isActive = true
+            row.addArrangedSubview(key)
+            if field.kind == .wikilink, let first = field.values.first,
+               first.hasPrefix("[["), first.hasSuffix("]]") {
+                let target = String(first.dropFirst(2).dropLast(2))
+                    .components(separatedBy: "|").first ?? ""
+                let link = UIButton(type: .system)
+                link.contentHorizontalAlignment = .leading
+                link.titleLabel?.numberOfLines = 0
+                link.titleLabel?.font = ImpressV3Appearance.Typography.body
+                link.titleLabel?.adjustsFontForContentSizeCategory = true
+                link.setTitle(first, for: .normal)
+                link.accessibilityIdentifier = "impress.notes.property-value." + field.name
+                link.addAction(UIAction { [weak self] _ in
+                    self?.followWikiLink(target)
+                }, for: .touchUpInside)
+                row.addArrangedSubview(link)
+            } else {
+                let value = UILabel()
+                value.text = field.displayValue
+                value.font = ImpressV3Appearance.Typography.body
+                value.adjustsFontForContentSizeCategory = true
+                value.textColor = ImpressV3Appearance.primaryText
+                value.numberOfLines = 0
+                value.accessibilityIdentifier = "impress.notes.property-value." + field.name
+                row.addArrangedSubview(value)
+            }
+            propertyRows.addArrangedSubview(row)
+        }
+        if let diagnostic = projection.diagnostic {
+            let notice = UILabel()
+            notice.text = diagnostic + " · " + V3L("查看 Markdown 源码")
+            notice.numberOfLines = 0
+            notice.font = ImpressV3Appearance.Typography.footnote
+            notice.adjustsFontForContentSizeCategory = true
+            notice.textColor = ImpressV3Appearance.caution
+            notice.accessibilityIdentifier = "impress.notes.properties-diagnostic"
+            propertyRows.addArrangedSubview(notice)
+        }
+        propertyToggle.setTitle(
+            (propertiesExpanded ? "⌄ " : "› ") + V3L("属性") +
+                " (" + String(projection.fields.count) + ")",
+            for: .normal)
+        propertyToggle.accessibilityValue = propertiesExpanded ? V3L("已展开") : V3L("已折叠")
+        propertyScroll.isHidden = !propertiesExpanded
+        propertyScrollHeight?.constant = propertiesExpanded ?
+            min(CGFloat(projection.fields.count + (projection.diagnostic == nil ? 0 : 1)) * 44 + 4,
+                218) : 0
+    }
+
     private func renderBody() {
+        let properties = ImpressFrontmatterReader.parse(document.markdown)
+        updatePropertyPanel(properties)
         canvasHost.isHidden = true
         canvasGraph = nil
         drawingGraph = nil
@@ -929,7 +1056,7 @@ final class ImVaultDocumentController: UIViewController {
             let safeMarkdown = preparedMarkdown ??
                 ImVaultSafetyProjection.withoutUntrustedImages(
                     ImVaultSafetyProjection.withCalloutHeadings(
-                        ImVaultSafetyProjection.withWikiLinks(document.markdown)))
+                        ImVaultSafetyProjection.withWikiLinks(properties.body)))
             // Only the prepared projection has excluded all ordinary image
             // URLs and can allow data: image embeds. The initial fallback
             // prohibits all images, including remote images.

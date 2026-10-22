@@ -1039,8 +1039,9 @@ extension ImVaultReadSync {
         // Inert raw HTML; full unmodified source remains available in Src mode.
         // Remove unsafe Markdown image syntax without affecting raw bytes;
         // only Obsidian ![[local]] embeds are resolved below under Vault scope.
+        let readableBody = ImpressFrontmatterReader.parse(source).body
         let formatted = ImVaultSafetyProjection.withCalloutHeadings(
-            ImVaultSafetyProjection.withWikiLinks(source))
+            ImVaultSafetyProjection.withWikiLinks(readableBody))
         var preview = ImVaultSafetyProjection.withoutUntrustedImages(formatted)
         let embed = try NSRegularExpression(pattern: #"!\[\[([^\]]+)\]\]"#)
         let allMatches = embed.matches(in: preview,
