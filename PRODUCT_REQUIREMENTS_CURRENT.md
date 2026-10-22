@@ -359,3 +359,31 @@
 - 历史成功 SHA d9711284bfe2cf8af9ada1b67d109747e30e52ff、Actions 39782229904 仅是旧基线。新 U17～21、RDR-01～22、ACCEPT-01～12、18 步、F01～F13、Widget 的实际 PASS 只以最终同一 SHA 证据为准；未测保持 NOT_RUN，iPhone13/签名没有真机证据则 DEVICE_BLOCKED。
 
 仅允许公开工作分支 feature/impress-duplex-loop-v1；不改 main 或私有仓库。不上传真实 Obsidian 数据、密钥与私密截图。ImVaultGuardedWrite.productionWriteEnabled = false 永久不变。
+
+## 2026-10-23 · 已确认：ChatGPT iPhone 完整对话 UI 基准、系统附件 B、Excalidraw P0 与校准日锁定
+
+**优先级**：本节为 2026-10-22 及以前同模块视觉/交互叙述之后的最新用户批准决定，不增加 85 个主需求 ID，不解冻与之无关的旧范围。技术讨论/需求冻结不代表代码或设备已经验收。
+
+### CHAT-01/02/03/05/06 + UI-02：完整对话画面，不是普通 UITableView 换皮
+
+目标以 ChatGPT iPhone 客户端**用户能观察到的整个会话体验**为视觉、布局、交互与内容验收参照：导航、空会话、用户消息/AI 消息、流式加载、工具操作、各种 Markdown 结构、错误/停止、滚动、历史、附件、键盘、输入焦点、Light/Dark、中文/英文和无障碍；不得以删除「我/AI」或只调 margin 作为完成。依同一 iPhone13、OS、主题、字体尺寸和固定合成对话进行逐状态对照；不复制官方专有资产、不承诺官方内部非公开实现与实时变化能够一比一复用。
+
+- 用户消息：内容宽度与圆角气泡、右侧对齐、整块动态高度；AI 消息：贴合 ChatGPT 式自然连续排版，无「我/AI」角色标题、无左右交替的大面积整行背景色、无传统分组带；正文/标题/列表/引用/代码块/表格/行内或块级公式/链接/复制与文本选择/重试操作有明确内容组件，不把一条数据库消息强迫为一个纯 UITextView 整行。
+- 采用 UIKit 原生会话容器与可复用自适应内容单元：优先评估 UICollectionView + diffable stable messageID + self-sizing + UIKit/SwiftUI UIHostingConfiguration 混合组件；已有 UITableView 消息外壳仅在视觉/交互/性能同等证据下才保留。Rich-text 基于可信 Markdown AST/原生文本组件；不能对每条普通消息新建 WKWebView。保持现有 WCDB 会话、历史搜索/删除/墓碑、来源/审批/FSRS 状态权威，不建第二套 Chat 状态机。
+- 模型逐步输出：当前 HTTP converse 请求为一次性 response（多路 wire 的 stream=false 或未指定）。要达到真实逐段生成，使用可用 Provider 的 SSE/stream 协议及增量视图更新；旧 pending/completed/failed/cancelled 状态和 durable messageID 继续权威，取消/失败/冷启保持 partial≠completed，无法 stream 的模型明确降级一次性完成，不能做假动画当成网络 token。请求侧/外显状态要有确定的真实支持证据。
+- Composer：一个 UITextView、STT、发送/停止，最低 44×44pt 热区；文本 baseline 和按钮光学中心协调、输入随文本增长、最高限内部滚动、系统键盘/候选栏/安全区同步、不跳动；附件已选缩略/文件卡可删除且可完整预览。首屏/历史/输入中/多行/正在回复/停止/失败均纳入视觉对照。保留用户原有简约导航（返回、更多、新建）。
+- **附件方案 B 冻结**：底部「+」仅显示系统「相册／文件／拍照」，先不塞 App 内卡片/笔记/章节选材；内部材料继续保留在顶部二级菜单中。相册通过系统 Photos picker（PHPickerViewController），文件通过 UIDocumentPickerViewController，拍照通过系统 camera 能力与权限检查（必要时 AVFoundation）。用户挑选→本地受限暂存、类型/MIME/字节大小校验→明确预览与移除→Provider/model 能力检查→用户确认发送；选择本身不上传。系统附件与知识 Vault 材料的身份、审核及来源回读保持隔离。
+- 附件**不仅是外观**：支持的模型必须收到真实可处理的 image/file 或经过用户认可的局部文本提取；通过每家 Provider/endpoint/model 显式能力矩阵确定视觉、文件、流式支持。不可把无视觉能力的文本模型标为“收到图片”，不能将其他厂商协议误用 OpenAI schema、静默上传、擅自改用付费模型或自动在不可用模型间切换。附件要随会话可恢复（存安全本地文件与元数据，避免将大图二进制塞入 WCDB JSON），能审计与撤销；删除/备份/中断要遵循原有安全规则。新增图片或 PDF 费用需受已有模型选择与授权控制。
+- 必需交互：用户消息复制/编辑/重新发送（编辑产生新提交，不重写历史已审批快照）；AI 回复复制/选取文本/重试/停止；消息长按及链接处理、回到底部、长历史定位、流式期间保留用户滚动位置；不存在的功能（如不同产品的实时语音、内部工具或推理显示）不能放虚假按钮。
+
+### UI-03.reader-c / SAFE-03：Excalidraw P0 提升及内容可读性
+
+与 Chat 同列 P0。任何「框/箭头可见但图中任务文字缺失或难读」都为视觉 FAIL，不得凭 scene 可解析/bridge ready 判 PASS。首先读取合成 fixture 的 text element、bound text、strokeColor、opacity、字体、坐标、frame/层叠、zoom，核查源语义与实际渲染位置；然后以官方开源 Excalidraw SVG export 离线适配方案对既有 UIKit/CAShapeLayer 做相同图纸 A/B，比较中文、曲线、箭头/端点、手绘、绑定文字、分组、Frame、内嵌图片、离线许可与 iPhone13 内存/IPA 体积。真实未授权 Obsidian 源、第三方远程依赖不可引入。来源 SHA 与元素 ID 选材门禁仍独立。
+
+### CAL-01～03（既有四指标范围）/ UI：当天完整结算后不可再编辑
+
+四项睡眠/运动/饮食/阅读的 outcome 都明确为 completed、missed 或 excused（没有 unrecorded）且**成功持久化**，自动进入当日 CLOSED；四项录入 section 的所有行及 header/footer 当天立即隐藏，同时保留今日净分、完成覆盖和原笛卡尔曲线。CLOSED 当天不可更改任何本日结果，亦不可通过额外加/减分、清除、通知入口、旧编辑页、数据库另一路 save 修改该日；额外修正如果存在仅允许结算前编辑，结算后可以只读显示历史状态。全局未来目标设置与提醒偏好可按原授权更改，但不能重开或重算今日 CLOSED 快照。最后一项录入时需清晰提示完成后不可修改，不增加独立冗长提交流程。
+
+关闭是持久化数据契约：以存储层旧值 isComplete 作为不可变门禁，写操作需原子回读并拒绝 CLOSED 的变更；UI 隐藏不是安全保证。保持完整旧日/迁移/备份语义，跨日按 Calendar/时区明确关联、Widget 与提醒投影从唯一账本读取；不允许因重启、旧 backup 恢复、并发任务、时区切换而把同一天已结算数据意外重开。存储失败不得假装 CLOSED、不得隐藏未成功提交的行。
+
+**验收状态**：CHAT-UI、附件/流式、Excalidraw 真实内容、CAL CLOSED 全部 SPEC_CONFIRMED / IMPLEMENTATION_NOT_RUN / CI_NOT_RUN / DEVICE_NOT_RUN。原 Vault 生产写回 productionWriteEnabled = false 继续冻结。

@@ -319,3 +319,20 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 | RDR-22 | 真实文档合成集：Excalidraw 手绘/曲线/笔触/箭头/多字形/旋转/图层/本地图片/frames A/B 对照官方导出；记录 bundle 体积、iPhone13 资源性能、许可证与离线审计，锁定视觉实现后重新跑图形/Chat 与完整回归。 | NOT_RUN |
 
 **扩展门禁**：RDR-17～22 只是 RDR-01～16 的补充，不允许替代原 RDR-13/14 的可见画布/排版验收或原 U13～21 的 UI 需求。不使用用户私有截图或私人 Vault 文件作为公开 Fixture。原始二进制安装包必须附真实完整 SHA，未运行不写 PASS。
+
+## 2026-10-23 · ChatGPT 全体验 / 系统附件 / Excalidraw 内容 / 校准 CLOSED 新验收子场景
+
+这些只是补足 U18、CHAT-01/02/05/06、RDR-13/15/22、CAL-01～03 既有门禁的 **子项**；ACCEPT-01～12、U01～21、RDR-01～22、F01～13、Widget 矩阵不减项。全部当前 NOT_RUN；DEVICE_BLOCKED 仅给需要真机/有效签名的测试，不把源码缺口归设备阻塞。
+
+| 子场景 | 验收观察点 | 当前状态 |
+|---|---|---|
+| U18.chat-layout | ChatGPT iPhone 基线同一设备/主题/字号：空会话、短长用户消息右侧气泡、AI 连续正文无「我/AI」标题/整行分色、消息操作栏、空白密度、标题/链接/代码/表格/公式、长文选择、历史恢复、滚动到底 | NOT_RUN |
+| U18.chat-stream | 真正可 streaming Provider 的首 token/多段增量/停止/失败/重试/后台冷启，部分生成不得标 completed；不支持流式 Provider 诚实一次性显示 | NOT_RUN |
+| U18.chat-composer | 输入1～多行/中文候选/英文/emoji/STT/附件/键盘/底部安全区/发送停止：文字与图标光学居中、touch >=44pt、无自动跳动/多余空白 | NOT_RUN |
+| U18.system-attach | + 的相册/文件/拍照三入口；真实 iPhone13 相机权限、取消、不支持摄像头、Files iCloud security scope、选择后可预览/移除，未发送零网络、拒超额/不支持格式 | NOT_RUN |
+| CHAT.media-provider | OpenAI Responses、Chat Completions、Anthropic、Gemini、其他兼容/自定义的能力矩阵：有图像/文件能力才转真实 payload；不支持时禁止误称已上传，保留免费测试门禁；取消/删除/冷启后附件仍安全 | NOT_RUN |
+| RDR.content-fidelity | 同一合成 Excalidraw 的中文任务文字、bound text、箭头、曲线/手绘、frame/组、图片、前景/背景/透明度、旋转、缩放真实可读；与官方 SVG A/B，点击选元素后 Vault/SHA/ID 保真 | NOT_RUN |
+| CAL.day-close | 四项中仍有 unrecorded 时可评估、section 可见；第四项成功保存后当天四项 section 整体消失，净分/覆盖率/二维图仍可见，额外修正及清除入口无法改闭账记录 | NOT_RUN |
+| CAL.day-durability | store 直接传入不同 CLOSED 结果必须拒绝；重复保存幂等、后台重开、并发、多次触发、旧记录迁移、跨日和时区变化、备份恢复、Widget 投影/当日提醒不回归 | NOT_RUN |
+
+所有 UI 截图须来自合成 Fixture 并附精确 SHA、设备、模式、失败证据；私人用户对比照片/真实 Vault 文件不得进入公开仓库。新旧两个 SHA 的截图不可混证；同最终 SHA 的 XCTest/XCUITest/IPA 需再次执行。

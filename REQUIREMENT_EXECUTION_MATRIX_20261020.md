@@ -289,3 +289,16 @@ G4 同最终 SHA 全套 CI/证据/QA IPA；只有外部设备/Keychain/Files/授
 | NAV-05.w/SAFE-08.w | Widget 基础代码已存在 | 侧载签名、App Group 与 iPhone13 六布局 DEVICE_BLOCKED |
 
 顺序：源码/需求审计→Chat 修复→Markdown 语义→图形真实呈现→其他 UI→最终同 SHA CI/截图/IPA。仅标实际已执行证据，禁止继承上次 PASS。
+
+## 2026-10-23 · 四项确认后的 UI/技术实施追踪（仅既有需求子项）
+
+| 子项 | GitHub 现存源码事实（基线 7b0cea32982a7b89cbeb4e897649ca64b5c0f4f9） | 已批准实施方案 / 验收门禁 | 状态 |
+|---|---|---|---|
+| CHAT-UI / UI-02 | ImpressAINativeChatViewController 中 UITableView + 通用 ImpressChatMessageCell；roleLabel「我/AI」与整行背景色仍在 | ChatGPT iPhone 全状态 UI：右侧用户气泡、助手连续无整行色块/无角色标签、Markdown block 类型、消息操作、滚动、主题；优先 UICollectionView diffable + 原生可复用内容组件 | SPEC_CONFIRMED / CODE_PENDING |
+| CHAT-COMPOSER / U18 | 一个 UITextView/inputBar/keyboardLayoutGuide，4×44pt 触控位 | 视觉文本中心、动态高度/安全区/键盘与历史；最小热区不缩水 | SPEC_CONFIRMED / VISUAL_NOT_RUN |
+| CHAT-SYSTEM-ATTACH / B | 当前 + 只打开内部材料入口，API converse 仅 [role,content: String] | + 仅相册(PHPicker)、文件(UIDocumentPicker)、拍照(camera)；本地 preview/remove、类型/大小与来源权限、Provider 多模态能力检查、显式发送、持久恢复/删除，顶部菜单仍为笔记/卡片材料 | SPEC_CONFIRMED / CODE_PENDING |
+| CHAT-STREAM | 当前 converse 为一次性 HTTP 文本与完成回填 | Provider 真实可用 stream 才增量渲染；SSE/事件解析/取消/不重复计费/中断 partial 处理，保留原 WCDB 状态机 | SPEC_CONFIRMED / CODE_PENDING |
+| RDR-13/15/22 | 原生 Excalidraw text/body button 与 CAShapeLayer，缺高保真文本/笔触证据 | 图内文字与任务内容可读为 P0；官方 SVG 与原生对照，文本/绑定/旋转/frame/图像/选材/体积/许可/性能 | SPEC_CONFIRMED / VISUAL_FAIL_REPORTED / REPRO_PENDING |
+| CAL-DAY-CLOSED | CalibrationDayCheckIn.isComplete 已存在；UI 始终 3 个 section、今日四项始终显示；store.save 未拒旧完成日变更 | 四项全部结算且保存成功 -> 当天隐藏四项 section 并锁定整日业务结果，store actor 原子拒绝复写，额外修正只读，Widget/跨日/恢复检验 | SPEC_CONFIRMED / CODE_PENDING |
+
+注意：2026-10-22 文档中的「Chat 本批只动外观、不动业务」已被 2026-10-23 最新确认的系统附件及真实流式需求所覆盖；但保留既有 WCDB/Source/FSRS 与 Vault 写入门禁。历史 PASS 不继承，仍然只允许公开开发分支，不得碰 main/私库。

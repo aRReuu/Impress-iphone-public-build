@@ -120,3 +120,12 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 旧 G2 说明属于较早的施工时点，不能作为当前源码事实：Review 已不再定义 configureRatingGuide/ratingGuide 四枚控件；笔记一级页已将 refreshControl 置 nil；ImVaultDocumentController 对普通 Markdown 阅读态已隐藏原生 readerHeader，将文件标题、类型化 Properties 和正文交由单个 WKWebView 呈现。这些属于 SOURCE_AUDITED，不是 U17/U20 或 RDR 的真机 PASS。
 
 仍存在的可查缺口：Chat placeholder 与 UITextView 的垂直基线不同、输入区高度和附件布局/键盘边界需要实测；Markdown CSS 在 markdown-index.html 与统一 Appearance 内重叠、深层列表/任务 DOM 语义待验证；WK 桥仅上报图形状态与受控 WikiLink，不能可靠地把任意 DOM 选字映射为原始 UTF8，禁止猜测；Excalidraw 独立原生 UIButton/CAShapeLayer 缺复杂手绘/曲线/绑定文本的官方级视觉对照；部分真实 Markdown 嵌入图形的打开完整阅读/选材交互缺 E2E 证据；笔记索引多个 reloadData 路径尚需版本 diff。生产 Vault 写入门禁保持关闭，旧 CI 不冒充新验收。
+
+## 2026-10-23 · 用户最新四项确认的源码根因（非施工完成声明）
+
+1. **Chat 整体违背 ChatGPT 式对话形态**：当前 UITableView 的 ImpressChatMessageCell 在 configure 中强制 roleLabel="我"/"AI"、通用纵向 column + UITextView，并按角色设置整个 cell 背景色；不是仅按钮位置问题。应分离源消息/显示块/布局，优先 UICollectionView 自适应单元 + typed rich blocks + Diffable stable IDs + streaming scroll anchor，不以换颜色代替架构重构。UIKit 无需整体换 Web；MessageKit 等偏通用左右消息气泡，并不能直接保证 ChatGPT 的非对称 AI 文档式渲染。
+2. **Chat 附件 B 缺真实传输**：当前 materialButton 唯一目标 reviewSessionMaterials()，没有 photo picker/document picker/camera；ImpressAIHTTPClient.converse 的 turns 目前只有 role+text，多 Provider 仍单次返回。仅接 UI picker 不等于「附件发送成功」；必须新增安全沙箱暂存、能力矩阵和分协议序列化，保留模型费用/来源审批边界，不能误发图像到纯文本路由。
+3. **Excalidraw 图片中的框/箭头存在、文字低可读**：当前以 UIButton + text label 与 CAShapeLayer 分开绘图，默认颜色/源文本绑定、transform/points/坐标需逐合成场景验证；原生画出形状不等于官方高保真。正式修复以 source scene 与官方 SVG A/B 为准，避免直接把用户图形截图或笔记传公开仓库。
+4. **校准日锁定缺持久化守卫**：CalibrationDayCheckIn.isComplete 是 computed 判定，setOutcome 允许直接更改；ImpressCalibrationLocalStore.save(checkIn) 可覆盖同日已完成记录；ImpressCalibrationViewController.tableView 固定3节、四项永远展示，并可通过额外行为按钮修改。必须在 Actor 保存层对已有完整当天 snapshot 添加拒改、UI 以保存成功的 CLOSED 投影动态隐藏四项录入节并禁用额外修正；只隐藏 section 将留下重入漏洞。
+
+本节仅为源码事实与新的产品判定；截至此确认未提交对应修复代码，不把上一轮 CI 当作本轮 PASS。
