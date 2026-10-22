@@ -431,17 +431,42 @@ enum ImpressV3Appearance {
     }
     .markdown-body {
       box-sizing: border-box; max-width: 760px; margin: 0 auto !important;
-      padding: 24px 20px 44px !important; font-size: 17px;
-      line-height: 1.7; overflow-wrap: anywhere; letter-spacing: -0.1px;
+      padding: 16px 18px 52px !important; font-size: 17px;
+      line-height: 1.55; overflow-wrap: anywhere; letter-spacing: -0.1px;
     }
     .markdown-body h1, .markdown-body h2, .markdown-body h3 {
       line-height: 1.32; letter-spacing: -0.35px;
-      margin-top: 1.45em; margin-bottom: 0.7em;
+      margin-top: 1.18em; margin-bottom: 0.52em;
     }
     .markdown-body h4, .markdown-body h5, .markdown-body h6 {
       line-height: 1.38; letter-spacing: -0.16px; font-weight: 650;
-      margin-top: 1.23em; margin-bottom: 0.52em;
+      margin-top: 1.08em; margin-bottom: 0.42em;
     }
+
+    /* Title, typed YAML properties and Markdown live in one WebKit scroll. */
+    .im-document-header { margin: 0 0 1.1em; }
+    .im-document-title {
+      font-size: 1.85em; font-weight: 750; line-height: 1.18;
+      letter-spacing: -0.45px; margin: 0 0 0.62em !important;
+      overflow-wrap: anywhere;
+    }
+    .im-properties {
+      color: var(--im-ink); margin: 0 0 1.2em; padding: 0;
+      background: transparent; border: 0;
+    }
+    .im-properties > summary {
+      display: list-item; list-style-position: inside;
+      cursor: pointer; font-size: 0.88em; font-weight: 550;
+      color: var(--im-muted); margin: 0.15em 0 0.5em;
+    }
+    .im-properties-grid {
+      display: grid; grid-template-columns: minmax(0, 36%) minmax(0, 1fr);
+      gap: 0.35em 0.7em; align-items: baseline;
+      padding: 0 0 0.42em; font-size: 0.92em; line-height: 1.5;
+    }
+    .im-property-name { color: var(--im-muted); overflow-wrap: anywhere; }
+    .im-property-value { color: var(--im-ink); overflow-wrap: anywhere; }
+    .im-properties-diagnostic { font-size: 0.84em; color: var(--im-muted); }
     .markdown-body h1:first-child, .markdown-body h2:first-child {
       margin-top: 0.15em;
     }

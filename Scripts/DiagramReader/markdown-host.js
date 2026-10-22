@@ -13,6 +13,63 @@ const cleanText = (source) => String(source || "")
 const diagrams = [];
 let serial = 0;
 let liveMaps = [];
+let propertyDocumentKey = "";
+let propertiesExpanded = true;
+
+// Trusted, typed metadata only; no YAML/HTML is interpreted in the web page.
+// The native bridge is responsible for all Vault identity/version checks.
+function renderNativeDocumentHeader(options, currentEpoch) {
+  const header = document.createElement("header");
+  header.className = "im-document-header";
+  const title = document.createElement("h1");
+  title.className = "im-document-title";
+  title.id = "impress.notes.document-title";
+  title.textContent = String(options?.documentTitle || "");
+  header.append(title);
+  const rawFields = Array.isArray(options?.properties) ? options.properties : [];
+  const fields = rawFields.slice(0, 128).filter(
+    (field) => field && typeof field.name === "string" &&
+      typeof field.value === "string");
+  const diagnostic = String(options?.propertiesDiagnostic || "").slice(0, 320);
+  const key = String(options?.documentKey || "");
+  if (propertyDocumentKey !== key) {
+    propertyDocumentKey = key;
+    propertiesExpanded = true;
+  }
+  if (fields.length > 0) {
+    const details = document.createElement("details");
+    details.className = "im-properties";
+    details.open = propertiesExpanded;
+    const summary = document.createElement("summary");
+    summary.id = "impress.notes.properties-toggle";
+    summary.textContent = "属性 (" + fields.length + ")";
+    details.append(summary);
+    const table = document.createElement("div");
+    table.className = "im-properties-grid";
+    for (const item of fields) {
+      const name = document.createElement("span");
+      name.className = "im-property-name";
+      name.textContent = item.name.slice(0, 160);
+      const value = document.createElement("span");
+      value.className = "im-property-value";
+      value.id = "impress.notes.property-value." + name.textContent;
+      value.textContent = item.value.slice(0, 4096);
+      table.append(name, value);
+    }
+    details.append(table);
+    details.addEventListener("toggle", () => {
+      if (serial === currentEpoch) propertiesExpanded = details.open;
+    });
+    header.append(details);
+  }
+  if (diagnostic) {
+    const note = document.createElement("p");
+    note.className = "im-properties-diagnostic";
+    note.textContent = diagnostic + " · 请从更多操作查看 Markdown 源码";
+    header.append(note);
+  }
+  return header;
+}
 const report = (state, diagramCount, failures, rendered = 0, mathCount = 0) => {
   window.webkit?.messageHandlers?.markdownState?.postMessage({
     state, diagramCount, failures, rendered, mathCount
@@ -243,6 +300,8 @@ async function drawMarkmap(host,source) {
 window.renderImpressMarkdown = async (body, options) => {
   const epoch = ++serial;
   const plain = String(body || "");
+  const beforeKey = propertyDocumentKey;
+  const beforeScroll = window.scrollY;
   if (plain.length > 8 * 1024 * 1024) {
     root.textContent = "文档超出阅读器安全预算，请切换到源码视图。";
     report("failed", 0, 1);
@@ -260,8 +319,9 @@ window.renderImpressMarkdown = async (body, options) => {
   const firstHeading = root.firstElementChild;
   if (firstHeading?.tagName === "H1" && String(options?.documentTitle || "").trim() ===
       firstHeading.textContent.trim()) {
-    firstHeading.hidden = true; // Native document title already expresses this H1.
+    firstHeading.hidden = true; // Keep source AST; show one document title.
   }
+  root.prepend(renderNativeDocumentHeader(options, epoch));
   markTasks();
   promoteCallouts();
   // Never make network requests for untrusted links or local Vault resources.
@@ -297,6 +357,13 @@ window.renderImpressMarkdown = async (body, options) => {
     }
   }
   if (epoch === serial) {
+    // Preserve the one scroll position when a theme/font/preview projection
+    // rerenders the same source. A different document always opens at top.
+    requestAnimationFrame(() => {
+      if (epoch === serial) {
+        window.scrollTo(0, beforeKey === propertyDocumentKey ? beforeScroll : 0);
+      }
+    });
     const rendered = items.filter((item) => item.querySelector("svg")).length;
     const actualFailures = Math.max(failures, items.length - rendered);
     const mathCount = root.querySelectorAll(".katex").length;

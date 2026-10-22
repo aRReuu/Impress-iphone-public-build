@@ -577,6 +577,8 @@ final class ImVaultDocumentController: UIViewController {
     private let readingView = UITextView()
     private let richView = ImpressMarkdownOfflineView()
     private let readerHeader = UIStackView()
+    private var contentTopWithHeader: NSLayoutConstraint?
+    private var contentTopWithoutHeader: NSLayoutConstraint?
     private let propertyPanel = UIStackView()
     private let propertyToggle = UIButton(type: .system)
     private let propertyScroll = UIScrollView()
@@ -676,7 +678,10 @@ final class ImVaultDocumentController: UIViewController {
         view.backgroundColor = ImpressV3Appearance.page
         navigationItem.largeTitleDisplayMode = .never
         ImpressV3Appearance.styleReadingTextView(readingView)
-        ImpressV3Appearance.styleVaultDocument(richView)
+        // The whole reading page is continuous, not a nested rounded card.
+        richView.backgroundColor = ImpressV3Appearance.surface
+        richView.layer.cornerRadius = 0
+        richView.clipsToBounds = false
         readingView.textAlignment = .left
         documentTitleLabel.text = documentTitleText
         documentTitleLabel.font = ImpressV3Appearance.Typography.documentTitle
@@ -762,11 +767,17 @@ final class ImVaultDocumentController: UIViewController {
         let top = ImpressV3Appearance.Metrics.compactInset
         let bottom = ImpressV3Appearance.Metrics.compactInset
         let gap = ImpressV3Appearance.Metrics.rowSpacing
+        let withHeader = readingView.topAnchor.constraint(
+            equalTo: readerHeader.bottomAnchor, constant: gap)
+        let withoutHeader = readingView.topAnchor.constraint(
+            equalTo: safe.topAnchor, constant: 0)
+        contentTopWithHeader = withHeader
+        contentTopWithoutHeader = withoutHeader
+        withHeader.isActive = true
         NSLayoutConstraint.activate([
             readerHeader.topAnchor.constraint(equalTo: safe.topAnchor, constant: top),
             readerHeader.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: inset),
             readerHeader.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -inset),
-            readingView.topAnchor.constraint(equalTo: readerHeader.bottomAnchor, constant: gap),
             readingView.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -bottom),
             readingView.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: inset),
             readingView.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -inset),
@@ -980,7 +991,16 @@ final class ImVaultDocumentController: UIViewController {
 
     private func renderBody() {
         let properties = ImpressFrontmatterReader.parse(document.markdown)
-        updatePropertyPanel(properties)
+        let singleScrollReading = !isSourceMode &&
+            document.identity.documentFormat == .markdown
+        // Markdown title, typed Properties and body now scroll as ONE WebKit
+        // document. Separate UIKit header stays available in source/graph mode.
+        contentTopWithHeader?.isActive = !singleScrollReading
+        contentTopWithoutHeader?.isActive = singleScrollReading
+        readerHeader.isHidden = singleScrollReading
+        view.backgroundColor = singleScrollReading
+            ? ImpressV3Appearance.surface : ImpressV3Appearance.page
+        if !singleScrollReading { updatePropertyPanel(properties) }
         canvasHost.isHidden = true
         canvasGraph = nil
         drawingGraph = nil
@@ -1079,7 +1099,9 @@ final class ImVaultDocumentController: UIViewController {
             richView.load(markdown: safeMarkdown,
                           enableImage: preparedMarkdown != nil,
                           css: ImpressV3Appearance.markdownReaderCSS,
-                          documentTitle: documentTitleText)
+                          documentTitle: documentTitleText,
+                          properties: properties,
+                          sourceDigest: document.digest)
         }
         readingView.textAlignment = .left
     }
@@ -3140,6 +3162,10 @@ final class ImpressMarkdownOfflineView: UIView, WKNavigationDelegate {
     private var activeCSS = ""
     private var activeTitle = ""
     private var allowImages = false
+    private var projectedFields: [[String: String]] = []
+    private var propertiesDiagnostic = ""
+    private var propertiesState = "absent"
+    private var activeSourceDigest = ""
     private var isLoaded = false
     private var requestedVersion: Int = 0
     private let relay = ImpressMarkdownStateRelay()
@@ -3163,6 +3189,7 @@ final class ImpressMarkdownOfflineView: UIView, WKNavigationDelegate {
         web.isOpaque = false
         web.backgroundColor = ImpressV3Appearance.surface
         web.scrollView.backgroundColor = ImpressV3Appearance.surface
+        web.scrollView.accessibilityIdentifier = "impress.notes.continuous-scroll"
         web.scrollView.contentInsetAdjustmentBehavior = .never
         web.accessibilityIdentifier = "impress.notes.markdown-webview"
         web.accessibilityValue = "loading"
@@ -3187,13 +3214,28 @@ final class ImpressMarkdownOfflineView: UIView, WKNavigationDelegate {
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
 
     func load(markdown: String, enableImage: Bool, css: String,
-              documentTitle: String) {
+              documentTitle: String, properties: ImpressFrontmatterReading,
+              sourceDigest: String) {
+        // Only a bounded, typed, inert display projection enters WebKit.
+        // Never pass raw YAML, Vault paths, file handles or edit authority.
+        let fields: [[String: String]] = properties.fields.prefix(128).map {
+            ["name": $0.name, "kind": $0.kind.rawValue,
+             "value": $0.displayValue]
+        }
+        let diagnostic = properties.diagnostic ?? ""
+        let state = properties.state.rawValue
         guard markdown != sourceMarkdown || css != activeCSS ||
-              documentTitle != activeTitle ||
+              documentTitle != activeTitle || fields != projectedFields ||
+              diagnostic != propertiesDiagnostic || state != propertiesState ||
+              sourceDigest != activeSourceDigest ||
               enableImage != allowImages || requestedVersion == 0 else { return }
         sourceMarkdown = markdown
         activeCSS = css
         activeTitle = documentTitle
+        projectedFields = fields
+        propertiesDiagnostic = diagnostic
+        propertiesState = state
+        activeSourceDigest = sourceDigest
         allowImages = enableImage
         requestedVersion += 1
         render()
@@ -3209,7 +3251,11 @@ final class ImpressMarkdownOfflineView: UIView, WKNavigationDelegate {
             "documentTitle": activeTitle,
             "dark": traitCollection.userInterfaceStyle == .dark,
             "fontSize": UIFont.preferredFont(forTextStyle: .body).pointSize,
-            "allowImages": imagePolicy
+            "allowImages": imagePolicy,
+            "properties": projectedFields,
+            "propertiesDiagnostic": propertiesDiagnostic,
+            "propertiesState": propertiesState,
+            "documentKey": activeSourceDigest
         ]
         web.accessibilityValue = "loading"
         web.callAsyncJavaScript(
