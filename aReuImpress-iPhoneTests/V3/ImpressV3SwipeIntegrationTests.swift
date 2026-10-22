@@ -408,7 +408,8 @@ final class ImpressV3SwipeIntegrationTests: XCTestCase {
         XCTAssertEqual(save.style, .plain)
         let navigation = ImNavigationViewController(rootViewController: composer)
         navigation.loadViewIfNeeded()
-        XCTAssertEqual(navigation.navigationBar.tintColor, ImpressV3Appearance.accent)
+        XCTAssertEqual(navigation.navigationBar.tintColor,
+                       ImpressV3Appearance.navigationActionInk)
     }
 
     func testActualTinderSwipeSavesOneFSRSEventOnlyAfterRevealingAnswer() async throws {
@@ -939,7 +940,8 @@ final class ImpressR042AppearanceTests: XCTestCase {
         XCTAssertEqual(bar.unselectedItemTintColor, ImpressV3Appearance.secondaryText)
         let navigation = UINavigationBar()
         ImpressV3Appearance.styleNavigationBar(navigation)
-        XCTAssertEqual(navigation.tintColor, ImpressV3Appearance.accent)
+        XCTAssertEqual(navigation.tintColor,
+                       ImpressV3Appearance.navigationActionInk)
     }
 
     func testSystemLightAndDarkResolveDifferentSemanticSurfaces() {
