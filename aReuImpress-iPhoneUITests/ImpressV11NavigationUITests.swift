@@ -597,6 +597,20 @@ final class ImpressV11NavigationUITests: XCTestCase {
         // same reviewed original card (after approved note edit + card undo).
         // A swipe is the only normal route to an FSRS event, and MUST require
         // a fresh answer reveal. We never grade by calling repository methods.
+        // Chat history is several native pushes below the notes root.
+        // ImNavigationViewController intentionally hides the TabBar when
+        // pushing a secondary screen. Return through REAL visible back
+        // controls; do not tap a nonexistent bar or bypass persisted UI state.
+        var backSteps = 0
+        while !tabs.exists && backSteps < 5 {
+            let back = app.navigationBars.buttons.element(boundBy: 0)
+            XCTAssertTrue(back.waitForExistence(timeout: 12),
+                "History / Chat / document must provide a native return path")
+            back.tap()
+            backSteps += 1
+        }
+        XCTAssertTrue(tabs.waitForExistence(timeout: 15),
+            "Navigating back to the primary notes screen must restore four Tabs")
         tabs.buttons.element(boundBy: 0).tap()
         let newReveal = app.buttons["impress.review.reveal-answer"]
         XCTAssertTrue(newReveal.waitForExistence(timeout: 30),
