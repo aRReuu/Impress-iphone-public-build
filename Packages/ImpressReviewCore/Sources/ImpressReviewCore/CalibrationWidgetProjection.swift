@@ -118,8 +118,12 @@ public enum CalibrationWidgetProjection {
             let explicit = entry.assessments.filter {
                 $0.outcome != .unrecorded
             }.count
+            // B-scheme coverage is independent from historic V1 mood closeout.
+            // Four explicit behaviors count as assessed; historic numeric scores
+            // remain nil unless the ORIGINAL legacy day was finalized.
             let state: CalibrationWidgetDayState =
-                entry.isComplete ? .finalized : (explicit > 0 ? .partial : .unrecorded)
+                explicit == CalibrationIndicator.behaviorIndicators.count ? .finalized
+                : (explicit > 0 ? .partial : .unrecorded)
             let score = entry.isComplete ? (try? entry.finalizedScore())?.netScore : nil
             byDay[entry.dayID] = CalibrationWidgetDay(
                 dayID: entry.dayID, assessedCount: explicit,

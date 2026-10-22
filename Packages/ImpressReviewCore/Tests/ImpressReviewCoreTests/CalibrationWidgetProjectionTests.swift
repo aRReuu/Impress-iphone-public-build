@@ -305,4 +305,39 @@ final class CalibrationWidgetProjectionTests: XCTestCase {
     }
 
 
+    func testLegacyFourAssessedButMoodPendingPreservesHistoricalGap() throws {
+        let now = date(2026, 10, 21)
+        var newStyle = try CalibrationDayCheckIn(
+            dayID: "2026-10-21", goals: CalibrationGoals())
+        for kind in CalibrationIndicator.behaviorIndicators {
+            try newStyle.setOutcome(.completed, for: kind)
+        }
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(newStyle)) as? [String: Any])
+        var rows = try XCTUnwrap(json["assessments"] as? [[String: Any]])
+        let fourth = try XCTUnwrap(rows.firstIndex {
+            ($0["taskID"] as? String) == "reading"
+        })
+        rows[fourth]["taskID"] = "custom"
+        json["assessments"] = rows
+        var captions = try XCTUnwrap(json["goalsSnapshot"] as? [String: Any])
+        captions.removeValue(forKey: "reading")
+        captions["custom"] = "旧第四行为"
+        json["goalsSnapshot"] = captions
+        let legacy = try JSONDecoder().decode(CalibrationDayCheckIn.self,
+            from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertTrue(legacy.isLegacyDay)
+        XCTAssertFalse(legacy.isComplete)
+        XCTAssertNil(try legacy.finalizedScore().netScore)
+        let snapshot = CalibrationWidgetProjection.snapshot(
+            from: [legacy], at: now, calendar: calendar)
+        let displayed = try XCTUnwrap(CalibrationWidgetProjection.overview(
+            from: snapshot, at: now, calendar: calendar))
+        XCTAssertEqual(displayed.weekDays.last?.assessedCount, 4)
+        XCTAssertEqual(displayed.weekDays.last?.state, .finalized)
+        XCTAssertNil(displayed.weekDays.last?.netScore,
+            "Coverage may be complete under four behaviors without rewriting a legacy score")
+    }
+
+
 }
