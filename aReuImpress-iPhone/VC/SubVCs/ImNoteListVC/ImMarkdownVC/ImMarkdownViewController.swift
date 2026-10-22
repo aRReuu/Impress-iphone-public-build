@@ -644,6 +644,12 @@ final class ImVaultDocumentController: UIViewController {
                     self.preparedMarkdown = nil
                     self.renderBody()
                     self.prepareLivePreview(for: latest)
+                } else if latest.identity.documentFormat == .markdown &&
+                          latest.markdown.contains("![[") {
+                    // A referenced drawing/note may change even when the host
+                    // Markdown's own SHA remains the same. Refresh only notes
+                    // with actual Obsidian embeds after a child page returns.
+                    self.prepareLivePreview(for: latest)
                 }
                 action?(latest)
             }
@@ -654,7 +660,9 @@ final class ImVaultDocumentController: UIViewController {
         guard current.identity.documentFormat == .markdown else { return }
         ImVaultReadSync.shared.prepareAuthorizedPreview(current) { [weak self] result in
             guard let self, self.document.digest == current.digest,
-                  self.document.identity == current.identity else { return }
+                  self.document.identity == current.identity,
+                  ImVaultReadOnlyProbe.shared.authorizedVaultID == current.identity.vaultID
+                  else { return }
             if case let .success(safeMarkdown) = result {
                 self.preparedMarkdown = safeMarkdown
                 if !self.isSourceMode { self.renderBody() }
