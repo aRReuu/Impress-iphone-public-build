@@ -2497,17 +2497,20 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(controller.navigationItem.rightBarButtonItems?
             .compactMap(\.accessibilityIdentifier),
             ["impress.ai.chat.new-discussion", "impress.ai.chat.features"])
-        let cell = ImpressChatMessageCell(style: .default, reuseIdentifier: "QA")
-        cell.configure(WCDBV3ChatMessage(role: .assistant,
-            text: "# Heading\n\n**Markdown** and long text",
-            status: .completed))
-        let text = try XCTUnwrap(cell.contentView.subviews
-            .compactMap { $0 as? UIStackView }.first?.arrangedSubviews
+        XCTAssertNotNil(elements.compactMap { $0 as? UICollectionView }.first {
+            $0.accessibilityIdentifier == "impress.ai.chat.transcript"
+        }, "Production Chat must mount its diffable transcript")
+        let cell = ImpressChatDocumentCell(
+            frame: CGRect(x: 0, y: 0, width: 390, height: 220))
+        cell.configure("**Markdown** and long text", kind: .paragraph,
+                       headingLevel: 0, user: false, stable: true)
+        let text = try XCTUnwrap(allSubviews(cell)
             .compactMap { $0 as? UITextView }.first)
+        XCTAssertEqual(text.accessibilityIdentifier, "impress.ai.chat.message-body")
         XCTAssertTrue(text.isSelectable)
         XCTAssertFalse(text.isEditable)
         XCTAssertFalse(text.isScrollEnabled)
-        XCTAssertNotNil(text.attributedText)
+        XCTAssertTrue(text.attributedText.string.contains("Markdown"))
     }
 
     @MainActor
