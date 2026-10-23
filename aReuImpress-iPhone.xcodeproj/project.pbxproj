@@ -135,6 +135,7 @@
 		F7C100000000000000000003 /* ImpressChatPOCInteractionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C100000000000000000004 /* ImpressChatPOCInteractionUITests.swift */; };
 		F7C200000000000000000001 /* ImpressExcalidrawRenderingIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C200000000000000000002 /* ImpressExcalidrawRenderingIntegrationTests.swift */; };
 		F7C300000000000000000001 /* ImpressChatPOCRichCells.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C300000000000000000002 /* ImpressChatPOCRichCells.swift */; };
+		F7C400000000000000000001 /* ImpressChatPOCRichRenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C400000000000000000002 /* ImpressChatPOCRichRenderingTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -331,6 +332,7 @@
 		F7C100000000000000000004 /* ImpressChatPOCInteractionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCInteractionUITests.swift; sourceTree = "<group>"; };
 		F7C200000000000000000002 /* ImpressExcalidrawRenderingIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressExcalidrawRenderingIntegrationTests.swift; sourceTree = "<group>"; };
 		F7C300000000000000000002 /* ImpressChatPOCRichCells.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCRichCells.swift; sourceTree = "<group>"; };
+		F7C400000000000000000002 /* ImpressChatPOCRichRenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCRichRenderingTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1008,6 +1010,7 @@
 				F3A300000000000000000001 /* ImpressV3NotificationIntegrationTests.swift */,
 				F3C000000000000000000014 /* ImpressCalibrationIntegrationTests.swift */,
 				F7C200000000000000000002 /* ImpressExcalidrawRenderingIntegrationTests.swift */,
+				F7C400000000000000000002 /* ImpressChatPOCRichRenderingTests.swift */,
 				F3A10000000000000000000D /* ReviewWCDBRepositoryTests.swift */,
 			);
 			path = V3;
@@ -1359,6 +1362,7 @@
 				F3A300000000000000000002 /* ImpressV3NotificationIntegrationTests.swift in Sources */,
 				F3C000000000000000000004 /* ImpressCalibrationIntegrationTests.swift in Sources */,
 				F7C200000000000000000001 /* ImpressExcalidrawRenderingIntegrationTests.swift in Sources */,
+				F7C400000000000000000001 /* ImpressChatPOCRichRenderingTests.swift in Sources */,
 				F3A100000000000000000003 /* ReviewWCDBRepositoryTests.swift in Sources */,
 				38B00CC82D17DE68002898A3 /* aReuImpress_iPhoneTests.swift in Sources */,
 			);
