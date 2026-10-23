@@ -1,0 +1,538 @@
+import UIKit
+import ImpressReviewCore
+
+/// Production conversation viewport. Unlike the disposable POC, this receives
+/// existing WCDB message values without becoming another data store.
+/// Only changed Markdown blocks are reconfigured; other cells retain identity.
+@MainActor
+final class ImpressChatProductionTranscript: UIView,
+                                              UICollectionViewDelegate, UIScrollViewDelegate {
+    private struct Row: Equatable {
+        let messageID: UUID
+        let user: Bool
+        let text: String
+        let kind: ImpressChatPOCBlock.Kind
+        let headingLevel: Int
+        let stable: Bool
+        let completed: Bool
+        let isStatus: Bool
+    }
+
+    private struct ParsedMessage {
+        let text: String
+        let status: WCDBV3ChatMessageStatus
+        let blocks: [ImpressChatPOCBlock]
+        let stream: ImpressChatPOCStream?
+    }
+
+    private enum ScrollMode {
+        case followingBottom, readingHistory, keyboardTransition, restoring
+    }
+
+    var menuForMessage: ((UUID) -> UIMenu?)?
+    private let collection: UICollectionView
+    private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
+    private var rows: [String: Row] = [:]
+    private var parsed: [UUID: ParsedMessage] = [:]
+    private var latestMessages: [WCDBV3ChatMessage] = []
+    private var publishedIDs: [String] = []
+    private var scrollMode: ScrollMode = .followingBottom
+    private var modeBeforeKeyboard: ScrollMode = .followingBottom
+    private var snapshotInFlight = false
+    private var snapshotNeedsRefresh = false
+    private var renderQueued = false
+    private var lastRenderedAt: CFAbsoluteTime = 0
+    private var requestedFocus: UUID?
+    private var refreshAll = false
+
+    override init(frame: CGRect) {
+        let layout = UICollectionViewCompositionalLayout { _, _ in
+            let size = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
+                                              heightDimension: .estimated(56))
+            let item = NSCollectionLayoutItem(layoutSize: size)
+            let group = NSCollectionLayoutGroup.vertical(layoutSize: size, subitems: [item])
+            let section = NSCollectionLayoutSection(group: group)
+            section.interGroupSpacing = 5
+            section.contentInsets = NSDirectionalEdgeInsets(
+                top: 16, leading: 14, bottom: 16, trailing: 14)
+            return section
+        }
+        collection = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        super.init(frame: frame)
+        collection.backgroundColor = .clear
+        collection.delegate = self
+        collection.keyboardDismissMode = .interactive
+        collection.accessibilityIdentifier = "impress.ai.chat.transcript"
+        collection.register(ImpressChatDocumentCell.self, forCellWithReuseIdentifier: "document")
+        collection.register(ImpressChatPOCStructuredCell.self, forCellWithReuseIdentifier: "structured")
+        collection.register(ImpressChatPOCMathCell.self, forCellWithReuseIdentifier: "math")
+        collection.register(ImpressChatStatusCell.self, forCellWithReuseIdentifier: "status")
+        let empty = UILabel()
+        empty.text = V3L("从一个问题开始")
+        empty.font = .preferredFont(forTextStyle: .body)
+        empty.textAlignment = .center
+        empty.textColor = .secondaryLabel
+        collection.backgroundView = empty
+        collection.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(collection)
+        NSLayoutConstraint.activate([
+            collection.leadingAnchor.constraint(equalTo: leadingAnchor),
+            collection.trailingAnchor.constraint(equalTo: trailingAnchor),
+            collection.topAnchor.constraint(equalTo: topAnchor),
+            collection.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+        dataSource = UICollectionViewDiffableDataSource<Int, String>(
+            collectionView: collection) { [weak self] list, indexPath, id in
+            guard let self, let row = self.rows[id] else { return nil }
+            if row.isStatus {
+                let cell = list.dequeueReusableCell(
+                    withReuseIdentifier: "status", for: indexPath) as! ImpressChatStatusCell
+                cell.configure(row.text)
+                return cell
+            }
+            if !row.user && (row.kind == .code || row.kind == .table) {
+                let cell = list.dequeueReusableCell(
+                    withReuseIdentifier: "structured", for: indexPath)
+                    as! ImpressChatPOCStructuredCell
+                cell.configure(markdown: row.text, kind: row.kind, stable: row.stable)
+                cell.accessibilityIdentifier = "impress.ai.chat.rich-block"
+                return cell
+            }
+            if !row.user && row.kind == .math {
+                let cell = list.dequeueReusableCell(
+                    withReuseIdentifier: "math", for: indexPath) as! ImpressChatPOCMathCell
+                cell.configure(row.text, stable: row.stable)
+                cell.accessibilityIdentifier = "impress.ai.chat.math-block"
+                return cell
+            }
+            let cell = list.dequeueReusableCell(
+                withReuseIdentifier: "document", for: indexPath) as! ImpressChatDocumentCell
+            cell.configure(row.text, kind: row.kind, headingLevel: row.headingLevel,
+                           user: row.user, stable: row.stable)
+            cell.accessibilityIdentifier = row.completed && !row.user
+                ? "impress.ai.chat.completed-assistant" : "impress.ai.chat.history-turn"
+            return cell
+        }
+        NotificationCenter.default.addObserver(self,
+            selector: #selector(contentSizeChanged),
+            name: UIContentSizeCategory.didChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self,
+            selector: #selector(keyboardWillChange),
+            name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+        NotificationCenter.default.addObserver(self,
+            selector: #selector(keyboardDidChange),
+            name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
+        NotificationCenter.default.addObserver(self,
+            selector: #selector(keyboardDidChange),
+            name: UIResponder.keyboardDidHideNotification, object: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    @objc private func contentSizeChanged() {
+        refreshAll = true
+        collection.collectionViewLayout.invalidateLayout()
+        renderLatest()
+    }
+
+    @objc private func keyboardWillChange() {
+        modeBeforeKeyboard = scrollMode
+        scrollMode = .keyboardTransition
+    }
+
+    @objc private func keyboardDidChange() {
+        scrollMode = modeBeforeKeyboard
+        if scrollMode == .followingBottom { scrollToBottom() }
+    }
+
+    func followNewestMessage() {
+        scrollMode = .followingBottom
+    }
+
+    func update(_ messages: [WCDBV3ChatMessage], focusMessageID: UUID? = nil) {
+        latestMessages = messages
+        if messages.isEmpty {
+            scrollMode = .followingBottom
+            parsed.removeAll()
+        }
+        if let focusMessageID {
+            requestedFocus = focusMessageID
+            scrollMode = .restoring
+        }
+        // Network SSE events can arrive hundreds of times per second.
+        // Model updates are lossless, while UI/layout transactions run at <= 30Hz.
+        let now = CFAbsoluteTimeGetCurrent()
+        if now - lastRenderedAt < (1.0 / 30.0) {
+            if !renderQueued {
+                renderQueued = true
+                Task { [weak self] in
+                    try? await Task.sleep(for: .milliseconds(34))
+                    guard let self else { return }
+                    self.renderQueued = false
+                    self.renderLatest()
+                }
+            }
+            return
+        }
+        renderLatest()
+    }
+
+    private func blocks(for message: WCDBV3ChatMessage) -> [ImpressChatPOCBlock] {
+        if let old = parsed[message.messageID],
+           old.text == message.text && old.status == message.status {
+            return old.blocks
+        }
+        let blocks: [ImpressChatPOCBlock]
+        var stream: ImpressChatPOCStream?
+        if message.status == .pending {
+            var next: ImpressChatPOCStream
+            if let old = parsed[message.messageID], old.status == .pending,
+               let previous = old.stream, message.text.hasPrefix(old.text) {
+                next = previous
+                next.append(String(message.text.dropFirst(old.text.count)))
+            } else {
+                next = ImpressChatPOCStream()
+                next.start()
+                next.append(message.text)
+            }
+            blocks = next.blocks
+            stream = next
+        } else if let old = parsed[message.messageID], old.text == message.text,
+                  let previous = old.stream {
+            var finished = previous
+            switch message.status {
+            case .completed: finished.finish()
+            case .cancelled: finished.stop()
+            case .failed: finished.fail()
+            case .pending: break
+            }
+            blocks = finished.blocks
+        } else {
+            blocks = ImpressChatPOCStream.parseOnce(message.text)
+        }
+        parsed[message.messageID] = ParsedMessage(
+            text: message.text, status: message.status, blocks: blocks, stream: stream)
+        return blocks
+    }
+
+    private func renderLatest() {
+        if snapshotInFlight {
+            snapshotNeedsRefresh = true
+            return
+        }
+        lastRenderedAt = CFAbsoluteTimeGetCurrent()
+        var nextRows: [String: Row] = [:]
+        var identifiers: [String] = []
+        let surviving = Set(latestMessages.map(\.messageID))
+        parsed = parsed.filter { surviving.contains($0.key) }
+        for message in latestMessages {
+            let prefix = message.messageID.uuidString
+            let completed = message.status == .completed
+            if message.role == .user {
+                let id = "user-" + prefix
+                identifiers.append(id)
+                nextRows[id] = Row(messageID: message.messageID, user: true,
+                    text: message.text, kind: .paragraph, headingLevel: 0,
+                    stable: true, completed: completed, isStatus: false)
+            } else {
+                for block in blocks(for: message) {
+                    let id = "assistant-" + prefix + "-" + String(block.id)
+                    identifiers.append(id)
+                    nextRows[id] = Row(messageID: message.messageID, user: false,
+                        text: block.markdown, kind: block.kind,
+                        headingLevel: block.headingLevel, stable: block.stable,
+                        completed: completed, isStatus: false)
+                }
+            }
+            if message.status != .completed {
+                let id = "status-" + prefix
+                let description: String
+                switch message.status {
+                case .pending: description = message.role == .assistant
+                    ? V3L("正在生成…") : V3L("正在发送…")
+                case .cancelled: description = V3L("已停止 · 保留部分内容")
+                case .failed: description = V3L("请求失败 · 保留部分内容")
+                case .completed: description = ""
+                }
+                identifiers.append(id)
+                nextRows[id] = Row(messageID: message.messageID, user: false,
+                    text: description, kind: .paragraph, headingLevel: 0,
+                    stable: true, completed: false, isStatus: true)
+            }
+        }
+        collection.backgroundView?.isHidden = !identifiers.isEmpty
+        let previous = dataSource.snapshot()
+        let oldIDs = Set(previous.itemIdentifiers)
+        let changed = identifiers.filter { oldIDs.contains($0) && rows[$0] != nextRows[$0] }
+        let newKinds = changed.filter { id in
+            guard let old = rows[id], let new = nextRows[id] else { return false }
+            return old.kind != new.kind || old.user != new.user || old.isStatus != new.isStatus
+        }
+        let changedKinds = Set(newKinds)
+        let ordinaryChanges = changed.filter { !changedKinds.contains($0) }
+        let visibleAnchor = collection.indexPathsForVisibleItems.sorted().first.flatMap {
+            index -> (String, CGFloat)? in
+            guard let id = dataSource.itemIdentifier(for: index),
+                  let attributes = collection.layoutAttributesForItem(at: index) else {
+                return nil
+            }
+            return (id, attributes.frame.minY - collection.contentOffset.y)
+        }
+        rows = nextRows
+        var snapshot = previous
+        if snapshot.sectionIdentifiers.isEmpty { snapshot.appendSections([0]) }
+        if identifiers == publishedIDs {
+            if changed.isEmpty && !refreshAll && requestedFocus == nil { return }
+            if !newKinds.isEmpty { snapshot.reloadItems(newKinds) }
+            let reconfigured = refreshAll
+                ? identifiers.filter { !changedKinds.contains($0) } : ordinaryChanges
+            if !reconfigured.isEmpty { snapshot.reconfigureItems(reconfigured) }
+        } else if publishedIDs.count <= identifiers.count &&
+                  Array(identifiers.prefix(publishedIDs.count)) == publishedIDs {
+            snapshot.appendItems(Array(identifiers.dropFirst(publishedIDs.count)))
+            if !newKinds.isEmpty { snapshot.reloadItems(newKinds) }
+            let reconfigured = refreshAll
+                ? publishedIDs.filter { !changedKinds.contains($0) } : ordinaryChanges
+            if !reconfigured.isEmpty { snapshot.reconfigureItems(reconfigured) }
+        } else {
+            snapshot = NSDiffableDataSourceSnapshot<Int, String>()
+            snapshot.appendSections([0])
+            snapshot.appendItems(identifiers)
+        }
+        refreshAll = false
+        publishedIDs = identifiers
+        snapshotInFlight = true
+        dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
+            guard let self else { return }
+            self.collection.layoutIfNeeded()
+            if let focus = self.requestedFocus,
+               let index = identifiers.firstIndex(where: {
+                   self.rows[$0]?.messageID == focus
+               }) {
+                self.collection.scrollToItem(
+                    at: IndexPath(item: index, section: 0),
+                    at: .centeredVertically, animated: false)
+                self.requestedFocus = nil
+                self.scrollMode = .readingHistory
+            } else if self.scrollMode == .followingBottom {
+                self.scrollToBottom()
+            } else if let (id, dy) = visibleAnchor,
+                      let index = identifiers.firstIndex(of: id),
+                      let frame = self.collection.layoutAttributesForItem(
+                          at: IndexPath(item: index, section: 0)) {
+                let target = max(-self.collection.adjustedContentInset.top,
+                                 frame.frame.minY - dy)
+                self.collection.setContentOffset(
+                    CGPoint(x: self.collection.contentOffset.x, y: target),
+                    animated: false)
+            }
+            self.snapshotInFlight = false
+            if self.snapshotNeedsRefresh {
+                self.snapshotNeedsRefresh = false
+                self.renderLatest()
+            }
+        }
+    }
+
+    private func scrollToBottom() {
+        let ids = dataSource.snapshot().itemIdentifiers
+        guard !ids.isEmpty else { return }
+        collection.scrollToItem(at: IndexPath(item: ids.count - 1, section: 0),
+                                at: .bottom, animated: false)
+    }
+
+    func collectionView(_ collectionView: UICollectionView,
+                        contextMenuConfigurationForItemAt indexPath: IndexPath,
+                        point: CGPoint) -> UIContextMenuConfiguration? {
+        guard let id = dataSource.itemIdentifier(for: indexPath),
+              let row = rows[id], !row.isStatus, menuForMessage?(row.messageID) != nil
+        else { return nil }
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) {
+            [weak self] _ in
+            self?.menuForMessage?(row.messageID) ?? UIMenu(children: [])
+        }
+    }
+
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        scrollMode = .readingHistory
+    }
+
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate: Bool) {
+        if !willDecelerate { updateFollowMode(scrollView) }
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        updateFollowMode(scrollView)
+    }
+
+    private func updateFollowMode(_ scrollView: UIScrollView) {
+        let distance = scrollView.contentSize.height -
+            (scrollView.contentOffset.y + scrollView.bounds.height)
+        scrollMode = distance < 64 ? .followingBottom : .readingHistory
+    }
+}
+
+/// Plain AI document paragraphs and a right-aligned user bubble. Never paints
+/// a full-width IM row or draws redundant role labels.
+@MainActor
+final class ImpressChatDocumentCell: UICollectionViewCell {
+    private let bubble = UIView()
+    private let body = UITextView()
+    private let quoteStripe = UIView()
+    private let rule = UIView()
+    private var assistantLeading: NSLayoutConstraint!
+    private var userWidth: NSLayoutConstraint!
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        for element in [bubble, body, quoteStripe, rule] {
+            element.translatesAutoresizingMaskIntoConstraints = false
+        }
+        body.isEditable = false
+        body.isSelectable = true
+        body.isScrollEnabled = false
+        body.backgroundColor = .clear
+        body.textContainerInset = .zero
+        body.textContainer.lineFragmentPadding = 0
+        body.adjustsFontForContentSizeCategory = true
+        body.dataDetectorTypes = [.link]
+        quoteStripe.backgroundColor = .tertiaryLabel
+        quoteStripe.layer.cornerRadius = 1.5
+        rule.backgroundColor = .separator
+        contentView.addSubview(bubble)
+        bubble.addSubview(body)
+        bubble.addSubview(quoteStripe)
+        bubble.addSubview(rule)
+        assistantLeading = bubble.leadingAnchor.constraint(equalTo: contentView.leadingAnchor)
+        userWidth = bubble.widthAnchor.constraint(equalTo: contentView.widthAnchor,
+                                                  multiplier: 0.84)
+        NSLayoutConstraint.activate([
+            bubble.topAnchor.constraint(equalTo: contentView.topAnchor),
+            bubble.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            bubble.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            bubble.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor),
+            body.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 9),
+            body.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -9),
+            body.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 12),
+            body.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -12),
+            quoteStripe.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 2),
+            quoteStripe.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 5),
+            quoteStripe.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -5),
+            quoteStripe.widthAnchor.constraint(equalToConstant: 3),
+            rule.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 12),
+            rule.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -12),
+            rule.centerYAnchor.constraint(equalTo: bubble.centerYAnchor),
+            rule.heightAnchor.constraint(equalToConstant: 1)
+        ])
+        assistantLeading.isActive = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    func configure(_ markdown: String, kind: ImpressChatPOCBlock.Kind,
+                   headingLevel: Int, user: Bool, stable: Bool) {
+        assistantLeading.isActive = !user
+        userWidth.isActive = user
+        bubble.backgroundColor = user ? .tertiarySystemFill : .clear
+        bubble.layer.cornerRadius = user ? 19 : 0
+        quoteStripe.isHidden = kind != .quote || user
+        rule.isHidden = kind != .divider || user
+        body.isHidden = kind == .divider
+        let base = UIFont.preferredFont(forTextStyle: .body).pointSize
+        let scale: [CGFloat] = [1.0, 1.58, 1.42, 1.28, 1.15, 1.07, 1.0]
+        let level = min(6, max(1, headingLevel))
+        let font = kind == .heading
+            ? UIFont.systemFont(ofSize: base * scale[level], weight: .bold)
+            : UIFont.preferredFont(forTextStyle: .body)
+        var displayed = markdown
+        if !user && kind == .heading {
+            displayed = String(markdown.dropFirst(headingLevel))
+                .trimmingCharacters(in: .whitespaces)
+        } else if !user && kind == .quote {
+            displayed = markdown.components(separatedBy: "\n").map { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                return trimmed.hasPrefix(">")
+                    ? String(trimmed.dropFirst()).trimmingCharacters(in: .whitespaces)
+                    : trimmed
+            }.joined(separator: "\n")
+        }
+        if kind == .divider { displayed = " " }
+        if !user && kind == .list {
+            body.attributedText = listText(displayed, font: font)
+        } else if !user, let parsed = try? AttributedString(markdown: displayed) {
+            let result = NSMutableAttributedString(attributedString: NSAttributedString(parsed))
+            if kind == .heading {
+                result.addAttribute(.font, value: font,
+                    range: NSRange(location: 0, length: result.length))
+            }
+            body.attributedText = result
+        } else {
+            body.attributedText = NSAttributedString(string: displayed, attributes: [
+                .font: font, .foregroundColor: UIColor.label
+            ])
+        }
+        body.accessibilityLabel = markdown + (stable ? "" : V3L("，生成中"))
+    }
+
+    private func listText(_ markdown: String, font: UIFont) -> NSAttributedString {
+        let result = NSMutableAttributedString(string: "")
+        for line in markdown.components(separatedBy: "\n") {
+            let spaces = line.prefix(while: { $0 == " " }).count
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let dash = ["- ", "+ ", "* "].first { trimmed.hasPrefix($0) }
+            let digits = trimmed.prefix(while: { $0.isNumber })
+            let numbered = !digits.isEmpty &&
+                (trimmed.dropFirst(digits.count).hasPrefix(". ") ||
+                 trimmed.dropFirst(digits.count).hasPrefix(") "))
+            let marker = dash != nil ? "• " :
+                (numbered ? String(digits) + ". " : "")
+            let body: String
+            if let dash { body = String(trimmed.dropFirst(dash.count)) }
+            else if numbered { body = String(trimmed.dropFirst(digits.count + 2)) }
+            else { body = trimmed }
+            let paragraph = NSMutableParagraphStyle()
+            let x = CGFloat(min(8, spaces / 2)) * 18 + 4
+            paragraph.firstLineHeadIndent = x
+            paragraph.headIndent = x + (marker.isEmpty ? 0 : 20)
+            paragraph.paragraphSpacing = 4
+            let chunk = marker + body + "\n"
+            let rendered: NSAttributedString
+            if let parsed = try? AttributedString(markdown: chunk) {
+                rendered = NSAttributedString(parsed)
+            } else { rendered = NSAttributedString(string: chunk) }
+            let resultLine = NSMutableAttributedString(attributedString: rendered)
+            resultLine.addAttributes([
+                .font: font, .paragraphStyle: paragraph,
+                .foregroundColor: UIColor.label
+            ], range: NSRange(location: 0, length: resultLine.length))
+            result.append(resultLine)
+        }
+        return result
+    }
+}
+
+@MainActor
+private final class ImpressChatStatusCell: UICollectionViewCell {
+    private let label = UILabel()
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        label.font = .preferredFont(forTextStyle: .caption1)
+        label.adjustsFontForContentSizeCategory = true
+        label.textColor = .secondaryLabel
+        label.numberOfLines = 0
+        label.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 14),
+            label.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -14),
+            label.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 3),
+            label.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3)
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+    func configure(_ text: String) {
+        label.text = text
+        accessibilityIdentifier = "impress.ai.chat.stream-status"
+    }
+}
