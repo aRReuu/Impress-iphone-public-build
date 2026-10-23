@@ -164,26 +164,6 @@ public struct ImpressChatPOCStream: Sendable {
         return !digits.isEmpty && (t.dropFirst(digits.count).hasPrefix(". ") ||
                                   t.dropFirst(digits.count).hasPrefix(") "))
     }
-    private static func classify(_ s: String) -> (ImpressChatPOCBlock.Kind, Int) {
-        let lines = s.split(separator: "\n", omittingEmptySubsequences: false)
-        let first = String(lines.first ?? "").trimmingCharacters(in: .whitespaces)
-        let depth = headingDepth(first)
-        if depth > 0 { return (.heading, depth) }
-        if isFence(first) { return (.code, 0) }
-        if first.hasPrefix("$$") { return (.math, 0) }
-        if ["---", "***", "___"].contains(first) { return (.divider, 0) }
-        if first.hasPrefix(">") { return (.quote, 0) }
-        if isList(first) { return (.list, 0) }
-        if lines.count > 1 && first.contains("|") {
-            let separator = String(lines[1])
-            let stripped = separator.replacingOccurrences(of: "|", with: "")
-                .replacingOccurrences(of: "-", with: "")
-                .replacingOccurrences(of: ":", with: "")
-                .trimmingCharacters(in: .whitespaces)
-            if separator.contains("---") && stripped.isEmpty { return (.table, 0) }
-        }
-        return (.paragraph, 0)
-    }
     private static func parse(_ input: String, offset: Int,
                               stable: Bool) -> [ImpressChatPOCBlock] {
         var result: [ImpressChatPOCBlock] = []
@@ -266,7 +246,7 @@ public struct ImpressChatPOCStream: Sendable {
             if ["---", "***", "___"].contains(trimmed) {
                 flush()
                 activeKind = .divider
-                pending.append(trimmed)
+                pending.append(row)
                 flush()
                 continue
             }
