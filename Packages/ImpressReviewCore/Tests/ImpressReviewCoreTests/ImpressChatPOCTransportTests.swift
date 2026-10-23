@@ -160,4 +160,73 @@ final class ImpressChatPOCTransportTests: XCTestCase {
         XCTAssertFalse(model.isCompleted)
         XCTAssertTrue(model.isFailed)
     }
+    func testEOFWithoutBlankFrameBoundaryNeverCommitsProviderTerminal() throws {
+        let validDelta = "data: " +
+            #"{"choices":[{"delta":{"content":"partial"}}]}"# + "\n\n"
+        for unfinishedEnd in ["data: [DONE]", "data: [DONE]\n",
+                               "data: [DONE]\r"] {
+            let result = try replay(validDelta + unfinishedEnd,
+                                    provider: .openAIChat, cuts: [1, 5, 8192])
+            XCTAssertEqual(result.outputs, [.delta("partial")])
+            XCTAssertFalse(result.complete)
+        }
+        let responses = "event: response.completed\n" +
+            #"data: {"type":"response.completed"}"# + "\n"
+        let incompleteResponses = try replay(responses, provider: .openAIResponses,
+                                             cuts: [128])
+        XCTAssertTrue(incompleteResponses.outputs.isEmpty)
+        XCTAssertFalse(incompleteResponses.complete)
+
+        let anthropic = "event: message_delta\n" +
+            #"data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}"# +
+            "\n\nevent: message_stop\n" +
+            #"data: {"type":"message_stop"}"# + "\n"
+        let incompleteAnthropic = try replay(anthropic, provider: .anthropicMessages,
+                                             cuts: [7])
+        XCTAssertTrue(incompleteAnthropic.outputs.isEmpty)
+        XCTAssertFalse(incompleteAnthropic.complete)
+
+        let gemini = "data: " +
+            #"{"candidates":[{"finishReason":"STOP"}]}"# + "\n"
+        let incompleteGemini = try replay(gemini, provider: .geminiGenerateContent,
+                                          cuts: [2, 64])
+        XCTAssertTrue(incompleteGemini.outputs.isEmpty)
+        XCTAssertFalse(incompleteGemini.complete)
+    }
+
+    func testFinalCRCanCloseRealBlankLineButNotUnterminatedData() throws {
+        let complete = try replay("data: [DONE]\r\r",
+                                  provider: .openAIChat, cuts: [1])
+        XCTAssertEqual(complete.outputs, [.completed])
+        XCTAssertTrue(complete.complete)
+        let incomplete = try replay("data: [DONE]\r",
+                                    provider: .openAIChat, cuts: [1])
+        XCTAssertTrue(incomplete.outputs.isEmpty)
+        XCTAssertFalse(incomplete.complete)
+    }
+
+    func testLargeNetworkReadWithManySmallEventsDoesNotHitFrameLimit() throws {
+        let oneEvent = "data: " +
+            #"{"choices":[{"delta":{"content":"🧠"}}]}"# + "\n\n"
+        let count = 6_000
+        let payload = String(repeating: oneEvent, count: count) + "data: [DONE]\n\n"
+        XCTAssertGreaterThan(payload.utf8.count,
+                             ImpressChatPOCSSEDecoder.maximumBufferBytes)
+        let result = try replay(payload, provider: .openAIChat,
+                                cuts: [payload.utf8.count])
+        XCTAssertEqual(result.outputs.count, count + 1)
+        XCTAssertEqual(result.outputs.first, .delta("🧠"))
+        XCTAssertEqual(result.outputs.last, .completed)
+        XCTAssertTrue(result.complete)
+    }
+
+    func testSlicedDataWithNonzeroBaseIndexRemainsDecodable() throws {
+        let payload = Data("ignoredata: [DONE]\n\n".utf8)
+        let sliced = payload.dropFirst(6)
+        var decoder = ImpressChatPOCSSEDecoder()
+        XCTAssertEqual(try decoder.append(sliced),
+                       [ImpressChatPOCSSEEvent(event: nil, id: nil, data: "[DONE]")])
+        XCTAssertTrue(try decoder.finish().isEmpty)
+    }
+
 }

@@ -31,30 +31,42 @@ public struct ImpressChatPOCSSEDecoder: Sendable {
 
     /// Arbitrary fragmented reads, including a single byte per call.
     public mutating func append(_ bytes: Data) throws -> [ImpressChatPOCSSEEvent] {
-        guard buffer.count + bytes.count <= Self.maximumBufferBytes else {
-            throw ImpressChatPOCTransportError.tooLarge
-        }
-        buffer.append(bytes)
         var produced: [ImpressChatPOCSSEEvent] = []
-        while let delimiter = Self.findLineDelimiter(in: buffer) {
-            let data = Data(buffer.prefix(delimiter.offset))
-            buffer.removeSubrange(0..<delimiter.end)
-            try consumeLine(data, into: &produced)
+        var cursor = bytes.startIndex
+        while cursor < bytes.endIndex {
+            // Bound one unfinished frame, not a network read containing
+            // thousands of independently framed events.
+            let available = Self.maximumBufferBytes - buffer.count
+            guard available > 0 else { throw ImpressChatPOCTransportError.tooLarge }
+            // Small batches avoid quadratic prefix removal for bulk URLSession reads.
+            let length = min(bytes.distance(from: cursor, to: bytes.endIndex),
+                             min(available, 16 * 1024))
+            let next = bytes.index(cursor, offsetBy: length)
+            buffer.append(contentsOf: bytes[cursor..<next])
+            cursor = next
+            while let delimiter = Self.findLineDelimiter(in: buffer) {
+                let data = Data(buffer.prefix(delimiter.offset))
+                buffer.removeSubrange(0..<delimiter.end)
+                try consumeLine(data, into: &produced)
+            }
         }
         return produced
     }
 
-    /// End of socket is *not* a completion signal for the AI response.
-    /// This only drains a final unterminated line/event; the consumer still
-    /// requires a provider-specific explicit terminal event.
+    /// EOF is not a completion signal: only an SSE frame ending with a blank
+    /// line may contain a terminal marker. Retain no uncommitted event at EOF.
     public mutating func finish() throws -> [ImpressChatPOCSSEEvent] {
         var produced: [ImpressChatPOCSSEEvent] = []
-        if !buffer.isEmpty {
-            let remaining = buffer
-            buffer.removeAll()
-            try consumeLine(remaining, into: &produced)
+        // A final CR is a valid line ending; append() delayed it only to
+        // distinguish CRLF fragmented over separate network reads.
+        if buffer.last == 13 {
+            try consumeLine(Data(buffer.dropLast()), into: &produced)
         }
-        dispatch(into: &produced)
+        buffer.removeAll(keepingCapacity: true)
+        activeEvent = nil
+        activeID = nil
+        lines.removeAll(keepingCapacity: true)
+        dataBytes = 0
         return produced
     }
 
