@@ -201,6 +201,87 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
         XCTAssertEqual(finalHistory, [day])
     }
 
+    func testSimultaneousClosedDayCommitsSerializeWithoutLastWriterWins() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cal-concurrent-" + UUID().uuidString,
+                                    isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let ledger = ImpressCalibrationLocalStore(
+            storageURL: directory.appendingPathComponent("checkins.json"))
+        var first = try await ledger.checkIn()
+        for kind in CalibrationIndicator.behaviorIndicators {
+            try first.setOutcome(.completed, for: kind)
+        }
+        var second = first
+        try second.setOutcome(.missed, for: .reading)
+        XCTAssertTrue(first.isComplete && second.isComplete)
+        let successes = await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                do { try await ledger.save(first); return true }
+                catch { return false }
+            }
+            group.addTask {
+                do { try await ledger.save(second); return true }
+                catch { return false }
+            }
+            var values = [Bool]()
+            for await value in group { values.append(value) }
+            return values.filter { $0 }.count
+        }
+        XCTAssertEqual(successes, 1,
+            "An actor must accept one CLOSED record, never silently overwrite it")
+        let recorded = try await ledger.checkIn()
+        XCTAssertTrue(recorded == first || recorded == second)
+        let original = try await ledger.archiveData()
+        try await ledger.save(recorded)
+        XCTAssertEqual(try await ledger.archiveData(), original,
+            "Idempotent CLOSED retries must not issue a second durable write")
+        var rejected = recorded
+        try rejected.setManualAdjustment(positive: true,
+                                         reason: "Do not change a closed score")
+        do {
+            try await ledger.save(rejected)
+            XCTFail("CLOSED cannot be mutated even by another concurrent writer")
+        } catch ImpressCalibrationStoreError.closedDayImmutable {
+            XCTAssertEqual(try await ledger.archiveData(), original)
+        }
+    }
+
+    func testFailedDurableWriteLeavesPreviousClosedLedgerIntact() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cal-failure-" + UUID().uuidString,
+                                    isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = root.appendingPathComponent("storage", isDirectory: true)
+        let dataPath = dir.appendingPathComponent("checkins.json")
+        let ledger = ImpressCalibrationLocalStore(storageURL: dataPath)
+        var day = try await ledger.checkIn()
+        try day.setOutcome(.completed, for: .sleep)
+        try await ledger.save(day)
+        let saved = try await ledger.archiveData()
+
+        // Deterministic filesystem failure: retain the saved directory as a
+        // sibling while replacing its parent path with a regular file. No user
+        // documents or App Group storage are involved.
+        let moved = root.appendingPathComponent("original", isDirectory: true)
+        try FileManager.default.moveItem(at: dir, to: moved)
+        try Data("not-a-directory".utf8).write(to: dir)
+        var changed = day
+        try changed.setOutcome(.missed, for: .nutrition)
+        do {
+            try await ledger.save(changed)
+            XCTFail("Persisting through a non-directory path must fail closed")
+        } catch {
+            XCTAssertFalse(error is ImpressCalibrationStoreError == false,
+                "The filesystem, not a prior CLOSED guard, must reject this save")
+        }
+        try FileManager.default.removeItem(at: dir)
+        try FileManager.default.moveItem(at: moved, to: dir)
+        let restored = try await ledger.checkIn()
+        XCTAssertEqual(restored, day)
+        XCTAssertEqual(try await ledger.archiveData(), saved)
+    }
+
     func testCalibrationArchiveRoundTripAndCorruptionRejection() async throws {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("cal-archive-" + UUID().uuidString, isDirectory: true)
