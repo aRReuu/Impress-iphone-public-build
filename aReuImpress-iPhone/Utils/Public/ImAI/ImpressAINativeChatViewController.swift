@@ -1468,37 +1468,94 @@ final class ImpressAINativeChatViewController: UIViewController,
                         text: saved.text)
                 }
                 turns.append(ImpressAIChatTurn(role: .user, text: message))
-                let reply: String
+                // Production sends consume the same provider-normalized SSE events
+                // already validated by the offline Chat POC. A terminal event alone
+                // may mark a reply completed; partial EOF and cancellation may not.
+                var assistantID: UUID?
+                var terminalReceived = false
+                var lastCheckpoint = Date.distantPast
+                func appendChunk(_ text: String) {
+                    guard !text.isEmpty else { return }
+                    if let id = assistantID,
+                       let index = history.firstIndex(where: { $0.messageID == id }) {
+                        history[index].text += text
+                    } else {
+                        let id = UUID()
+                        assistantID = id
+                        history.append(WCDBV3ChatMessage(
+                            messageID: id, role: .assistant, text: text, status: .pending,
+                            providerID: providerID, modelIdentifier: modelName,
+                            promptSnapshot: prompt))
+                    }
+                    // WCDB saves are separately serialized from the 30Hz renderer.
+                    // Persist an early partial reply, then bounded checkpoints.
+                    if Date().timeIntervalSince(lastCheckpoint) >= 2 {
+                        enqueuePersistence()
+                        lastCheckpoint = Date()
+                    }
+                    reloadAndScroll()
+                }
                 #if DEBUG
                 if ImpressV11UITestFixture.enabled &&
                    (self.noteIdentity?.vaultID == ImpressV11UITestFixture.vaultID ||
                     self.sourceCardID != nil) {
-                    // Still passes the actual Vault SHA/CAS + consent checks
-                    // above and persists real WCDB user/assistant messages.
-                    // No network request or model charge occurs.
-                    reply = "合成模型回复：依据已核准的来源，先确定前提，再提出可检验的机制，最后检查反例。原笔记与原卡必须分别审阅修改后才可批准。"
+                    // The real production controller, not a disconnected POC,
+                    // streams a deterministic offline fixture through its UI.
+                    // All existing consent, SHA and local-save gates ran above.
+                    let offlineReply = "合成模型回复：依据已核准的来源，先确定前提，再提出可检验的机制，最后检查反例。原笔记与原卡必须分别审阅修改后才可批准。"
+                    let characters = Array(offlineReply)
+                    for offset in stride(from: 0, to: characters.count, by: 18) {
+                        try Task.checkCancellation()
+                        appendChunk(String(characters[offset..<min(offset + 18, characters.count)]))
+                        try await Task.sleep(for: .milliseconds(65))
+                    }
+                    terminalReceived = true
                 } else {
-                    reply = try await ImpressAIHTTPClient.shared.converse(
+                    let events = try await ImpressAIHTTPClient.shared.converseStream(
                         route: route, system: system, turns: turns)
+                    for try await event in events {
+                        try Task.checkCancellation()
+                        switch event {
+                        case .delta(let text): appendChunk(text)
+                        case .completed: terminalReceived = true
+                        case .failed: throw ImpressAIServiceError.response
+                        }
+                    }
                 }
                 #else
-                reply = try await ImpressAIHTTPClient.shared.converse(
+                let events = try await ImpressAIHTTPClient.shared.converseStream(
                     route: route, system: system, turns: turns)
+                for try await event in events {
+                    try Task.checkCancellation()
+                    switch event {
+                    case .delta(let text): appendChunk(text)
+                    case .completed: terminalReceived = true
+                    case .failed: throw ImpressAIServiceError.response
+                    }
+                }
                 #endif
                 try Task.checkCancellation()
-                if let index = history.firstIndex(where: { $0.messageID == messageID }) {
-                    history[index].status = .completed
+                guard terminalReceived, let id = assistantID,
+                      let assistantIndex = history.firstIndex(where: { $0.messageID == id }),
+                      !history[assistantIndex].text.isEmpty else {
+                    throw ImpressAIServiceError.response
                 }
-                history.append(WCDBV3ChatMessage(
-                    role: .assistant, text: reply, status: .completed,
-                    providerID: providerID, modelIdentifier: modelName,
-                    promptSnapshot: prompt))
+                if let userIndex = history.firstIndex(where: { $0.messageID == messageID }) {
+                    history[userIndex].status = .completed
+                }
+                history[assistantIndex].status = .completed
                 activeProviderID = providerID
                 requestFailure = nil
                 privacyLabel.text = V3L("对话已保存至本机；更新内容仍需预览确认。")
             } catch {
                 let cancelled = Task.isCancelled || error is CancellationError
                 if let index = history.firstIndex(where: { $0.messageID == messageID }) {
+                    history[index].status = cancelled ? .cancelled : .failed
+                }
+                if let id = assistantID,
+                   let index = history.firstIndex(where: { $0.messageID == id }) {
+                    // Retain every already displayed token; incomplete output is
+                    // never eligible for knowledge approval or auto replay.
                     history[index].status = cancelled ? .cancelled : .failed
                 }
                 requestFailure = cancelled ? V3L("生成已停止") : error.localizedDescription
