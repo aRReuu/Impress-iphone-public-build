@@ -22,6 +22,18 @@ final class ImpressChatPOCScaleTests: XCTestCase {
                     engine.append(scalars[index..<min(scalars.count, index+eventSize)]
                         .map(String.init).joined())
                 }
+                // Algorithmic work counters permit repeatable 1/16/64KB
+                // comparisons without inventing a device FPS or CPU figure.
+                XCTAssertGreaterThan(engine.eventCount, 0)
+                XCTAssertGreaterThanOrEqual(engine.cumulativeReparsedUTF8Count,
+                                            engine.lastReparsedUTF8Count)
+                XCTAssertLessThanOrEqual(engine.peakDirtyTailUTF8Count,
+                                         markdown.utf8.count)
+                print("CHAT_POC_INCREMENTAL_COST source_bytes=\(markdown.utf8.count) " +
+                      "event_scalars=\(eventSize) events=\(engine.eventCount) " +
+                      "reparsed_utf8_bytes=\(engine.cumulativeReparsedUTF8Count) " +
+                      "peak_dirty_tail_bytes=\(engine.peakDirtyTailUTF8Count) " +
+                      "committed_blocks=\(engine.committedBlockCount)")
                 engine.finish()
                 XCTAssertEqual(engine.blocks, expected,
                     "\(bytes) bytes, \(eventSize)-scalar fragments")

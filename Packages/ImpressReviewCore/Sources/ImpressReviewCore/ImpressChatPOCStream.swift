@@ -28,22 +28,35 @@ public struct ImpressChatPOCStream: Sendable {
     public private(set) var source = ""
     public private(set) var blocks: [ImpressChatPOCBlock] = []
     public private(set) var lastReparsedUTF8Count = 0
+    /// Instrumentation for offline POC-05; bytes reparsed are an algorithmic
+    /// cost proxy, NOT wall-clock latency, CPU utilization or device FPS.
+    public private(set) var cumulativeReparsedUTF8Count = 0
+    public private(set) var eventCount = 0
+    public private(set) var peakDirtyTailUTF8Count = 0
+    public var committedBlockCount: Int { fixed.count }
     private var fixed: [ImpressChatPOCBlock] = []
     private var tail = ""
 
     public init() {}
     public mutating func start() {
         source = ""; blocks = []; fixed = []; tail = ""
-        lastReparsedUTF8Count = 0; phase = .streaming
+        lastReparsedUTF8Count = 0
+        cumulativeReparsedUTF8Count = 0
+        eventCount = 0
+        peakDirtyTailUTF8Count = 0
+        phase = .streaming
     }
     public mutating func append(_ fragment: String) {
         guard phase == .streaming, !fragment.isEmpty else { return }
         source += fragment; tail += fragment
+        eventCount += 1
         if let point = Self.lastSafeBoundary(in: tail) {
             fixed += Self.parse(String(tail[..<point]), offset: fixed.count, stable: true)
             tail = String(tail[point...])
         }
         lastReparsedUTF8Count = tail.utf8.count
+        cumulativeReparsedUTF8Count += lastReparsedUTF8Count
+        peakDirtyTailUTF8Count = max(peakDirtyTailUTF8Count, lastReparsedUTF8Count)
         blocks = fixed + Self.parse(tail, offset: fixed.count, stable: false)
     }
     public mutating func finish() {
