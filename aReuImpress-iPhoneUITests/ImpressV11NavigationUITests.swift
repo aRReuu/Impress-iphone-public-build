@@ -405,6 +405,12 @@ final class ImpressV11NavigationUITests: XCTestCase {
 
     private func sendSyntheticChatAndVerifyReply(_ app: XCUIApplication,
                                                  message: String) {
+        // The real production route must use the block-based renderer, not
+        // the standalone Debug POC or the retired UITableView transcript.
+        let transcript = app.collectionViews["impress.ai.chat.transcript"]
+        XCTAssertTrue(transcript.waitForExistence(timeout: 25),
+                      "Production Chat must mount its native diffable transcript")
+        XCTAssertFalse(app.tables["impress.ai.chat.transcript"].exists)
         let input = app.textViews["impress.ai.chat.input"]
         XCTAssertTrue(input.waitForExistence(timeout: 25))
         let guide = app.alerts["关于讨论"]
