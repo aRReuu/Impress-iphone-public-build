@@ -1,12 +1,12 @@
-#if DEBUG
 import Foundation
 import UIKit
 import PhotosUI
 import UniformTypeIdentifiers
 import ImageIO
 
-/// Disposable, local-only POC material. The typed payload is intentionally
-/// not Codable and contains neither Vault authority nor model upload metadata.
+/// Ephemeral, bounded preview-only material. No raw files are persisted or
+/// transmitted: a provider multimodal capability/consent gateway is still
+/// required before any future network upload.
 @MainActor
 struct ImpressChatPOCLocalPreview {
     enum Origin: String { case photo = "相册", file = "文件", camera = "拍照" }
@@ -53,12 +53,14 @@ final class ImpressChatPOCLocalAttachments: NSObject,
         onChange?(items)
     }
 
-    /// Deterministic unit-fixture path: never picks a device resource.
+    #if DEBUG
+    /// Deterministic unit fixture: never reads or persists device resources.
     func addSyntheticPreviewForTest(_ name: String) {
         insert(ImpressChatPOCLocalPreview(
             id: UUID(), title: name, source: .file, approximateBytes: 100,
             thumbnail: nil))
     }
+    #endif
 
     private func insert(_ item: ImpressChatPOCLocalPreview) {
         guard items.count < maxItems, item.approximateBytes <= maxItemBytes,
@@ -201,4 +203,3 @@ final class ImpressChatPOCLocalAttachments: NSObject,
         presenting.present(alert, animated: true)
     }
 }
-#endif

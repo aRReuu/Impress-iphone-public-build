@@ -196,7 +196,7 @@ enum ImpressChatProviderConsentGate {
 
 @MainActor
 final class ImpressAINativeChatViewController: UIViewController,
-                                                UITableViewDataSource, UITableViewDelegate, UITextViewDelegate {
+                                                UITextViewDelegate {
     private let sourceQuestion: String?
     private let sourceAnswer: String?
     private let sourceCardID: UUID?
@@ -262,7 +262,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         return note?.documentFormat == .markdown ? note : nil
     }
 
-    private let tableView = UITableView(frame: .zero, style: .plain)
+    private let transcript = ImpressChatProductionTranscript()
     private let messageInput = UITextView()
     private let inputPlaceholder = UILabel()
     private let sendButton = UIButton(type: .system)
@@ -274,6 +274,14 @@ final class ImpressAINativeChatViewController: UIViewController,
     private let attachmentChip = UIButton(type: .system)
     private let composerColumn = UIStackView()
     private let composerRow = UIStackView()
+    private let localAttachmentScroller = UIScrollView()
+    private let localAttachmentRow = UIStackView()
+    private let localAttachmentHint = UILabel()
+    private var localAttachmentHeight: NSLayoutConstraint?
+    private var acknowledgedTextOnlyPreviews = false
+    // Existing bounded system picker implementation becomes a real production
+    // composer preview. Its data never enters WCDB or provider payloads.
+    private lazy var localAttachments = ImpressChatPOCLocalAttachments(presenting: self)
     private var messageHeight: NSLayoutConstraint?
     private static let introductionKey = "ImpressV11ChatIntroductionSeen"
     private var pendingInitialMaterials: [WCDBV3ChatContextReference]
@@ -412,15 +420,14 @@ final class ImpressAINativeChatViewController: UIViewController,
         view.backgroundColor = ImpressV3Appearance.page
         navigationItem.largeTitleDisplayMode = .never
 
-        tableView.dataSource = self
-        tableView.delegate = self
-        tableView.register(ImpressChatMessageCell.self, forCellReuseIdentifier: "chat.message")
-        tableView.backgroundColor = .clear
-        tableView.separatorStyle = .none
-        tableView.rowHeight = UITableView.automaticDimension
-        tableView.estimatedRowHeight = 90
-        tableView.keyboardDismissMode = .interactive
-        tableView.accessibilityIdentifier = "impress.ai.chat.transcript"
+        // Production uses stable message/block IDs and a diffable content layout.
+        // Reuse the original knowledge-approval menu at message identity scope.
+        transcript.menuForMessage = { [weak self] id in
+            guard let self,
+                  let turn = self.history.first(where: { $0.messageID == id })
+            else { return nil }
+            return self.messageMenu(for: turn)
+        }
 
         privacyLabel.font = ImpressV3Appearance.Typography.caption
         privacyLabel.adjustsFontForContentSizeCategory = true
@@ -505,10 +512,14 @@ final class ImpressAINativeChatViewController: UIViewController,
                 weight: .regular))
         add.baseForegroundColor = ImpressV3Appearance.primaryText
         materialButton.configuration = add
-        materialButton.accessibilityLabel = V3L("添加材料")
+        materialButton.accessibilityLabel = V3L("添加相册、文件或拍照")
         materialButton.accessibilityIdentifier = "impress.ai.chat.add-material"
-        materialButton.addTarget(self, action: #selector(reviewSessionMaterials),
-                                 for: .touchUpInside)
+        materialButton.menu = localAttachments.pickerMenu()
+        materialButton.showsMenuAsPrimaryAction = true
+        localAttachments.onChange = { [weak self] _ in
+            self?.acknowledgedTextOnlyPreviews = false
+            self?.updateLocalPreviewStrip()
+        }
         var dictation = UIButton.Configuration.plain()
         dictation.image = UIImage(systemName: "mic",
             withConfiguration: UIImage.SymbolConfiguration(
@@ -528,7 +539,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         attachmentChip.addTarget(self, action: #selector(reviewSessionMaterials),
                                  for: .touchUpInside)
         attachmentChip.isHidden = true
-        for element in [tableView, inputBar, privacyLabel] {
+        for element in [transcript, inputBar, privacyLabel] {
             element.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(element)
         }
@@ -541,6 +552,37 @@ final class ImpressAINativeChatViewController: UIViewController,
         composerRow.addArrangedSubview(messageInput)
         composerRow.addArrangedSubview(speechButton)
         composerRow.addArrangedSubview(sendButton)
+        localAttachmentScroller.showsHorizontalScrollIndicator = false
+        localAttachmentScroller.accessibilityIdentifier = "impress.ai.chat.local-preview-strip"
+        localAttachmentScroller.isHidden = true
+        localAttachmentRow.axis = .horizontal
+        localAttachmentRow.alignment = .center
+        localAttachmentRow.spacing = 8
+        localAttachmentRow.translatesAutoresizingMaskIntoConstraints = false
+        localAttachmentScroller.addSubview(localAttachmentRow)
+        let previewHeight = localAttachmentScroller.heightAnchor.constraint(equalToConstant: 0)
+        localAttachmentHeight = previewHeight
+        NSLayoutConstraint.activate([
+            previewHeight,
+            localAttachmentRow.leadingAnchor.constraint(
+                equalTo: localAttachmentScroller.contentLayoutGuide.leadingAnchor),
+            localAttachmentRow.trailingAnchor.constraint(
+                equalTo: localAttachmentScroller.contentLayoutGuide.trailingAnchor),
+            localAttachmentRow.centerYAnchor.constraint(
+                equalTo: localAttachmentScroller.contentLayoutGuide.centerYAnchor),
+            localAttachmentRow.heightAnchor.constraint(
+                equalTo: localAttachmentScroller.frameLayoutGuide.heightAnchor)
+        ])
+        localAttachmentHint.font = .preferredFont(forTextStyle: .caption2)
+        localAttachmentHint.textColor = .secondaryLabel
+        localAttachmentHint.adjustsFontForContentSizeCategory = true
+        localAttachmentHint.numberOfLines = 2
+        localAttachmentHint.text = V3L("仅本地预览；模型无法读取附件")
+        localAttachmentHint.accessibilityIdentifier =
+            "impress.ai.chat.local-preview-not-transmitted"
+        localAttachmentHint.isHidden = true
+        composerColumn.addArrangedSubview(localAttachmentScroller)
+        composerColumn.addArrangedSubview(localAttachmentHint)
         composerColumn.addArrangedSubview(attachmentChip)
         composerColumn.addArrangedSubview(composerRow)
         messageInput.isScrollEnabled = false
@@ -549,10 +591,10 @@ final class ImpressAINativeChatViewController: UIViewController,
         let dynamicHeight = messageInput.heightAnchor.constraint(equalToConstant: 44)
         messageHeight = dynamicHeight
         NSLayoutConstraint.activate([
-            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            tableView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
-            tableView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
-            tableView.bottomAnchor.constraint(equalTo: inputBar.topAnchor, constant: -8),
+            transcript.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            transcript.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            transcript.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
+            transcript.bottomAnchor.constraint(equalTo: inputBar.topAnchor, constant: -8),
             privacyLabel.leadingAnchor.constraint(
                 equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
             privacyLabel.trailingAnchor.constraint(
@@ -628,6 +670,79 @@ final class ImpressAINativeChatViewController: UIViewController,
         messageInput.isScrollEnabled = ideal > limit
     }
 
+    private func updateLocalPreviewStrip() {
+        for control in localAttachmentRow.arrangedSubviews {
+            localAttachmentRow.removeArrangedSubview(control)
+            control.removeFromSuperview()
+        }
+        let items = localAttachments.items
+        let visible = !items.isEmpty
+        localAttachmentScroller.isHidden = !visible
+        localAttachmentHint.isHidden = !visible
+        localAttachmentHeight?.constant = visible ? 52 : 0
+        for item in items {
+            let chip = UIView()
+            chip.backgroundColor = .tertiarySystemFill
+            chip.layer.cornerRadius = 12
+            chip.translatesAutoresizingMaskIntoConstraints = false
+            chip.accessibilityIdentifier = "impress.ai.chat.local-preview"
+            let content = UIStackView()
+            content.axis = .horizontal
+            content.alignment = .center
+            content.spacing = 5
+            content.translatesAutoresizingMaskIntoConstraints = false
+            if let thumbnail = item.thumbnail {
+                let preview = UIImageView(image: thumbnail)
+                preview.contentMode = .scaleAspectFill
+                preview.clipsToBounds = true
+                preview.layer.cornerRadius = 7
+                preview.translatesAutoresizingMaskIntoConstraints = false
+                content.addArrangedSubview(preview)
+                NSLayoutConstraint.activate([
+                    preview.widthAnchor.constraint(equalToConstant: 36),
+                    preview.heightAnchor.constraint(equalToConstant: 36)
+                ])
+            }
+            let name = UILabel()
+            name.text = item.title
+            name.textColor = .label
+            name.font = .preferredFont(forTextStyle: .caption1)
+            name.lineBreakMode = .byTruncatingMiddle
+            name.adjustsFontForContentSizeCategory = true
+            content.addArrangedSubview(name)
+            let remove = UIButton(type: .system)
+            remove.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
+            remove.tintColor = .secondaryLabel
+            remove.accessibilityLabel = V3L("移除附件") + " " + item.title
+            remove.accessibilityIdentifier = "impress.ai.chat.local-preview-remove"
+            remove.addAction(UIAction { [weak self] _ in
+                self?.localAttachments.remove(id: item.id)
+            }, for: .touchUpInside)
+            content.addArrangedSubview(remove)
+            NSLayoutConstraint.activate([
+                remove.widthAnchor.constraint(equalToConstant: 44),
+                remove.heightAnchor.constraint(equalToConstant: 44)
+            ])
+            chip.addSubview(content)
+            NSLayoutConstraint.activate([
+                chip.widthAnchor.constraint(equalToConstant: 198),
+                chip.heightAnchor.constraint(equalToConstant: 48),
+                content.leadingAnchor.constraint(equalTo: chip.leadingAnchor, constant: 8),
+                content.trailingAnchor.constraint(equalTo: chip.trailingAnchor, constant: -3),
+                content.centerYAnchor.constraint(equalTo: chip.centerYAnchor)
+            ])
+            localAttachmentRow.addArrangedSubview(chip)
+        }
+        view.setNeedsLayout()
+    }
+
+    #if DEBUG
+    func addLocalPreviewFixtureForTest(_ name: String) {
+        loadViewIfNeeded()
+        localAttachments.addSyntheticPreviewForTest(name)
+    }
+    #endif
+
     private func updateAttachmentPresentation() {
         let count = contextReferences.count
         attachmentChip.isHidden = count == 0
@@ -650,18 +765,6 @@ final class ImpressAINativeChatViewController: UIViewController,
             guard !Task.isCancelled else { return }
             self?.enqueuePersistence()
         }
-    }
-
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        history.count
-    }
-
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath)
-        -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "chat.message", for: indexPath)
-            as! ImpressChatMessageCell
-        cell.configure(history[indexPath.row])
-        return cell
     }
 
     @objc private func openSessionPrompt() {
@@ -860,6 +963,21 @@ final class ImpressAINativeChatViewController: UIViewController,
                 UIPasteboard.general.string = turn.text
             }
         ]
+        if turn.role == .user {
+            actions.append(UIAction(
+                title: V3L("编辑并新发问题"),
+                image: UIImage(systemName: "pencil")) { [weak self] _ in
+                    self?.restoreQuestionAsDraft(from: turn)
+                })
+        } else if turn.role == .assistant &&
+                    (turn.status == .completed || turn.status == .cancelled ||
+                     turn.status == .failed) {
+            actions.append(UIAction(
+                title: V3L("以原问题重新提问"),
+                image: UIImage(systemName: "arrow.clockwise")) { [weak self] _ in
+                    self?.restoreQuestionAsDraft(from: turn)
+                })
+        }
         if turn.role == .assistant && turn.status == .completed {
             if sourceCardID != nil || noteDraftTarget != nil {
                 actions.append(UIAction(
@@ -898,15 +1016,28 @@ final class ImpressAINativeChatViewController: UIViewController,
         return UIMenu(children: actions)
     }
 
-    func tableView(_ tableView: UITableView,
-                   contextMenuConfigurationForRowAt indexPath: IndexPath,
-                   point: CGPoint) -> UIContextMenuConfiguration? {
-        guard history.indices.contains(indexPath.row) else { return nil }
-        let message = history[indexPath.row]
-        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) {
-            [weak self] _ in
-            self?.messageMenu(for: message) ?? UIMenu(children: [])
+    /// Explicit edit/resend is a new draft. It never mutates history, replays a
+    /// provider request, or reuses a previous external-material approval.
+    private func restoreQuestionAsDraft(from turn: WCDBV3ChatMessage) {
+        guard !sending, !restoring else { return }
+        let question: String
+        if turn.role == .user {
+            question = turn.text
+        } else if let index = history.firstIndex(where: { $0.messageID == turn.messageID }),
+                  let previous = history[..<index].last(where: { $0.role == .user }) {
+            question = previous.text
+        } else {
+            return
         }
+        guard !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+        // The ordinary send action must re-run the source/version/consent gates.
+        contextConsentGranted = false
+        contextChoiceMade = false
+        messageInput.text = question
+        textViewDidChange(messageInput)
+        messageInput.becomeFirstResponder()
     }
 
     @objc private func openDuplexReceipts() {
@@ -1243,6 +1374,20 @@ final class ImpressAINativeChatViewController: UIViewController,
         let text = messageInput.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf8.count <= 12_000,
               !sending, !restoring else { return }
+        if !localAttachments.items.isEmpty && !acknowledgedTextOnlyPreviews {
+            let prompt = UIAlertController(title: V3L("附件尚未接入模型"),
+                message: V3L("当前相册、文件和照片只能本地预览。继续只会发送输入文字及另外明确授权的笔记材料；模型不会看到这些附件。"),
+                preferredStyle: .alert)
+            prompt.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            prompt.addAction(UIAlertAction(title: V3L("仅发送文字"),
+                style: .default) { [weak self] _ in
+                    guard let self else { return }
+                    self.acknowledgedTextOnlyPreviews = true
+                    self.submitMessage()
+                })
+            present(prompt, animated: true)
+            return
+        }
         let omitted = ImpressChatWindowPolicy.omittedCompletedCount(in: history)
         if omitted > 0 && !acknowledgedBoundedContext {
             let alert = UIAlertController(title: V3L("确认有限对话上下文"),
@@ -1382,6 +1527,9 @@ final class ImpressAINativeChatViewController: UIViewController,
 
     private func performSend(_ message: String, route: ImpressAIResolvedRoute) {
         guard !sending, !restoring else { return }
+        // Text-only approval is per request; no preview data ever enters
+        // system prompt, turn serialization, WCDB or the SSE transport.
+        acknowledgedTextOnlyPreviews = false
         draftDebounce?.cancel()
         sending = true
         // Freeze the exact approved material selection for this Send. A later
@@ -1420,11 +1568,14 @@ final class ImpressAINativeChatViewController: UIViewController,
         sendButton.isEnabled = true
         sendButton.configuration?.image = UIImage(systemName: "stop.fill")
         sendButton.accessibilityLabel = V3L("停止生成")
+        transcript.followNewestMessage()
         reloadAndScroll()
 
         let priorSave = saveChain
         requestTask = Task {
             await priorSave?.value
+            // Shared by success and failure paths; partial responses survive errors.
+            var assistantID: UUID?
             do {
                 try Task.checkCancellation()
                 // Re-check the authorized Vault and content SHA immediately
@@ -1468,37 +1619,93 @@ final class ImpressAINativeChatViewController: UIViewController,
                         text: saved.text)
                 }
                 turns.append(ImpressAIChatTurn(role: .user, text: message))
-                let reply: String
+                // Production sends consume the same provider-normalized SSE events
+                // already validated by the offline Chat POC. A terminal event alone
+                // may mark a reply completed; partial EOF and cancellation may not.
+                var terminalReceived = false
+                var lastCheckpoint = Date.distantPast
+                @MainActor func appendChunk(_ text: String) {
+                    guard !text.isEmpty else { return }
+                    if let id = assistantID,
+                       let index = history.firstIndex(where: { $0.messageID == id }) {
+                        history[index].text += text
+                    } else {
+                        let id = UUID()
+                        assistantID = id
+                        history.append(WCDBV3ChatMessage(
+                            messageID: id, role: .assistant, text: text, status: .pending,
+                            providerID: providerID, modelIdentifier: modelName,
+                            promptSnapshot: prompt))
+                    }
+                    // WCDB saves are separately serialized from the 30Hz renderer.
+                    // Persist an early partial reply, then bounded checkpoints.
+                    if Date().timeIntervalSince(lastCheckpoint) >= 2 {
+                        enqueuePersistence()
+                        lastCheckpoint = Date()
+                    }
+                    reloadAndScroll()
+                }
                 #if DEBUG
                 if ImpressV11UITestFixture.enabled &&
                    (self.noteIdentity?.vaultID == ImpressV11UITestFixture.vaultID ||
                     self.sourceCardID != nil) {
-                    // Still passes the actual Vault SHA/CAS + consent checks
-                    // above and persists real WCDB user/assistant messages.
-                    // No network request or model charge occurs.
-                    reply = "合成模型回复：依据已核准的来源，先确定前提，再提出可检验的机制，最后检查反例。原笔记与原卡必须分别审阅修改后才可批准。"
+                    // The real production controller, not a disconnected POC,
+                    // streams a deterministic offline fixture through its UI.
+                    // All existing consent, SHA and local-save gates ran above.
+                    let offlineReply = "合成模型回复：依据已核准的来源，先确定前提，再提出可检验的机制，最后检查反例。原笔记与原卡必须分别审阅修改后才可批准。"
+                    let characters = Array(offlineReply)
+                    for offset in stride(from: 0, to: characters.count, by: 18) {
+                        try Task.checkCancellation()
+                        appendChunk(String(characters[offset..<min(offset + 18, characters.count)]))
+                        try await Task.sleep(for: .milliseconds(65))
+                    }
+                    terminalReceived = true
                 } else {
-                    reply = try await ImpressAIHTTPClient.shared.converse(
+                    let events = try await ImpressAIHTTPClient.shared.converseStream(
                         route: route, system: system, turns: turns)
+                    for try await event in events {
+                        try Task.checkCancellation()
+                        switch event {
+                        case .delta(let text): appendChunk(text)
+                        case .completed: terminalReceived = true
+                        case .failed: throw ImpressAIServiceError.response
+                        }
+                    }
                 }
                 #else
-                reply = try await ImpressAIHTTPClient.shared.converse(
+                let events = try await ImpressAIHTTPClient.shared.converseStream(
                     route: route, system: system, turns: turns)
+                for try await event in events {
+                    try Task.checkCancellation()
+                    switch event {
+                    case .delta(let text): appendChunk(text)
+                    case .completed: terminalReceived = true
+                    case .failed: throw ImpressAIServiceError.response
+                    }
+                }
                 #endif
                 try Task.checkCancellation()
-                if let index = history.firstIndex(where: { $0.messageID == messageID }) {
-                    history[index].status = .completed
+                guard terminalReceived, let id = assistantID,
+                      let assistantIndex = history.firstIndex(where: { $0.messageID == id }),
+                      !history[assistantIndex].text.isEmpty else {
+                    throw ImpressAIServiceError.response
                 }
-                history.append(WCDBV3ChatMessage(
-                    role: .assistant, text: reply, status: .completed,
-                    providerID: providerID, modelIdentifier: modelName,
-                    promptSnapshot: prompt))
+                if let userIndex = history.firstIndex(where: { $0.messageID == messageID }) {
+                    history[userIndex].status = .completed
+                }
+                history[assistantIndex].status = .completed
                 activeProviderID = providerID
                 requestFailure = nil
                 privacyLabel.text = V3L("对话已保存至本机；更新内容仍需预览确认。")
             } catch {
                 let cancelled = Task.isCancelled || error is CancellationError
                 if let index = history.firstIndex(where: { $0.messageID == messageID }) {
+                    history[index].status = cancelled ? .cancelled : .failed
+                }
+                if let id = assistantID,
+                   let index = history.firstIndex(where: { $0.messageID == id }) {
+                    // Retain every already displayed token; incomplete output is
+                    // never eligible for knowledge approval or auto replay.
                     history[index].status = cancelled ? .cancelled : .failed
                 }
                 requestFailure = cancelled ? V3L("生成已停止") : error.localizedDescription
@@ -1773,13 +1980,7 @@ final class ImpressAINativeChatViewController: UIViewController,
     }
 
     private func reloadAndScroll(to messageID: UUID? = nil) {
-        tableView.reloadData()
-        guard !history.isEmpty else { return }
-        let index = messageID.flatMap { target in
-            history.firstIndex(where: { $0.messageID == target })
-        } ?? history.count - 1
-        tableView.scrollToRow(at: IndexPath(row: index, section: 0),
-                              at: .middle, animated: false)
+        transcript.update(history, focusMessageID: messageID)
     }
 }
 
@@ -2011,66 +2212,6 @@ final class ImpressChatSessionHistoryViewController: UITableViewController,
             }
         })
         present(warning, animated: true)
-    }
-}
-
-@MainActor
-final class ImpressChatMessageCell: UITableViewCell {
-    private let roleLabel = UILabel()
-    private let bodyView = UITextView()
-    private let stateLabel = UILabel()
-    private let column = UIStackView()
-
-    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
-        super.init(style: style, reuseIdentifier: reuseIdentifier)
-        column.axis = .vertical
-        column.spacing = ImpressV3Appearance.Metrics.rowSpacing
-        column.translatesAutoresizingMaskIntoConstraints = false
-        roleLabel.font = ImpressV3Appearance.Typography.caption
-        roleLabel.textColor = ImpressV3Appearance.secondaryText
-        bodyView.backgroundColor = .clear
-        bodyView.isEditable = false
-        bodyView.isSelectable = true
-        bodyView.isScrollEnabled = false
-        bodyView.textContainerInset = .zero
-        bodyView.textContainer.lineFragmentPadding = 0
-        bodyView.font = ImpressV3Appearance.Typography.body
-        bodyView.textColor = ImpressV3Appearance.primaryText
-        bodyView.adjustsFontForContentSizeCategory = true
-        bodyView.accessibilityIdentifier = "impress.ai.chat.message-body"
-        stateLabel.font = ImpressV3Appearance.Typography.caption
-        stateLabel.textColor = ImpressV3Appearance.secondaryText
-        stateLabel.numberOfLines = 0
-        for item in [roleLabel, bodyView, stateLabel] {
-            column.addArrangedSubview(item)
-        }
-        contentView.addSubview(column)
-        let margins = contentView.layoutMarginsGuide
-        NSLayoutConstraint.activate([
-            column.topAnchor.constraint(equalTo: margins.topAnchor, constant: 4),
-            column.bottomAnchor.constraint(equalTo: margins.bottomAnchor, constant: -4),
-            column.leadingAnchor.constraint(equalTo: margins.leadingAnchor),
-            column.trailingAnchor.constraint(equalTo: margins.trailingAnchor)
-        ])
-        selectionStyle = .none
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
-
-    func configure(_ message: WCDBV3ChatMessage) {
-        accessibilityIdentifier = message.role == .assistant &&
-            message.status == .completed ? "impress.ai.chat.completed-assistant" :
-            "impress.ai.chat.history-turn"
-        roleLabel.text = message.role == .user ? V3L("我") : V3L("AI")
-        let rendered = MarkdownKitRenderer().parseMarkdown(message.text)
-            ?? NSAttributedString(string: message.text)
-        bodyView.attributedText = rendered
-        bodyView.isSelectable = true
-        stateLabel.text = message.status == .failed ? V3L("请求失败，可重新发送") :
-            (message.status == .cancelled ? V3L("请求已取消") :
-             (message.status == .pending ? V3L("正在生成…") : nil))
-        stateLabel.isHidden = stateLabel.text == nil
-        backgroundColor = message.role == .user
-            ? ImpressV3Appearance.reviewActionSurface : ImpressV3Appearance.surface
     }
 }
 

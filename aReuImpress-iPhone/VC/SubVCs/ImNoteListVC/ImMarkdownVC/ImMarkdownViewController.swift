@@ -2393,15 +2393,19 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
         addSubview(artboard)
         contentSize = artboard.bounds.size
 
-        // Iterate in serialized source order: later elements draw above
-        // earlier ones. No force-directed layout or automatic rearrangement.
-        for element in elements {
+        // Keep the serialized paint order. UIKit zPosition is needed because
+        // some bound text overlays must sit just above their own container.
+        // Never put every text node above every later shape.
+        let elementOrder = Dictionary(uniqueKeysWithValues:
+            elements.enumerated().map { ($0.element.id, $0.offset) })
+        for (order, element) in elements.enumerated() {
             let rect = CGRect(x: element.x - minX + 48,
                               y: element.y - minY + 48,
                               width: max(1, element.width),
                               height: max(1, element.height))
             let control = UIButton(type: .custom)
             control.frame = rect
+            control.layer.zPosition = CGFloat(order)
             control.backgroundColor = .clear
             control.setTitleColor(.label, for: .normal)
             control.titleLabel?.font = .preferredFont(forTextStyle: .body)
@@ -2441,12 +2445,27 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
                     UIFont.systemFont(ofSize: size, weight: .regular)
                 label.textColor = Self.readableInk(Self.color(element.strokeColor),
                                                   on: canvasBackground)
+                // Excalidraw stores a per-element lineHeight multiplier; the
+                // default system UILabel leading loses authored multiline rhythm.
+                let line = CGFloat(element.lineHeight ?? 1.25) * size
+                let paragraph = NSMutableParagraphStyle()
+                paragraph.alignment = label.textAlignment
+                paragraph.minimumLineHeight = line
+                paragraph.maximumLineHeight = line
+                label.attributedText = NSAttributedString(string: element.text ?? "",
+                    attributes: [
+                        .font: label.font as Any,
+                        .foregroundColor: label.textColor as Any,
+                        .paragraphStyle: paragraph
+                    ])
                 label.alpha = CGFloat(element.opacity ?? 100) / 100
                 label.isUserInteractionEnabled = false
                 let textWidth = max(1, rect.width - 6)
                 let measured = label.sizeThatFits(
                     CGSize(width: textWidth, height: .greatestFiniteMagnitude)).height
-                let textHeight = max(max(1, rect.height - 6), measured)
+                // Use actual glyph height for vertical alignment. Using the
+                // full box height made middle/bottom behave as top alignment.
+                let textHeight = max(1, measured)
                 let top = element.verticalAlign == "middle" ?
                     max(3, (rect.height - textHeight) / 2) :
                     (element.verticalAlign == "bottom" ?
@@ -2454,8 +2473,13 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
                 label.frame = CGRect(x: 3, y: top, width: textWidth, height: textHeight)
                 control.clipsToBounds = false
                 control.addSubview(label)
-                // A bound text node must be above its underlying filled shape.
-                control.layer.zPosition = 2
+                // A bound text stays above its *own* container only, while
+                // respecting later authored occluding shapes.
+                if let containerID = element.containerId,
+                   let containerOrder = elementOrder[containerID] {
+                    control.layer.zPosition = max(CGFloat(order),
+                                                  CGFloat(containerOrder) + 0.25)
+                }
             } else if element.type == "image" {
                 if let picture = Self.localImage(for: element, in: source) {
                     let imageView = UIImageView(image: picture)

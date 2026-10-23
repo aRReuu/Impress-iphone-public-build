@@ -1,4 +1,3 @@
-#if DEBUG
 import UIKit
 import WebKit
 import ImpressReviewCore
@@ -366,4 +365,3 @@ final class ImpressChatPOCMathCell: UICollectionViewCell, WKNavigationDelegate {
     }
     @objc private func copySource() { UIPasteboard.general.string = current }
 }
-#endif

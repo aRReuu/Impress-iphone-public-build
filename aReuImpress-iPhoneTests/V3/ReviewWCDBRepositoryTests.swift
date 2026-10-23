@@ -2482,6 +2482,40 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
     }
 
     @MainActor
+    func testProductionChatSystemPickersStayLocalWithRemovablePreviews() throws {
+        let controller = ImpressAINativeChatViewController()
+        controller.loadViewIfNeeded()
+        let controls = allSubviews(controller.view).compactMap { $0 as? UIButton }
+        let add = try XCTUnwrap(controls.first {
+            $0.accessibilityIdentifier == "impress.ai.chat.add-material"
+        })
+        XCTAssertTrue(add.showsMenuAsPrimaryAction)
+        XCTAssertEqual(add.menu?.children.compactMap { $0 as? UIAction }
+            .map(\.title), ["相册", "文件", "拍照"])
+        controller.addLocalPreviewFixtureForTest("安全边界.txt")
+        let preview = try XCTUnwrap(allSubviews(controller.view).first {
+            $0.accessibilityIdentifier == "impress.ai.chat.local-preview"
+        })
+        XCTAssertFalse(preview.isHidden)
+        let hint = try XCTUnwrap(allSubviews(controller.view)
+            .compactMap { $0 as? UILabel }.first {
+                $0.accessibilityIdentifier ==
+                    "impress.ai.chat.local-preview-not-transmitted"
+            })
+        XCTAssertFalse(hint.isHidden)
+        let remove = try XCTUnwrap(allSubviews(controller.view)
+            .compactMap { $0 as? UIButton }.first {
+                $0.accessibilityIdentifier == "impress.ai.chat.local-preview-remove"
+            })
+        remove.sendActions(for: .touchUpInside)
+        let scroller = try XCTUnwrap(allSubviews(controller.view)
+            .compactMap { $0 as? UIScrollView }.first {
+                $0.accessibilityIdentifier == "impress.ai.chat.local-preview-strip"
+            })
+        XCTAssertTrue(scroller.isHidden)
+    }
+
+    @MainActor
     func testNativeChatRendersSelectableMarkdownWithSecondaryFeatures() throws {
         let controller = ImpressAINativeChatViewController()
         controller.loadViewIfNeeded()
@@ -2497,17 +2531,20 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertEqual(controller.navigationItem.rightBarButtonItems?
             .compactMap(\.accessibilityIdentifier),
             ["impress.ai.chat.new-discussion", "impress.ai.chat.features"])
-        let cell = ImpressChatMessageCell(style: .default, reuseIdentifier: "QA")
-        cell.configure(WCDBV3ChatMessage(role: .assistant,
-            text: "# Heading\n\n**Markdown** and long text",
-            status: .completed))
-        let text = try XCTUnwrap(cell.contentView.subviews
-            .compactMap { $0 as? UIStackView }.first?.arrangedSubviews
+        XCTAssertNotNil(elements.compactMap { $0 as? UICollectionView }.first {
+            $0.accessibilityIdentifier == "impress.ai.chat.transcript"
+        }, "Production Chat must mount its diffable transcript")
+        let cell = ImpressChatDocumentCell(
+            frame: CGRect(x: 0, y: 0, width: 390, height: 220))
+        cell.configure("**Markdown** and long text", kind: .paragraph,
+                       headingLevel: 0, user: false, stable: true)
+        let text = try XCTUnwrap(allSubviews(cell)
             .compactMap { $0 as? UITextView }.first)
+        XCTAssertEqual(text.accessibilityIdentifier, "impress.ai.chat.message-body")
         XCTAssertTrue(text.isSelectable)
         XCTAssertFalse(text.isEditable)
         XCTAssertFalse(text.isScrollEnabled)
-        XCTAssertNotNil(text.attributedText)
+        XCTAssertTrue(text.attributedText.string.contains("Markdown"))
     }
 
     @MainActor
