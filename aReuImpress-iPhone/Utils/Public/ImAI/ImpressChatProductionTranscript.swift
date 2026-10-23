@@ -484,19 +484,55 @@ final class ImpressChatDocumentCell: UICollectionViewCell {
         if kind == .divider { displayed = " " }
         if !user && kind == .list {
             body.attributedText = listText(displayed, font: font)
-        } else if !user, let parsed = try? AttributedString(markdown: displayed) {
-            let result = NSMutableAttributedString(attributedString: NSAttributedString(parsed))
-            if kind == .heading {
-                result.addAttribute(.font, value: font,
-                    range: NSRange(location: 0, length: result.length))
-            }
-            body.attributedText = result
+        } else if !user {
+            body.attributedText = richText(displayed, font: font)
         } else {
             body.attributedText = NSAttributedString(string: displayed, attributes: [
                 .font: font, .foregroundColor: UIColor.label
             ])
         }
         body.accessibilityLabel = markdown + (stable ? "" : V3L("，生成中"))
+    }
+
+    /// UITextView.font/textColor may become nil with attributedText.
+    /// Supply dynamic UIKit attributes to actual text runs and preserve Markdown
+    /// emphasis. Offsets use UTF-16, matching TextKit/NSAttributedString.
+    private func richText(_ markdown: String, font: UIFont) -> NSAttributedString {
+        let fallback = NSAttributedString(string: markdown, attributes: [
+            .font: font, .foregroundColor: UIColor.label
+        ])
+        guard let parsed = try? AttributedString(markdown: markdown) else {
+            return fallback
+        }
+        let result = NSMutableAttributedString(
+            attributedString: NSAttributedString(parsed))
+        var offset = 0
+        for run in parsed.runs {
+            let length = String(parsed[run.range].characters).utf16.count
+            defer { offset += length }
+            guard length > 0, offset + length <= result.length else { continue }
+            let range = NSRange(location: offset, length: length)
+            let intent = run.inlinePresentationIntent
+            var traits = font.fontDescriptor.symbolicTraits
+            if intent?.contains(.stronglyEmphasized) == true {
+                traits.insert(.traitBold)
+            }
+            if intent?.contains(.emphasized) == true {
+                traits.insert(.traitItalic)
+            }
+            let runFont = font.fontDescriptor.withSymbolicTraits(traits)
+                .map { UIFont(descriptor: $0, size: font.pointSize) } ?? font
+            result.addAttribute(.font, value: runFont, range: range)
+            let ink: UIColor = result.attribute(.link, at: offset,
+                                                effectiveRange: nil) == nil
+                ? .label : .link
+            result.addAttribute(.foregroundColor, value: ink, range: range)
+            if intent?.contains(.strikethrough) == true {
+                result.addAttribute(.strikethroughStyle,
+                    value: NSUnderlineStyle.single.rawValue, range: range)
+            }
+        }
+        return result
     }
 
     private func listText(_ markdown: String, font: UIFont) -> NSAttributedString {
@@ -521,15 +557,10 @@ final class ImpressChatDocumentCell: UICollectionViewCell {
             paragraph.headIndent = x + (marker.isEmpty ? 0 : 20)
             paragraph.paragraphSpacing = 4
             let chunk = marker + body + "\n"
-            let rendered: NSAttributedString
-            if let parsed = try? AttributedString(markdown: chunk) {
-                rendered = NSAttributedString(parsed)
-            } else { rendered = NSAttributedString(string: chunk) }
-            let resultLine = NSMutableAttributedString(attributedString: rendered)
-            resultLine.addAttributes([
-                .font: font, .paragraphStyle: paragraph,
-                .foregroundColor: UIColor.label
-            ], range: NSRange(location: 0, length: resultLine.length))
+            let resultLine = NSMutableAttributedString(
+                attributedString: richText(chunk, font: font))
+            resultLine.addAttribute(.paragraphStyle, value: paragraph,
+                range: NSRange(location: 0, length: resultLine.length))
             result.append(resultLine)
         }
         return result

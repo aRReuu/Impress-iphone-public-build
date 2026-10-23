@@ -177,6 +177,7 @@ jobs:
               -only-testing:aReuImpress-iPhoneTests/ImpressAIHTTPStreamingIntegrationTests
               -only-testing:aReuImpress-iPhoneTests/ImpressChatPOCRichRenderingTests
               -only-testing:aReuImpress-iPhoneTests/ImpressChatPOCLocalAttachmentTests
+              -only-testing:aReuImpress-iPhoneTests/ReviewWCDBRepositoryTests/testProductionChatSystemPickersStayLocalWithRemovablePreviews
               -only-testing:aReuImpress-iPhoneTests/ImpressChatPOCStreamDriverIntegrationTests
               -only-testing:aReuImpress-iPhoneTests/ImpressExcalidrawRenderingIntegrationTests
               -only-testing:aReuImpress-iPhoneTests/ImpressCalibrationIntegrationTests
