@@ -99,6 +99,40 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
         XCTAssertEqual(UIPasteboard.general.string, source)
     }
 
+    func testProductionTranscriptUsesRealDiffableBlocksAndRetainsPartialState() throws {
+        let viewport = ImpressChatProductionTranscript(
+            frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        let list = try XCTUnwrap(descendants(of: viewport, as: UICollectionView.self).first)
+        XCTAssertEqual(list.accessibilityIdentifier, "impress.ai.chat.transcript")
+        let userID = UUID()
+        let assistantID = UUID()
+        let question = WCDBV3ChatMessage(
+            messageID: userID, role: .user, text: "解释可验证的假设", status: .completed)
+        var answer = WCDBV3ChatMessage(
+            messageID: assistantID, role: .assistant,
+            text: "# 标题\n\n首段", status: .pending)
+        viewport.update([question, answer])
+        let started = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in list.numberOfItems(inSection: 0) >= 4 },
+            object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [started], timeout: 8), .completed,
+            "A real production message must be split into user, Markdown and stream rows")
+
+        answer.text += "\n\n~~~swift\nlet n = 1\n~~~"
+        viewport.update([question, answer])
+        let appended = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in list.numberOfItems(inSection: 0) >= 5 },
+            object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [appended], timeout: 8), .completed)
+        answer.status = .failed
+        viewport.update([question, answer])
+        let retained = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in list.numberOfItems(inSection: 0) >= 5 },
+            object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [retained], timeout: 8), .completed,
+            "A failed stream retains code and partial text instead of discarding them")
+    }
+
     private func descendants<T: UIView>(of view: UIView, as type: T.Type) -> [T] {
         view.subviews.flatMap { child -> [T] in
             ((child as? T).map { [$0] } ?? []) +
