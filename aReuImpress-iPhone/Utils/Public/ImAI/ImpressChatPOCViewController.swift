@@ -42,6 +42,8 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
     private var rows: [String: Row] = [:]
     private var playback: Task<Void, Never>?
     private var followingBottom = true
+    /// Counts real decoded SSE delta events, not animation frames.
+    private var receivedDeltas = 0
     private let fixture = """
     # 从碎片到结构化理解
 
@@ -176,20 +178,88 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         showRows()
         updateAction()
 
-        let scalars = Array(fixture.unicodeScalars)
-        let fragments = stride(from: 0, to: scalars.count, by: 5).map { i in
-            scalars[i..<min(scalars.count, i + 5)].map { String($0) }.joined()
-        }
+        // Replay genuine fragmented OpenAI-format SSE byte frames. This
+        // exercises the EXACT offline UTF-8/SSE/terminal decoder used by the
+        // Core tests; it is no longer a fake substring typing animation.
+        let frames = makeOfflineFrames(for: fixture)
+        receivedDeltas = 0
         playback = Task { [weak self] in
-            for fragment in fragments {
-                if Task.isCancelled { return }
-                try? await Task.sleep(nanoseconds: 55_000_000)
-                if Task.isCancelled { return }
-                self?.append(fragment)
+            guard let self else { return }
+            var transport = ImpressChatPOCReplay(provider: .openAIChat)
+            do {
+                for bytes in frames {
+                    try Task.checkCancellation()
+                    try await Task.sleep(nanoseconds: 22_000_000)
+                    try Task.checkCancellation()
+                    for output in try transport.append(bytes) {
+                        switch output {
+                        case .delta(let text):
+                            self.receivedDeltas += 1
+                            self.append(text)
+                        case .completed:
+                            self.finish()
+                            return
+                        case .failed:
+                            self.failStream()
+                            return
+                        }
+                    }
+                }
+                // Socket close without [DONE] is a failure, not completion.
+                for output in try transport.finish() {
+                    switch output {
+                    case .delta(let text): self.append(text)
+                    case .completed: self.finish(); return
+                    case .failed: self.failStream(); return
+                    }
+                }
+                if !transport.normalizer.isCompleted { self.failStream() }
+            } catch is CancellationError {
+                // Stop was handled synchronously; no late completed write.
+            } catch {
+                self.failStream()
             }
-            self?.finish()
         }
         updateAction()
+    }
+
+    /// Mixed SSE buffer reads are intentionally not aligned to event lines,
+    /// UTF-8 scalar boundaries, or JSON boundaries.
+    private func makeOfflineFrames(for markdown: String) -> [Data] {
+        let scalars = Array(markdown.unicodeScalars)
+        var wire = Data()
+        for i in stride(from: 0, to: scalars.count, by: 12) {
+            let delta = scalars[i..<min(scalars.count, i + 12)]
+                .map { String($0) }.joined()
+            let packet: [String: Any] = [
+                "choices": [["delta": ["content": delta]]]
+            ]
+            guard let encoded = try? JSONSerialization.data(withJSONObject: packet),
+                  let line = String(data: encoded, encoding: .utf8) else { continue }
+            wire.append(Data(("data: " + line + "\n\n").utf8))
+        }
+        wire.append(Data("data: [DONE]\n\n".utf8))
+        let bytes = Array(wire)
+        var frames: [Data] = []
+        var offset = 0, count = 0
+        while offset < bytes.count {
+            let size = min(29 + count % 17, bytes.count - offset)
+            frames.append(Data(bytes[offset..<(offset + size)]))
+            offset += size
+            count += 1
+        }
+        return frames
+    }
+
+    private func failStream() {
+        guard let index = turns.indices.last, var stream = turns[index].stream,
+              stream.phase == .streaming else { return }
+        stream.fail()
+        turns[index].stream = stream
+        playback?.cancel()
+        playback = nil
+        updateAction()
+        showRows()
     }
 
     private func append(_ text: String) {
@@ -213,6 +283,7 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         action.setImage(UIImage(systemName: running ? "stop.circle.fill" : "arrow.up.circle.fill"),
                         for: .normal)
         action.accessibilityLabel = running ? "停止生成" : "发送"
+        action.accessibilityValue = running ? "SSE 增量事件：" + String(receivedDeltas) : nil
     }
 
     private func showRows() {
