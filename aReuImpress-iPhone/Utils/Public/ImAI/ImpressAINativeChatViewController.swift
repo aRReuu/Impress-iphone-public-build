@@ -274,6 +274,14 @@ final class ImpressAINativeChatViewController: UIViewController,
     private let attachmentChip = UIButton(type: .system)
     private let composerColumn = UIStackView()
     private let composerRow = UIStackView()
+    private let localAttachmentScroller = UIScrollView()
+    private let localAttachmentRow = UIStackView()
+    private let localAttachmentHint = UILabel()
+    private var localAttachmentHeight: NSLayoutConstraint?
+    private var acknowledgedTextOnlyPreviews = false
+    // Existing bounded system picker implementation becomes a real production
+    // composer preview. Its data never enters WCDB or provider payloads.
+    private lazy var localAttachments = ImpressChatPOCLocalAttachments(presenting: self)
     private var messageHeight: NSLayoutConstraint?
     private static let introductionKey = "ImpressV11ChatIntroductionSeen"
     private var pendingInitialMaterials: [WCDBV3ChatContextReference]
@@ -504,10 +512,14 @@ final class ImpressAINativeChatViewController: UIViewController,
                 weight: .regular))
         add.baseForegroundColor = ImpressV3Appearance.primaryText
         materialButton.configuration = add
-        materialButton.accessibilityLabel = V3L("添加材料")
+        materialButton.accessibilityLabel = V3L("添加相册、文件或拍照")
         materialButton.accessibilityIdentifier = "impress.ai.chat.add-material"
-        materialButton.addTarget(self, action: #selector(reviewSessionMaterials),
-                                 for: .touchUpInside)
+        materialButton.menu = localAttachments.pickerMenu()
+        materialButton.showsMenuAsPrimaryAction = true
+        localAttachments.onChange = { [weak self] _ in
+            self?.acknowledgedTextOnlyPreviews = false
+            self?.updateLocalPreviewStrip()
+        }
         var dictation = UIButton.Configuration.plain()
         dictation.image = UIImage(systemName: "mic",
             withConfiguration: UIImage.SymbolConfiguration(
@@ -540,6 +552,37 @@ final class ImpressAINativeChatViewController: UIViewController,
         composerRow.addArrangedSubview(messageInput)
         composerRow.addArrangedSubview(speechButton)
         composerRow.addArrangedSubview(sendButton)
+        localAttachmentScroller.showsHorizontalScrollIndicator = false
+        localAttachmentScroller.accessibilityIdentifier = "impress.ai.chat.local-preview-strip"
+        localAttachmentScroller.isHidden = true
+        localAttachmentRow.axis = .horizontal
+        localAttachmentRow.alignment = .center
+        localAttachmentRow.spacing = 8
+        localAttachmentRow.translatesAutoresizingMaskIntoConstraints = false
+        localAttachmentScroller.addSubview(localAttachmentRow)
+        let previewHeight = localAttachmentScroller.heightAnchor.constraint(equalToConstant: 0)
+        localAttachmentHeight = previewHeight
+        NSLayoutConstraint.activate([
+            previewHeight,
+            localAttachmentRow.leadingAnchor.constraint(
+                equalTo: localAttachmentScroller.contentLayoutGuide.leadingAnchor),
+            localAttachmentRow.trailingAnchor.constraint(
+                equalTo: localAttachmentScroller.contentLayoutGuide.trailingAnchor),
+            localAttachmentRow.centerYAnchor.constraint(
+                equalTo: localAttachmentScroller.contentLayoutGuide.centerYAnchor),
+            localAttachmentRow.heightAnchor.constraint(
+                equalTo: localAttachmentScroller.frameLayoutGuide.heightAnchor)
+        ])
+        localAttachmentHint.font = .preferredFont(forTextStyle: .caption2)
+        localAttachmentHint.textColor = .secondaryLabel
+        localAttachmentHint.adjustsFontForContentSizeCategory = true
+        localAttachmentHint.numberOfLines = 2
+        localAttachmentHint.text = V3L("仅本地预览；模型无法读取附件")
+        localAttachmentHint.accessibilityIdentifier =
+            "impress.ai.chat.local-preview-not-transmitted"
+        localAttachmentHint.isHidden = true
+        composerColumn.addArrangedSubview(localAttachmentScroller)
+        composerColumn.addArrangedSubview(localAttachmentHint)
         composerColumn.addArrangedSubview(attachmentChip)
         composerColumn.addArrangedSubview(composerRow)
         messageInput.isScrollEnabled = false
@@ -626,6 +669,79 @@ final class ImpressAINativeChatViewController: UIViewController,
         }
         messageInput.isScrollEnabled = ideal > limit
     }
+
+    private func updateLocalPreviewStrip() {
+        for control in localAttachmentRow.arrangedSubviews {
+            localAttachmentRow.removeArrangedSubview(control)
+            control.removeFromSuperview()
+        }
+        let items = localAttachments.items
+        let visible = !items.isEmpty
+        localAttachmentScroller.isHidden = !visible
+        localAttachmentHint.isHidden = !visible
+        localAttachmentHeight?.constant = visible ? 52 : 0
+        for item in items {
+            let chip = UIView()
+            chip.backgroundColor = .tertiarySystemFill
+            chip.layer.cornerRadius = 12
+            chip.translatesAutoresizingMaskIntoConstraints = false
+            chip.accessibilityIdentifier = "impress.ai.chat.local-preview"
+            let content = UIStackView()
+            content.axis = .horizontal
+            content.alignment = .center
+            content.spacing = 5
+            content.translatesAutoresizingMaskIntoConstraints = false
+            if let thumbnail = item.thumbnail {
+                let preview = UIImageView(image: thumbnail)
+                preview.contentMode = .scaleAspectFill
+                preview.clipsToBounds = true
+                preview.layer.cornerRadius = 7
+                preview.translatesAutoresizingMaskIntoConstraints = false
+                content.addArrangedSubview(preview)
+                NSLayoutConstraint.activate([
+                    preview.widthAnchor.constraint(equalToConstant: 36),
+                    preview.heightAnchor.constraint(equalToConstant: 36)
+                ])
+            }
+            let name = UILabel()
+            name.text = item.title
+            name.textColor = .label
+            name.font = .preferredFont(forTextStyle: .caption1)
+            name.lineBreakMode = .byTruncatingMiddle
+            name.adjustsFontForContentSizeCategory = true
+            content.addArrangedSubview(name)
+            let remove = UIButton(type: .system)
+            remove.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
+            remove.tintColor = .secondaryLabel
+            remove.accessibilityLabel = V3L("移除附件") + " " + item.title
+            remove.accessibilityIdentifier = "impress.ai.chat.local-preview-remove"
+            remove.addAction(UIAction { [weak self] _ in
+                self?.localAttachments.remove(id: item.id)
+            }, for: .touchUpInside)
+            content.addArrangedSubview(remove)
+            NSLayoutConstraint.activate([
+                remove.widthAnchor.constraint(equalToConstant: 44),
+                remove.heightAnchor.constraint(equalToConstant: 44)
+            ])
+            chip.addSubview(content)
+            NSLayoutConstraint.activate([
+                chip.widthAnchor.constraint(equalToConstant: 198),
+                chip.heightAnchor.constraint(equalToConstant: 48),
+                content.leadingAnchor.constraint(equalTo: chip.leadingAnchor, constant: 8),
+                content.trailingAnchor.constraint(equalTo: chip.trailingAnchor, constant: -3),
+                content.centerYAnchor.constraint(equalTo: chip.centerYAnchor)
+            ])
+            localAttachmentRow.addArrangedSubview(chip)
+        }
+        view.setNeedsLayout()
+    }
+
+    #if DEBUG
+    func addLocalPreviewFixtureForTest(_ name: String) {
+        loadViewIfNeeded()
+        localAttachments.addSyntheticPreviewForTest(name)
+    }
+    #endif
 
     private func updateAttachmentPresentation() {
         let count = contextReferences.count
@@ -1258,6 +1374,20 @@ final class ImpressAINativeChatViewController: UIViewController,
         let text = messageInput.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf8.count <= 12_000,
               !sending, !restoring else { return }
+        if !localAttachments.items.isEmpty && !acknowledgedTextOnlyPreviews {
+            let prompt = UIAlertController(title: V3L("附件尚未接入模型"),
+                message: V3L("当前相册、文件和照片只能本地预览。继续只会发送输入文字及另外明确授权的笔记材料；模型不会看到这些附件。"),
+                preferredStyle: .alert)
+            prompt.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            prompt.addAction(UIAlertAction(title: V3L("仅发送文字"),
+                style: .default) { [weak self] _ in
+                    guard let self else { return }
+                    self.acknowledgedTextOnlyPreviews = true
+                    self.submitMessage()
+                })
+            present(prompt, animated: true)
+            return
+        }
         let omitted = ImpressChatWindowPolicy.omittedCompletedCount(in: history)
         if omitted > 0 && !acknowledgedBoundedContext {
             let alert = UIAlertController(title: V3L("确认有限对话上下文"),
@@ -1397,6 +1527,9 @@ final class ImpressAINativeChatViewController: UIViewController,
 
     private func performSend(_ message: String, route: ImpressAIResolvedRoute) {
         guard !sending, !restoring else { return }
+        // Text-only approval is per request; no preview data ever enters
+        // system prompt, turn serialization, WCDB or the SSE transport.
+        acknowledgedTextOnlyPreviews = false
         draftDebounce?.cancel()
         sending = true
         // Freeze the exact approved material selection for this Send. A later

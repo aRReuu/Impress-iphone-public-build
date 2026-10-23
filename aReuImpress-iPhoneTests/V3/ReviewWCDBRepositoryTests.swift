@@ -2482,6 +2482,40 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
     }
 
     @MainActor
+    func testProductionChatSystemPickersStayLocalWithRemovablePreviews() throws {
+        let controller = ImpressAINativeChatViewController()
+        controller.loadViewIfNeeded()
+        let controls = allSubviews(controller.view).compactMap { $0 as? UIButton }
+        let add = try XCTUnwrap(controls.first {
+            $0.accessibilityIdentifier == "impress.ai.chat.add-material"
+        })
+        XCTAssertTrue(add.showsMenuAsPrimaryAction)
+        XCTAssertEqual(add.menu?.children.compactMap { $0 as? UIAction }
+            .map(\.title), ["相册", "文件", "拍照"])
+        controller.addLocalPreviewFixtureForTest("安全边界.txt")
+        let preview = try XCTUnwrap(allSubviews(controller.view).first {
+            $0.accessibilityIdentifier == "impress.ai.chat.local-preview"
+        })
+        XCTAssertFalse(preview.isHidden)
+        let hint = try XCTUnwrap(allSubviews(controller.view)
+            .compactMap { $0 as? UILabel }.first {
+                $0.accessibilityIdentifier ==
+                    "impress.ai.chat.local-preview-not-transmitted"
+            })
+        XCTAssertFalse(hint.isHidden)
+        let remove = try XCTUnwrap(allSubviews(controller.view)
+            .compactMap { $0 as? UIButton }.first {
+                $0.accessibilityIdentifier == "impress.ai.chat.local-preview-remove"
+            })
+        remove.sendActions(for: .touchUpInside)
+        let scroller = try XCTUnwrap(allSubviews(controller.view)
+            .compactMap { $0 as? UIScrollView }.first {
+                $0.accessibilityIdentifier == "impress.ai.chat.local-preview-strip"
+            })
+        XCTAssertTrue(scroller.isHidden)
+    }
+
+    @MainActor
     func testNativeChatRendersSelectableMarkdownWithSecondaryFeatures() throws {
         let controller = ImpressAINativeChatViewController()
         controller.loadViewIfNeeded()
