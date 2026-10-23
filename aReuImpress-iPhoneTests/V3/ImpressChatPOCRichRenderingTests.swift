@@ -71,7 +71,7 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
 
     private func descendants<T: UIView>(of view: UIView, as type: T.Type) -> [T] {
         view.subviews.flatMap { child -> [T] in
-            (child as? T).map { [$0] } ?? [] +
+            ((child as? T).map { [$0] } ?? []) +
                 descendants(of: child, as: type)
         }
     }
