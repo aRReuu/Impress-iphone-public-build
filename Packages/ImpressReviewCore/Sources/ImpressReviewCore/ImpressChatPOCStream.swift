@@ -56,23 +56,62 @@ public struct ImpressChatPOCStream: Sendable {
     public static func parseOnce(_ source: String) -> [ImpressChatPOCBlock] {
         parse(source, offset: 0, stable: true)
     }
-    private static func isFence(_ line: String) -> Bool {
-        line.hasPrefix("~~~") || line.hasPrefix("\u{60}\u{60}\u{60}")
+    // CommonMark fenced-code openers must not be closed by a different
+    // marker, a shorter run, or stray backticks inside ordinary content.
+    private struct Fence: Equatable {
+        let marker: Character
+        let length: Int
     }
+
+    private static func openingFence(_ line: String) -> Fence? {
+        let indentation = line.prefix(while: { $0 == " " }).count
+        guard indentation <= 3 else { return nil }
+        let trimmed = line.dropFirst(indentation)
+        guard let marker = trimmed.first,
+              marker == "\u{60}" || marker == "~" else { return nil }
+        let count = trimmed.prefix(while: { $0 == marker }).count
+        guard count >= 3 else { return nil }
+        // Backtick infos may not themselves contain a backtick.
+        if marker == "\u{60}" && trimmed.dropFirst(count).contains("\u{60}") {
+            return nil
+        }
+        return Fence(marker: marker, length: count)
+    }
+
+    private static func closesFence(_ line: String, _ active: Fence) -> Bool {
+        let indentation = line.prefix(while: { $0 == " " }).count
+        guard indentation <= 3 else { return false }
+        let trimmed = line.dropFirst(indentation)
+        let count = trimmed.prefix(while: { $0 == active.marker }).count
+        guard count >= active.length else { return false }
+        return trimmed.dropFirst(count).allSatisfy { $0 == " " || $0 == "\t" }
+    }
+
+    private static func togglesMath(_ line: String) -> Bool {
+        guard line.hasPrefix("$$") else { return false }
+        return line == "$$" || !line.dropFirst(2).contains("$$")
+    }
+
     private static func lastSafeBoundary(in text: String) -> String.Index? {
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
         var cursor = text.startIndex
-        var code = false, math = false
+        var fenced: Fence?
+        var math = false
         var last: String.Index?
         for (i, raw) in lines.enumerated() {
-            let s = String(raw), t = s.trimmingCharacters(in: .whitespaces)
-            if isFence(t) { code.toggle() }
-            else if !code && t.hasPrefix("$$") &&
-                    !(t.count > 2 && t.hasSuffix("$$")) { math.toggle() }
-            cursor = text.index(cursor, offsetBy: s.count)
+            let line = String(raw)
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let open = fenced {
+                if closesFence(line, open) { fenced = nil }
+            } else if !math, let open = openingFence(line) {
+                fenced = open
+            } else if togglesMath(trimmed) {
+                math.toggle()
+            }
+            cursor = text.index(cursor, offsetBy: line.count)
             if i < lines.count - 1 {
                 cursor = text.index(after: cursor)
-                if t.isEmpty && !code && !math { last = cursor }
+                if trimmed.isEmpty && fenced == nil && !math { last = cursor }
             }
         }
         return last
@@ -110,36 +149,109 @@ public struct ImpressChatPOCStream: Sendable {
     }
     private static func parse(_ input: String, offset: Int,
                               stable: Bool) -> [ImpressChatPOCBlock] {
-        var result: [ImpressChatPOCBlock] = [], pending: [String] = []
-        var code = false, math = false
-        func add(_ text: String) {
-            guard !text.isEmpty else { return }
-            let (kind, depth) = classify(text)
-            result.append(ImpressChatPOCBlock(id: offset + result.count, kind: kind,
-                                               markdown: text, headingLevel: depth, stable: stable))
-        }
+        var result: [ImpressChatPOCBlock] = []
+        var pending: [String] = []
+        var activeKind: ImpressChatPOCBlock.Kind?
+        var activeHeading = 0
+        var fenced: Fence?
+        var math = false
+
         func flush() {
-            let text = pending.joined(separator: "\n").trimmingCharacters(in: .newlines)
+            let content = pending.joined(separator: "\n")
+                .trimmingCharacters(in: .newlines)
             pending = []
-            if text.isEmpty { return }
-            if isFence(text) || text.hasPrefix("$$") { add(text); return }
-            var chunk: [String] = []
-            for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
-                let row = String(line)
-                if headingDepth(row) > 0 {
-                    if !chunk.isEmpty { add(chunk.joined(separator: "\n")); chunk = [] }
-                    add(row)
-                } else { chunk.append(row) }
+            guard !content.isEmpty else {
+                activeKind = nil
+                activeHeading = 0
+                return
             }
-            if !chunk.isEmpty { add(chunk.joined(separator: "\n")) }
+            let kind = activeKind ?? .paragraph
+            result.append(ImpressChatPOCBlock(
+                id: offset + result.count, kind: kind, markdown: content,
+                headingLevel: activeHeading, stable: stable))
+            activeKind = nil
+            activeHeading = 0
         }
-        for raw in input.split(separator: "\n", omittingEmptySubsequences: false) {
-            let s = String(raw), t = s.trimmingCharacters(in: .whitespaces)
-            if t.isEmpty && !code && !math { flush(); continue }
-            pending.append(s)
-            if isFence(t) { code.toggle() }
-            else if !code && t.hasPrefix("$$") &&
-                    !(t.count > 2 && t.hasSuffix("$$")) { math.toggle() }
+
+        let lines = input.split(separator: "\n", omittingEmptySubsequences: false)
+        for raw in lines {
+            let line = String(raw)
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let open = fenced {
+                pending.append(line)
+                if closesFence(line, open) {
+                    fenced = nil
+                    flush()
+                }
+                continue
+            }
+            if math {
+                pending.append(line)
+                if togglesMath(trimmed) {
+                    math = false
+                    flush()
+                }
+                continue
+            }
+            if trimmed.isEmpty { flush(); continue }
+
+            if let open = openingFence(line) {
+                flush()
+                activeKind = .code
+                pending.append(line)
+                fenced = open
+                continue
+            }
+            if trimmed.hasPrefix("$$") {
+                flush()
+                activeKind = .math
+                pending.append(line)
+                if togglesMath(trimmed) {
+                    math = true
+                } else {
+                    flush()
+                }
+                continue
+            }
+            let heading = headingDepth(trimmed)
+            if heading > 0 {
+                flush()
+                activeKind = .heading
+                activeHeading = heading
+                pending.append(trimmed)
+                flush()
+                continue
+            }
+            if ["---", "***", "___"].contains(trimmed) {
+                flush()
+                activeKind = .divider
+                pending.append(trimmed)
+                flush()
+                continue
+            }
+
+            let isDelimiter = trimmed.contains("---") &&
+                trimmed.replacingOccurrences(of: "|", with: "")
+                    .replacingOccurrences(of: "-", with: "")
+                    .replacingOccurrences(of: ":", with: "")
+                    .trimmingCharacters(in: .whitespaces).isEmpty
+            if pending.count == 1, activeKind == .paragraph,
+               pending[0].contains("|"), isDelimiter {
+                activeKind = .table
+                pending.append(line)
+                continue
+            }
+            let kind: ImpressChatPOCBlock.Kind =
+                trimmed.hasPrefix(">") ? .quote : (isList(trimmed) ? .list : .paragraph)
+            let continuesList = activeKind == .list &&
+                (kind == .list || line.first == " " || line.first == "\t")
+            let continuesTable = activeKind == .table && trimmed.contains("|")
+            if activeKind != nil && activeKind != kind &&
+                !continuesList && !continuesTable {
+                flush()
+            }
+            if activeKind == nil { activeKind = kind }
+            pending.append(line)
         }
         flush()
         return result

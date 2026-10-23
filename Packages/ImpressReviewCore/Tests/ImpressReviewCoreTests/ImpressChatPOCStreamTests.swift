@@ -64,4 +64,64 @@ final class ImpressChatPOCStreamTests: XCTestCase {
         e.finish()
         XCTAssertEqual(e.blocks, ImpressChatPOCStream.parseOnce(e.source))
     }
+    func testAdjacentTypedBlocksWithoutBlankLinesRemainDistinct() {
+        let markdown = [
+            "普通段落", "- 一级", "  - 嵌套", "2. 第二项",
+            "> 引用行", "> 下一行", "## 新标题", "紧跟标题的内容",
+            "~~~~swift", "let value = \"中文\"", "~~~~",
+            "| Key | Value |", "| --- | --- |", "| 中文 | 🧠 |",
+            "$$", "E=mc^2", "$$", "结束段落"
+        ].joined(separator: "\n")
+        let reference = ImpressChatPOCStream.parseOnce(markdown)
+        XCTAssertEqual(reference.map(\.kind), [
+            .paragraph, .list, .quote, .heading, .paragraph,
+            .code, .table, .math, .paragraph
+        ])
+        XCTAssertEqual(reference[1].markdown, "- 一级\n  - 嵌套\n2. 第二项")
+        var engine = ImpressChatPOCStream()
+        engine.start()
+        for scalar in markdown.unicodeScalars {
+            engine.append(String(scalar))
+        }
+        engine.finish()
+        XCTAssertEqual(engine.blocks, reference)
+    }
+
+    func testMismatchedOrTooShortCodeFenceCannotCloseOpenFence() {
+        let source = [
+            "~~~~swift", "let a = 1", "\u{60}\u{60}\u{60}",
+            "~~~", "", "still within four-tilde fence",
+            "~~~~", "", "final paragraph"
+        ].joined(separator: "\n")
+        var engine = ImpressChatPOCStream()
+        engine.start()
+        engine.append(source)
+        XCTAssertEqual(engine.blocks.count, 2)
+        XCTAssertEqual(engine.blocks[0].kind, .code)
+        XCTAssertTrue(engine.blocks[0].stable)
+        XCTAssertTrue(engine.blocks[0].markdown.contains("still within four-tilde fence"))
+        XCTAssertEqual(engine.blocks[1].kind, .paragraph)
+        XCTAssertEqual(engine.blocks, [
+            ImpressChatPOCStream.parseOnce(source)[0],
+            ImpressChatPOCBlock(id: 1, kind: .paragraph,
+                                markdown: "final paragraph", stable: false)
+        ])
+    }
+
+    func testCRLFAndSplitFenceMarkersPreserveStablePrefix() {
+        let markdown = "固定前缀\r\n\r\n~~~swift\r\nlet x = 42\r\n\r\n~~~\r\n\r\n结束"
+        let expected = ImpressChatPOCStream.parseOnce(markdown)
+        var streaming = ImpressChatPOCStream()
+        streaming.start()
+        for fragment in ["固定前", "缀\r", "\n\r\n~", "~~swift\r\n",
+                         "let x = 42\r\n\r\n~~", "~\r\n\r\n结束"] {
+            streaming.append(fragment)
+        }
+        XCTAssertEqual(streaming.blocks.first?.markdown, "固定前缀\r")
+        XCTAssertEqual(streaming.blocks.first?.stable, true)
+        streaming.finish()
+        XCTAssertEqual(streaming.blocks, expected)
+        XCTAssertEqual(streaming.blocks.map(\.kind), [.paragraph, .code, .paragraph])
+    }
+
 }
