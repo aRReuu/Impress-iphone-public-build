@@ -27,12 +27,11 @@ final class ImpressAIHTTPStreamingIntegrationTests: XCTestCase {
     }
 
     func testFreeModelRequestStreamsAndTerminatesWithoutNetwork() async throws {
-        OfflineSSEProtocol.body = Data((
-            "data: " +
-            #"{"choices":[{"delta":{"content":"中文 🧠"}}]}"# + "\n\n" +
-            "data: " +
-            #"{"choices":[{"delta":{"content":"＋证据"},"finish_reason":"stop"}]}"# + "\n\n" +
-            "data: [DONE]\n\n").utf8)
+        let first = #"{"choices":[{"delta":{"content":"中文 🧠"}}]}"#
+        let second = #"{"choices":[{"delta":{"content":"＋证据"},"finish_reason":"stop"}]}"#
+        let lines = ["data: " + first, "", "data: " + second, "",
+                     "data: [DONE]", "", ""]
+        OfflineSSEProtocol.body = Data(lines.joined(separator: "\n").utf8)
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [OfflineSSEProtocol.self]
         let client = ImpressAIHTTPClient(session: URLSession(configuration: config))
@@ -58,9 +57,8 @@ final class ImpressAIHTTPStreamingIntegrationTests: XCTestCase {
     }
 
     func testUnexpectedEOFMustThrowRatherThanComplete() async throws {
-        OfflineSSEProtocol.body = Data((
-            "data: " +
-            #"{"choices":[{"delta":{"content":"未完成"}}]}"# + "\n\n").utf8)
+        let partialJSON = #"{"choices":[{"delta":{"content":"未完成"}}]}"#
+        OfflineSSEProtocol.body = Data(("data: " + partialJSON + "\n\n").utf8)
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [OfflineSSEProtocol.self]
         let client = ImpressAIHTTPClient(session: URLSession(configuration: config))
