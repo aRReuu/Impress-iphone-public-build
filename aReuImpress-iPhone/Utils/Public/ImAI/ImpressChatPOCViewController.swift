@@ -53,6 +53,11 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
     private enum ScrollMode { case followingBottom, readingHistory, keyboardTransition, restoring }
     private var scrollMode: ScrollMode = .followingBottom
     private var publishedIDs: [String] = []
+    /// Serialize UIKit diffable transactions. A streaming frame may arrive
+    /// before the previous snapshot and its self-sizing layout have finished.
+    /// The queued flag coalesces intermediate frames but never drops text.
+    private var snapshotInFlight = false
+    private var snapshotNeedsRefresh = false
     private var isRenderingQueued = false
     private var lastRenderedAt = CFAbsoluteTimeGetCurrent()
     /// Counts real decoded SSE delta events, not animation frames.
@@ -267,11 +272,11 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
             }
         }
         scrollMode = .followingBottom
+        // showRows will replace the old snapshot in one controlled
+        // transaction; applying an empty snapshot immediately before another
+        // apply would race when a long history was already on screen.
         publishedIDs = []
         rows = [:]
-        var empty = NSDiffableDataSourceSnapshot<Int, String>()
-        empty.appendSections([0])
-        dataSource.apply(empty, animatingDifferences: false)
         showRows()
         updateAction()
     }
@@ -545,6 +550,10 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
     }
 
     private func showRows() {
+        if snapshotInFlight {
+            snapshotNeedsRefresh = true
+            return
+        }
         var fresh: [String: Row] = [:]
         var identifiers: [String] = []
         for turn in turns {
@@ -609,6 +618,7 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
             snapshot.appendItems(identifiers)
         }
         publishedIDs = identifiers
+        snapshotInFlight = true
         dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
             guard let self else { return }
             self.transcript.layoutIfNeeded()
@@ -625,6 +635,13 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
                                  attributes.frame.minY - dy)
                 self.transcript.setContentOffset(
                     CGPoint(x: self.transcript.contentOffset.x, y: offset), animated: false)
+            }
+            // UIKit has finished this transaction. The latest model state,
+            // rather than every intermediate token event, is rendered next.
+            self.snapshotInFlight = false
+            if self.snapshotNeedsRefresh {
+                self.snapshotNeedsRefresh = false
+                self.showRows()
             }
         }
     }
