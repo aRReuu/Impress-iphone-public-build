@@ -587,9 +587,15 @@ final class ImpressV11NavigationUITests: XCTestCase {
             identifier: "impress.ai.chat.message-body").matching(
                 NSPredicate(format: "value CONTAINS %@", "合成模型回复")).firstMatch
         XCTAssertTrue(completedText.waitForExistence(timeout: 30))
-        let completedCell = app.cells["impress.ai.chat.completed-assistant"]
-        XCTAssertTrue(completedCell.waitForExistence(timeout: 15))
-        completedCell.press(forDuration: 1.1)
+        // The completed response presents a visible native Copy / More
+        // footer. Its buttons, rather than the non-accessibility-element
+        // UICollectionViewCell that owns selectable text, are the real user
+        // interaction. This also gates approval on a completed AI response:
+        // pending/failed replies never get a reply-actions footer.
+        let replyMore = app.buttons["impress.ai.chat.reply-more"].firstMatch
+        XCTAssertTrue(replyMore.waitForExistence(timeout: 20),
+            "A completed AI reply must expose its native More actions; partial output must not")
+        replyMore.tap()
         let change = app.buttons["统一预览笔记与原卡修订"]
         XCTAssertTrue(change.waitForExistence(timeout: 12))
         change.tap()
