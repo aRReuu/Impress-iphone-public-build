@@ -58,6 +58,9 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
     /// The queued flag coalesces intermediate frames but never drops text.
     private var snapshotInFlight = false
     private var snapshotNeedsRefresh = false
+    private var refreshAllOnNextSnapshot = false
+    private var modeBeforeKeyboard: ScrollMode = .followingBottom
+    private var keyboardReadingAnchor: (id: String, dy: CGFloat)?
     private var isRenderingQueued = false
     private var lastRenderedAt = CFAbsoluteTimeGetCurrent()
     /// Counts real decoded SSE delta events, not animation frames.
@@ -114,6 +117,15 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         NotificationCenter.default.addObserver(self,
             selector: #selector(refreshDynamicType),
             name: UIContentSizeCategory.didChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self,
+            selector: #selector(keyboardWillChange(_:)),
+            name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+        NotificationCenter.default.addObserver(self,
+            selector: #selector(keyboardDidChange(_:)),
+            name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
+        NotificationCenter.default.addObserver(self,
+            selector: #selector(keyboardDidChange(_:)),
+            name: UIResponder.keyboardDidHideNotification, object: nil)
         navigationItem.largeTitleDisplayMode = .never
 
         transcript.backgroundColor = .clear
@@ -246,10 +258,51 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
     deinit { NotificationCenter.default.removeObserver(self) }
 
     @objc private func refreshDynamicType() {
-        // Reconfigure visible items, including already stable blocks.
-        var snapshot = dataSource.snapshot()
-        snapshot.reconfigureItems(snapshot.itemIdentifiers)
-        dataSource.apply(snapshot, animatingDifferences: false)
+        // Reconfiguration must share the serialized diffable pipeline. A
+        // concurrent apply from a Dynamic Type notification can crash UIKit.
+        refreshAllOnNextSnapshot = true
+        showRows()
+    }
+
+    @objc private func keyboardWillChange(_ notification: Notification) {
+        guard view.window != nil, scrollMode != .keyboardTransition else { return }
+        modeBeforeKeyboard = scrollMode
+        if scrollMode == .readingHistory {
+            keyboardReadingAnchor = transcript.indexPathsForVisibleItems
+                .sorted().first.flatMap { index -> (String, CGFloat)? in
+                    guard let id = dataSource.itemIdentifier(for: index),
+                          let info = transcript.layoutAttributesForItem(at: index) else {
+                        return nil
+                    }
+                    return (id, info.frame.minY - transcript.contentOffset.y)
+                }
+        } else {
+            keyboardReadingAnchor = nil
+        }
+        scrollMode = .keyboardTransition
+    }
+
+    @objc private func keyboardDidChange(_ notification: Notification) {
+        guard scrollMode == .keyboardTransition else { return }
+        scrollMode = .restoring
+        view.layoutIfNeeded()
+        transcript.layoutIfNeeded()
+        if modeBeforeKeyboard == .followingBottom {
+            let snapshot = dataSource.snapshot()
+            if let last = snapshot.itemIdentifiers.last,
+               let path = dataSource.indexPath(for: last) {
+                transcript.scrollToItem(at: path, at: .bottom, animated: false)
+            }
+        } else if let anchor = keyboardReadingAnchor,
+                  let path = dataSource.indexPath(for: anchor.id),
+                  let info = transcript.layoutAttributesForItem(at: path) {
+            let y = max(-transcript.adjustedContentInset.top,
+                        info.frame.minY - anchor.dy)
+            transcript.setContentOffset(
+                CGPoint(x: transcript.contentOffset.x, y: y), animated: false)
+        }
+        keyboardReadingAnchor = nil
+        scrollMode = modeBeforeKeyboard
     }
 
     private func loadSyntheticHistory(count: Int) {
@@ -607,6 +660,8 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         rows = fresh
         transcript.backgroundView?.isHidden = !identifiers.isEmpty
         var snapshot = dataSource.snapshot()
+        let fullReconfigure = refreshAllOnNextSnapshot
+        refreshAllOnNextSnapshot = false
         // A brand-new diffable data source has NO sections. Appending the
         // very first user/assistant turn without an explicit section triggers
         // __UIDiffableDataSourceSnapshot Objective-C assertion and app crash.
@@ -615,14 +670,20 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
             snapshot.appendSections([0])
         }
         if identifiers == publishedIDs {
-            if changed.isEmpty { return }
+            if changed.isEmpty && !fullReconfigure { return }
             if !typeChanged.isEmpty { snapshot.reloadItems(typeChanged) }
-            if !contentChanged.isEmpty { snapshot.reconfigureItems(contentChanged) }
+            let reconfigure = fullReconfigure
+                ? identifiers.filter { !typeChanged.contains($0) }
+                : contentChanged
+            if !reconfigure.isEmpty { snapshot.reconfigureItems(reconfigure) }
         } else if publishedIDs.count <= identifiers.count &&
                     Array(identifiers.prefix(publishedIDs.count)) == publishedIDs {
             snapshot.appendItems(Array(identifiers.dropFirst(publishedIDs.count)))
             if !typeChanged.isEmpty { snapshot.reloadItems(typeChanged) }
-            if !contentChanged.isEmpty { snapshot.reconfigureItems(contentChanged) }
+            let reconfigure = fullReconfigure
+                ? publishedIDs.filter { !typeChanged.contains($0) }
+                : contentChanged
+            if !reconfigure.isEmpty { snapshot.reconfigureItems(reconfigure) }
         } else {
             snapshot = NSDiffableDataSourceSnapshot<Int, String>()
             snapshot.appendSections([0])
