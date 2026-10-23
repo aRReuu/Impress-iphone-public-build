@@ -397,6 +397,7 @@ final class ImpressChatDocumentCell: UICollectionViewCell {
         body.textContainer.lineFragmentPadding = 0
         body.adjustsFontForContentSizeCategory = true
         body.dataDetectorTypes = [.link]
+        body.accessibilityIdentifier = "impress.ai.chat.message-body"
         quoteStripe.backgroundColor = .tertiaryLabel
         quoteStripe.layer.cornerRadius = 1.5
         rule.backgroundColor = .separator
