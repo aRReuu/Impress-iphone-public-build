@@ -162,9 +162,37 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
                        headingLevel: 0, user: false, stable: true)
         let text = try XCTUnwrap(descendants(of: cell, as: UITextView.self).first)
         XCTAssertTrue(text.isSelectable)
-        XCTAssertEqual(text.textColor, UIColor.label)
-        XCTAssertGreaterThan(text.font?.pointSize ?? 0, 12)
-        XCTAssertTrue(text.attributedText.string.contains("中文强调"))
+        let rendered = try XCTUnwrap(text.attributedText)
+        let boldRange = (rendered.string as NSString).range(of: "中文强调")
+        let plainRange = (rendered.string as NSString).range(of: "plain text")
+        XCTAssertNotEqual(boldRange.location, NSNotFound)
+        XCTAssertNotEqual(plainRange.location, NSNotFound)
+        let strongFont = try XCTUnwrap(rendered.attribute(.font,
+            at: boldRange.location, effectiveRange: nil) as? UIFont)
+        let plainFont = try XCTUnwrap(rendered.attribute(.font,
+            at: plainRange.location, effectiveRange: nil) as? UIFont)
+        XCTAssertGreaterThan(plainFont.pointSize, 12)
+        XCTAssertTrue(strongFont.fontDescriptor.symbolicTraits.contains(.traitBold))
+        XCTAssertFalse(plainFont.fontDescriptor.symbolicTraits.contains(.traitBold))
+        let ink = try XCTUnwrap(rendered.attribute(.foregroundColor,
+            at: plainRange.location, effectiveRange: nil) as? UIColor)
+        XCTAssertEqual(ink, .label)
+        XCTAssertEqual(ink.resolvedColor(with: text.traitCollection),
+                       UIColor.label.resolvedColor(with: text.traitCollection))
+
+        // Reuse must not leak assistant strong emphasis into plain/user text.
+        cell.configure("普通问题", kind: .paragraph,
+                       headingLevel: 0, user: true, stable: true)
+        let userText = try XCTUnwrap(text.attributedText)
+        let userFont = try XCTUnwrap(userText.attribute(.font,
+            at: 0, effectiveRange: nil) as? UIFont)
+        XCTAssertFalse(userFont.fontDescriptor.symbolicTraits.contains(.traitBold))
+        cell.configure("普通回答", kind: .paragraph,
+                       headingLevel: 0, user: false, stable: true)
+        let normal = try XCTUnwrap(text.attributedText)
+        let normalFont = try XCTUnwrap(normal.attribute(.font,
+            at: 0, effectiveRange: nil) as? UIFont)
+        XCTAssertFalse(normalFont.fontDescriptor.symbolicTraits.contains(.traitBold))
     }
 
     private func descendants<T: UIView>(of view: UIView, as type: T.Type) -> [T] {
