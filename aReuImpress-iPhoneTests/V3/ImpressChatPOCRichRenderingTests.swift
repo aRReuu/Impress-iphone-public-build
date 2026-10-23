@@ -49,6 +49,44 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
         XCTAssertEqual(UIPasteboard.general.string, table)
     }
 
+    func testProductionGFMTableRetainsLongCellsAndLiteralWindowsPaths() throws {
+        let cell = ImpressChatPOCStructuredCell(
+            frame: CGRect(x: 0, y: 0, width: 310, height: 540))
+        let windowsPath = #"C:\Notes\Projects\drawing.md"#
+        let longValue = String(repeating: "长内容需要完整显示并支持纵向滚动。", count: 150)
+        let source = "| 字段 | 值 |\n| --- | --- |\n" +
+            "| 路径 | " + windowsPath + " |\n" +
+            "| 管道 | alpha\\|beta |\n" +
+            "| 说明 | " + longValue + " |"
+        cell.configure(markdown: source, kind: .table, stable: true)
+        cell.layoutIfNeeded()
+        let labels = descendants(of: cell, as: UILabel.self)
+        XCTAssertTrue(labels.contains { $0.text == windowsPath },
+            "A literal Windows path must not lose its backslashes")
+        XCTAssertTrue(labels.contains { $0.text == "alpha|beta" },
+            "Only escaped separators should be unescaped")
+        let longLabel = try XCTUnwrap(labels.first { $0.text == longValue })
+        XCTAssertEqual(longLabel.numberOfLines, 0,
+            "Long GFM table cells must not silently truncate at three lines")
+        let scroll = try XCTUnwrap(descendants(of: cell, as: UIScrollView.self).first)
+        XCTAssertTrue(scroll.showsVerticalScrollIndicator,
+            "Tall cells need a vertical scroll range even with few rows")
+        let copy = try XCTUnwrap(descendants(of: cell, as: UIButton.self).first {
+            $0.accessibilityIdentifier == "impress.chat.poc.content-copy"
+        })
+        copy.sendActions(for: .touchUpInside)
+        XCTAssertEqual(UIPasteboard.general.string, source,
+            "Source copying must preserve all original Markdown escapes")
+
+        // Reused collection cells cannot retain the previous tall-scroll state.
+        cell.configure(markdown: "| Key | Value |\n| --- | --- |\n| A | B |",
+                       kind: .table, stable: true)
+        XCTAssertFalse(scroll.showsVerticalScrollIndicator)
+        XCTAssertFalse(descendants(of: cell, as: UILabel.self).contains {
+            $0.text == longValue
+        })
+    }
+
     func testWindowsCRLFCodeSelectionAndGFMTableProjection() throws {
         let code = ImpressChatPOCStructuredCell(
             frame: CGRect(x: 0, y: 0, width: 310, height: 250))

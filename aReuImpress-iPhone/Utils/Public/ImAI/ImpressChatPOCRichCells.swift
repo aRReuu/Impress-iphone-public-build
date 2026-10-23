@@ -179,11 +179,18 @@ final class ImpressChatPOCStructuredCell: UICollectionViewCell {
         for (index, raw) in lines.enumerated() {
             var columns = [String](), current = "", escape = false
             for char in raw {
-                if escape { current.append(char); escape = false; continue }
+                if escape {
+                    // Only escaped pipes or backslashes consume the slash.
+                    if char != "|" && char != "\\" { current.append("\\") }
+                    current.append(char)
+                    escape = false
+                    continue
+                }
                 if char == "\\" { escape = true; continue }
                 if char == "|" { columns.append(current); current = "" }
                 else { current.append(char) }
             }
+            if escape { current.append("\\") }
             columns.append(current)
             if raw.first == "|", !columns.isEmpty { columns.removeFirst() }
             if raw.last == "|", !columns.isEmpty { columns.removeLast() }
@@ -209,30 +216,42 @@ final class ImpressChatPOCStructuredCell: UICollectionViewCell {
         grid.axis = .vertical
         grid.spacing = 0
         grid.translatesAutoresizingMaskIntoConstraints = false
+        var projectedHeight: CGFloat = 0
         for (i, values) in rows.enumerated() {
             let row = UIStackView()
             row.axis = .horizontal
             row.alignment = .fill
             row.spacing = 1
+            var rowHeight: CGFloat = 40
             for j in values.indices {
                 let label = UILabel()
                 label.text = values[j]
                 label.font = i == 0 ?
                     UIFont.preferredFont(forTextStyle: .headline) : font
-                label.numberOfLines = 3
+                label.numberOfLines = 0
+                label.adjustsFontForContentSizeCategory = true
+                label.textColor = .label
                 label.backgroundColor = i == 0 ? .tertiarySystemFill :
                     (i % 2 == 0 ? UIColor.systemBackground : UIColor.secondarySystemBackground)
                 label.accessibilityLabel = values[j]
                 label.textAlignment = .left
                 label.widthAnchor.constraint(equalToConstant: widths[j]).isActive = true
+                // A single long cell can exceed three lines even when there
+                // are very few table rows. Measure its actual wrapped height.
+                let glyphHeight = label.sizeThatFits(CGSize(
+                    width: widths[j], height: .greatestFiniteMagnitude)).height
+                rowHeight = max(rowHeight, ceil(glyphHeight) + 12)
                 row.addArrangedSubview(label)
             }
-            row.heightAnchor.constraint(greaterThanOrEqualToConstant: 40).isActive = true
+            row.heightAnchor.constraint(greaterThanOrEqualToConstant: rowHeight)
+                .isActive = true
+            projectedHeight += rowHeight
             grid.addArrangedSubview(row)
         }
-        scroller.showsVerticalScrollIndicator = rows.count > 12
-        scroller.alwaysBounceVertical = rows.count > 12
-        heightConstraint?.constant = min(530, CGFloat(rows.count) * 42 + 2)
+        let needsVerticalScroll = projectedHeight + 2 > 530
+        scroller.showsVerticalScrollIndicator = needsVerticalScroll
+        scroller.alwaysBounceVertical = needsVerticalScroll
+        heightConstraint?.constant = min(530, max(40, projectedHeight + 2))
         scroller.addSubview(grid)
         renderedContent = grid
         NSLayoutConstraint.activate([
