@@ -196,7 +196,7 @@ enum ImpressChatProviderConsentGate {
 
 @MainActor
 final class ImpressAINativeChatViewController: UIViewController,
-                                                UITableViewDataSource, UITableViewDelegate, UITextViewDelegate {
+                                                UITextViewDelegate {
     private let sourceQuestion: String?
     private let sourceAnswer: String?
     private let sourceCardID: UUID?
@@ -262,7 +262,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         return note?.documentFormat == .markdown ? note : nil
     }
 
-    private let tableView = UITableView(frame: .zero, style: .plain)
+    private let transcript = ImpressChatProductionTranscript()
     private let messageInput = UITextView()
     private let inputPlaceholder = UILabel()
     private let sendButton = UIButton(type: .system)
@@ -412,15 +412,14 @@ final class ImpressAINativeChatViewController: UIViewController,
         view.backgroundColor = ImpressV3Appearance.page
         navigationItem.largeTitleDisplayMode = .never
 
-        tableView.dataSource = self
-        tableView.delegate = self
-        tableView.register(ImpressChatMessageCell.self, forCellReuseIdentifier: "chat.message")
-        tableView.backgroundColor = .clear
-        tableView.separatorStyle = .none
-        tableView.rowHeight = UITableView.automaticDimension
-        tableView.estimatedRowHeight = 90
-        tableView.keyboardDismissMode = .interactive
-        tableView.accessibilityIdentifier = "impress.ai.chat.transcript"
+        // Production uses stable message/block IDs and a diffable content layout.
+        // Reuse the original knowledge-approval menu at message identity scope.
+        transcript.menuForMessage = { [weak self] id in
+            guard let self,
+                  let turn = self.history.first(where: { $0.messageID == id })
+            else { return nil }
+            return self.messageMenu(for: turn)
+        }
 
         privacyLabel.font = ImpressV3Appearance.Typography.caption
         privacyLabel.adjustsFontForContentSizeCategory = true
@@ -528,7 +527,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         attachmentChip.addTarget(self, action: #selector(reviewSessionMaterials),
                                  for: .touchUpInside)
         attachmentChip.isHidden = true
-        for element in [tableView, inputBar, privacyLabel] {
+        for element in [transcript, inputBar, privacyLabel] {
             element.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(element)
         }
@@ -549,10 +548,10 @@ final class ImpressAINativeChatViewController: UIViewController,
         let dynamicHeight = messageInput.heightAnchor.constraint(equalToConstant: 44)
         messageHeight = dynamicHeight
         NSLayoutConstraint.activate([
-            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            tableView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
-            tableView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
-            tableView.bottomAnchor.constraint(equalTo: inputBar.topAnchor, constant: -8),
+            transcript.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            transcript.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            transcript.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
+            transcript.bottomAnchor.constraint(equalTo: inputBar.topAnchor, constant: -8),
             privacyLabel.leadingAnchor.constraint(
                 equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
             privacyLabel.trailingAnchor.constraint(
@@ -650,18 +649,6 @@ final class ImpressAINativeChatViewController: UIViewController,
             guard !Task.isCancelled else { return }
             self?.enqueuePersistence()
         }
-    }
-
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        history.count
-    }
-
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath)
-        -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "chat.message", for: indexPath)
-            as! ImpressChatMessageCell
-        cell.configure(history[indexPath.row])
-        return cell
     }
 
     @objc private func openSessionPrompt() {
@@ -896,17 +883,6 @@ final class ImpressAINativeChatViewController: UIViewController,
             }
         }
         return UIMenu(children: actions)
-    }
-
-    func tableView(_ tableView: UITableView,
-                   contextMenuConfigurationForRowAt indexPath: IndexPath,
-                   point: CGPoint) -> UIContextMenuConfiguration? {
-        guard history.indices.contains(indexPath.row) else { return nil }
-        let message = history[indexPath.row]
-        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) {
-            [weak self] _ in
-            self?.messageMenu(for: message) ?? UIMenu(children: [])
-        }
     }
 
     @objc private func openDuplexReceipts() {
@@ -1420,6 +1396,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         sendButton.isEnabled = true
         sendButton.configuration?.image = UIImage(systemName: "stop.fill")
         sendButton.accessibilityLabel = V3L("停止生成")
+        transcript.followNewestMessage()
         reloadAndScroll()
 
         let priorSave = saveChain
@@ -1831,13 +1808,7 @@ final class ImpressAINativeChatViewController: UIViewController,
     }
 
     private func reloadAndScroll(to messageID: UUID? = nil) {
-        tableView.reloadData()
-        guard !history.isEmpty else { return }
-        let index = messageID.flatMap { target in
-            history.firstIndex(where: { $0.messageID == target })
-        } ?? history.count - 1
-        tableView.scrollToRow(at: IndexPath(row: index, section: 0),
-                              at: .middle, animated: false)
+        transcript.update(history, focusMessageID: messageID)
     }
 }
 
@@ -2073,65 +2044,6 @@ final class ImpressChatSessionHistoryViewController: UITableViewController,
 }
 
 @MainActor
-final class ImpressChatMessageCell: UITableViewCell {
-    private let roleLabel = UILabel()
-    private let bodyView = UITextView()
-    private let stateLabel = UILabel()
-    private let column = UIStackView()
-
-    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
-        super.init(style: style, reuseIdentifier: reuseIdentifier)
-        column.axis = .vertical
-        column.spacing = ImpressV3Appearance.Metrics.rowSpacing
-        column.translatesAutoresizingMaskIntoConstraints = false
-        roleLabel.font = ImpressV3Appearance.Typography.caption
-        roleLabel.textColor = ImpressV3Appearance.secondaryText
-        bodyView.backgroundColor = .clear
-        bodyView.isEditable = false
-        bodyView.isSelectable = true
-        bodyView.isScrollEnabled = false
-        bodyView.textContainerInset = .zero
-        bodyView.textContainer.lineFragmentPadding = 0
-        bodyView.font = ImpressV3Appearance.Typography.body
-        bodyView.textColor = ImpressV3Appearance.primaryText
-        bodyView.adjustsFontForContentSizeCategory = true
-        bodyView.accessibilityIdentifier = "impress.ai.chat.message-body"
-        stateLabel.font = ImpressV3Appearance.Typography.caption
-        stateLabel.textColor = ImpressV3Appearance.secondaryText
-        stateLabel.numberOfLines = 0
-        for item in [roleLabel, bodyView, stateLabel] {
-            column.addArrangedSubview(item)
-        }
-        contentView.addSubview(column)
-        let margins = contentView.layoutMarginsGuide
-        NSLayoutConstraint.activate([
-            column.topAnchor.constraint(equalTo: margins.topAnchor, constant: 4),
-            column.bottomAnchor.constraint(equalTo: margins.bottomAnchor, constant: -4),
-            column.leadingAnchor.constraint(equalTo: margins.leadingAnchor),
-            column.trailingAnchor.constraint(equalTo: margins.trailingAnchor)
-        ])
-        selectionStyle = .none
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
-
-    func configure(_ message: WCDBV3ChatMessage) {
-        accessibilityIdentifier = message.role == .assistant &&
-            message.status == .completed ? "impress.ai.chat.completed-assistant" :
-            "impress.ai.chat.history-turn"
-        roleLabel.text = message.role == .user ? V3L("我") : V3L("AI")
-        let rendered = MarkdownKitRenderer().parseMarkdown(message.text)
-            ?? NSAttributedString(string: message.text)
-        bodyView.attributedText = rendered
-        bodyView.isSelectable = true
-        stateLabel.text = message.status == .failed ? V3L("请求失败，可重新发送") :
-            (message.status == .cancelled ? V3L("请求已取消") :
-             (message.status == .pending ? V3L("正在生成…") : nil))
-        stateLabel.isHidden = stateLabel.text == nil
-        backgroundColor = message.role == .user
-            ? ImpressV3Appearance.reviewActionSurface : ImpressV3Appearance.surface
-    }
-}
-
 @MainActor
 final class ImpressChatNoteSectionPicker: UITableViewController {
     private let sections: [ImpressAISectionItem]
