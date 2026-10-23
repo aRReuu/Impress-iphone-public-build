@@ -603,6 +603,13 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         rows = fresh
         transcript.backgroundView?.isHidden = !identifiers.isEmpty
         var snapshot = dataSource.snapshot()
+        // A brand-new diffable data source has NO sections. Appending the
+        // very first user/assistant turn without an explicit section triggers
+        // __UIDiffableDataSourceSnapshot Objective-C assertion and app crash.
+        // Ensure the section exists before any incremental append.
+        if snapshot.sectionIdentifiers.isEmpty {
+            snapshot.appendSections([0])
+        }
         if identifiers == publishedIDs {
             if changed.isEmpty { return }
             if !typeChanged.isEmpty { snapshot.reloadItems(typeChanged) }
