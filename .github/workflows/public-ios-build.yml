@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/impress-duplex-loop-v1
+      - 'feature/impress-calibration-*'
     paths-ignore:
       - '**/*.md'
   workflow_dispatch:
