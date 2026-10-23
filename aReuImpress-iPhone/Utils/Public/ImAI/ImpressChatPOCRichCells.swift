@@ -12,7 +12,9 @@ final class ImpressChatPOCStructuredCell: UICollectionViewCell {
     private let copy = UIButton(type: .system)
     private let scroller = UIScrollView()
     private var heightConstraint: NSLayoutConstraint?
+    private var renderedContent: UIView?
     private var source = ""
+    private var sourceKind: ImpressChatPOCBlock.Kind = .paragraph
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -63,9 +65,11 @@ final class ImpressChatPOCStructuredCell: UICollectionViewCell {
 
     func configure(markdown: String, kind: ImpressChatPOCBlock.Kind, stable: Bool) {
         source = markdown
+        sourceKind = kind
         heading.text = kind == .code ? codeLanguage(markdown) :
             (stable ? "表格" : "表格 · 生成中")
-        for previous in scroller.subviews { previous.removeFromSuperview() }
+        renderedContent?.removeFromSuperview()
+        renderedContent = nil
         scroller.setContentOffset(.zero, animated: false)
         switch kind {
         case .table where stable:
@@ -107,11 +111,16 @@ final class ImpressChatPOCStructuredCell: UICollectionViewCell {
         let font = UIFont.monospacedSystemFont(
             ofSize: UIFont.preferredFont(forTextStyle: .body).pointSize - 2,
             weight: .regular)
-        let label = UILabel()
+        // Native TextKit selection remains available inside horizontal code.
+        let label = UITextView()
         label.font = font
-        label.numberOfLines = 0
-        label.lineBreakMode = .byClipping
-        label.isUserInteractionEnabled = false
+        label.isEditable = false
+        label.isSelectable = true
+        label.isScrollEnabled = false
+        label.textContainerInset = .zero
+        label.textContainer.lineFragmentPadding = 0
+        label.textContainer.lineBreakMode = .byClipping
+        label.backgroundColor = .clear
         label.accessibilityLabel = body
         label.attributedText = highlight(body, font: font)
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -124,6 +133,7 @@ final class ImpressChatPOCStructuredCell: UICollectionViewCell {
         scroller.showsVerticalScrollIndicator = fullHeight > 760
         scroller.alwaysBounceVertical = fullHeight > 760
         scroller.addSubview(label)
+        renderedContent = label
         NSLayoutConstraint.activate([
             label.leadingAnchor.constraint(equalTo: scroller.contentLayoutGuide.leadingAnchor,
                                            constant: 12),
@@ -217,6 +227,7 @@ final class ImpressChatPOCStructuredCell: UICollectionViewCell {
         scroller.alwaysBounceVertical = rows.count > 12
         heightConstraint?.constant = min(530, CGFloat(rows.count) * 42 + 2)
         scroller.addSubview(grid)
+        renderedContent = grid
         NSLayoutConstraint.activate([
             grid.leadingAnchor.constraint(equalTo: scroller.contentLayoutGuide.leadingAnchor,
                                           constant: 10),
@@ -230,7 +241,7 @@ final class ImpressChatPOCStructuredCell: UICollectionViewCell {
     }
 
     @objc private func copyRaw() {
-        UIPasteboard.general.string = source
+        UIPasteboard.general.string = sourceKind == .code ? codeBody(source) : source
     }
 }
 

@@ -487,6 +487,8 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
 private final class ImpressChatPOCCell: UICollectionViewCell {
     private let bubble = UIView()
     private let body = UITextView()
+    private let quoteStripe = UIView()
+    private let horizontalRule = UIView()
     private var assistantLeading: NSLayoutConstraint!
     private var userWidth: NSLayoutConstraint!
     override init(frame: CGRect) {
@@ -503,6 +505,13 @@ private final class ImpressChatPOCCell: UICollectionViewCell {
         body.adjustsFontForContentSizeCategory = true
         contentView.addSubview(bubble)
         bubble.addSubview(body)
+        bubble.addSubview(quoteStripe)
+        bubble.addSubview(horizontalRule)
+        quoteStripe.translatesAutoresizingMaskIntoConstraints = false
+        quoteStripe.backgroundColor = .tertiaryLabel
+        quoteStripe.layer.cornerRadius = 1.5
+        horizontalRule.translatesAutoresizingMaskIntoConstraints = false
+        horizontalRule.backgroundColor = .separator
         assistantLeading = bubble.leadingAnchor.constraint(equalTo: contentView.leadingAnchor)
         userWidth = bubble.widthAnchor.constraint(equalTo: contentView.widthAnchor,
                                                    multiplier: 0.82)
@@ -514,7 +523,15 @@ private final class ImpressChatPOCCell: UICollectionViewCell {
             body.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 10),
             body.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -10),
             body.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 12),
-            body.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -12)
+            body.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -12),
+            quoteStripe.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 2),
+            quoteStripe.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 4),
+            quoteStripe.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -4),
+            quoteStripe.widthAnchor.constraint(equalToConstant: 3),
+            horizontalRule.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 12),
+            horizontalRule.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -12),
+            horizontalRule.centerYAnchor.constraint(equalTo: bubble.centerYAnchor),
+            horizontalRule.heightAnchor.constraint(equalToConstant: 1)
         ])
         assistantLeading.isActive = true
     }
@@ -526,24 +543,89 @@ private final class ImpressChatPOCCell: UICollectionViewCell {
         userWidth.isActive = user
         bubble.backgroundColor = user ? .tertiarySystemFill : .clear
         bubble.layer.cornerRadius = user ? 19 : 0
-        var display = rowText
+        quoteStripe.isHidden = kind != .quote || user
+        horizontalRule.isHidden = kind != .divider || user
+        let original = rowText
+        var displayed = rowText
         if kind == .heading && headingLevel > 0 {
-            display = String(rowText.dropFirst(headingLevel))
+            displayed = String(rowText.dropFirst(headingLevel))
                 .trimmingCharacters(in: .whitespaces)
+        } else if kind == .quote {
+            displayed = rowText.split(separator: "\n",
+                omittingEmptySubsequences: false).map {
+                let value = $0.trimmingCharacters(in: .whitespaces)
+                return value.hasPrefix(">") ? String(value.dropFirst())
+                    .trimmingCharacters(in: .whitespaces) : value
+            }.joined(separator: "\n")
         }
-        let mono = kind == .code || kind == .table || kind == .math
-        body.font = mono ? UIFont.monospacedSystemFont(ofSize: 14, weight: .regular)
-                         : UIFont.preferredFont(forTextStyle: kind == .heading ? .headline : .body)
+        let baseSize = UIFont.preferredFont(forTextStyle: .body).pointSize
+        let headingScale: [CGFloat] = [1.0, 1.58, 1.42, 1.28, 1.15, 1.07, 1.0]
+        let depth = min(6, max(1, headingLevel))
+        let font = kind == .heading ?
+            UIFont.systemFont(ofSize: baseSize * headingScale[depth], weight: .bold) :
+            UIFont.preferredFont(forTextStyle: .body)
         body.textColor = .label
-        body.attributedText = nil
-        if !mono && !user, let parsed = try? AttributedString(markdown: display) {
-            body.attributedText = NSAttributedString(parsed)
+        body.font = font
+        body.isSelectable = true
+        body.isHidden = kind == .divider
+        if kind == .divider { displayed = " " }
+
+        if !user && kind == .list {
+            body.attributedText = structuredList(displayed, font: font)
+        } else if !user,
+                  let parsed = try? AttributedString(markdown: displayed) {
+            let attributed = NSMutableAttributedString(attributedString: NSAttributedString(parsed))
+            if kind == .heading {
+                attributed.addAttribute(.font, value: font,
+                    range: NSRange(location: 0, length: attributed.length))
+            }
+            body.attributedText = attributed
         } else {
-            body.text = display
+            body.attributedText = NSAttributedString(string: displayed, attributes: [
+                .font: font, .foregroundColor: UIColor.label
+            ])
         }
-        body.backgroundColor = mono ? .secondarySystemBackground : .clear
-        body.layer.cornerRadius = mono ? 10 : 0
-        body.accessibilityLabel = display + (stable ? "" : "，生成中")
+        // Source markdown is only an accessibility/copy fallback. Do not
+        // claim that unsupported attachment links were actually loaded.
+        body.accessibilityLabel = original + (stable ? "" : "，生成中")
+    }
+
+    private func structuredList(_ markdown: String, font: UIFont) -> NSAttributedString {
+        let output = NSMutableAttributedString()
+        for raw in markdown.components(separatedBy: "\n") {
+            let indentSpaces = raw.prefix(while: { $0 == " " }).count
+            let clean = raw.trimmingCharacters(in: .whitespaces)
+            let dash = ["- ", "* ", "+ "].first { clean.hasPrefix($0) }
+            let ordered = clean.prefix(while: { $0.isNumber })
+            let numberMarker = !ordered.isEmpty &&
+                (clean.dropFirst(ordered.count).hasPrefix(". ") ||
+                 clean.dropFirst(ordered.count).hasPrefix(") "))
+            let depth = min(8, indentSpaces / 2)
+            let marker = dash != nil ? "• " : (numberMarker ? String(ordered) + ". " : "")
+            let content: String
+            if let dash { content = String(clean.dropFirst(dash.count)) }
+            else if numberMarker { content = String(clean.dropFirst(ordered.count + 2)) }
+            else { content = clean }
+            let paragraph = NSMutableParagraphStyle()
+            let start = CGFloat(depth) * 18 + 6
+            let inset = marker.isEmpty ? 0 : 20.0
+            paragraph.firstLineHeadIndent = start
+            paragraph.headIndent = start + inset
+            paragraph.paragraphSpacing = 5
+            let value = marker + content + "\n"
+            let styled: NSAttributedString
+            if let parsed = try? AttributedString(markdown: value) {
+                styled = NSAttributedString(parsed)
+            } else {
+                styled = NSAttributedString(string: value)
+            }
+            let built = NSMutableAttributedString(attributedString: styled)
+            built.addAttributes([
+                .font: font, .paragraphStyle: paragraph, .foregroundColor: UIColor.label
+            ], range: NSRange(location: 0, length: built.length))
+            output.append(built)
+        }
+        return output
     }
 }
 #endif
