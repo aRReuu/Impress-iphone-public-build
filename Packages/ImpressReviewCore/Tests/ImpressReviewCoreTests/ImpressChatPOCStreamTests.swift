@@ -117,11 +117,13 @@ final class ImpressChatPOCStreamTests: XCTestCase {
                          "let x = 42\r\n\r\n~~", "~\r\n\r\n结束"] {
             streaming.append(fragment)
         }
-        XCTAssertEqual(streaming.blocks.first?.markdown, "固定前缀\r")
+        XCTAssertEqual(streaming.blocks.first?.markdown, "固定前缀")
         XCTAssertEqual(streaming.blocks.first?.stable, true)
         streaming.finish()
         XCTAssertEqual(streaming.blocks, expected)
         XCTAssertEqual(streaming.blocks.map(\.kind), [.paragraph, .code, .paragraph])
+        XCTAssertTrue(streaming.blocks[1].markdown.contains("\r\nlet x = 42\r\n"),
+                      "The read-only block projection retains original source newlines")
     }
 
 }

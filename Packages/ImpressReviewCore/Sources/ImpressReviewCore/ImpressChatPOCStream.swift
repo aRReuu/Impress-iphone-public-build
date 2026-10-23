@@ -56,6 +56,46 @@ public struct ImpressChatPOCStream: Sendable {
     public static func parseOnce(_ source: String) -> [ImpressChatPOCBlock] {
         parse(source, offset: 0, stable: true)
     }
+    /// Split by Unicode newline scalars, not Swift Character. Swift treats
+    /// CRLF as a single grapheme; String.split(separator: "\n") misses it.
+    /// Indexes retain the exact source span and original line endings.
+    private struct SourceLine {
+        let text: String
+        let start: String.Index
+        let contentEnd: String.Index
+        let nextStart: String.Index
+        let terminated: Bool
+    }
+
+    private static func logicalLines(_ input: String) -> [SourceLine] {
+        let scalars = input.unicodeScalars
+        var start = scalars.startIndex
+        var cursor = start
+        var output: [SourceLine] = []
+        while cursor < scalars.endIndex {
+            let current = scalars[cursor].value
+            if current == 10 || current == 13 {
+                var next = scalars.index(after: cursor)
+                if current == 13 && next < scalars.endIndex &&
+                   scalars[next].value == 10 {
+                    next = scalars.index(after: next)
+                }
+                output.append(SourceLine(
+                    text: String(input[start..<cursor]), start: start,
+                    contentEnd: cursor, nextStart: next, terminated: true))
+                start = next
+                cursor = next
+            } else {
+                cursor = scalars.index(after: cursor)
+            }
+        }
+        output.append(SourceLine(
+            text: String(input[start..<input.endIndex]), start: start,
+            contentEnd: input.endIndex, nextStart: input.endIndex,
+            terminated: false))
+        return output
+    }
+
     // CommonMark fenced-code openers must not be closed by a different
     // marker, a shorter run, or stray backticks inside ordinary content.
     private struct Fence: Equatable {
@@ -93,13 +133,12 @@ public struct ImpressChatPOCStream: Sendable {
     }
 
     private static func lastSafeBoundary(in text: String) -> String.Index? {
-        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-        var cursor = text.startIndex
+        let lines = logicalLines(text)
         var fenced: Fence?
         var math = false
         var last: String.Index?
-        for (i, raw) in lines.enumerated() {
-            let line = String(raw)
+        for row in lines {
+            let line = row.text
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             if let open = fenced {
                 if closesFence(line, open) { fenced = nil }
@@ -108,10 +147,8 @@ public struct ImpressChatPOCStream: Sendable {
             } else if togglesMath(trimmed) {
                 math.toggle()
             }
-            cursor = text.index(cursor, offsetBy: line.count)
-            if i < lines.count - 1 {
-                cursor = text.index(after: cursor)
-                if trimmed.isEmpty && fenced == nil && !math { last = cursor }
+            if trimmed.isEmpty && row.terminated && fenced == nil && !math {
+                last = row.nextStart
             }
         }
         return last
@@ -150,15 +187,19 @@ public struct ImpressChatPOCStream: Sendable {
     private static func parse(_ input: String, offset: Int,
                               stable: Bool) -> [ImpressChatPOCBlock] {
         var result: [ImpressChatPOCBlock] = []
-        var pending: [String] = []
+        var pending: [SourceLine] = []
         var activeKind: ImpressChatPOCBlock.Kind?
         var activeHeading = 0
         var fenced: Fence?
         var math = false
 
         func flush() {
-            let content = pending.joined(separator: "\n")
-                .trimmingCharacters(in: .newlines)
+            let content: String
+            if let first = pending.first, let last = pending.last {
+                content = String(input[first.start..<last.contentEnd])
+            } else {
+                content = ""
+            }
             pending = []
             guard !content.isEmpty else {
                 activeKind = nil
@@ -173,12 +214,12 @@ public struct ImpressChatPOCStream: Sendable {
             activeHeading = 0
         }
 
-        let lines = input.split(separator: "\n", omittingEmptySubsequences: false)
-        for raw in lines {
-            let line = String(raw)
+        let lines = logicalLines(input)
+        for row in lines {
+            let line = row.text
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             if let open = fenced {
-                pending.append(line)
+                pending.append(row)
                 if closesFence(line, open) {
                     fenced = nil
                     flush()
@@ -186,7 +227,7 @@ public struct ImpressChatPOCStream: Sendable {
                 continue
             }
             if math {
-                pending.append(line)
+                pending.append(row)
                 if togglesMath(trimmed) {
                     math = false
                     flush()
@@ -198,14 +239,14 @@ public struct ImpressChatPOCStream: Sendable {
             if let open = openingFence(line) {
                 flush()
                 activeKind = .code
-                pending.append(line)
+                pending.append(row)
                 fenced = open
                 continue
             }
             if trimmed.hasPrefix("$$") {
                 flush()
                 activeKind = .math
-                pending.append(line)
+                pending.append(row)
                 if togglesMath(trimmed) {
                     math = true
                 } else {
@@ -218,7 +259,7 @@ public struct ImpressChatPOCStream: Sendable {
                 flush()
                 activeKind = .heading
                 activeHeading = heading
-                pending.append(trimmed)
+                pending.append(row)
                 flush()
                 continue
             }
@@ -236,9 +277,9 @@ public struct ImpressChatPOCStream: Sendable {
                     .replacingOccurrences(of: ":", with: "")
                     .trimmingCharacters(in: .whitespaces).isEmpty
             if pending.count == 1, activeKind == .paragraph,
-               pending[0].contains("|"), isDelimiter {
+               pending[0].text.contains("|"), isDelimiter {
                 activeKind = .table
-                pending.append(line)
+                pending.append(row)
                 continue
             }
             let kind: ImpressChatPOCBlock.Kind =
@@ -251,7 +292,7 @@ public struct ImpressChatPOCStream: Sendable {
                 flush()
             }
             if activeKind == nil { activeKind = kind }
-            pending.append(line)
+            pending.append(row)
         }
         flush()
         return result
