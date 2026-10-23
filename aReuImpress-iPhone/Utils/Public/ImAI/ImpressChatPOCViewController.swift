@@ -753,6 +753,68 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         }
     }
 
+
+    /// Long-press actions belong to the actual message, not an IM-style
+    /// row decoration. POC edits are explicit *new* turns, never silent
+    /// rewrites of historical WCDB records.
+    private func messageMenu(for itemID: String) -> UIMenu? {
+        guard !itemID.hasPrefix("status-"),
+              let turn = turns.first(where: { itemID.contains($0.id.uuidString) })
+        else { return nil }
+        let existing = turn.isUser ? turn.text : (turn.stream?.source ?? "")
+        guard !existing.isEmpty else { return nil }
+        var actions: [UIMenuElement] = [
+            UIAction(title: turn.isUser ? "复制问题" : "复制回复",
+                     image: UIImage(systemName: "doc.on.doc")) { _ in
+                UIPasteboard.general.string = existing
+            }
+        ]
+        if turn.isUser && playback == nil {
+            actions.append(UIAction(
+                title: "引用问题并重新发送",
+                image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
+                    guard let self else { return }
+                    self.input.text = existing
+                    self.textViewDidChange(self.input)
+                    self.input.becomeFirstResponder()
+                })
+        }
+        if !turn.isUser, playback == nil,
+           turn.id == turns.last?.id,
+           let phase = turn.stream?.phase,
+           phase == .stopped || phase == .failed {
+            actions.append(UIAction(
+                title: "重新生成",
+                image: UIImage(systemName: "arrow.clockwise")) { [weak self] _ in
+                    guard let self, self.input.text
+                        .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    else { return }
+                    self.sendOrStop()
+                })
+        }
+        return UIMenu(children: actions)
+    }
+
+    func collectionView(_ collectionView: UICollectionView,
+                        contextMenuConfigurationForItemAt indexPath: IndexPath,
+                        point: CGPoint) -> UIContextMenuConfiguration? {
+        guard let identifier = dataSource.itemIdentifier(for: indexPath),
+              messageMenu(for: identifier) != nil else { return nil }
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) {
+            [weak self] _ in
+            self?.messageMenu(for: identifier) ?? UIMenu(children: [])
+        }
+    }
+
+    /// Native synthetic tests verify the real menu composition without
+    /// opening SpringBoard and without reading the user's clipboard.
+    func testMessageActionTitles(at index: Int) -> [String] {
+        let ids = dataSource.snapshot().itemIdentifiers
+        guard ids.indices.contains(index),
+              let menu = messageMenu(for: ids[index]) else { return [] }
+        return menu.children.compactMap { ($0 as? UIAction)?.title }
+    }
+
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         scrollMode = .readingHistory
     }

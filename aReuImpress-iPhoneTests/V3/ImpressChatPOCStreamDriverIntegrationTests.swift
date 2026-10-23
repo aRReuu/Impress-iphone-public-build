@@ -112,6 +112,23 @@ final class ImpressChatPOCStreamDriverIntegrationTests: XCTestCase {
         XCTAssertGreaterThan(controller.testRenderedRowCount, 2)
     }
 
+
+    func testNativeMessageContextMenuCopiesWholeTurnAndQuotesWithoutMutation() async throws {
+        let controller = ImpressChatPOCViewController()
+        controller.loadViewIfNeeded()
+        controller.testLoadSyntheticHistory(count: 100)
+        for _ in 0..<100 where controller.testRenderedRowCount < 200 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(controller.testRenderedRowCount, 200)
+        let first = controller.testMessageActionTitles(at: 0)
+        XCTAssertEqual(first, ["复制问题", "引用问题并重新发送"])
+        let assistant = controller.testMessageActionTitles(at: 1)
+        XCTAssertTrue(assistant.contains("复制回复"))
+        XCTAssertFalse(assistant.contains("重新生成"))
+        XCTAssertEqual(controller.testModelMessageCount, 100)
+    }
+
     private func subviews<T: UIView>(in root: UIView, as type: T.Type) -> [T] {
         root.subviews.flatMap { child in
             ((child as? T).map { [$0] } ?? []) + subviews(in: child, as: type)
