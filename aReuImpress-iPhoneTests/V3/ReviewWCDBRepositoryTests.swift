@@ -2396,14 +2396,31 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         try await repository.saveChatSession(saved, expectedRevision: nil)
         let chat = ImpressAINativeChatViewController(question: "Note", answer: nil,
             repository: repository, sourceKey: source, sourceVersion: "sha256")
+        // A self-sizing UICollectionView must have real window geometry before
+        // we inspect layout or visible cells. Avoid probing section 0 while the
+        // asynchronous Diffable snapshot has not yet published any section.
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = UINavigationController(rootViewController: chat)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
         chat.loadViewIfNeeded()
         let transcript = try XCTUnwrap(allSubviews(chat.view)
             .compactMap { $0 as? UICollectionView }
             .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.transcript" }))
-        for _ in 0..<100 where transcript.numberOfItems(inSection: 0) != 1 {
+        for _ in 0..<100 {
+            if transcript.numberOfSections > 0 &&
+               transcript.numberOfItems(inSection: 0) == 1 { break }
             try await Task.sleep(for: .milliseconds(30))
         }
+        XCTAssertEqual(transcript.numberOfSections, 1)
         XCTAssertEqual(transcript.numberOfItems(inSection: 0), 1)
+        window.layoutIfNeeded()
+        let cell = try XCTUnwrap(transcript.cellForItem(
+            at: IndexPath(item: 0, section: 0)) as? ImpressChatDocumentCell)
+        let text = try XCTUnwrap(allSubviews(cell)
+            .compactMap { $0 as? UITextView }.first)
+        XCTAssertEqual(text.attributedText.string, "My note discussion",
+            "The authorized note discussion must recover its exact original text")
         let unrelated = try await repository.chatSessions(for: "card:" + UUID().uuidString)
         XCTAssertTrue(unrelated.isEmpty)
     }
@@ -2566,6 +2583,10 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         let chat = ImpressAINativeChatViewController(
             question: "Q", answer: "A", cardID: cardID,
             contentRevision: 0, repository: repository)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = UINavigationController(rootViewController: chat)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
         chat.loadViewIfNeeded()
         let input = try XCTUnwrap(allSubviews(chat.view)
             .compactMap { $0 as? UITextView }
@@ -2573,11 +2594,30 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         let transcript = try XCTUnwrap(allSubviews(chat.view)
             .compactMap { $0 as? UICollectionView }
             .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.transcript" }))
-        for _ in 0..<50 where input.text != saved.inputDraft {
+        for _ in 0..<100 {
+            if input.text == saved.inputDraft &&
+               transcript.numberOfSections > 0 &&
+               transcript.numberOfItems(inSection: 0) == 3 { break }
             try await Task.sleep(for: .milliseconds(30))
         }
         XCTAssertEqual(input.text, "Unsent boundary question")
-        XCTAssertEqual(transcript.numberOfItems(inSection: 0), 2)
+        XCTAssertEqual(transcript.numberOfSections, 1)
+        // Two WCDB messages become three independently reusable UI blocks:
+        // user bubble, assistant document and the completed reply-action footer.
+        XCTAssertEqual(transcript.numberOfItems(inSection: 0), 3)
+        window.layoutIfNeeded()
+        for (item, expectedText) in [(0, "First question"), (1, "First answer")] {
+            let cell = try XCTUnwrap(transcript.cellForItem(
+                at: IndexPath(item: item, section: 0)) as? ImpressChatDocumentCell)
+            let text = try XCTUnwrap(allSubviews(cell)
+                .compactMap { $0 as? UITextView }.first)
+            XCTAssertEqual(text.attributedText.string, expectedText)
+        }
+        let footer = try XCTUnwrap(transcript.cellForItem(
+            at: IndexPath(item: 2, section: 0)) as? ImpressChatReplyActionsCell)
+        XCTAssertTrue(allSubviews(footer).contains(where: {
+            $0.accessibilityIdentifier == "impress.ai.chat.reply-copy"
+        }), "The restored completed reply keeps its real interaction controls")
         // Load is read-only; opening Chat does not trigger model requests
         // or modify the saved source content / FSRS database.
         let durable = try await repository.chatSessions(for: identity)
