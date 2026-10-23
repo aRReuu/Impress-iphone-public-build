@@ -41,6 +41,8 @@ final class ImpressChatPOCTransportTests: XCTestCase {
     func testAnthropicAndResponsesProtocolsNormalizeWithoutFalseFinish() throws {
         let anthropic = "event: content_block_delta\n" +
             "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"拆解\"}}\n\n" +
+            "event: message_delta\n" +
+            "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"}}\n\n" +
             "event: message_stop\n" + "data: {\"type\":\"message_stop\"}\n\n"
         let a = try replay(anthropic, provider: .anthropicMessages, cuts: [1, 7, 3])
         XCTAssertEqual(a.outputs, [.delta("拆解"), .completed])
@@ -121,6 +123,33 @@ final class ImpressChatPOCTransportTests: XCTestCase {
         XCTAssertThrowsError(try normalized.consume(
             ImpressChatPOCSSEEvent(event: nil, id: nil, data:
                 #"{"choices":[{"delta":{"content":"late"}}]}"#)))
+    }
+
+
+    func testTerminalMarkersAreScopedToTheirProviderAndReason() throws {
+        for provider in [ImpressChatPOCProviderProtocol.openAIResponses,
+                         .anthropicMessages, .geminiGenerateContent] {
+            var state = ImpressChatPOCEventNormalizer(provider: provider)
+            XCTAssertThrowsError(try state.consume(
+                ImpressChatPOCSSEEvent(event: nil, id: nil, data: "[DONE]"))) { error in
+                XCTAssertEqual(error as? ImpressChatPOCTransportError, .invalidEvent)
+            }
+            XCTAssertFalse(state.isCompleted)
+        }
+        var missingStopReason = ImpressChatPOCEventNormalizer(provider: .anthropicMessages)
+        XCTAssertThrowsError(try missingStopReason.consume(
+            ImpressChatPOCSSEEvent(event: "message_stop", id: nil,
+                                   data: #"{"type":"message_stop"}"#)))
+        XCTAssertFalse(missingStopReason.isCompleted)
+
+        var toolOutput = ImpressChatPOCEventNormalizer(provider: .anthropicMessages)
+        _ = try toolOutput.consume(ImpressChatPOCSSEEvent(
+            event: "message_delta", id: nil,
+            data: #"{"type":"message_delta","delta":{"stop_reason":"tool_use"}}"#))
+        XCTAssertEqual(try toolOutput.consume(ImpressChatPOCSSEEvent(
+            event: "message_stop", id: nil, data: #"{"type":"message_stop"}"#)),
+            [.failed])
+        XCTAssertFalse(toolOutput.isCompleted)
     }
 
     func testProviderErrorKeepsUnfinishedStatus() throws {

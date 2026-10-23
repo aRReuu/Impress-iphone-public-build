@@ -137,11 +137,18 @@ public struct ImpressChatPOCEventNormalizer: Sendable {
         _ event: ImpressChatPOCSSEEvent
     ) throws -> [ImpressChatPOCOutput] {
         guard !isCompleted && !isFailed else {
-            // Repeated terminal events, including [DONE], are harmless.
-            if event.data == "[DONE]" { return [] }
+            // OpenAI Chat Completions may send [DONE] after finish_reason.
+            // Other providers never use that sentinel to end their response.
+            if isCompleted && provider == .openAIChat &&
+               event.data == "[DONE]" { return [] }
             throw ImpressChatPOCTransportError.unexpectedAfterTerminal
         }
-        if event.data == "[DONE]" { return terminal() }
+        if event.data == "[DONE]" {
+            guard provider == .openAIChat else {
+                throw ImpressChatPOCTransportError.invalidEvent
+            }
+            return terminal()
+        }
         if event.event == "error" || event.event == "response.failed" {
             isFailed = true
             return [.failed]
@@ -200,12 +207,17 @@ public struct ImpressChatPOCEventNormalizer: Sendable {
                 anthropicStopReason = reason
             }
             if type == "message_stop" {
-                if anthropicStopReason == "max_tokens" ||
-                   anthropicStopReason == "refusal" {
+                switch anthropicStopReason {
+                case "end_turn", "stop_sequence":
+                    return terminal()
+                case .some:
                     isFailed = true
                     return [.failed]
+                case .none:
+                    // A bare stream close is not evidence of a complete
+                    // answer, even if partial text has been seen.
+                    throw ImpressChatPOCTransportError.invalidEvent
                 }
-                return terminal()
             }
             if type == "content_block_delta",
                let delta = object["delta"] as? [String: Any],
