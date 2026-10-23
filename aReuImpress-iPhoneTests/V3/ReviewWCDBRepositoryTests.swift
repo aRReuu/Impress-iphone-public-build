@@ -2397,12 +2397,13 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         let chat = ImpressAINativeChatViewController(question: "Note", answer: nil,
             repository: repository, sourceKey: source, sourceVersion: "sha256")
         chat.loadViewIfNeeded()
-        let transcript = try XCTUnwrap(chat.view.subviews
-            .compactMap { $0 as? UITableView }.first)
-        for _ in 0..<100 where transcript.numberOfRows(inSection: 0) != 1 {
+        let transcript = try XCTUnwrap(allSubviews(chat.view)
+            .compactMap { $0 as? UICollectionView }
+            .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.transcript" }))
+        for _ in 0..<100 where transcript.numberOfItems(inSection: 0) != 1 {
             try await Task.sleep(for: .milliseconds(30))
         }
-        XCTAssertEqual(transcript.numberOfRows(inSection: 0), 1)
+        XCTAssertEqual(transcript.numberOfItems(inSection: 0), 1)
         let unrelated = try await repository.chatSessions(for: "card:" + UUID().uuidString)
         XCTAssertTrue(unrelated.isEmpty)
     }
@@ -2569,13 +2570,14 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         let input = try XCTUnwrap(allSubviews(chat.view)
             .compactMap { $0 as? UITextView }
             .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.input" }))
-        let transcript = try XCTUnwrap(chat.view.subviews
-            .compactMap { $0 as? UITableView }.first)
+        let transcript = try XCTUnwrap(allSubviews(chat.view)
+            .compactMap { $0 as? UICollectionView }
+            .first(where: { $0.accessibilityIdentifier == "impress.ai.chat.transcript" }))
         for _ in 0..<50 where input.text != saved.inputDraft {
             try await Task.sleep(for: .milliseconds(30))
         }
         XCTAssertEqual(input.text, "Unsent boundary question")
-        XCTAssertEqual(transcript.numberOfRows(inSection: 0), 2)
+        XCTAssertEqual(transcript.numberOfItems(inSection: 0), 2)
         // Load is read-only; opening Chat does not trigger model requests
         // or modify the saved source content / FSRS database.
         let durable = try await repository.chatSessions(for: identity)
