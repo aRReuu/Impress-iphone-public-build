@@ -97,7 +97,12 @@ final class ImpressChatPOCStructuredCell: UICollectionViewCell {
     }
 
     private func codeBody(_ text: String) -> String {
-        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        // Display-only line ending projection. Keep source for provenance,
+        // but split CRLF as a logical newline (Swift Character treats it as
+        // a single grapheme, not as Character("\\n")).
+        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false)
         guard lines.count >= 2,
               let opening = lines.first, let closing = lines.last,
               (opening.hasPrefix("~~~") && closing.hasPrefix("~~~")) ||
@@ -167,7 +172,9 @@ final class ImpressChatPOCStructuredCell: UICollectionViewCell {
     }
 
     private func tableRows(_ source: String) -> [[String]] {
-        let lines = source.split(separator: "\n", omittingEmptySubsequences: true)
+        let visible = source.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let lines = visible.split(separator: "\n", omittingEmptySubsequences: true)
         guard lines.count >= 2 else { return [] }
         var rows = [[String]]()
         for (index, raw) in lines.enumerated() {

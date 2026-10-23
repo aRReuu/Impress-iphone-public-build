@@ -49,6 +49,36 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
         XCTAssertEqual(UIPasteboard.general.string, table)
     }
 
+    func testWindowsCRLFCodeSelectionAndGFMTableProjection() throws {
+        let code = ImpressChatPOCStructuredCell(
+            frame: CGRect(x: 0, y: 0, width: 310, height: 250))
+        code.configure(markdown: "~~~swift\r\nlet x = \"中文\"\r\n~~~",
+                       kind: .code, stable: true)
+        code.layoutIfNeeded()
+        let editor = try XCTUnwrap(descendants(of: code, as: UITextView.self).first)
+        XCTAssertEqual(editor.text, "let x = \"中文\"")
+        let copy = try XCTUnwrap(descendants(of: code, as: UIButton.self).first {
+            $0.accessibilityIdentifier == "impress.chat.poc.content-copy"
+        })
+        copy.sendActions(for: .touchUpInside)
+        XCTAssertEqual(UIPasteboard.general.string, "let x = \"中文\"")
+
+        let grid = ImpressChatPOCStructuredCell(
+            frame: CGRect(x: 0, y: 0, width: 300, height: 200))
+        let source = "| 条目 | 状态 |\r\n| --- | --- |\r\n| 中文 | 通过 |"
+        grid.configure(markdown: source, kind: .table, stable: true)
+        grid.layoutIfNeeded()
+        XCTAssertTrue(descendants(of: grid, as: UILabel.self).contains {
+            $0.text == "通过"
+        }, "A CRLF GFM table must render cells, not raw source")
+        let gridCopy = try XCTUnwrap(descendants(of: grid, as: UIButton.self).first {
+            $0.accessibilityIdentifier == "impress.chat.poc.content-copy"
+        })
+        gridCopy.sendActions(for: .touchUpInside)
+        XCTAssertEqual(UIPasteboard.general.string, source,
+                       "The copy action retains original GFM source line endings")
+    }
+
     func testMathEngineIsOfflineLocalAndHasCopyFallback() throws {
         let resource = try XCTUnwrap(Bundle.main.url(
             forResource: "index", withExtension: "html",
