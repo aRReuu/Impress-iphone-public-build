@@ -135,6 +135,7 @@
 		F7C100000000000000000003 /* ImpressChatPOCInteractionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C100000000000000000004 /* ImpressChatPOCInteractionUITests.swift */; };
 		F7C200000000000000000001 /* ImpressExcalidrawRenderingIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C200000000000000000002 /* ImpressExcalidrawRenderingIntegrationTests.swift */; };
 		F7C300000000000000000001 /* ImpressChatPOCRichCells.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C300000000000000000002 /* ImpressChatPOCRichCells.swift */; };
+		F8C000000000000000000001 /* ImpressChatProductionTranscript.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8C000000000000000000002 /* ImpressChatProductionTranscript.swift */; };
 		F7C400000000000000000001 /* ImpressChatPOCRichRenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C400000000000000000002 /* ImpressChatPOCRichRenderingTests.swift */; };
 		F7C500000000000000000001 /* ImpressAIHTTPStreamingIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C500000000000000000002 /* ImpressAIHTTPStreamingIntegrationTests.swift */; };
 		F7C600000000000000000001 /* ImpressChatPOCLocalAttachments.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C600000000000000000002 /* ImpressChatPOCLocalAttachments.swift */; };
@@ -337,6 +338,7 @@
 		F7C100000000000000000004 /* ImpressChatPOCInteractionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCInteractionUITests.swift; sourceTree = "<group>"; };
 		F7C200000000000000000002 /* ImpressExcalidrawRenderingIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressExcalidrawRenderingIntegrationTests.swift; sourceTree = "<group>"; };
 		F7C300000000000000000002 /* ImpressChatPOCRichCells.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCRichCells.swift; sourceTree = "<group>"; };
+		F8C000000000000000000002 /* ImpressChatProductionTranscript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatProductionTranscript.swift; sourceTree = "<group>"; };
 		F7C400000000000000000002 /* ImpressChatPOCRichRenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCRichRenderingTests.swift; sourceTree = "<group>"; };
 		F7C500000000000000000002 /* ImpressAIHTTPStreamingIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressAIHTTPStreamingIntegrationTests.swift; sourceTree = "<group>"; };
 		F7C600000000000000000002 /* ImpressChatPOCLocalAttachments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCLocalAttachments.swift; sourceTree = "<group>"; };
@@ -408,6 +410,7 @@
 				F4A100000000000000000014 /* ImpressAINativeChatViewController.swift */,
 				F7C100000000000000000002 /* ImpressChatPOCViewController.swift */,
 				F7C300000000000000000002 /* ImpressChatPOCRichCells.swift */,
+				F8C000000000000000000002 /* ImpressChatProductionTranscript.swift */,
 				F7C600000000000000000002 /* ImpressChatPOCLocalAttachments.swift */,
 				F7C800000000000000000002 /* ImpressChatPOCWebControlViewController.swift */,
 			);
@@ -1271,6 +1274,7 @@
 				F4A100000000000000000004 /* ImpressAINativeChatViewController.swift in Sources */,
 				F7C100000000000000000001 /* ImpressChatPOCViewController.swift in Sources */,
 				F7C300000000000000000001 /* ImpressChatPOCRichCells.swift in Sources */,
+				F8C000000000000000000001 /* ImpressChatProductionTranscript.swift in Sources */,
 				F7C600000000000000000001 /* ImpressChatPOCLocalAttachments.swift in Sources */,
 				F7C800000000000000000001 /* ImpressChatPOCWebControlViewController.swift in Sources */,
 				F3A200000000000000000011 /* ImpressV3ReviewEnvironment.swift in Sources */,
