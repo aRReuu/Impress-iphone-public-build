@@ -38,6 +38,8 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
     private let action = UIButton(type: .system)
     private let addMaterials = UIButton(type: .system)
     private let localPreview = UIButton(type: .system)
+    private let thumbnailScroller = UIScrollView()
+    private let thumbnailRow = UIStackView()
     private lazy var localMaterials = ImpressChatPOCLocalAttachments(presenting: self)
     private var height: NSLayoutConstraint?
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
@@ -167,10 +169,28 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         localPreview.isHidden = true
         localPreview.addTarget(self, action: #selector(editLocalPreviews),
                                for: .touchUpInside)
+        thumbnailScroller.showsHorizontalScrollIndicator = false
+        thumbnailScroller.isHidden = true
+        thumbnailRow.axis = .horizontal
+        thumbnailRow.spacing = 6
+        thumbnailRow.translatesAutoresizingMaskIntoConstraints = false
+        thumbnailScroller.addSubview(thumbnailRow)
+        NSLayoutConstraint.activate([
+            thumbnailRow.leadingAnchor.constraint(
+                equalTo: thumbnailScroller.contentLayoutGuide.leadingAnchor, constant: 6),
+            thumbnailRow.trailingAnchor.constraint(
+                equalTo: thumbnailScroller.contentLayoutGuide.trailingAnchor, constant: -6),
+            thumbnailRow.topAnchor.constraint(
+                equalTo: thumbnailScroller.contentLayoutGuide.topAnchor),
+            thumbnailRow.bottomAnchor.constraint(
+                equalTo: thumbnailScroller.contentLayoutGuide.bottomAnchor)
+        ])
         localMaterials.onChange = { [weak self] previews in
-            self?.localPreview.isHidden = previews.isEmpty
-            self?.localPreview.setTitle("本地材料 " + String(previews.count) +
+            guard let self else { return }
+            self.localPreview.isHidden = previews.isEmpty
+            self.localPreview.setTitle("本地材料 " + String(previews.count) +
                                        " 项 · 未发送 · 点击移除", for: .normal)
+            self.showLocalThumbnails(previews)
         }
         composer.layer.cornerRadius = 22
         composer.backgroundColor = .secondarySystemBackground
@@ -179,7 +199,9 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         row.axis = .horizontal
         row.alignment = .bottom
         row.spacing = 4
-        let composerRows = UIStackView(arrangedSubviews: [localPreview, row])
+        let composerRows = UIStackView(arrangedSubviews: [
+            localPreview, thumbnailScroller, row
+        ])
         composerRows.axis = .vertical
         composerRows.spacing = 2
         composerRows.translatesAutoresizingMaskIntoConstraints = false
@@ -243,6 +265,40 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         dataSource.apply(empty, animatingDifferences: false)
         showRows()
         updateAction()
+    }
+
+    /// Synthetic fixture is visible only to native Debug XCTest.
+    func addSyntheticLocalMaterialForTest(_ title: String) {
+        localMaterials.addSyntheticPreviewForTest(title)
+    }
+
+    private func showLocalThumbnails(_ previews: [ImpressChatPOCLocalPreview]) {
+        thumbnailRow.arrangedSubviews.forEach { view in
+            thumbnailRow.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        thumbnailScroller.isHidden = previews.isEmpty
+        for item in previews {
+            let chip = UIButton(type: .system)
+            let image = item.thumbnail?.withRenderingMode(.alwaysOriginal) ??
+                        UIImage(systemName: "doc.text")
+            chip.setImage(image, for: .normal)
+            chip.setTitle(" " + String(item.title.prefix(12)), for: .normal)
+            chip.titleLabel?.font = .preferredFont(forTextStyle: .caption2)
+            chip.titleLabel?.numberOfLines = 2
+            chip.imageView?.contentMode = .scaleAspectFit
+            chip.backgroundColor = .tertiarySystemFill
+            chip.layer.cornerRadius = 9
+            chip.accessibilityIdentifier = "impress.chat.poc.preview." + item.id.uuidString
+            chip.accessibilityLabel = item.title + " · 本地预览，未发送"
+            chip.accessibilityHint = "点击移除此材料"
+            chip.widthAnchor.constraint(equalToConstant: 124).isActive = true
+            chip.heightAnchor.constraint(equalToConstant: 56).isActive = true
+            chip.addAction(UIAction { [weak self] _ in
+                self?.localMaterials.remove(id: item.id)
+            }, for: .touchUpInside)
+            thumbnailRow.addArrangedSubview(chip)
+        }
     }
 
     @objc private func editLocalPreviews() {

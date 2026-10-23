@@ -37,6 +37,14 @@ final class ImpressChatPOCLocalAttachmentTests: XCTestCase {
             $0.accessibilityIdentifier == "impress.chat.poc.local-preview"
         })
         XCTAssertTrue(status.isHidden)
+        vc.addSyntheticLocalMaterialForTest("QA Thumbnail")
+        XCTAssertFalse(status.isHidden)
+        let previews = findSubviews(in: vc.view, type: UIButton.self)
+            .filter { $0.accessibilityIdentifier?.hasPrefix("impress.chat.poc.preview.") == true }
+        XCTAssertEqual(previews.count, 1)
+        XCTAssertTrue(previews[0].accessibilityLabel?.contains("未发送") == true)
+        previews[0].sendActions(for: .touchUpInside)
+        XCTAssertTrue(status.isHidden)
     }
 
     private func findSubviews<T: UIView>(in root: UIView, type: T.Type) -> [T] {
