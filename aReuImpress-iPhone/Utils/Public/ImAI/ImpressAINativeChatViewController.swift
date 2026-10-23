@@ -2044,7 +2044,6 @@ final class ImpressChatSessionHistoryViewController: UITableViewController,
 }
 
 @MainActor
-@MainActor
 final class ImpressChatNoteSectionPicker: UITableViewController {
     private let sections: [ImpressAISectionItem]
     private var selected: Set<String> = []
