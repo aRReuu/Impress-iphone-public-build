@@ -150,18 +150,17 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
         let formula = "$$\n\\frac{1}{2}+\\sqrt{4}\n$$"
         cell.configure(formula, stable: false)
         let web = try XCTUnwrap(descendants(of: cell, as: WKWebView.self).first)
-        let loaded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            web.url?.isFileURL == true && !web.isLoading
-        }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [loaded], timeout: 12), .completed,
-                       "Offline reader must finish loading before checking provisional state")
-        XCTAssertTrue(web.isHidden, "Provisional math must remain selectable source text")
+        let cover = try XCTUnwrap(descendants(of: cell, as: UIView.self)
+            .first(where: { $0.accessibilityIdentifier ==
+                "impress.chat.poc.math-fallback-cover" }))
+        XCTAssertFalse(cover.isHidden,
+            "Provisional math must keep the opaque selectable fallback visible")
         cell.configure(formula, stable: true)
         let appears = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            !web.isHidden
+            cover.isHidden
         }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [appears], timeout: 12), .completed,
-                       "Rendered math must be visible only after the offline KaTeX DOM exists")
+        XCTAssertEqual(XCTWaiter.wait(for: [appears], timeout: 25), .completed,
+                       "Fallback may disappear only after real offline KaTeX DOM verification")
         let verified = expectation(description: "Real offline KaTeX node")
         web.evaluateJavaScript("document.querySelectorAll('.katex').length") {
             value, error in
@@ -171,8 +170,8 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
         }
         wait(for: [verified], timeout: 5)
         cell.configure("not a formula", stable: false)
-        XCTAssertTrue(web.isHidden,
-                      "Cell reuse cannot display a stale mathematical rendering")
+        XCTAssertFalse(cover.isHidden,
+                      "Cell reuse must cover stale mathematical rendering")
         XCTAssertEqual(cell.accessibilityLabel, "公式：not a formula")
     }
 

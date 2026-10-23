@@ -58,7 +58,9 @@ final class ImpressExcalidrawRenderingIntegrationTests: XCTestCase {
             $0.accessibilityIdentifier == "impress.excalidraw.element.caption"
         })
         let label = try XCTUnwrap(caption.subviews
-            .compactMap { $0 as? UILabel }.first)
+            .compactMap { $0 as? UILabel }
+            .first(where: { $0.text == "透明文字" }),
+            "Inspect the authored Excalidraw label, never UIButton.titleLabel")
         XCTAssertEqual(label.alpha, 0.60, accuracy: 0.001)
     }
 

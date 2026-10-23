@@ -297,6 +297,7 @@ final class ImpressChatPOCMathCell: UICollectionViewCell, WKNavigationDelegate {
     private let label = UILabel()
     private let copy = UIButton(type: .system)
     private let fallback = UILabel()
+    private let fallbackCover = UIView()
     private let web: WKWebView
     private var ready = false
     private var current = ""
@@ -330,6 +331,10 @@ final class ImpressChatPOCMathCell: UICollectionViewCell, WKNavigationDelegate {
         fallback.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
         fallback.textColor = .label
         fallback.translatesAutoresizingMaskIntoConstraints = false
+        fallbackCover.translatesAutoresizingMaskIntoConstraints = false
+        fallbackCover.backgroundColor = .secondarySystemBackground
+        fallbackCover.accessibilityIdentifier = "impress.chat.poc.math-fallback-cover"
+        fallbackCover.isUserInteractionEnabled = false
         web.translatesAutoresizingMaskIntoConstraints = false
         header.translatesAutoresizingMaskIntoConstraints = false
         web.isOpaque = false
@@ -338,10 +343,13 @@ final class ImpressChatPOCMathCell: UICollectionViewCell, WKNavigationDelegate {
         web.scrollView.isScrollEnabled = false
         web.navigationDelegate = self
         web.accessibilityIdentifier = "impress.chat.poc.math-katex"
-        web.isHidden = true
+        // Hidden WKWebViews may defer loading in headless Simulator tests.
+        // Keep it attached, while an opaque overlay hides any unverified HTML.
+        web.isHidden = false
         contentView.addSubview(header)
         contentView.addSubview(web)
-        contentView.addSubview(fallback)
+        contentView.addSubview(fallbackCover)
+        fallbackCover.addSubview(fallback)
         NSLayoutConstraint.activate([
             header.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             header.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
@@ -351,9 +359,13 @@ final class ImpressChatPOCMathCell: UICollectionViewCell, WKNavigationDelegate {
             web.topAnchor.constraint(equalTo: header.bottomAnchor),
             web.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
             web.heightAnchor.constraint(equalToConstant: 128),
-            fallback.leadingAnchor.constraint(equalTo: web.leadingAnchor),
-            fallback.trailingAnchor.constraint(equalTo: web.trailingAnchor),
-            fallback.centerYAnchor.constraint(equalTo: web.centerYAnchor)
+            fallbackCover.leadingAnchor.constraint(equalTo: web.leadingAnchor),
+            fallbackCover.trailingAnchor.constraint(equalTo: web.trailingAnchor),
+            fallbackCover.topAnchor.constraint(equalTo: web.topAnchor),
+            fallbackCover.bottomAnchor.constraint(equalTo: web.bottomAnchor),
+            fallback.leadingAnchor.constraint(equalTo: fallbackCover.leadingAnchor, constant: 4),
+            fallback.trailingAnchor.constraint(equalTo: fallbackCover.trailingAnchor, constant: -4),
+            fallback.centerYAnchor.constraint(equalTo: fallbackCover.centerYAnchor)
         ])
         if let directory = Bundle.main.url(forResource: "index", withExtension: "html",
                                            subdirectory: "MarkdownReader") {
@@ -370,7 +382,7 @@ final class ImpressChatPOCMathCell: UICollectionViewCell, WKNavigationDelegate {
         renderEpoch &+= 1
         fallback.text = source
         fallback.isHidden = false
-        web.isHidden = true
+        fallbackCover.isHidden = false
         accessibilityLabel = "公式：" + source
         if stable && ready { render() }
     }
@@ -402,8 +414,8 @@ final class ImpressChatPOCMathCell: UICollectionViewCell, WKNavigationDelegate {
                 guard self.renderEpoch == epoch,
                       let renderedCount = value as? NSNumber,
                       renderedCount.intValue > 0 else { return }
-                self.web.isHidden = false
                 self.fallback.isHidden = true
+                self.fallbackCover.isHidden = true
             } catch {
                 // Preserve the selectable TeX fallback; no false render PASS.
             }
