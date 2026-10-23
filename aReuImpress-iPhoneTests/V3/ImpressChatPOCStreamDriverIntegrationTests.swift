@@ -58,6 +58,60 @@ final class ImpressChatPOCStreamDriverIntegrationTests: XCTestCase {
         XCTAssertEqual(send.accessibilityLabel, "重新生成")
     }
 
+    func testSyntheticZeroToFiveThousandHistoryRowsReachRealDiffableSnapshot()
+        async throws {
+        for messageCount in [0, 100, 1_000, 5_000] {
+            let controller = ImpressChatPOCViewController()
+            controller.loadViewIfNeeded()
+            let before = ProcessInfo.processInfo.systemUptime
+            controller.testLoadSyntheticHistory(count: messageCount)
+            let expectedRows = messageCount * 2
+            // User = 1 block, assistant = heading + paragraph + terminal.
+            // Alternating synthetic history therefore emits exactly 2N rows.
+            for _ in 0..<250 where controller.testRenderedRowCount < expectedRows {
+                try await Task.sleep(nanoseconds: 60_000_000)
+            }
+            let elapsed = ProcessInfo.processInfo.systemUptime - before
+            print("CHAT_POC_HISTORY_BASELINE count=\(messageCount) " +
+                  "rows=\(controller.testRenderedRowCount) " +
+                  "elapsed_ms=\(Int(elapsed * 1_000))")
+            XCTAssertEqual(controller.testModelMessageCount, messageCount)
+            XCTAssertEqual(controller.testRenderedRowCount, expectedRows)
+            XCTAssertLessThan(elapsed, 20,
+                "Simulator-only sampling budget; does not prove device FPS")
+        }
+    }
+
+    func testDynamicTypeNotificationsDoNotRaceStreamingSnapshot() async throws {
+        let controller = ImpressChatPOCViewController()
+        controller.loadViewIfNeeded()
+        controller.injectOfflineDomainStreamForTest { _ in
+            AsyncThrowingStream { output in
+                for index in 0..<18 {
+                    output.yield(.delta("内容 \(index)\n\n"))
+                }
+                output.yield(.completed)
+                output.finish()
+            }
+        }
+        let input = try XCTUnwrap(subviews(in: controller.view, as: UITextView.self)
+            .first(where: { $0.accessibilityIdentifier == "impress.chat.poc.input" }))
+        input.text = "验证动画刷新"
+        let send = try XCTUnwrap(subviews(in: controller.view, as: UIButton.self)
+            .first(where: { $0.accessibilityIdentifier == "impress.chat.poc.send-stop" }))
+        send.sendActions(for: .touchUpInside)
+        for _ in 0..<12 {
+            NotificationCenter.default.post(
+                name: UIContentSizeCategory.didChangeNotification, object: nil)
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        for _ in 0..<120 where controller.testVisibleStreamPhase != .completed {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(controller.testVisibleStreamPhase, .completed)
+        XCTAssertGreaterThan(controller.testRenderedRowCount, 2)
+    }
+
     private func subviews<T: UIView>(in root: UIView, as type: T.Type) -> [T] {
         root.subviews.flatMap { child in
             ((child as? T).map { [$0] } ?? []) + subviews(in: child, as: type)

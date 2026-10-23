@@ -348,6 +348,18 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         turns.last?.stream?.phase
     }
 
+    /// Native-only reproducible stress hooks. These do not expose user data.
+    func testLoadSyntheticHistory(count: Int) {
+        precondition([0, 100, 1_000, 5_000].contains(count))
+        loadSyntheticHistory(count: count)
+    }
+
+    var testRenderedRowCount: Int {
+        dataSource.snapshot().numberOfItems
+    }
+
+    var testModelMessageCount: Int { turns.count }
+
     private func showLocalThumbnails(_ previews: [ImpressChatPOCLocalPreview]) {
         thumbnailRow.arrangedSubviews.forEach { view in
             thumbnailRow.removeArrangedSubview(view)
