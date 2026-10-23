@@ -55,6 +55,23 @@ note_list = source("aReuImpress-iPhone/VC/SubVCs/ImNoteListVC/ImpressNoteListTab
 vault = source("aReuImpress-iPhone/Utils/Public/ImFileManager/ImObsidianManager.swift")
 workflow = source(".github/workflows/public-ios-build.yml")
 
+# One PBX identifier must designate exactly one project object. Concurrent
+# Chat edits previously reused F7C7... IDs for a new UI file and a test file,
+# causing CocoaPods/Xcodeproj to fail before any Swift code could compile.
+pbx = source("aReuImpress-iPhone.xcodeproj/project.pbxproj")
+object_ids = re.findall(
+    r"^[ \t]*([0-9A-F]{24})\s*/\*[^\n]*?\*/\s*=\s*\{",
+    pbx, flags=re.MULTILINE)
+seen_ids = set()
+duplicate_ids = set()
+for item in object_ids:
+    if item in seen_ids:
+        duplicate_ids.add(item)
+    seen_ids.add(item)
+assert object_ids and not duplicate_ids, (
+    "Duplicate Xcode project PBX object IDs: " + ", ".join(sorted(duplicate_ids))
+)
+
 assert "contentHistoryAction" not in review, "Superseded review footer history returned"
 assert "impress.composer.content-history" in composer, "Editor lost content history"
 assert "questionTextView.setMarkdownText" in memory
