@@ -36,6 +36,7 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
     private let composer = UIView()
     private let input = UITextView()
     private let action = UIButton(type: .system)
+    private let microphone = UIButton(type: .system)
     private let addMaterials = UIButton(type: .system)
     private let localPreview = UIButton(type: .system)
     private let thumbnailScroller = UIScrollView()
@@ -180,6 +181,13 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         action.addTarget(self, action: #selector(sendOrStop), for: .touchUpInside)
         action.widthAnchor.constraint(equalToConstant: 44).isActive = true
         action.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        microphone.setImage(UIImage(systemName: "mic"), for: .normal)
+        microphone.accessibilityIdentifier = "impress.chat.poc.apple-stt"
+        microphone.accessibilityLabel = "Apple 语音转文字"
+        microphone.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        microphone.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        microphone.addTarget(self, action: #selector(presentAppleSpeechInput),
+                             for: .touchUpInside)
         addMaterials.setImage(UIImage(systemName: "plus"), for: .normal)
         addMaterials.accessibilityIdentifier = "impress.chat.poc.add"
         addMaterials.accessibilityLabel = "添加本地材料"
@@ -224,7 +232,7 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         composer.layer.cornerRadius = 22
         composer.backgroundColor = .secondarySystemBackground
 
-        let row = UIStackView(arrangedSubviews: [addMaterials, input, action])
+        let row = UIStackView(arrangedSubviews: [addMaterials, input, microphone, action])
         row.axis = .horizontal
         row.alignment = .bottom
         row.spacing = 4
@@ -396,6 +404,12 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
             }, for: .touchUpInside)
             thumbnailRow.addArrangedSubview(chip)
         }
+    }
+
+    @objc private func presentAppleSpeechInput() {
+        // Reuse the existing permission-aware Apple STT sheet and its
+        // version-checked UTF-16 insertion. No separate speech/chat transport.
+        ImpressSpeechAccessory.present(for: input)
     }
 
     @objc private func editLocalPreviews() {

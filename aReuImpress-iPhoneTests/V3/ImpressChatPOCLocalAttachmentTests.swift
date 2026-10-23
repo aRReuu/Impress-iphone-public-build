@@ -36,6 +36,13 @@ final class ImpressChatPOCLocalAttachmentTests: XCTestCase {
         })
         XCTAssertEqual(add.menu?.children.count, 3)
         XCTAssertTrue(add.showsMenuAsPrimaryAction)
+        let stt = try XCTUnwrap(buttons.first {
+            $0.accessibilityIdentifier == "impress.chat.poc.apple-stt"
+        })
+        XCTAssertEqual(stt.accessibilityLabel, "Apple 语音转文字")
+        XCTAssertEqual(stt.constraints.first(where: {
+            $0.firstAttribute == .width && $0.constant == 44
+        })?.constant, 44)
         let status = try XCTUnwrap(buttons.first {
             $0.accessibilityIdentifier == "impress.chat.poc.local-preview"
         })
