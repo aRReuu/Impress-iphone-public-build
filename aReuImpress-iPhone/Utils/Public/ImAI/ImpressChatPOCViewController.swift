@@ -85,13 +85,29 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         transcript.keyboardDismissMode = .interactive
         transcript.delegate = self
         transcript.register(ImpressChatPOCCell.self, forCellWithReuseIdentifier: "block")
+        transcript.register(ImpressChatPOCStructuredCell.self,
+                            forCellWithReuseIdentifier: "structured")
+        transcript.register(ImpressChatPOCMathCell.self,
+                            forCellWithReuseIdentifier: "math")
         transcript.accessibilityIdentifier = "impress.chat.poc.transcript"
         dataSource = UICollectionViewDiffableDataSource<Int, String>(
             collectionView: transcript) { [weak self] collection, indexPath, id in
-                guard let self,
-                      let row = self.rows[id],
-                      let cell = collection.dequeueReusableCell(
-                        withReuseIdentifier: "block", for: indexPath) as? ImpressChatPOCCell
+                guard let self, let row = self.rows[id] else { return nil }
+                if !row.user && (row.kind == .code || row.kind == .table),
+                   let cell = collection.dequeueReusableCell(
+                    withReuseIdentifier: "structured", for: indexPath)
+                        as? ImpressChatPOCStructuredCell {
+                    cell.configure(markdown: row.text, kind: row.kind, stable: row.stable)
+                    return cell
+                }
+                if !row.user && row.kind == .math,
+                   let cell = collection.dequeueReusableCell(
+                    withReuseIdentifier: "math", for: indexPath) as? ImpressChatPOCMathCell {
+                    cell.configure(row.text, stable: row.stable)
+                    return cell
+                }
+                guard let cell = collection.dequeueReusableCell(
+                    withReuseIdentifier: "block", for: indexPath) as? ImpressChatPOCCell
                 else { return nil }
                 cell.configure(rowText: row.text, kind: row.kind,
                                headingLevel: row.depth, user: row.user,
