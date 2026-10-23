@@ -497,6 +497,145 @@ actor ImpressAIHTTPClient {
         return (value, response.statusCode)
     }
 
+    /// Validated real SSE transport. Never retries on a different provider,
+    /// silently upgrades paid models, or marks a lost socket as completed.
+    /// The renderer can consume this stream without changing WCDB schema.
+    /// All automated tests inject a zero-network URLProtocol fixture.
+    func converseStream(route: ImpressAIResolvedRoute, system: String,
+                        turns: [ImpressAIChatTurn]) async throws
+        -> AsyncThrowingStream<ImpressChatPOCOutput, Error> {
+        guard !turns.isEmpty, turns.last?.role == .user, turns.count <= 20,
+              system.utf8.count <= 4_000,
+              turns.allSatisfy({
+                  !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                  $0.text.utf8.count <= 12_000
+              }),
+              turns.reduce(0, { $0 + $1.text.utf8.count }) <= 55_000 else {
+            throw ImpressAIServiceError.tooLarge
+        }
+        try ImpressAIRequestPolicy.validate(route)
+        let connection = route.connection
+        let wire = route.effectiveProtocol
+        let model = route.model.identifier
+        let endpointPath: String
+        let payload: [String: Any]
+        let protocolID: ImpressChatPOCProviderProtocol
+
+        switch wire {
+        case .responses:
+            endpointPath = connection.effectiveEndpoints.responsesPath
+            protocolID = .openAIResponses
+            payload = ["model": model, "instructions": system,
+                       "input": turns.map { ["role": $0.role.rawValue, "content": $0.text] },
+                       "store": false, "stream": true, "max_output_tokens": 1400]
+        case .chatCompletions:
+            endpointPath = connection.effectiveEndpoints.chatPath
+            protocolID = .openAIChat
+            let messages = [["role": "system", "content": system]] +
+                turns.map { ["role": $0.role.rawValue, "content": $0.text] }
+            payload = ["model": model, "messages": messages, "stream": true]
+        case .anthropicMessages:
+            endpointPath = connection.effectiveEndpoints.messagesPath
+            protocolID = .anthropicMessages
+            payload = ["model": model, "system": system, "max_tokens": 1400,
+                       "stream": true,
+                       "messages": turns.map {
+                           ["role": $0.role.rawValue, "content": $0.text]
+                       }]
+        case .geminiGenerateContent:
+            let allowed = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))
+            let safeModel = model.addingPercentEncoding(withAllowedCharacters: allowed) ?? model
+            endpointPath = "models/" + safeModel + ":streamGenerateContent"
+            protocolID = .geminiGenerateContent
+            payload = ["systemInstruction": ["parts": [["text": system]]],
+                       "contents": turns.map { item in
+                           ["role": item.role == .assistant ? "model" : "user",
+                            "parts": [["text": item.text]]]
+                       }]
+        }
+        var wireRequest = try request(connection, path: endpointPath,
+                                      method: "POST", wireProtocol: wire, body: payload)
+        if wire == .geminiGenerateContent {
+            guard let url = wireRequest.url,
+                  var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                  components.queryItems == nil else {
+                throw ImpressAIServiceError.invalidURL
+            }
+            components.queryItems = [URLQueryItem(name: "alt", value: "sse")]
+            guard let target = components.url else { throw ImpressAIServiceError.invalidURL }
+            wireRequest.url = target
+        }
+        wireRequest.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        wireRequest.timeoutInterval = 90
+        let currentSession = session
+        return AsyncThrowingStream { continuation in
+            let transportTask = Task {
+                do {
+                    let (bytes, response) = try await currentSession.bytes(for: wireRequest)
+                    guard let http = response as? HTTPURLResponse else {
+                        throw ImpressAIServiceError.response
+                    }
+                    switch http.statusCode {
+                    case 401: throw ImpressAIServiceError.unauthorized
+                    case 403: throw ImpressAIServiceError.forbidden
+                    case 429: throw ImpressAIServiceError.rateLimited
+                    case 200...299: break
+                    default: throw ImpressAIServiceError.status(http.statusCode)
+                    }
+                    guard http.value(forHTTPHeaderField: "Content-Type")?
+                        .lowercased().contains("text/event-stream") == true else {
+                        throw ImpressAIServiceError.response
+                    }
+                    var decoder = ImpressChatPOCReplay(provider: protocolID)
+                    var fragment = Data()
+                    var visibleBytes = 0
+                    func offer(_ output: ImpressChatPOCOutput) throws {
+                        switch output {
+                        case .delta(let text):
+                            visibleBytes += text.utf8.count
+                            guard visibleBytes <= 65_000 else {
+                                throw ImpressAIServiceError.tooLarge
+                            }
+                            continuation.yield(output)
+                        case .completed:
+                            guard visibleBytes > 0 else {
+                                throw ImpressAIServiceError.response
+                            }
+                            continuation.yield(.completed)
+                        case .failed:
+                            throw ImpressAIServiceError.response
+                        }
+                    }
+                    for try await byte in bytes {
+                        try Task.checkCancellation()
+                        fragment.append(byte)
+                        if byte == 10 || fragment.count >= 2048 {
+                            for output in try decoder.append(fragment) {
+                                try offer(output)
+                            }
+                            fragment.removeAll(keepingCapacity: true)
+                        }
+                    }
+                    try Task.checkCancellation()
+                    if !fragment.isEmpty {
+                        for output in try decoder.append(fragment) { try offer(output) }
+                    }
+                    for output in try decoder.finish() { try offer(output) }
+                    guard decoder.normalizer.isCompleted, visibleBytes > 0 else {
+                        // Unexpected EOF is partial, never success or retry.
+                        throw ImpressAIServiceError.response
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { @Sendable _ in
+                transportTask.cancel()
+            }
+        }
+    }
+
     /// Harmless connectivity + JSON probe. It is not a guarantee of factual correctness.
     func probeJSON(connection: ImpressAIConnection, model: ImpressAIModel) async throws -> Bool {
         let resolved = ImpressAIResolvedRoute(connection: connection, model: model)
