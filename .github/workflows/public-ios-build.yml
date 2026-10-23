@@ -14,6 +14,12 @@ on:
         required: true
         type: boolean
         default: false
+      validation_scope:
+        description: 'Chat-only intermediate QA or complete pre-release regression'
+        required: true
+        type: choice
+        options: [chat, full]
+        default: chat
 
 permissions:
   contents: read
@@ -74,7 +80,7 @@ jobs:
           retention-days: 14
 
   ios-native:
-    name: macOS Xcode iOS XCTest and unsigned IPA
+    name: macOS iOS Chat QA — no IPA on development pushes
     runs-on: xcode-27
     timeout-minutes: 90
     steps:
@@ -158,15 +164,32 @@ jobs:
           xcrun simctl spawn "$SIM_ID" launchctl list >/dev/null
           echo "IMPRESS_SIMULATOR_ID=$SIM_ID" >> "$GITHUB_ENV"
       - name: Run native iOS XCTest
+        env:
+          VALIDATION_SCOPE: ${{ inputs.validation_scope || 'chat' }}
         shell: bash
         run: |
           set -euo pipefail
-          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination "platform=iOS Simulator,id=$IMPRESS_SIMULATOR_ID" -derivedDataPath "$RUNNER_TEMP/ImpressDebugSim" -resultBundlePath "$PWD/out/ImpressNative.xcresult" -parallel-testing-enabled NO -collect-test-diagnostics never -only-testing:aReuImpress-iPhoneTests \
+          if [[ "$VALIDATION_SCOPE" == "full" && "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            SELECTION=(-only-testing:aReuImpress-iPhoneTests)
+          else
+            SELECTION=(
+              -only-testing:aReuImpress-iPhoneTests/ImpressAIHTTPStreamingIntegrationTests
+              -only-testing:aReuImpress-iPhoneTests/ImpressChatPOCRichRenderingTests
+              -only-testing:aReuImpress-iPhoneTests/ImpressChatPOCLocalAttachmentTests
+              -only-testing:aReuImpress-iPhoneTests/ImpressChatPOCStreamDriverIntegrationTests
+              -only-testing:aReuImpress-iPhoneTests/ImpressExcalidrawRenderingIntegrationTests
+              -only-testing:aReuImpress-iPhoneTests/ImpressCalibrationIntegrationTests
+            )
+          fi
+          echo "native.scope=$VALIDATION_SCOPE" >> out/ci-test-scope.txt
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination "platform=iOS Simulator,id=$IMPRESS_SIMULATOR_ID" -derivedDataPath "$RUNNER_TEMP/ImpressDebugSim" -resultBundlePath "$PWD/out/ImpressNative.xcresult" -parallel-testing-enabled NO -collect-test-diagnostics never "${SELECTION[@]}" \
              CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
              CODE_SIGN_ENTITLEMENTS="$GITHUB_WORKSPACE/.github/ci/ImpressSimulatorKeychainQA.entitlements" \
              test 2>&1 | tee out/simulator-native-xctest.log
           xcrun xcresulttool get test-results summary --path out/ImpressNative.xcresult --format json > out/native-test-summary.json
       - name: Run real-process iOS XCUITest
+        env:
+          VALIDATION_SCOPE: ${{ inputs.validation_scope || 'chat' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -174,12 +197,19 @@ jobs:
           # healthy. Fail early on a broken boot instead of misreporting UI logic.
           xcrun simctl bootstatus "$IMPRESS_SIMULATOR_ID" -b 2>&1 | tee out/simulator-ui-bootstatus.log
           xcrun simctl spawn "$IMPRESS_SIMULATOR_ID" launchctl list >/dev/null
-          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination "platform=iOS Simulator,id=$IMPRESS_SIMULATOR_ID" -derivedDataPath "$RUNNER_TEMP/ImpressDebugSim" -resultBundlePath "$PWD/out/ImpressUI.xcresult" -parallel-testing-enabled NO -collect-test-diagnostics never -only-testing:aReuImpress-iPhoneUITests \
+          if [[ "$VALIDATION_SCOPE" == "full" && "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            SELECTION=(-only-testing:aReuImpress-iPhoneUITests)
+          else
+            SELECTION=(-only-testing:aReuImpress-iPhoneUITests/ImpressChatPOCInteractionUITests)
+          fi
+          echo "ui.scope=$VALIDATION_SCOPE" >> out/ci-test-scope.txt
+          xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination "platform=iOS Simulator,id=$IMPRESS_SIMULATOR_ID" -derivedDataPath "$RUNNER_TEMP/ImpressDebugSim" -resultBundlePath "$PWD/out/ImpressUI.xcresult" -parallel-testing-enabled NO -collect-test-diagnostics never "${SELECTION[@]}" \
              CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
              CODE_SIGN_ENTITLEMENTS="$GITHUB_WORKSPACE/.github/ci/ImpressSimulatorKeychainQA.entitlements" \
              test 2>&1 | tee out/simulator-ui-xctest.log
           xcrun xcresulttool get test-results summary --path out/ImpressUI.xcresult --format json > out/ui-test-summary.json
       - name: Build Release iOS Simulator
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.validation_scope == 'full' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -187,7 +217,7 @@ jobs:
           # Native XCTest already ran in the separate signed Debug test step.
           xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone-AltStore -configuration Release -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/ImpressReleaseSim" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee out/release-simulator-build.log
       - name: Compile unsigned Debug iPhoneOS arm64
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_candidate }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_candidate && inputs.validation_scope == 'full' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -195,7 +225,7 @@ jobs:
           # Match the previously successful unsigned ARM64 AltStore CI settings.
           xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone-AltStore -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/ImpressPhone" IPHONEOS_DEPLOYMENT_TARGET=26.0 CODE_SIGNING_ALLOWED=NO CODE_SIGN_ENTITLEMENTS= ENABLE_DEBUG_DYLIB=NO build 2>&1 | tee out/iphoneos-arm64-build.log
       - name: Package and hash unsigned iPhoneOS IPA
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_candidate }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_candidate && inputs.validation_scope == 'full' }}
         shell: bash
         run: |
           set -euo pipefail
