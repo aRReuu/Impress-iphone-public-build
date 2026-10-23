@@ -129,7 +129,7 @@ public struct ImpressChatPOCEventNormalizer: Sendable {
     public let provider: ImpressChatPOCProviderProtocol
     public private(set) var isCompleted = false
     public private(set) var isFailed = false
-    private var lastGeminiSnapshot = ""
+    private var anthropicStopReason: String?
 
     public init(provider: ImpressChatPOCProviderProtocol) { self.provider = provider }
 
@@ -164,12 +164,25 @@ public struct ImpressChatPOCEventNormalizer: Sendable {
                 events.append(.delta(text))
             }
             if let reason = choice["finish_reason"] as? String, !reason.isEmpty {
-                events += terminal()
+                if reason == "stop" { events += terminal() }
+                else { isFailed = true; events.append(.failed) }
             }
             return events
         case .openAIResponses:
             let type = event.event ?? (object["type"] as? String ?? "")
-            if type == "response.completed" { return terminal() }
+            if type == "response.completed" {
+                if let response = object["response"] as? [String: Any],
+                   let status = response["status"] as? String,
+                   status != "completed" {
+                    isFailed = true
+                    return [.failed]
+                }
+                return terminal()
+            }
+            if type == "response.incomplete" {
+                isFailed = true
+                return [.failed]
+            }
             if type == "response.failed" {
                 isFailed = true
                 return [.failed]
@@ -181,7 +194,19 @@ public struct ImpressChatPOCEventNormalizer: Sendable {
             return []
         case .anthropicMessages:
             let type = event.event ?? (object["type"] as? String ?? "")
-            if type == "message_stop" { return terminal() }
+            if type == "message_delta",
+               let delta = object["delta"] as? [String: Any],
+               let reason = delta["stop_reason"] as? String {
+                anthropicStopReason = reason
+            }
+            if type == "message_stop" {
+                if anthropicStopReason == "max_tokens" ||
+                   anthropicStopReason == "refusal" {
+                    isFailed = true
+                    return [.failed]
+                }
+                return terminal()
+            }
             if type == "content_block_delta",
                let delta = object["delta"] as? [String: Any],
                delta["type"] as? String == "text_delta",
@@ -194,18 +219,13 @@ public struct ImpressChatPOCEventNormalizer: Sendable {
             else { return [] }
             let content = candidate["content"] as? [String: Any]
             let parts = content?["parts"] as? [[String: Any]] ?? []
-            let cumulative = parts.compactMap { $0["text"] as? String }.joined()
-            var output: [ImpressChatPOCOutput] = []
-            if cumulative.hasPrefix(lastGeminiSnapshot) {
-                let next = String(cumulative.dropFirst(lastGeminiSnapshot.count))
-                if !next.isEmpty { output.append(.delta(next)) }
-                lastGeminiSnapshot = cumulative
-            } else {
-                // A revision/rewind cannot be appended as a duplicate delta.
-                throw ImpressChatPOCTransportError.invalidEvent
-            }
+            // Google's streamed GenerateContentResponse parts are chunks,
+            // not the cumulative full answer. SDK samples append chunk.text.
+            let chunk = parts.compactMap { $0["text"] as? String }.joined()
+            var output: [ImpressChatPOCOutput] = chunk.isEmpty ? [] : [.delta(chunk)]
             if let reason = candidate["finishReason"] as? String, !reason.isEmpty {
-                output += terminal()
+                if reason == "STOP" { output += terminal() }
+                else { isFailed = true; output.append(.failed) }
             }
             return output
         }

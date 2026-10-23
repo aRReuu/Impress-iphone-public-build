@@ -54,12 +54,36 @@ final class ImpressChatPOCTransportTests: XCTestCase {
         XCTAssertTrue(b.complete)
     }
 
-    func testGeminiCumulativeFramesNeverDuplicateExistingText() throws {
+    func testGeminiChunkDeltasFollowOfficialStreamingSemantics() throws {
         let a = #"data: {"candidates":[{"content":{"parts":[{"text":"中文"}]}}]}"#
-        let b = #"data: {"candidates":[{"content":{"parts":[{"text":"中文🌱"}]},"finishReason":"STOP"}]}"#
+        let b = #"data: {"candidates":[{"content":{"parts":[{"text":"🌱"}]},"finishReason":"STOP"}]}"#
         let result = try replay(a + "\n\n" + b + "\n\n",
                                 provider: .geminiGenerateContent, cuts: [1, 19, 2])
         XCTAssertEqual(result.outputs, [.delta("中文"), .delta("🌱"), .completed])
+    }
+
+    func testTruncatedOrSafetyStopNeverMarksAnswerCompleted() throws {
+        let truncated = "data: " +
+            #"{"choices":[{"delta":{"content":"partial"},"finish_reason":"length"}]}"# +
+            "\n\n"
+        let one = try replay(truncated, provider: .openAIChat, cuts: [2])
+        XCTAssertEqual(one.outputs, [.delta("partial"), .failed])
+        XCTAssertFalse(one.complete)
+
+        let anthropic = "event: message_delta\n" +
+            #"data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"}}"# +
+            "\n\nevent: message_stop\n" +
+            #"data: {"type":"message_stop"}"# + "\n\n"
+        let two = try replay(anthropic, provider: .anthropicMessages, cuts: [9])
+        XCTAssertEqual(two.outputs, [.failed])
+        XCTAssertFalse(two.complete)
+
+        let gemini = "data: " +
+            #"{"candidates":[{"content":{"parts":[{"text":"partial"}]},"finishReason":"MAX_TOKENS"}]}"# +
+            "\n\n"
+        let three = try replay(gemini, provider: .geminiGenerateContent, cuts: [15])
+        XCTAssertEqual(three.outputs, [.delta("partial"), .failed])
+        XCTAssertFalse(three.complete)
     }
 
     func testUnterminatedNetworkStreamNeverCompletesAIMessage() throws {
