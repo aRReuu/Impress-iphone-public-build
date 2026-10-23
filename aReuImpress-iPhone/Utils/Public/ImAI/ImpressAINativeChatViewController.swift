@@ -1452,7 +1452,7 @@ final class ImpressAINativeChatViewController: UIViewController,
                 // may mark a reply completed; partial EOF and cancellation may not.
                 var terminalReceived = false
                 var lastCheckpoint = Date.distantPast
-                func appendChunk(_ text: String) {
+                @MainActor func appendChunk(_ text: String) {
                     guard !text.isEmpty else { return }
                     if let id = assistantID,
                        let index = history.firstIndex(where: { $0.messageID == id }) {
