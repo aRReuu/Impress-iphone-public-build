@@ -79,12 +79,18 @@ final class ImpressChatPOCInteractionUITests: XCTestCase {
                       "The comparison must load a real, single offline WKWebView")
         let report = app.staticTexts["impress.chat.poc.web-report"]
         XCTAssertTrue(report.waitForExistence(timeout: 20))
+        // WKWebView is present before its local HTML, scripts, and KaTeX
+        // resource graph finish loading. Wait for the real ready callback:
+        // an initial placeholder is not A/B render evidence.
+        let ready = NSPredicate(format: "label CONTAINS %@", "实验对照")
+        let readyExpectation = XCTNSPredicateExpectation(predicate: ready, object: report)
+        XCTAssertEqual(XCTWaiter.wait(for: [readyExpectation], timeout: 25),
+                       .completed, "Offline Markdown A/B must report a loaded renderer")
+        XCTAssertTrue(report.label.contains("全页解析"))
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "chat-poc-single-offline-web-ab-control"
         screenshot.lifetime = .keepAlways
         add(screenshot)
-        XCTAssertTrue(report.label.contains("对照") ||
-                      report.label.contains("实验"))
     }
 
     private func waitForLabel(_ element: XCUIElement, _ expected: String,
