@@ -685,7 +685,10 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
             guard let previous = rows[id], let next = fresh[id] else { return false }
             return previous.kind != next.kind || previous.user != next.user
         }
-        let contentChanged = changed.filter { !typeChanged.contains($0) }
+        // Set membership avoids O(changedBlocks × rendererSwitches) during
+        // the 5,000-message synthetic-history stress case.
+        let rendererSwitchIDs = Set(typeChanged)
+        let contentChanged = changed.filter { !rendererSwitchIDs.contains($0) }
         let anchor = transcript.indexPathsForVisibleItems.sorted().first.flatMap {
             index -> (String, CGFloat)? in
             guard let id = dataSource.itemIdentifier(for: index),
@@ -708,7 +711,7 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
             if changed.isEmpty && !fullReconfigure { return }
             if !typeChanged.isEmpty { snapshot.reloadItems(typeChanged) }
             let reconfigure = fullReconfigure
-                ? identifiers.filter { !typeChanged.contains($0) }
+                ? identifiers.filter { !rendererSwitchIDs.contains($0) }
                 : contentChanged
             if !reconfigure.isEmpty { snapshot.reconfigureItems(reconfigure) }
         } else if publishedIDs.count <= identifiers.count &&
@@ -716,7 +719,7 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
             snapshot.appendItems(Array(identifiers.dropFirst(publishedIDs.count)))
             if !typeChanged.isEmpty { snapshot.reloadItems(typeChanged) }
             let reconfigure = fullReconfigure
-                ? publishedIDs.filter { !typeChanged.contains($0) }
+                ? publishedIDs.filter { !rendererSwitchIDs.contains($0) }
                 : contentChanged
             if !reconfigure.isEmpty { snapshot.reconfigureItems(reconfigure) }
         } else {
