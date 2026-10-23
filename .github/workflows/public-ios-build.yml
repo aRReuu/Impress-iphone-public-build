@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/impress-duplex-loop-v1
+      - 'feature/impress-chat-*'
     paths-ignore:
       - '**/*.md'
   workflow_dispatch:
@@ -200,7 +201,10 @@ jobs:
           if [[ "$VALIDATION_SCOPE" == "full" && "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             SELECTION=(-only-testing:aReuImpress-iPhoneUITests)
           else
-            SELECTION=(-only-testing:aReuImpress-iPhoneUITests/ImpressChatPOCInteractionUITests)
+            SELECTION=(
+              -only-testing:aReuImpress-iPhoneUITests/ImpressChatPOCInteractionUITests
+              -only-testing:aReuImpress-iPhoneUITests/ImpressV11NavigationUITests/testNativeJSONCanvasOnlySelectedNodeMovesIntoChat
+            )
           fi
           echo "ui.scope=$VALIDATION_SCOPE" >> out/ci-test-scope.txt
           xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone -configuration Debug -destination "platform=iOS Simulator,id=$IMPRESS_SIMULATOR_ID" -derivedDataPath "$RUNNER_TEMP/ImpressDebugSim" -resultBundlePath "$PWD/out/ImpressUI.xcresult" -parallel-testing-enabled NO -collect-test-diagnostics never "${SELECTION[@]}" \
