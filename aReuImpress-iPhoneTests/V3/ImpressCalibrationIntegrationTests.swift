@@ -215,13 +215,15 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
         var second = first
         try second.setOutcome(.missed, for: .reading)
         XCTAssertTrue(first.isComplete && second.isComplete)
+        let candidateOne = first
+        let candidateTwo = second
         let successes = await withTaskGroup(of: Bool.self) { group in
             group.addTask {
-                do { try await ledger.save(first); return true }
+                do { try await ledger.save(candidateOne); return true }
                 catch { return false }
             }
             group.addTask {
-                do { try await ledger.save(second); return true }
+                do { try await ledger.save(candidateTwo); return true }
                 catch { return false }
             }
             var values = [Bool]()
@@ -234,7 +236,8 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
         XCTAssertTrue(recorded == first || recorded == second)
         let original = try await ledger.archiveData()
         try await ledger.save(recorded)
-        XCTAssertEqual(try await ledger.archiveData(), original,
+        let repeated = try await ledger.archiveData()
+        XCTAssertEqual(repeated, original,
             "Idempotent CLOSED retries must not issue a second durable write")
         var rejected = recorded
         try rejected.setManualAdjustment(positive: true,
@@ -243,7 +246,8 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
             try await ledger.save(rejected)
             XCTFail("CLOSED cannot be mutated even by another concurrent writer")
         } catch ImpressCalibrationStoreError.closedDayImmutable {
-            XCTAssertEqual(try await ledger.archiveData(), original)
+            let unchanged = try await ledger.archiveData()
+            XCTAssertEqual(unchanged, original)
         }
     }
 
@@ -272,14 +276,15 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
             try await ledger.save(changed)
             XCTFail("Persisting through a non-directory path must fail closed")
         } catch {
-            XCTAssertFalse(error is ImpressCalibrationStoreError == false,
+            XCTAssertFalse(error is ImpressCalibrationStoreError,
                 "The filesystem, not a prior CLOSED guard, must reject this save")
         }
         try FileManager.default.removeItem(at: dir)
         try FileManager.default.moveItem(at: moved, to: dir)
         let restored = try await ledger.checkIn()
         XCTAssertEqual(restored, day)
-        XCTAssertEqual(try await ledger.archiveData(), saved)
+        let restoredBytes = try await ledger.archiveData()
+        XCTAssertEqual(restoredBytes, saved)
     }
 
     func testCalibrationArchiveRoundTripAndCorruptionRejection() async throws {
