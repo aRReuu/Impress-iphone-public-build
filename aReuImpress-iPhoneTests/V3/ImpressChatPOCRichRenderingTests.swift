@@ -137,6 +137,44 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
         XCTAssertEqual(UIPasteboard.general.string, source)
     }
 
+    func testMathActuallyCreatesOfflineKaTeXDOMBeforeHidingTextFallback() throws {
+        let cell = ImpressChatPOCMathCell(
+            frame: CGRect(x: 0, y: 0, width: 390, height: 210))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 220))
+        let root = UIViewController()
+        window.rootViewController = root
+        root.view.addSubview(cell)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        let formula = "$$\n\\frac{1}{2}+\\sqrt{4}\n$$"
+        cell.configure(formula, stable: false)
+        let web = try XCTUnwrap(descendants(of: cell, as: WKWebView.self).first)
+        let loaded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            web.url?.isFileURL == true && !web.isLoading
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [loaded], timeout: 12), .completed,
+                       "Offline reader must finish loading before checking provisional state")
+        XCTAssertTrue(web.isHidden, "Provisional math must remain selectable source text")
+        cell.configure(formula, stable: true)
+        let appears = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            !web.isHidden
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [appears], timeout: 12), .completed,
+                       "Rendered math must be visible only after the offline KaTeX DOM exists")
+        let verified = expectation(description: "Real offline KaTeX node")
+        web.evaluateJavaScript("document.querySelectorAll('.katex').length") {
+            value, error in
+            XCTAssertNil(error)
+            XCTAssertGreaterThan((value as? NSNumber)?.intValue ?? 0, 0)
+            verified.fulfill()
+        }
+        wait(for: [verified], timeout: 5)
+        cell.configure("not a formula", stable: false)
+        XCTAssertTrue(web.isHidden,
+                      "Cell reuse cannot display a stale mathematical rendering")
+        XCTAssertEqual(cell.accessibilityLabel, "公式：not a formula")
+    }
+
     func testProductionTranscriptUsesRealDiffableBlocksAndRetainsPartialState() throws {
         let viewport = ImpressChatProductionTranscript(
             frame: CGRect(x: 0, y: 0, width: 390, height: 700))
@@ -169,6 +207,37 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
             object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [retained], timeout: 8), .completed,
             "A failed stream retains code and partial text instead of discarding them")
+    }
+
+    func testColdRestoredFailedAnswerKeepsUnfinishedGFMTableProvisional() throws {
+        let viewport = ImpressChatProductionTranscript(
+            frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        let window = UIWindow(frame: viewport.bounds)
+        let root = UIViewController()
+        window.rootViewController = root
+        root.view.addSubview(viewport)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        let list = try XCTUnwrap(descendants(of: viewport, as: UICollectionView.self).first)
+        let assistant = WCDBV3ChatMessage(
+            messageID: UUID(), role: .assistant,
+            text: "| Name | Result |\n| --- | --- |\n| Chinese | part",
+            status: .failed)
+        viewport.update([assistant])
+        viewport.layoutIfNeeded()
+        let appeared = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            viewport.layoutIfNeeded()
+            return list.visibleCells.contains { $0 is ImpressChatPOCStructuredCell }
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [appeared], timeout: 8), .completed)
+        let table = try XCTUnwrap(list.visibleCells
+            .compactMap { $0 as? ImpressChatPOCStructuredCell }.first)
+        XCTAssertTrue(descendants(of: table, as: UILabel.self)
+            .contains { $0.text == "表格 · 生成中" },
+            "Cold-restored unfinished Markdown must not masquerade as a complete table")
+        XCTAssertFalse(list.visibleCells.contains {
+            $0.accessibilityIdentifier == "impress.ai.chat.reply-more"
+        }, "Failed replies cannot expose completed-answer operations")
     }
 
     func testProductionReplyFooterUsesNativeCopyAndExistingReviewMenu() throws {

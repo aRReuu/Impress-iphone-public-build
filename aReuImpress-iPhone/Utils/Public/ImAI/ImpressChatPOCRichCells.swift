@@ -282,6 +282,8 @@ final class ImpressChatPOCMathCell: UICollectionViewCell, WKNavigationDelegate {
     private let web: WKWebView
     private var ready = false
     private var current = ""
+    private var renderEpoch = 0
+    private var sourceIsStable = false
 
     override init(frame: CGRect) {
         let settings = WKWebViewConfiguration()
@@ -346,6 +348,8 @@ final class ImpressChatPOCMathCell: UICollectionViewCell, WKNavigationDelegate {
 
     func configure(_ source: String, stable: Bool) {
         current = source
+        sourceIsStable = stable
+        renderEpoch &+= 1
         fallback.text = source
         fallback.isHidden = false
         web.isHidden = true
@@ -354,22 +358,31 @@ final class ImpressChatPOCMathCell: UICollectionViewCell, WKNavigationDelegate {
     }
 
     private func render() {
-        guard ready, current.utf8.count <= 10_000 else { return }
-        guard let encoded = try? JSONSerialization.data(withJSONObject: [current]),
-              let payload = String(data: encoded, encoding: .utf8) else { return }
+        guard ready, sourceIsStable, current.utf8.count <= 10_000 else { return }
+        let epoch = renderEpoch
         let css = "#reader{min-height:0!important;padding:4px!important}" +
                   ".im-document-header{display:none!important}" +
                   ".markdown-body{background:transparent!important}" +
                   ".katex-display{margin:0!important}"
-        guard let style = try? JSONSerialization.data(withJSONObject: [css]),
-              let styles = String(data: style, encoding: .utf8) else { return }
-        let javascript = "window.renderImpressMarkdown(" + payload +
-            "[0], { css: " + styles + "[0], documentTitle: '', fontSize: 18, properties: [] })"
-        web.evaluateJavaScript(javascript) { [weak self] _, error in
-            guard let self, error == nil else { return }
-            self.web.isHidden = false
-            self.fallback.isHidden = true
-        }
+        // The reader returns a Promise. An error-free JavaScript invocation
+        // is not proof of KaTeX rendering; wait for its actual DOM result.
+        // Typed arguments prevent Markdown text from becoming executable JS.
+        let javascript = """
+            await window.renderImpressMarkdown(markdown, {
+                css: css, documentTitle: '', fontSize: 18, properties: []
+            });
+            return document.querySelectorAll('.katex').length;
+            """
+        web.callAsyncJavaScript(javascript,
+            arguments: ["markdown": current, "css": css],
+            in: nil, contentWorld: .page) { [weak self] result in
+                guard let self, self.renderEpoch == epoch,
+                      case .success(let value) = result,
+                      let renderedCount = value as? NSNumber,
+                      renderedCount.intValue > 0 else { return }
+                self.web.isHidden = false
+                self.fallback.isHidden = true
+            }
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

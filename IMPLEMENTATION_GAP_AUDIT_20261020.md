@@ -173,3 +173,11 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 - 只为真正不适合原生渲染的复杂组件开局部滚动与视图，优先验证文本选择/代码/表格/公式的原生可用性；可保留单个受控离线 WebKit 整页渲染的 A/B 对照，但不能缺测便宣称它劣于 UIKit。
 
 **当前未执行**：POC-01/02/03/04/05/06 均 NOT_RUN；没有新的 iPhone13 CPU/FPS/内存与对照截图结果。下一会话首先应提交可构建可执行的隔离 POC-01/02 后再进行反馈，而非继续大量只读评述。Chat 生产替换需要单独定版门禁。Excalidraw P0 真实任务文字和 CAL 当日 CLOSED 已冻结，可在不影响 Chat 的独立提交中并行施工。
+
+## 2026-10-24 · 纠正旧 POC-only / 未实施结论后的剩余缺口
+
+历史“POC-01/02 尚未执行、Chat 没有正式生产 SSE、校准器还未写代码”已经被较新真实源码覆盖：现有生产 `ImpressChatProductionTranscript` 为 UICollectionView/Diffable，`ImpressAINativeChatViewController` 通过 `ImpressAIHTTPClient.converseStream` 消费逐厂商增量并保留 WCDB 唯一来源；原生 Native XCTest 219/219 与 XCUITest 20/20 在 d265 / Run39984006889 PASS，包含连续双目标审批/冷启。Calibrator Actor CLOSED 与 6 布局离线同源 Canvas 相关原生回归亦已通过命名用例。旧段落不能再作为当前 CODE_NOT_STARTED 的证据。
+
+**本轮新修复**：7b8009056aacc1b4a4d208ca210d88204f299eb9，SSE 缓冲由“大 HTTP 读取”限制更正为“未完成帧”限制，并拒绝 EOF 非法终止；Run39988645038 的 Portable Core PASS，新 iOS Jobs 尚需独立最终结果。后续补充的 KaTeX 实际 DOM/Cell 复用和失败回复冷启稳定性、Excalidraw 端点几何防护仍必须等对应最终集成 SHA 的 CI 才能从 CODE_DONE 升到 TEST_PASS。
+
+**仍未闭合**：OpenAI Responses/Anthropic/Gemini/DeepSeek/GLM/自定义 Provider 能力矩阵的完整真实流与合法截断；复杂 Chat 富文本视觉/代码/行内公式/滚动/5,000 历史 CPU 内存；附件真实多模态传输（现为本地预览，模型不可读）；Excalidraw 官方 SVG 视觉 A/B 与完整图形交互；RDR/U/F/ACCEPT/W 逐项完整故障和真实设备回归。未得到 iPhone13 数据前保留 DEVICE_BLOCKED；禁止在此次任务门禁未满足时打包 IPA。

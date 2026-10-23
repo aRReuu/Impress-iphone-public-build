@@ -372,3 +372,11 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 | CAL.day-close / CAL.day-durability | 睡眠/运动/饮食/阅读四项全部保存才 CLOSED；完全隐藏 section、额外修正只读，actor 拒绝 CLOSED 再写、并发/回启/跨日/Widget x/4 不回归 | NOT_RUN |
 
 单元级建议：Core parser 的随机 chunking 属性测试（完整结果 vs. 一次性）；滚动锚点 geometry 测试；主线程/缓存/文本测量负载测试；UI 原型输入、发送、停止、历史上滑、键盘动作 XCUITest，并输出合成截图到测试产物（不提交用户截图）。记录提交完整 SHA、确切测试名、Fixture 名、截图/日志位置、预期/实际、PASS/FAIL/NOT_RUN/DEVICE_BLOCKED。**POC PASS 不能证明完整 Chat、现有业务 18 步、Provider 实网、真实 iPhone13 或 IPA 最终交付；**最终旧版 ACCEPT/F01～13/U/RDR/Widget 不可因原型通过而自动更新。
+
+## 2026-10-24 · 核验过的 CI 基线与未通过交付门禁
+
+[Run #39984006889](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39984006889) / `d2652ba4e4af1c5981f5901fe56cc35667e0e53f`：Portable Core SUCCESS，Native XCTest **219/219 PASS**，完整 XCUITest **20/20 PASS**。真实执行 `ImpressV11NavigationUITests.testContinuousSourceCardChatDoubleTargetApprovalAndRestart`（179.975 秒）、GFM 结构化表格/复制、Chat 离线 SSE 停止与回复、Excalidraw 文字绑定、校准 CLOSED/六种二维画布专项。Debug/Release Simulator、unsigned iPhoneOS ARM64 SUCCESS；IPA 打包**SKIPPED**。证据仅覆盖命名的具体测试，不替换原 18 步全矩阵。
+
+`7b8009056aacc1b4a4d208ca210d88204f299eb9` 的 Run [#39988645038](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39988645038) Portable Core SUCCESS，实际执行 SSE 残缺 EOF/最终 CR、>256KB 合法批次、切片 Data 四项回归；其它 Jobs 最终 PASS/FAIL 必须据其独立结果再登记，不能提前沿用旧 Run。
+
+仍保持 **NOT_RUN/DEVICE_BLOCKED**：18 步尚未包含全部 F01～F13 系统强杀、断点注入及 ZIP 回档；ACCEPT-01～12 全项独立 UI/设备边界；U01～21、RDR-01～22 全组合；Excalidraw 官方 SVG A/B；5,000 历史 CPU/内存/帧率与 iPhone13 视觉；Widget SpringBoard 六布局、App Group/证书、真实系统通知与 Files/iCloud 撤权。未闭账前禁止 IPA，不弱化断言，也不把源层测试冒充完整 UI E2E。

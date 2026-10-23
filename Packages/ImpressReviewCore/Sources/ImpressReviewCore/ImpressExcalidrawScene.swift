@@ -180,8 +180,10 @@ public struct ImpressExcalidrawScene: Decodable, Sendable {
                   element.lineHeight.map({ $0.isFinite && (0.5...5).contains($0) }) ?? true,
                   element.points.map({ $0.count <= 20_000 &&
                     $0.allSatisfy { point in
-                        point.count >= 2 && point[0].isFinite &&
-                        point[1].isFinite }
+                        point.count >= 2 &&
+                        point[0].isFinite && point[1].isFinite &&
+                        (-10_000_000.0...10_000_000.0).contains(point[0]) &&
+                        (-10_000_000.0...10_000_000.0).contains(point[1]) }
                   }) ?? true else {
                 throw ImpressExcalidrawReadError.invalidGeometry
             }

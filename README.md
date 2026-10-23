@@ -60,3 +60,11 @@ V3 WCDB为卡片/FSRS/Chat唯一权威；内容revision与调度revision独立�
 **其他已定稿、可独立施工**：Excalidraw P0 必须真实显示中文任务文字/绑定文本与复杂图形，不是只有几何边框；校准器 x/4 四项结算成功后当日 CLOSED，隐藏四项 Section 并在持久层禁止二次修改，Widget 同源二维图不变；保留笔记 Markdown 连续阅读、四 Tab、全局原生导航/Flashcard UI 回归与原验收矩阵。
 
 本次交接前的最后已核源码 HEAD 为 6f2370dadb473ebb4c2987f517dfc705e29991a8，最近完整成功旧 Run 39782229904 对应 d9711284bfe2。**本次是文档同步，并非新的 POC/Excalidraw/CAL 源码已完成或 CI/IPA 已通过**。后续提交必须在同一精确 SHA 运行可验证的 Portable Core、Native XCTest、XCUITest、Debug/Release Simulator、ARM64 与 IPA ZIP/Widget 检查；真实设备单独登记 DEVICE_BLOCKED。生产 Vault 禁写 constant = false、不改私库/main、不新建删除分支、原 AppIcon 不动。
+
+## 2026-10-24 · 当前生产施工事实（覆盖上方过时的 POC-only 交接）
+
+唯一可写仓库/分支：`aRReuu/Impress-iphone-public-build` / `feature/impress-duplex-loop-v1`。最新用户授权是**完整生产 Chat 续作**；此前“仅隔离 POC、不准进入生产”的段落是历史时点，不再是当前工程阻止条件。已有正式 UICollectionView Diffable、Provider SSE、WCDB 会话、富内容、统一审批都是保留/完善的基线。
+
+经真实日志核查：`d2652ba4e4af1c5981f5901fe56cc35667e0e53f` / [Run39984006889](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39984006889) 已获 Portable Core/Native XCTest 219/219/XCUITest 20/20/Debug+Release Simulator/unsigned ARM64 全绿；IPA 打包因门禁被**跳过**。后续 7b8009056aacc1b4a4d208ca210d88204f299eb9 / Run39988645038 的 SSE 回归已见 Portable Core PASS，新增代码的完整 iOS 结论必须按自己的最终 Run 记录。完整 Chat 视觉/权限/性能、官方 Excalidraw SVG A/B、18 步与 F01～13、W01～15 SpringBoard、iPhone13 和整套交付尚未闭账。
+
+**当前硬门禁：所有需求及必要自动化达标前绝不生成 IPA。** 私有仓库、公开 main、AppIcon、真实 Vault 和密钥禁止修改/上传；`ImVaultGuardedWrite.productionWriteEnabled = false`。即使 Debug 合成测试通过，也不能宣称已完成真机验收。

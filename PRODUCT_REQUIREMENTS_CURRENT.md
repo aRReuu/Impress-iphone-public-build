@@ -434,3 +434,11 @@
 - **原有其余任务**：Markdown/复合文档的 RDR-01～RDR-22、Chat/闪卡/笔记导航的 U 系列、ACCEPT、18 步、F 系列及 W 系列仍有效；独立工作流可以在不触碰生产 Chat 的前提下施工已经冻结的非 Chat 改动。
 
 **最终交付**：独立变更可测试后增量提交，最新同一代码 SHA 的 Portable Core、Native XCTest、XCUITest、Debug/Release Simulator、iPhoneOS ARM64、Widget、unsigned IPA/ZIP/manifest/SHA256 完整性均须有真实结果。POC 和 DOC_ONLY 提交不能用历史 Run 39782229904 冒充新测试 PASS；真机 iPhone13 的安装、签名、Provider、多语言/主题和视觉仍须 DEVICE 实测。私有仓库、main、真实 Vault、AppIcon 不动，不新增分支，productionWriteEnabled = false 永久保留。
+
+## 2026-10-24 · 生产 Chat 持续施工与交付禁令（覆盖本稿历史 POC-only 约束）
+
+本次用户最新授权是**直接续作生产 Chat，而非停在隔离 POC**；已存在的 UIKit `UICollectionView + Diffable Data Source`、WCDB 消息/会话、逐 Provider SSE、Markdown block、统一来源/审批与 FSRS 链路是施工基线，不得重新推翻。本文 2026-10-23 早期“生产替换尚未授权”“只允许 POC-01/02”的表述仅保留为历史决策记录，不能限制本次后续维护。
+
+以已核验的代码与 CI 为事实：集成 `d2652ba4e4af1c5981f5901fe56cc35667e0e53f` 的 [Run #39984006889](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39984006889) 全部 Jobs SUCCESS；原生 XCTest 219/219、XCUITest 20/20（含连续 Chat→双目标审批→重启）均真实执行；Debug/Release Simulator 与 unsigned ARM64 均通过，**IPA package SKIPPED**。不把这些子测试升级为 18 步、F01～F13 或真机全面 PASS。
+
+后续生产 SSE、KaTeX 真实 DOM/生命周期、故障恢复及 Excalidraw 代码以精确集成 SHA 的 CI 结果为准；富文本视觉、5,000 历史性能、官方 Excalidraw SVG A/B、整套 RDR/U/ACCEPT/F/Widget 与 iPhone 13 人工实测尚未闭账，分别标记 NOT_RUN / DEVICE_BLOCKED。系统相册/文件/相机目前具备**本地预览**，不得将此写为 Provider 已接收真正多模态附件。**全部必要验收达标前禁止生成 IPA**，本轮不允许改私库、公开 main、AppIcon、真实 Vault；`ImVaultGuardedWrite.productionWriteEnabled = false`。

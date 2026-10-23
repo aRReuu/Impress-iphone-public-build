@@ -62,3 +62,9 @@
 2026-10-21 §2/§7 中旧五项、情绪门禁、x/5、CAL 新项目一律 DEFERRED 是**历史基线**。当前明确生效四项为 **睡眠、运动、饮食、阅读**；completed +1、missed -1、excused 0、unrecorded 表示待评估，未记录不得补零。情绪和自定义的老数据保留历史兼容，不误译为新的阅读，原先额外加/减分最多各一次和既有算法保持（仅当日关闭前允许修正），不得批量重写历史账本。App 与 Widget 显示今日 x/4，灰色原始得分线/蓝色均线、零线、断线、周/月/年几何仍共享同一个 CalibrationCartesianTrendRenderer。
 
 **CLOSED 是保存层契约**：当天四项均明确已处理且 LocalStore 保存并回读成功才进入 CLOSED。当天四项录入 Section（包括 header/footer）隐藏，详情仍显示净分/覆盖率/二维图、只读额外修正；不得通过直接 store.save、旧 UI、并发提交、当天目标变化、通知路由或 Widget 写入重开/重算。actor 在修改前以当前持久旧记录的 isComplete 拒绝不同结果，允许完全相同的幂等重试；存储失败不隐藏录入状态。跨日、时区、迁移、备份/恢复与 AppGroup 只读快照必须由已有数据权威协调，通知完成当天不重复催促。新增子测试见 SMOKE 的 CAL.day-close 与 CAL.day-durability；此前测试与视觉 PASS 不证明新规则已完成。
+
+## 2026-10-24 · CLOSED / Widget 实际源码与 CI 状态补证
+
+原生 `ImpressCalibrationLocalStore` 已是 actor、保存前检查历史 CLOSED 状态、支持同值幂等、拒绝不同日结修改；`ImpressCalibrationIntegrationTests` 明确包含 `testClosedDayRejectsDifferentLedgerWritesAndPreservesDurability`、`testSimultaneousClosedDayCommitsSerializeWithoutLastWriterWins`、`testFailedDurableWriteLeavesPreviousClosedLedgerIntact`、`testCartesianRendererHasIdenticalUIKitAndWidgetImagePaths`、`testCartesianGappedMultiIsolatesAreVisibleInSixWidgetCanvases`。上述专项在 d265 / Run39984006889 的 **219/219 Native XCTest PASS** 范围内真实执行。四项/今日 x/4、旧五项兼容与共享笛卡尔绘图原则不变。
+
+这些测试不能替代实际 SpringBoard 的六种 Widget 视觉、App Group 正式签名、跨时区提醒停推和 iPhone13 重启表现；对应 W01～W15 仍按单项 TEST_PASS/NOT_RUN/DEVICE_BLOCKED 分类。禁止因此提前生成 IPA。

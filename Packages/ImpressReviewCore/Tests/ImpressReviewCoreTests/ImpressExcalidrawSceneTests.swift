@@ -127,6 +127,29 @@ struct ImpressExcalidrawSceneTests {
                 format: .excalidrawJSON).selection(ids: ["not-present"])
         }
     }
+    @Test func finiteButExtremePolylineCoordinatesAreRejectedBeforeUIKitDrawing() throws {
+        // A finite Double is not necessarily a drawable canvas coordinate:
+        // adversarial control points can exceed CGFloat/rendering limits.
+        for coordinate in ["1e200", "-1e200"] {
+            let json = """
+            {"type":"excalidraw","elements":[
+              {"id":"line","type":"line","x":0,"y":0,"width":10,"height":10,
+               "points":[[0,0],[\(coordinate),5]]}]}
+            """
+            #expect(throws: ImpressExcalidrawReadError.invalidGeometry) {
+                try ImpressExcalidrawScene.parse(Data(json.utf8),
+                    format: .excalidrawJSON)
+            }
+        }
+        let valid = """
+        {"type":"excalidraw","elements":[
+          {"id":"line","type":"line","x":0,"y":0,"width":10,"height":10,
+           "points":[[0,0],[8,5]]}]}
+        """
+        #expect(try ImpressExcalidrawScene.parse(Data(valid.utf8),
+            format: .excalidrawJSON).elements.count == 1)
+    }
+
     @Test func plainMdObsidianDrawingIsReadableButDeniedByGenericDraft() throws {
         let fence = String(repeating: String(Character(UnicodeScalar(96)!)), count: 3)
         let drawing = "---\nexcalidraw-plugin: parsed\ntags: [excalidraw]\n---\n" +

@@ -338,3 +338,16 @@ Excalidraw P0 的图中文字/节点真实可读和校准器 CLOSED 持久化门
 | G4 同 SHA 完整交付 | Actions/IPA/App+Widget/设备 | Core→XCTest→XCUITest→Sim/ARM64→IPA→签名/设备证据 | PENDING；旧成功 SHA 不冒充新功能通过 |
 
 推进次序：先 POC-01/02 独立可运行垂直切片，分层证明之后才扩 POC-03～06；Excalidraw 与 CAL 属于独立可执行队列，可并行但不能互相覆盖更改。Chat 生产替换属于**下一道独立门禁**，不能在 POC-01/02 首次成功时悄悄实施。原四 Tab、WCDB、FSRS、APP Group、Production Vault 禁写与权限边界不改变。
+
+## 2026-10-24 · 最新提交证据补正（稳定需求 ID 与旧矩阵不重编号）
+
+| 既定范围 | 当前有据事实 | 本轮仍须兑现 |
+| --- | --- | --- |
+| CHAT-01/02/03/05/06、UI-02 | 生产 `ImpressChatProductionTranscript` 已通过 UICollectionView/Diffable 使用 WCDB messageID + typed Markdown block；`ImpressAINativeChatViewController` 正式调用 `ImpressAIHTTPClient.converseStream`；基线 d265 的 Native XCTest 219/219 与 XCUITest 20/20 **TEST_PASS（已覆盖子项）** | 真正的全面富内容/Provider 协议/历史/权限/性能/VoiceOver、复杂界面视觉仍有 NOT_RUN；严禁标整项全通过 |
+| CHAT-PROTOCOL / 异常流 | `7b8009056aacc1b4a4d208ca210d88204f299eb9` 修改 SSE EOF 严格结帧、>256KB 多帧批量读取及非零 Data 起始索引；Run #39988645038 的 Portable Core 执行四项新测试并 SUCCESS | 对应 Native/XCUITest/Release/ARM64 需以**同一 HEAD 新 Run 最终结论**为准 |
+| RDR-13/15/22、Excalidraw | 有原生元素、中文 Bound Text、顺序/旋转、图片、本地 SHA 权限的 CODE_DONE 基础；d265 已覆盖两项原生文字图层测试 | 官方离线 exportToSvg A/B、高保真样本、设备渲染实测 NOT_RUN；不可全称通过 |
+| CAL-CLOSED / W01～15 | 现有 actor CLOSED 防改、幂等/并发/失败回滚 Native XCTest 与六种 Widget 画布投影测试已在 d265 的 219/219 范围内通过 | App Group 真签名、SpringBoard 六布局、重启、通知与真实 iPhone 13：DEVICE_BLOCKED 或 NOT_RUN，不代表 W01～15 全 PASS |
+| ACCEPT-01～12、18 步 UI、F01～13、U01～21、RDR-01～22 | d265 真机模拟器端到端“连续知识闭环”单条 XCUITest 实跑通过 | 仍缺全部 18 步独立故障/撤销/备份恢复、全部 F 系列及多主题/设备视觉逐条记录：PARTIAL_E2E_PASS / NOT_RUN |
+| 交付与 IPA | 既有 workflow 仅手动 `release_candidate=true` 且 `validation_scope=full` 才打包；普通 Push 会 SKIP | **本轮禁止 IPA**；只在全功能和必要自动化通过后等待明确新批准 |
+
+旧的“Chat 为 UITableView/无 SSE”“校准器完全未施工”“已通过测试仍 NOT_RUN”是历史快照，不得再引用为当前代码状态。状态只依据精确测试对象划分 `SPEC_FROZEN / CODE_DONE / TEST_PASS / FAIL / NOT_RUN / DEVICE_BLOCKED`；不得把 CODE_DONE、单元成功、部分 E2E、真机认证合并计数。

@@ -221,6 +221,17 @@ final class ImpressChatProductionTranscript: UIView,
             case .pending: break
             }
             blocks = finished.blocks
+        } else if message.status == .failed || message.status == .cancelled {
+            // Cold-start restore has no in-memory streaming parser. Replaying
+            // the saved partial source as an interrupted stream preserves
+            // provisional tail blocks; parseOnce would incorrectly mark an
+            // unfinished code/table/math block stable after app relaunch.
+            var partial = ImpressChatPOCStream()
+            partial.start()
+            partial.append(message.text)
+            if message.status == .failed { partial.fail() }
+            else { partial.stop() }
+            blocks = partial.blocks
         } else {
             blocks = ImpressChatPOCStream.parseOnce(message.text)
         }

@@ -84,3 +84,9 @@ Excalidraw 仅从当前授权文档读取合法受限数据，外部图片、SVG
 下一阶段 Chat **独立 Debug POC** 只允许合成 Mock 消息、文件及截图，不传用户任何当前聊天历史、Vault、截图或密钥到公开仓库，也不能运行真实 Provider 费用请求；不更改正式 Chat 数据库。iPhone13 上以相同 Fixture 对照流式输入、键盘/候选、轻重 Markdown、上下滚动、文件预览和最少触控 44pt；用 Instruments/OSSignpost 确证延迟/卡顿/内存/复用，设备不可用标 DEVICE_BLOCKED，不能用模拟器帧数填设备 PASS。
 
 独立 Excalidraw 视觉验收须核实源 text/bound text 是否真正以正确颜色、字形、几何关系显示；用户私有对比图只可在授权设备作为人工观察材料，不入 GitHub。此前“看见边框即成功”无效。所有测试以精确代码 SHA+Run+Fixture+证据与真实结论逐项登记；保留生产 Vault 绝对禁写、独立 Debug QA Vault 受限写回及现有 F01～F13/18步。
+
+## 2026-10-24 · 最新真实构建证据与生产安全门禁
+
+d2652ba4e4af1c5981f5901fe56cc35667e0e53f / [Run39984006889](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39984006889)：Portable Core、Debug/Release iOS Simulator、Native XCTest219、XCUITest20、unsigned iPhoneOS ARM64 **TEST_PASS/BUILD_PASS**；**IPA SKIPPED**，因为本轮全面完成前没有打包授权。7b8009056aacc1b4a4d208ca210d88204f299eb9 / Run39988645038 已见 Portable Core PASS（新增四项 SSE 用例），新 SHA 其它环节必须查独立结果，不得沿用 d265 结论。
+
+依旧缺少 iPhone13 真机：侧载签名、SpringBoard Widget 周/月/年 × 小/中六布局、App Group 真实权限、Files/iCloud 失权/移动、Keychain、真实 Provider 与图形/字号性能。分别标 DEVICE_BLOCKED / NOT_RUN；不存在真机 60FPS 结论。未授权密钥、真实 Vault、用户数据库与照片永不出现在公共仓库/日志；`ImVaultGuardedWrite.productionWriteEnabled = false` 不变。当前 Picker 的图片/文件仅本地预览；未建立 Provider 能力矩阵和显式授权前禁止宣称模型能读附件或发送字节。F01～F13 和原 18 步 E2E 不可被局部测例代替。**不允许生成 IPA、改公开 main/私有仓库或 AppIcon**。

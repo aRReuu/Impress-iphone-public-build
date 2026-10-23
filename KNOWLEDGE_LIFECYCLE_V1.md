@@ -74,3 +74,9 @@ Excalidraw 解码使用有界 LZ-String Base64（`compressed-json`），普通 J
 未来真实集成前须设计**单一来源事实与双层投影**：原始完整 message 文本 + stable messageID 为可恢复的权威；增量 AST、UI Block ID、测量缓存和渲染状态均是可重建显示投影。来自 Provider 的不完整文字不可擅自被标记 completed，更不能进入“指定已完成 AI 回复→局部建议→双目标审批→回读”写入链。停止、异常、旧请求回调、切换 Provider、删除会话与冷启冲突，都必须沿用已有 CAS/墓碑/已批准范围，明确区分“只读可见的部分内容”和“可授权提交的完整答复”。所有 POC 网络请求为 Mock 零费用。
 
 系统附件方案 B 以后接生产必须将相册/文件/拍照的本地文件与已有 Vault 结构材料分开建身份及权限；用户只挑选未发网，向 Provider 实际发出的结构遵循每家模型/端点能力矩阵。显示图像不等于模型实际已获得视觉输入；无法保证同意范围或能力时安全拒绝。原 Chat、卡片、笔记、FSRS 和双目标提案均不得因渲染器替换而重建。
+
+## 2026-10-24 · 生产 Chat 已使用旧知识闭环的证据修正
+
+本轮已正式授权继续**现有生产** Chat Engine 施工，而不再局限历史隔离 POC。其生产控制器在原始 WCDB 消息、messageID、来源身份/选材权限与 FSRS 不变前提下消费 SSE；不新增第二套审批账本。d265 / Run39984006889 的 `testContinuousSourceCardChatDoubleTargetApprovalAndRestart` 为真实进程 XCUITest **TEST_PASS**，但尚不证明所有 18 步、全部 F01～F13 强杀、手工安全撤销、备份恢复和真实 Obsidian 写回可用。
+
+“合法显式完成”是回复进入统一笔记/原卡修订审批的必要条件；EO​F、cancelled、failed、partial 均不得被展示或审批为 completed。7b8009056aacc1b4a4d208ca210d88204f299eb9 新增严格 SSE EOF 边界的 Core PASS 专项，iOS 全套仍须同 SHA 验证。附件目前只是获本地 Picker 授权的预览，不等于获得远程视觉模型上传授权；生产真实 Vault 禁写始终为 false。
