@@ -173,6 +173,15 @@ public struct ImpressChatPOCEventNormalizer: Sendable {
             isFailed = true
             return [.failed]
         }
+        // Provider event names and JSON payload types must agree. A forged
+        // terminal header cannot turn an unrelated partial delta into success.
+        if provider == .openAIResponses || provider == .anthropicMessages {
+            if let headerType = event.event,
+               let payloadType = object["type"] as? String,
+               headerType != payloadType {
+                throw ImpressChatPOCTransportError.invalidEvent
+            }
+        }
         switch provider {
         case .openAIChat:
             guard let choice = (object["choices"] as? [[String: Any]])?.first
@@ -190,9 +199,8 @@ public struct ImpressChatPOCEventNormalizer: Sendable {
         case .openAIResponses:
             let type = event.event ?? (object["type"] as? String ?? "")
             if type == "response.completed" {
-                if let response = object["response"] as? [String: Any],
-                   let status = response["status"] as? String,
-                   status != "completed" {
+                guard let response = object["response"] as? [String: Any],
+                      response["status"] as? String == "completed" else {
                     isFailed = true
                     return [.failed]
                 }

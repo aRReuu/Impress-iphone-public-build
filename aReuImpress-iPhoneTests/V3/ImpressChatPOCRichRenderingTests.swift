@@ -1,6 +1,7 @@
 import XCTest
 import UIKit
 import WebKit
+import Darwin
 import ImpressReviewCore
 @testable import aReuImpress_iPhone
 
@@ -240,6 +241,158 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
         }, "Failed replies cannot expose completed-answer operations")
     }
 
+    func testProductionTranscriptActualLargeMarkdownLayoutsStayAddressable() throws {
+        // 1/16/64 KB of completed mixed Markdown must reach real UIKit rows,
+        // including a bounded scrolling code cell. Logs are simulator-only.
+        for targetBytes in [1_024, 16_384, 65_536] {
+            let unit = "let 中文 = \"🧠\" // syntax + Unicode\n"
+            let code = String(repeating: unit,
+                              count: max(1, targetBytes / unit.utf8.count))
+            let markdown = "# 流式完成\n\n正文 **强调**。\n\n~~~swift\n" + code +
+                "~~~\n\n| Key | State |\n| --- | --- |\n| Done | Yes |\n\n" +
+                "$$\nE=mc^2\n$$"
+            let viewport = ImpressChatProductionTranscript(
+                frame: CGRect(x: 0, y: 0, width: 390, height: 680))
+            let window = UIWindow(frame: viewport.bounds)
+            let root = UIViewController()
+            window.rootViewController = root
+            root.view.addSubview(viewport)
+            window.makeKeyAndVisible()
+            let list = try XCTUnwrap(descendants(
+                of: viewport, as: UICollectionView.self).first)
+            let response = WCDBV3ChatMessage(messageID: UUID(),
+                role: .assistant, text: markdown, status: .completed)
+            let start = CFAbsoluteTimeGetCurrent()
+            viewport.update([response])
+            let applied = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                viewport.layoutIfNeeded()
+                return list.numberOfItems(inSection: 0) >= 5
+            }, object: nil)
+            let result = XCTWaiter.wait(for: [applied], timeout: 25)
+            let elapsed = Int((CFAbsoluteTimeGetCurrent() - start) * 1_000)
+            print("CHAT_SIMULATOR_RICH_RESPONSE source_bytes=\(markdown.utf8.count)" +
+                  " target_bytes=\(targetBytes)" +
+                  " blocks=\(list.numberOfItems(inSection: 0))" +
+                  " elapsed_ms=\(elapsed) platform=simulator")
+            XCTAssertEqual(result, .completed,
+                "A real response must retain code, GFM, KaTeX and operation rows")
+            XCTAssertGreaterThanOrEqual(list.numberOfItems(inSection: 0), 5)
+            window.isHidden = true
+        }
+    }
+
+    func testProductionTranscriptScaleLogsActualSimulatorLoadTime() throws {
+        // Genuine UIKit/Diffable transactions, not parser counters. Values
+        // are measured in the CI simulator; no iPhone13 FPS claim follows.
+        func resourceSample() -> (cpuMilliseconds: Double, peakRSSMiB: Double)? {
+            var usage = rusage()
+            // RUSAGE_SELF is 0 on Darwin. Sample actual process CPU time and
+            // lifetime peak resident bytes; neither is device FPS or layout time.
+            guard getrusage(0, &usage) == 0 else { return nil }
+            let user = Double(usage.ru_utime.tv_sec) * 1_000 +
+                Double(usage.ru_utime.tv_usec) / 1_000
+            let kernel = Double(usage.ru_stime.tv_sec) * 1_000 +
+                Double(usage.ru_stime.tv_usec) / 1_000
+            return (user + kernel, Double(usage.ru_maxrss) / (1024 * 1024))
+        }
+        for messageCount in [0, 100, 1_000, 5_000] {
+            let viewport = ImpressChatProductionTranscript(
+                frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+            let window = UIWindow(frame: viewport.bounds)
+            let root = UIViewController()
+            window.rootViewController = root
+            root.view.addSubview(viewport)
+            window.makeKeyAndVisible()
+            viewport.layoutIfNeeded()
+            let collection = try XCTUnwrap(
+                descendants(of: viewport, as: UICollectionView.self).first)
+            let messages: [WCDBV3ChatMessage] = (0..<messageCount).map { index in
+                WCDBV3ChatMessage(messageID: UUID(), role: .user,
+                    text: "Question \(index) 中文 🧠", status: .completed)
+            }
+            let baseline = resourceSample()
+            let start = CFAbsoluteTimeGetCurrent()
+            viewport.update(messages)
+            let applied = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                viewport.layoutIfNeeded()
+                return collection.numberOfItems(inSection: 0) == messageCount
+            }, object: nil)
+            let outcome = XCTWaiter.wait(for: [applied], timeout: 25)
+            let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1_000
+            let measured = resourceSample()
+            let cpuDelta = (measured?.cpuMilliseconds ?? 0) -
+                (baseline?.cpuMilliseconds ?? 0)
+            print("CHAT_SIMULATOR_TRANSCRIPT_LOAD messages=\(messageCount)" +
+                  " rows=\(collection.numberOfItems(inSection: 0))" +
+                  " elapsed_ms=\(Int(elapsed)) cpu_ms=\(Int(cpuDelta))" +
+                  " peak_process_rss_mib=\(Int(measured?.peakRSSMiB ?? 0))" +
+                  " platform=simulator")
+            XCTAssertEqual(outcome, .completed,
+                "Real collection must load all \(messageCount) distinct messages")
+            XCTAssertEqual(collection.numberOfItems(inSection: 0), messageCount)
+            window.isHidden = true
+        }
+    }
+
+    func testProductionActionsStayBoundToCorrectReplyAfterDiffableReuse() throws {
+        let viewport = ImpressChatProductionTranscript(
+            frame: CGRect(x: 0, y: 0, width: 390, height: 580))
+        let window = UIWindow(frame: viewport.bounds)
+        let root = UIViewController()
+        window.rootViewController = root
+        root.view.addSubview(viewport)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        let collection = try XCTUnwrap(descendants(of: viewport, as: UICollectionView.self).first)
+        viewport.menuForMessage = { id in
+            UIMenu(children: [UIAction(title: id.uuidString, handler: { _ in })])
+        }
+        let first = WCDBV3ChatMessage(messageID: UUID(),
+            role: .assistant, text: "第一条完整答案", status: .completed)
+        let second = WCDBV3ChatMessage(messageID: UUID(),
+            role: .assistant, text: "第二条独立回复", status: .completed)
+
+        func assertReply(_ message: WCDBV3ChatMessage) throws {
+            viewport.update([message])
+            let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                viewport.layoutIfNeeded()
+                return collection.visibleCells.contains {
+                    $0 is ImpressChatReplyActionsCell &&
+                    $0.accessibilityValue == message.messageID.uuidString
+                }
+            }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 8), .completed)
+            let actions = try XCTUnwrap(collection.visibleCells.first {
+                $0 is ImpressChatReplyActionsCell &&
+                $0.accessibilityValue == message.messageID.uuidString
+            })
+            let buttons = descendants(of: actions, as: UIButton.self)
+            let copy = try XCTUnwrap(buttons.first {
+                $0.accessibilityIdentifier == "impress.ai.chat.reply-copy"
+            })
+            copy.sendActions(for: .touchUpInside)
+            XCTAssertEqual(UIPasteboard.general.string, message.text)
+            let more = try XCTUnwrap(buttons.first {
+                $0.accessibilityIdentifier == "impress.ai.chat.reply-more"
+            })
+            XCTAssertEqual(more.menu?.children.first?.title, message.messageID.uuidString)
+        }
+
+        try assertReply(first)
+        try assertReply(second)
+        try assertReply(first)
+        var incomplete = second
+        incomplete.status = .failed
+        viewport.update([incomplete])
+        let forbidden = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            viewport.layoutIfNeeded()
+            return collection.numberOfItems(inSection: 0) == 2 &&
+                !collection.visibleCells.contains { $0 is ImpressChatReplyActionsCell }
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [forbidden], timeout: 8), .completed,
+                       "Failed replies must not expose a stale completed reply menu")
+    }
+
     func testProductionReplyFooterUsesNativeCopyAndExistingReviewMenu() throws {
         let cell = ImpressChatReplyActionsCell(
             frame: CGRect(x: 0, y: 0, width: 390, height: 44))
@@ -259,6 +412,70 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
         XCTAssertTrue(more.showsMenuAsPrimaryAction)
         XCTAssertEqual(more.menu?.children.count, 1)
         XCTAssertEqual(copy.bounds.height, 44)
+    }
+
+    func testQuadrupleCodeFencePreservesRealLanguageAndBody() throws {
+        let cell = ImpressChatPOCStructuredCell(
+            frame: CGRect(x: 0, y: 0, width: 350, height: 280))
+        let code = "~~~~swift\r\nlet result = \"中文\"\r\n~~~~"
+        cell.configure(markdown: code, kind: .code, stable: true)
+        XCTAssertTrue(descendants(of: cell, as: UILabel.self)
+            .contains(where: { $0.text == "swift" }),
+            "Four-tilde code fences must not appear as ~swift in the header")
+        let editor = try XCTUnwrap(descendants(of: cell, as: UITextView.self).first)
+        XCTAssertEqual(editor.text, "let result = \"中文\"")
+        let copy = try XCTUnwrap(descendants(of: cell, as: UIButton.self).first {
+            $0.accessibilityIdentifier == "impress.chat.poc.content-copy"
+        })
+        copy.sendActions(for: .touchUpInside)
+        XCTAssertEqual(UIPasteboard.general.string, "let result = \"中文\"")
+    }
+
+    func testModelMarkdownCannotOpenPrivateSchemesOrPreviewLinks() throws {
+        let cell = ImpressChatDocumentCell(
+            frame: CGRect(x: 0, y: 0, width: 390, height: 210))
+        let editor = try XCTUnwrap(descendants(of: cell, as: UITextView.self).first)
+        XCTAssertNotNil(editor.delegate)
+        for raw in ["javascript:alert(1)", "file:///private/path",
+                    "impress://calibration/week", "data:text/html,hi",
+                    "https://user:secret@example.org/"] {
+            let url = try XCTUnwrap(URL(string: raw))
+            XCTAssertFalse(ImpressChatDocumentCell.safeExternalURL(url))
+            XCTAssertFalse(cell.textView(editor, shouldInteractWith: url,
+                in: NSRange(location: 0, length: 1), interaction: .invokeDefaultAction))
+        }
+        let valid = try XCTUnwrap(URL(string: "https://example.org/learn"))
+        XCTAssertTrue(ImpressChatDocumentCell.safeExternalURL(valid))
+        XCTAssertFalse(cell.textView(editor, shouldInteractWith: valid,
+            in: NSRange(location: 0, length: 1), interaction: .preview),
+            "Preview must not initiate a network navigation")
+        cell.configure("[可靠](https://example.org) [危险](file:///private/path)",
+                       kind: .paragraph, headingLevel: 0, user: false, stable: true)
+        let rendered = try XCTUnwrap(editor.attributedText)
+        let location = (rendered.string as NSString).range(of: "危险").location
+        XCTAssertNotEqual(location, NSNotFound)
+        XCTAssertNil(rendered.attribute(.link, at: location, effectiveRange: nil))
+    }
+
+    func testVoiceOverReadsRenderedDocumentRatherThanRawMarkdown() throws {
+        let cell = ImpressChatDocumentCell(
+            frame: CGRect(x: 0, y: 0, width: 390, height: 220))
+        let body = try XCTUnwrap(descendants(of: cell, as: UITextView.self).first)
+        cell.configure("**中文强调** 与 [安全链接](https://example.org)",
+                       kind: .paragraph, headingLevel: 0, user: false, stable: true)
+        let reading = try XCTUnwrap(body.accessibilityLabel)
+        XCTAssertTrue(reading.contains("中文强调"))
+        XCTAssertTrue(reading.contains("安全链接"))
+        XCTAssertFalse(reading.contains("**"))
+        XCTAssertFalse(reading.contains("](https://"),
+            "Link destinations are not a substitute for readable link labels")
+        cell.configure("> 第一条引用\n> 第二条引用",
+                       kind: .quote, headingLevel: 0, user: false, stable: false)
+        let quote = try XCTUnwrap(body.accessibilityLabel)
+        XCTAssertTrue(quote.contains("引用："))
+        XCTAssertTrue(quote.contains("第一条引用"))
+        XCTAssertFalse(quote.contains("> "))
+        XCTAssertTrue(quote.contains("生成中"))
     }
 
     func testProductionMarkdownRespectsDynamicDarkInkAndSelection() throws {

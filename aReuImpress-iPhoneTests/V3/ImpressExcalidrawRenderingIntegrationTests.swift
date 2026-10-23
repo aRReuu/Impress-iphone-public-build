@@ -31,6 +31,38 @@ final class ImpressExcalidrawRenderingIntegrationTests: XCTestCase {
         XCTAssertGreaterThan(task.frame.height, 30)
     }
     @MainActor
+    func testNativeExcalidrawOpacityAffectsStrokeFillAndTextWithoutHidingSelection() throws {
+        let json = """
+        {"type":"excalidraw","appState":{"viewBackgroundColor":"#ffffff"},
+         "elements":[
+          {"id":"panel","type":"rectangle","x":0,"y":0,"width":160,"height":90,
+           "opacity":35,"strokeColor":"#111111","backgroundColor":"#999999"},
+          {"id":"caption","type":"text","x":10,"y":10,"width":120,"height":50,
+           "opacity":60,"fontSize":20,"strokeColor":"#222222","text":"透明文字"}]}
+        """
+        let scene = try ImpressExcalidrawScene.parse(Data(json.utf8),
+            format: .excalidrawJSON)
+        let reader = try ImpressExcalidrawNativeView(source: scene)
+        let controls = reader.subviews.flatMap(\.subviews)
+            .compactMap { $0 as? UIButton }
+        let panel = try XCTUnwrap(controls.first {
+            $0.accessibilityIdentifier == "impress.excalidraw.element.panel"
+        })
+        let shape = try XCTUnwrap(panel.layer.sublayers?
+            .compactMap { $0 as? CAShapeLayer }.first)
+        XCTAssertEqual(shape.opacity, 0.35, accuracy: 0.001,
+            "The outline and the fill must share Excalidraw opacity")
+        XCTAssertEqual(panel.alpha, 1, accuracy: 0.001,
+            "Selection border must remain visible even when artwork is translucent")
+        let caption = try XCTUnwrap(controls.first {
+            $0.accessibilityIdentifier == "impress.excalidraw.element.caption"
+        })
+        let label = try XCTUnwrap(caption.subviews
+            .compactMap { $0 as? UILabel }.first)
+        XCTAssertEqual(label.alpha, 0.60, accuracy: 0.001)
+    }
+
+    @MainActor
     func testBoundTextKeepsSourceOcclusionAndActualVerticalCenter() throws {
         let drawing = """
         {"type":"excalidraw","elements":[

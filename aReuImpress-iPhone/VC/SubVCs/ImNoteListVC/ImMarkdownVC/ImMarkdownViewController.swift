@@ -2425,8 +2425,11 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
                 let shape = CAShapeLayer()
                 shape.path = outline.cgPath
                 shape.strokeColor = stroke.cgColor
-                shape.fillColor = (Self.color(element.backgroundColor) ?? UIColor.clear)
-                    .withAlphaComponent(CGFloat((element.opacity ?? 100) / 100)).cgColor
+                shape.fillColor = (Self.color(element.backgroundColor) ?? UIColor.clear).cgColor
+                // Excalidraw opacity applies to both the line and fill,
+                // not just the fill. Compositing them as one layer also avoids
+                // alpha accumulating where stroke and fill overlap.
+                shape.opacity = Float((element.opacity ?? 100) / 100)
                 shape.lineWidth = CGFloat(min(24, max(0.5, element.strokeWidth ?? 1.5)))
                 control.layer.addSublayer(shape)
             }
@@ -2486,6 +2489,7 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
                     imageView.frame = control.bounds
                     imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
                     imageView.contentMode = .scaleAspectFit
+                    imageView.alpha = CGFloat((element.opacity ?? 100) / 100)
                     imageView.isUserInteractionEnabled = false
                     control.addSubview(imageView)
                 } else {

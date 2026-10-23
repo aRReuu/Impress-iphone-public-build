@@ -407,7 +407,26 @@ final class ImpressChatProductionTranscript: UIView,
 /// Plain AI document paragraphs and a right-aligned user bubble. Never paints
 /// a full-width IM row or draws redundant role labels.
 @MainActor
-final class ImpressChatDocumentCell: UICollectionViewCell {
+final class ImpressChatDocumentCell: UICollectionViewCell, UITextViewDelegate {
+    /// Untrusted AI Markdown may supply arbitrary schemes. Only an explicit
+    /// tap on a standard external web URL may navigate away from Impress.
+    static func safeExternalURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(),
+              scheme == "https" || scheme == "http",
+              let host = url.host, !host.isEmpty,
+              url.user == nil, url.password == nil else { return false }
+        return true
+    }
+
+    func textView(_ textView: UITextView, shouldInteractWith url: URL,
+                  in characterRange: NSRange,
+                  interaction: UITextItemInteraction) -> Bool {
+        guard interaction == .invokeDefaultAction, Self.safeExternalURL(url)
+        else { return false }
+        UIApplication.shared.open(url, options: [:], completionHandler: nil)
+        return false
+    }
+
     private let bubble = UIView()
     private let body = UITextView()
     private let quoteStripe = UIView()
@@ -422,6 +441,7 @@ final class ImpressChatDocumentCell: UICollectionViewCell {
         }
         body.isEditable = false
         body.isSelectable = true
+        body.delegate = self
         body.isScrollEnabled = false
         body.backgroundColor = .clear
         body.textContainerInset = .zero
@@ -433,6 +453,8 @@ final class ImpressChatDocumentCell: UICollectionViewCell {
         quoteStripe.backgroundColor = .tertiaryLabel
         quoteStripe.layer.cornerRadius = 1.5
         rule.backgroundColor = .separator
+        rule.isAccessibilityElement = true
+        rule.accessibilityLabel = V3L("分隔线")
         contentView.addSubview(bubble)
         bubble.addSubview(body)
         bubble.addSubview(quoteStripe)
@@ -502,7 +524,11 @@ final class ImpressChatDocumentCell: UICollectionViewCell {
                 .font: font, .foregroundColor: UIColor.label
             ])
         }
-        body.accessibilityLabel = markdown + (stable ? "" : V3L("，生成中"))
+        // VoiceOver should read the visible semantic projection, never raw
+        // Markdown punctuation or untrusted link destinations.
+        let rolePrefix = !user && kind == .quote ? V3L("引用：") : ""
+        body.accessibilityLabel = rolePrefix + body.attributedText.string +
+            (stable ? "" : V3L("，生成中"))
     }
 
     /// UITextView.font/textColor may become nil with attributedText.
@@ -517,6 +543,16 @@ final class ImpressChatDocumentCell: UICollectionViewCell {
         }
         let result = NSMutableAttributedString(
             attributedString: NSAttributedString(parsed))
+        // Remove disallowed URL attributes, not just their visual ink. Do not
+        // modify the attributed string while enumerating its original runs.
+        let full = NSRange(location: 0, length: result.length)
+        var invalidLinks: [NSRange] = []
+        result.enumerateAttribute(.link, in: full, options: []) { value, range, _ in
+            guard let value else { return }
+            let url = (value as? URL) ?? (value as? String).flatMap(URL.init(string:))
+            if url.map(Self.safeExternalURL) != true { invalidLinks.append(range) }
+        }
+        for range in invalidLinks { result.removeAttribute(.link, range: range) }
         var offset = 0
         for run in parsed.runs {
             let length = String(parsed[run.range].characters).utf16.count

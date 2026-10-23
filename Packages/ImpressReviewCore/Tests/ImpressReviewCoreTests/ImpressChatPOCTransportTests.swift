@@ -50,7 +50,7 @@ final class ImpressChatPOCTransportTests: XCTestCase {
         let response = "event: response.output_text.delta\r" +
             "data: {\"delta\":\"first\"}\r\r" +
             "event: response.completed\r" +
-            "data: {\"type\":\"response.completed\"}\r\r"
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\r\r"
         let b = try replay(response, provider: .openAIResponses, cuts: [1, 2])
         XCTAssertEqual(b.outputs, [.delta("first"), .completed])
         XCTAssertTrue(b.complete)
@@ -86,6 +86,32 @@ final class ImpressChatPOCTransportTests: XCTestCase {
         let three = try replay(gemini, provider: .geminiGenerateContent, cuts: [15])
         XCTAssertEqual(three.outputs, [.delta("partial"), .failed])
         XCTAssertFalse(three.complete)
+    }
+
+    func testResponsesSpoofedOrIncompleteTerminalCannotComplete() throws {
+        let validDelta = "event: response.output_text.delta\n" +
+            #"data: {"type":"response.output_text.delta","delta":"partial"}"# + "\n\n"
+        for terminal in [
+            #"{"type":"response.completed"}"#,
+            #"{"type":"response.completed","response":{"status":"incomplete"}}"#,
+            #"{"type":"response.completed","response":{"status":"failed"}}"#
+        ] {
+            let wire = validDelta + "event: response.completed\n" +
+                "data: " + terminal + "\n\n"
+            let result = try replay(wire, provider: .openAIResponses, cuts: [1, 3, 41])
+            XCTAssertEqual(result.outputs, [.delta("partial"), .failed])
+            XCTAssertFalse(result.complete)
+        }
+        var spoof = ImpressChatPOCEventNormalizer(provider: .openAIResponses)
+        XCTAssertThrowsError(try spoof.consume(ImpressChatPOCSSEEvent(
+            event: "response.completed", id: nil, data:
+                #"{"type":"response.output_text.delta","delta":"partial"}"#)))
+        XCTAssertFalse(spoof.isCompleted)
+        var anthropicSpoof = ImpressChatPOCEventNormalizer(provider: .anthropicMessages)
+        XCTAssertThrowsError(try anthropicSpoof.consume(ImpressChatPOCSSEEvent(
+            event: "message_stop", id: nil, data:
+                #"{"type":"content_block_delta","delta":{"type":"text_delta","text":"x"}}"#)))
+        XCTAssertFalse(anthropicSpoof.isCompleted)
     }
 
     func testUnterminatedNetworkStreamNeverCompletesAIMessage() throws {

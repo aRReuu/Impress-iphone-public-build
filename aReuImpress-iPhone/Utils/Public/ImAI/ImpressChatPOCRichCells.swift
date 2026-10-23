@@ -87,26 +87,44 @@ final class ImpressChatPOCStructuredCell: UICollectionViewCell {
             "impress.chat.poc.table" : "impress.chat.poc.code"
     }
 
+    private func openingCodeFence(_ raw: String)
+        -> (marker: Character, count: Int, language: String)? {
+        let normalized = raw.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        guard let first = normalized.split(separator: "\n",
+                    omittingEmptySubsequences: false).first else { return nil }
+        let indentation = first.prefix(while: { $0 == " " }).count
+        guard indentation <= 3 else { return nil }
+        let body = first.dropFirst(indentation)
+        guard let marker = body.first, marker == "~" || marker == "\u{60}"
+        else { return nil }
+        let count = body.prefix(while: { $0 == marker }).count
+        guard count >= 3 else { return nil }
+        let language = body.dropFirst(count).trimmingCharacters(
+            in: .whitespacesAndNewlines)
+        return (marker, count, String(language.prefix(28)))
+    }
+
     private func codeLanguage(_ raw: String) -> String {
-        guard let line = raw.split(separator: "\n", omittingEmptySubsequences: false).first,
-              line.hasPrefix("~~~") || line.hasPrefix(String(repeating: "\u{60}", count: 3))
+        guard let fence = openingCodeFence(raw), !fence.language.isEmpty
         else { return "代码" }
-        let name = line.dropFirst(3).trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.isEmpty ? "代码" : String(name.prefix(28))
+        return fence.language
     }
 
     private func codeBody(_ text: String) -> String {
-        // Display-only line ending projection. Keep source for provenance,
-        // but split CRLF as a logical newline (Swift Character treats it as
-        // a single grapheme, not as Character("\\n")).
+        // Treat the opening run length and delimiter kind as authoritative.
+        // A four-tilde block cannot close with three tildes or backticks.
         let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
         let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false)
-        guard lines.count >= 2,
-              let opening = lines.first, let closing = lines.last,
-              (opening.hasPrefix("~~~") && closing.hasPrefix("~~~")) ||
-              (opening.hasPrefix(String(repeating: "\u{60}", count: 3)) &&
-               closing.hasPrefix(String(repeating: "\u{60}", count: 3)))
+        guard lines.count >= 2, let fence = openingCodeFence(normalized),
+              let last = lines.last else { return text }
+        let indentation = last.prefix(while: { $0 == " " }).count
+        guard indentation <= 3 else { return text }
+        let closing = last.dropFirst(indentation)
+        let run = closing.prefix(while: { $0 == fence.marker }).count
+        guard run >= fence.count,
+              closing.dropFirst(run).allSatisfy({ $0 == " " || $0 == "\t" })
         else { return text }
         return lines.dropFirst().dropLast().joined(separator: "\n")
     }
