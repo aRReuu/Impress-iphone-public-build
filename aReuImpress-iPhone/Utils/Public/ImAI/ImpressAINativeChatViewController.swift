@@ -847,6 +847,21 @@ final class ImpressAINativeChatViewController: UIViewController,
                 UIPasteboard.general.string = turn.text
             }
         ]
+        if turn.role == .user {
+            actions.append(UIAction(
+                title: V3L("编辑并新发问题"),
+                image: UIImage(systemName: "pencil")) { [weak self] _ in
+                    self?.restoreQuestionAsDraft(from: turn)
+                })
+        } else if turn.role == .assistant &&
+                    (turn.status == .completed || turn.status == .cancelled ||
+                     turn.status == .failed) {
+            actions.append(UIAction(
+                title: V3L("以原问题重新提问"),
+                image: UIImage(systemName: "arrow.clockwise")) { [weak self] _ in
+                    self?.restoreQuestionAsDraft(from: turn)
+                })
+        }
         if turn.role == .assistant && turn.status == .completed {
             if sourceCardID != nil || noteDraftTarget != nil {
                 actions.append(UIAction(
@@ -883,6 +898,30 @@ final class ImpressAINativeChatViewController: UIViewController,
             }
         }
         return UIMenu(children: actions)
+    }
+
+    /// Explicit edit/resend is a new draft. It never mutates history, replays a
+    /// provider request, or reuses a previous external-material approval.
+    private func restoreQuestionAsDraft(from turn: WCDBV3ChatMessage) {
+        guard !sending, !restoring else { return }
+        let question: String
+        if turn.role == .user {
+            question = turn.text
+        } else if let index = history.firstIndex(where: { $0.messageID == turn.messageID }),
+                  let previous = history[..<index].last(where: { $0.role == .user }) {
+            question = previous.text
+        } else {
+            return
+        }
+        guard !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+        // The ordinary send action must re-run the source/version/consent gates.
+        contextConsentGranted = false
+        contextChoiceMade = false
+        messageInput.text = question
+        textViewDidChange(messageInput)
+        messageInput.becomeFirstResponder()
     }
 
     @objc private func openDuplexReceipts() {

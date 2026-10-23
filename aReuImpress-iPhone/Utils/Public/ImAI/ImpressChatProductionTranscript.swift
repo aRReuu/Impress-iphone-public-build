@@ -16,6 +16,7 @@ final class ImpressChatProductionTranscript: UIView,
         let stable: Bool
         let completed: Bool
         let isStatus: Bool
+        let isActions: Bool
     }
 
     private struct ParsedMessage {
@@ -67,6 +68,7 @@ final class ImpressChatProductionTranscript: UIView,
         collection.register(ImpressChatPOCStructuredCell.self, forCellWithReuseIdentifier: "structured")
         collection.register(ImpressChatPOCMathCell.self, forCellWithReuseIdentifier: "math")
         collection.register(ImpressChatStatusCell.self, forCellWithReuseIdentifier: "status")
+        collection.register(ImpressChatReplyActionsCell.self, forCellWithReuseIdentifier: "actions")
         let empty = UILabel()
         empty.text = V3L("从一个问题开始")
         empty.font = .preferredFont(forTextStyle: .body)
@@ -84,6 +86,14 @@ final class ImpressChatProductionTranscript: UIView,
         dataSource = UICollectionViewDiffableDataSource<Int, String>(
             collectionView: collection) { [weak self] list, indexPath, id in
             guard let self, let row = self.rows[id] else { return nil }
+            if row.isActions {
+                let cell = list.dequeueReusableCell(
+                    withReuseIdentifier: "actions", for: indexPath)
+                    as! ImpressChatReplyActionsCell
+                cell.configure(messageID: row.messageID, text: row.text,
+                               menu: self.menuForMessage?(row.messageID))
+                return cell
+            }
             if row.isStatus {
                 let cell = list.dequeueReusableCell(
                     withReuseIdentifier: "status", for: indexPath) as! ImpressChatStatusCell
@@ -137,6 +147,9 @@ final class ImpressChatProductionTranscript: UIView,
     }
 
     @objc private func keyboardWillChange() {
+        // Chinese input candidates may trigger repeated will-change notifications.
+        // Do not overwrite the original ReadingHistory/FollowingBottom state.
+        guard scrollMode != .keyboardTransition else { return }
         modeBeforeKeyboard = scrollMode
         scrollMode = .keyboardTransition
     }
@@ -234,7 +247,7 @@ final class ImpressChatProductionTranscript: UIView,
                 identifiers.append(id)
                 nextRows[id] = Row(messageID: message.messageID, user: true,
                     text: message.text, kind: .paragraph, headingLevel: 0,
-                    stable: true, completed: completed, isStatus: false)
+                    stable: true, completed: completed, isStatus: false, isActions: false)
             } else {
                 for block in blocks(for: message) {
                     let id = "assistant-" + prefix + "-" + String(block.id)
@@ -242,7 +255,7 @@ final class ImpressChatProductionTranscript: UIView,
                     nextRows[id] = Row(messageID: message.messageID, user: false,
                         text: block.markdown, kind: block.kind,
                         headingLevel: block.headingLevel, stable: block.stable,
-                        completed: completed, isStatus: false)
+                        completed: completed, isStatus: false, isActions: false)
                 }
             }
             if message.status != .completed {
@@ -258,7 +271,13 @@ final class ImpressChatProductionTranscript: UIView,
                 identifiers.append(id)
                 nextRows[id] = Row(messageID: message.messageID, user: false,
                     text: description, kind: .paragraph, headingLevel: 0,
-                    stable: true, completed: false, isStatus: true)
+                    stable: true, completed: false, isStatus: true, isActions: false)
+            } else if message.role == .assistant && !message.text.isEmpty {
+                let id = "actions-" + prefix
+                identifiers.append(id)
+                nextRows[id] = Row(messageID: message.messageID, user: false,
+                    text: message.text, kind: .paragraph, headingLevel: 0,
+                    stable: true, completed: true, isStatus: false, isActions: true)
             }
         }
         collection.backgroundView?.isHidden = !identifiers.isEmpty
@@ -346,7 +365,8 @@ final class ImpressChatProductionTranscript: UIView,
                         contextMenuConfigurationForItemAt indexPath: IndexPath,
                         point: CGPoint) -> UIContextMenuConfiguration? {
         guard let id = dataSource.itemIdentifier(for: indexPath),
-              let row = rows[id], !row.isStatus, menuForMessage?(row.messageID) != nil
+              let row = rows[id], !row.isStatus, !row.isActions,
+              menuForMessage?(row.messageID) != nil
         else { return nil }
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) {
             [weak self] _ in
@@ -396,6 +416,7 @@ final class ImpressChatDocumentCell: UICollectionViewCell {
         body.textContainerInset = .zero
         body.textContainer.lineFragmentPadding = 0
         body.adjustsFontForContentSizeCategory = true
+        body.textColor = .label
         body.dataDetectorTypes = [.link]
         body.accessibilityIdentifier = "impress.ai.chat.message-body"
         quoteStripe.backgroundColor = .tertiaryLabel
@@ -446,6 +467,8 @@ final class ImpressChatDocumentCell: UICollectionViewCell {
         let font = kind == .heading
             ? UIFont.systemFont(ofSize: base * scale[level], weight: .bold)
             : UIFont.preferredFont(forTextStyle: .body)
+        body.font = font
+        body.textColor = .label
         var displayed = markdown
         if !user && kind == .heading {
             displayed = String(markdown.dropFirst(headingLevel))
@@ -535,5 +558,61 @@ private final class ImpressChatStatusCell: UICollectionViewCell {
     func configure(_ text: String) {
         label.text = text
         accessibilityIdentifier = "impress.ai.chat.stream-status"
+    }
+}
+
+
+/// Compact assistant reply footer: native 44pt controls, no full-width IM bar.
+@MainActor
+final class ImpressChatReplyActionsCell: UICollectionViewCell {
+    private let copyButton = UIButton(type: .system)
+    private let moreButton = UIButton(type: .system)
+    private let stack = UIStackView()
+    private var currentText = ""
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        stack.axis = .horizontal
+        stack.alignment = .center
+        stack.spacing = 0
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        copyButton.translatesAutoresizingMaskIntoConstraints = false
+        moreButton.translatesAutoresizingMaskIntoConstraints = false
+        copyButton.setImage(UIImage(systemName: "doc.on.doc"), for: .normal)
+        moreButton.setImage(UIImage(systemName: "ellipsis"), for: .normal)
+        for button in [copyButton, moreButton] {
+            button.tintColor = .secondaryLabel
+            stack.addArrangedSubview(button)
+        }
+        copyButton.accessibilityLabel = V3L("复制回复")
+        copyButton.accessibilityIdentifier = "impress.ai.chat.reply-copy"
+        moreButton.accessibilityLabel = V3L("更多回复操作")
+        moreButton.accessibilityIdentifier = "impress.ai.chat.reply-more"
+        copyButton.addTarget(self, action: #selector(copyMessage), for: .touchUpInside)
+        moreButton.showsMenuAsPrimaryAction = true
+        contentView.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 2),
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor),
+            copyButton.widthAnchor.constraint(equalToConstant: 44),
+            copyButton.heightAnchor.constraint(equalToConstant: 44),
+            moreButton.widthAnchor.constraint(equalToConstant: 44),
+            moreButton.heightAnchor.constraint(equalToConstant: 44)
+        ])
+        accessibilityIdentifier = "impress.ai.chat.reply-actions"
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    func configure(messageID: UUID, text: String, menu: UIMenu?) {
+        currentText = text
+        moreButton.menu = menu
+        accessibilityValue = messageID.uuidString
+    }
+
+    @objc private func copyMessage() {
+        UIPasteboard.general.string = currentText
     }
 }

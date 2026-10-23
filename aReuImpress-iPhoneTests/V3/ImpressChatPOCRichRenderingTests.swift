@@ -133,6 +133,40 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
             "A failed stream retains code and partial text instead of discarding them")
     }
 
+    func testProductionReplyFooterUsesNativeCopyAndExistingReviewMenu() throws {
+        let cell = ImpressChatReplyActionsCell(
+            frame: CGRect(x: 0, y: 0, width: 390, height: 44))
+        let menu = UIMenu(children: [UIAction(title: "Review", handler: { _ in })])
+        let response = "最终答复\n含中文和公式"
+        cell.configure(messageID: UUID(), text: response, menu: menu)
+        cell.layoutIfNeeded()
+        let buttons = descendants(of: cell, as: UIButton.self)
+        let copy = try XCTUnwrap(buttons.first {
+            $0.accessibilityIdentifier == "impress.ai.chat.reply-copy"
+        })
+        copy.sendActions(for: .touchUpInside)
+        XCTAssertEqual(UIPasteboard.general.string, response)
+        let more = try XCTUnwrap(buttons.first {
+            $0.accessibilityIdentifier == "impress.ai.chat.reply-more"
+        })
+        XCTAssertTrue(more.showsMenuAsPrimaryAction)
+        XCTAssertEqual(more.menu?.children.count, 1)
+        XCTAssertEqual(copy.bounds.height, 44)
+    }
+
+    func testProductionMarkdownRespectsDynamicDarkInkAndSelection() throws {
+        let cell = ImpressChatDocumentCell(
+            frame: CGRect(x: 0, y: 0, width: 390, height: 180))
+        cell.overrideUserInterfaceStyle = .dark
+        cell.configure("**中文强调** and plain text", kind: .paragraph,
+                       headingLevel: 0, user: false, stable: true)
+        let text = try XCTUnwrap(descendants(of: cell, as: UITextView.self).first)
+        XCTAssertTrue(text.isSelectable)
+        XCTAssertEqual(text.textColor, UIColor.label)
+        XCTAssertGreaterThan(text.font?.pointSize ?? 0, 12)
+        XCTAssertTrue(text.attributedText.string.contains("中文强调"))
+    }
+
     private func descendants<T: UIView>(of view: UIView, as type: T.Type) -> [T] {
         view.subviews.flatMap { child -> [T] in
             ((child as? T).map { [$0] } ?? []) +
