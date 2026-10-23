@@ -60,7 +60,9 @@ final class ImpressExcalidrawRenderingIntegrationTests: XCTestCase {
         XCTAssertGreaterThan(textNode.layer.zPosition, container.layer.zPosition)
         XCTAssertLessThan(textNode.layer.zPosition, occluder.layer.zPosition,
             "Later Excalidraw shapes must still cover earlier bound text")
-        let label = try XCTUnwrap(textNode.subviews.compactMap { $0 as? UILabel }.first)
+        let label = try XCTUnwrap(textNode.subviews.compactMap { $0 as? UILabel }
+            .first(where: { $0.text == "先复习再验证" }),
+            "Inspect the authored Excalidraw glyph label, not UIButton.titleLabel")
         XCTAssertGreaterThan(label.frame.minY, 12,
             "Middle-aligned text must use measured glyph height, not full box height")
         let style = try XCTUnwrap(label.attributedText?.attribute(.paragraphStyle,
