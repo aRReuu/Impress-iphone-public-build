@@ -424,6 +424,14 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         let snapshotBefore = dataSource.snapshot()
         let oldIDs = Set(snapshotBefore.itemIdentifiers)
         let changed = identifiers.filter { oldIDs.contains($0) && rows[$0] != fresh[$0] }
+        // A provisional tail may change from a paragraph to a fenced-code,
+        // table or math renderer. Reconfigure preserves the old cell class;
+        // reload is required for a different registered reuse identifier.
+        let typeChanged = changed.filter { id in
+            guard let previous = rows[id], let next = fresh[id] else { return false }
+            return previous.kind != next.kind || previous.user != next.user
+        }
+        let contentChanged = changed.filter { !typeChanged.contains($0) }
         let anchor = transcript.indexPathsForVisibleItems.sorted().first.flatMap {
             index -> (String, CGFloat)? in
             guard let id = dataSource.itemIdentifier(for: index),
@@ -435,16 +443,17 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         var snapshot = dataSource.snapshot()
         if identifiers == publishedIDs {
             if changed.isEmpty { return }
-            snapshot.reconfigureItems(changed)
+            if !typeChanged.isEmpty { snapshot.reloadItems(typeChanged) }
+            if !contentChanged.isEmpty { snapshot.reconfigureItems(contentChanged) }
         } else if publishedIDs.count <= identifiers.count &&
                     Array(identifiers.prefix(publishedIDs.count)) == publishedIDs {
             snapshot.appendItems(Array(identifiers.dropFirst(publishedIDs.count)))
-            if !changed.isEmpty { snapshot.reconfigureItems(changed) }
+            if !typeChanged.isEmpty { snapshot.reloadItems(typeChanged) }
+            if !contentChanged.isEmpty { snapshot.reconfigureItems(contentChanged) }
         } else {
             snapshot = NSDiffableDataSourceSnapshot<Int, String>()
             snapshot.appendSections([0])
             snapshot.appendItems(identifiers)
-            if !changed.isEmpty { snapshot.reconfigureItems(changed) }
         }
         publishedIDs = identifiers
         dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
