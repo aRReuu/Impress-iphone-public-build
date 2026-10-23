@@ -1,6 +1,7 @@
 #if DEBUG
 import UIKit
 import WebKit
+import ImpressReviewCore
 
 /// Native, selectable, horizontally scrollable renderer for code and tables.
 /// Provisional GFM tables remain selectable raw text until syntactically stable.

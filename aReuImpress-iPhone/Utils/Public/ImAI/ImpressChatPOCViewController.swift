@@ -591,7 +591,7 @@ private final class ImpressChatPOCCell: UICollectionViewCell {
     }
 
     private func structuredList(_ markdown: String, font: UIFont) -> NSAttributedString {
-        let output = NSMutableAttributedString()
+        let output = NSMutableAttributedString(string: "")
         for raw in markdown.components(separatedBy: "\n") {
             let indentSpaces = raw.prefix(while: { $0 == " " }).count
             let clean = raw.trimmingCharacters(in: .whitespaces)
