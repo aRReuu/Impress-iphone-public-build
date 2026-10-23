@@ -140,6 +140,7 @@
 		F7C600000000000000000001 /* ImpressChatPOCLocalAttachments.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C600000000000000000002 /* ImpressChatPOCLocalAttachments.swift */; };
 		F7C600000000000000000003 /* ImpressChatPOCLocalAttachmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C600000000000000000004 /* ImpressChatPOCLocalAttachmentTests.swift */; };
 		F7C700000000000000000001 /* ImpressChatPOCStreamDriverIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C700000000000000000002 /* ImpressChatPOCStreamDriverIntegrationTests.swift */; };
+		F7C700000000000000000001 /* ImpressChatPOCWebControlViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C700000000000000000002 /* ImpressChatPOCWebControlViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -341,6 +342,7 @@
 		F7C600000000000000000002 /* ImpressChatPOCLocalAttachments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCLocalAttachments.swift; sourceTree = "<group>"; };
 		F7C600000000000000000004 /* ImpressChatPOCLocalAttachmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCLocalAttachmentTests.swift; sourceTree = "<group>"; };
 		F7C700000000000000000002 /* ImpressChatPOCStreamDriverIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCStreamDriverIntegrationTests.swift; sourceTree = "<group>"; };
+		F7C700000000000000000002 /* ImpressChatPOCWebControlViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCWebControlViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -407,6 +409,7 @@
 				F7C100000000000000000002 /* ImpressChatPOCViewController.swift */,
 				F7C300000000000000000002 /* ImpressChatPOCRichCells.swift */,
 				F7C600000000000000000002 /* ImpressChatPOCLocalAttachments.swift */,
+				F7C700000000000000000002 /* ImpressChatPOCWebControlViewController.swift */,
 			);
 			path = ImAI;
 			sourceTree = "<group>";
@@ -1269,6 +1272,7 @@
 				F7C100000000000000000001 /* ImpressChatPOCViewController.swift in Sources */,
 				F7C300000000000000000001 /* ImpressChatPOCRichCells.swift in Sources */,
 				F7C600000000000000000001 /* ImpressChatPOCLocalAttachments.swift in Sources */,
+				F7C700000000000000000001 /* ImpressChatPOCWebControlViewController.swift in Sources */,
 				F3A200000000000000000011 /* ImpressV3ReviewEnvironment.swift in Sources */,
 				F3A200000000000000000012 /* ImpressV3ReviewViewController.swift in Sources */,
 				F3A400000000000000000010 /* ImpressV3CardComposerViewController.swift in Sources */,

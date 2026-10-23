@@ -107,6 +107,9 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         empty.textAlignment = .center
         empty.accessibilityIdentifier = "impress.chat.poc.empty"
         transcript.backgroundView = empty
+        navigationItem.leftBarButtonItem = UIBarButtonItem(
+            title: "Web 对照", style: .plain,
+            target: self, action: #selector(openOfflineWebComparison))
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             title: "合成压力样本", image: UIImage(systemName: "chart.bar.xaxis"),
             primaryAction: nil, menu: UIMenu(children: [100, 1_000, 5_000].map { size in
@@ -256,6 +259,12 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
     }
 
     deinit { NotificationCenter.default.removeObserver(self) }
+
+    @objc private func openOfflineWebComparison() {
+        let comparison = ImpressChatPOCWebControlViewController(
+            frames: makeOfflineFrames(for: fixture))
+        navigationController?.pushViewController(comparison, animated: true)
+    }
 
     @objc private func refreshDynamicType() {
         // Reconfiguration must share the serialized diffable pipeline. A
