@@ -10,6 +10,9 @@ final class ImpressChatPOCLocalAttachmentTests: XCTestCase {
         let menu = coordinator.pickerMenu()
         let labels = menu.children.compactMap { ($0 as? UIAction)?.title }
         XCTAssertEqual(labels, ["相册", "文件", "拍照"])
+        XCTAssertNotNil(Bundle.main.object(
+            forInfoDictionaryKey: "NSCameraUsageDescription"),
+            "The camera picker must never launch without a declared usage string")
         var changes = 0
         coordinator.onChange = { _ in changes += 1 }
         for i in 0..<7 {
