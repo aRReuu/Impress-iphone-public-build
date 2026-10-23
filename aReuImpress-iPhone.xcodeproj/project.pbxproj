@@ -137,6 +137,8 @@
 		F7C300000000000000000001 /* ImpressChatPOCRichCells.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C300000000000000000002 /* ImpressChatPOCRichCells.swift */; };
 		F7C400000000000000000001 /* ImpressChatPOCRichRenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C400000000000000000002 /* ImpressChatPOCRichRenderingTests.swift */; };
 		F7C500000000000000000001 /* ImpressAIHTTPStreamingIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C500000000000000000002 /* ImpressAIHTTPStreamingIntegrationTests.swift */; };
+		F7C600000000000000000001 /* ImpressChatPOCLocalAttachments.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C600000000000000000002 /* ImpressChatPOCLocalAttachments.swift */; };
+		F7C600000000000000000003 /* ImpressChatPOCLocalAttachmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C600000000000000000004 /* ImpressChatPOCLocalAttachmentTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -335,6 +337,8 @@
 		F7C300000000000000000002 /* ImpressChatPOCRichCells.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCRichCells.swift; sourceTree = "<group>"; };
 		F7C400000000000000000002 /* ImpressChatPOCRichRenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCRichRenderingTests.swift; sourceTree = "<group>"; };
 		F7C500000000000000000002 /* ImpressAIHTTPStreamingIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressAIHTTPStreamingIntegrationTests.swift; sourceTree = "<group>"; };
+		F7C600000000000000000002 /* ImpressChatPOCLocalAttachments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCLocalAttachments.swift; sourceTree = "<group>"; };
+		F7C600000000000000000004 /* ImpressChatPOCLocalAttachmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImpressChatPOCLocalAttachmentTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -400,6 +404,7 @@
 				F4A100000000000000000014 /* ImpressAINativeChatViewController.swift */,
 				F7C100000000000000000002 /* ImpressChatPOCViewController.swift */,
 				F7C300000000000000000002 /* ImpressChatPOCRichCells.swift */,
+				F7C600000000000000000002 /* ImpressChatPOCLocalAttachments.swift */,
 			);
 			path = ImAI;
 			sourceTree = "<group>";
@@ -1014,6 +1019,7 @@
 				F7C200000000000000000002 /* ImpressExcalidrawRenderingIntegrationTests.swift */,
 				F7C400000000000000000002 /* ImpressChatPOCRichRenderingTests.swift */,
 				F7C500000000000000000002 /* ImpressAIHTTPStreamingIntegrationTests.swift */,
+				F7C600000000000000000004 /* ImpressChatPOCLocalAttachmentTests.swift */,
 				F3A10000000000000000000D /* ReviewWCDBRepositoryTests.swift */,
 			);
 			path = V3;
@@ -1259,6 +1265,7 @@
 				F4A100000000000000000004 /* ImpressAINativeChatViewController.swift in Sources */,
 				F7C100000000000000000001 /* ImpressChatPOCViewController.swift in Sources */,
 				F7C300000000000000000001 /* ImpressChatPOCRichCells.swift in Sources */,
+				F7C600000000000000000001 /* ImpressChatPOCLocalAttachments.swift in Sources */,
 				F3A200000000000000000011 /* ImpressV3ReviewEnvironment.swift in Sources */,
 				F3A200000000000000000012 /* ImpressV3ReviewViewController.swift in Sources */,
 				F3A400000000000000000010 /* ImpressV3CardComposerViewController.swift in Sources */,
@@ -1367,6 +1374,7 @@
 				F7C200000000000000000001 /* ImpressExcalidrawRenderingIntegrationTests.swift in Sources */,
 				F7C400000000000000000001 /* ImpressChatPOCRichRenderingTests.swift in Sources */,
 				F7C500000000000000000001 /* ImpressAIHTTPStreamingIntegrationTests.swift in Sources */,
+				F7C600000000000000000003 /* ImpressChatPOCLocalAttachmentTests.swift in Sources */,
 				F3A100000000000000000003 /* ReviewWCDBRepositoryTests.swift in Sources */,
 				38B00CC82D17DE68002898A3 /* aReuImpress_iPhoneTests.swift in Sources */,
 			);

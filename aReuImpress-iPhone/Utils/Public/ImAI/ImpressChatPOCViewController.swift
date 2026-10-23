@@ -36,6 +36,9 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
     private let composer = UIView()
     private let input = UITextView()
     private let action = UIButton(type: .system)
+    private let addMaterials = UIButton(type: .system)
+    private let localPreview = UIButton(type: .system)
+    private lazy var localMaterials = ImpressChatPOCLocalAttachments(presenting: self)
     private var height: NSLayoutConstraint?
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
     private var turns: [Turn] = []
@@ -151,19 +154,40 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         action.addTarget(self, action: #selector(sendOrStop), for: .touchUpInside)
         action.widthAnchor.constraint(equalToConstant: 44).isActive = true
         action.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        addMaterials.setImage(UIImage(systemName: "plus"), for: .normal)
+        addMaterials.accessibilityIdentifier = "impress.chat.poc.add"
+        addMaterials.accessibilityLabel = "添加本地材料"
+        addMaterials.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        addMaterials.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        addMaterials.menu = localMaterials.pickerMenu()
+        addMaterials.showsMenuAsPrimaryAction = true
+        localPreview.accessibilityIdentifier = "impress.chat.poc.local-preview"
+        localPreview.contentHorizontalAlignment = .leading
+        localPreview.titleLabel?.font = .preferredFont(forTextStyle: .caption2)
+        localPreview.isHidden = true
+        localPreview.addTarget(self, action: #selector(editLocalPreviews),
+                               for: .touchUpInside)
+        localMaterials.onChange = { [weak self] previews in
+            self?.localPreview.isHidden = previews.isEmpty
+            self?.localPreview.setTitle("本地材料 " + String(previews.count) +
+                                       " 项 · 未发送 · 点击移除", for: .normal)
+        }
         composer.layer.cornerRadius = 22
         composer.backgroundColor = .secondarySystemBackground
 
-        let row = UIStackView(arrangedSubviews: [input, action])
+        let row = UIStackView(arrangedSubviews: [addMaterials, input, action])
         row.axis = .horizontal
         row.alignment = .bottom
         row.spacing = 4
-        row.translatesAutoresizingMaskIntoConstraints = false
+        let composerRows = UIStackView(arrangedSubviews: [localPreview, row])
+        composerRows.axis = .vertical
+        composerRows.spacing = 2
+        composerRows.translatesAutoresizingMaskIntoConstraints = false
         transcript.translatesAutoresizingMaskIntoConstraints = false
         composer.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(transcript)
         view.addSubview(composer)
-        composer.addSubview(row)
+        composer.addSubview(composerRows)
         let inputHeight = input.heightAnchor.constraint(equalToConstant: 44)
         height = inputHeight
         NSLayoutConstraint.activate([
@@ -174,10 +198,10 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
             composer.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 12),
             composer.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -12),
             composer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -4),
-            row.leadingAnchor.constraint(equalTo: composer.leadingAnchor, constant: 7),
-            row.trailingAnchor.constraint(equalTo: composer.trailingAnchor, constant: -7),
-            row.topAnchor.constraint(equalTo: composer.topAnchor, constant: 4),
-            row.bottomAnchor.constraint(equalTo: composer.bottomAnchor, constant: -4),
+            composerRows.leadingAnchor.constraint(equalTo: composer.leadingAnchor, constant: 7),
+            composerRows.trailingAnchor.constraint(equalTo: composer.trailingAnchor, constant: -7),
+            composerRows.topAnchor.constraint(equalTo: composer.topAnchor, constant: 4),
+            composerRows.bottomAnchor.constraint(equalTo: composer.bottomAnchor, constant: -4),
             inputHeight
         ])
         showRows()
@@ -219,6 +243,25 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         dataSource.apply(empty, animatingDifferences: false)
         showRows()
         updateAction()
+    }
+
+    @objc private func editLocalPreviews() {
+        guard !localMaterials.items.isEmpty else { return }
+        let alert = UIAlertController(
+            title: "本地材料（仅预览）",
+            message: "原型不向模型发送图片、文件或照片。",
+            preferredStyle: .actionSheet)
+        for item in localMaterials.items {
+            alert.addAction(UIAlertAction(
+                title: "移除 " + String(item.title.prefix(45)),
+                style: .default) { [weak self] _ in
+                    self?.localMaterials.remove(id: item.id)
+                })
+        }
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.popoverPresentationController?.sourceView = localPreview
+        alert.popoverPresentationController?.sourceRect = localPreview.bounds
+        present(alert, animated: true)
     }
 
     func textViewDidChange(_ textView: UITextView) {
