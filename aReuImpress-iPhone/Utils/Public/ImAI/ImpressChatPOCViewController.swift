@@ -41,7 +41,11 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
     private var turns: [Turn] = []
     private var rows: [String: Row] = [:]
     private var playback: Task<Void, Never>?
-    private var followingBottom = true
+    private enum ScrollMode { case followingBottom, readingHistory, keyboardTransition, restoring }
+    private var scrollMode: ScrollMode = .followingBottom
+    private var publishedIDs: [String] = []
+    private var isRenderingQueued = false
+    private var lastRenderedAt = CFAbsoluteTimeGetCurrent()
     /// Counts real decoded SSE delta events, not animation frames.
     private var receivedDeltas = 0
     private let fixture = """
@@ -79,6 +83,23 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         super.viewDidLoad()
         title = "Chat Renderer · POC"
         view.backgroundColor = ImpressV3Appearance.page
+        let empty = UILabel()
+        empty.text = "从一个问题开始"
+        empty.font = .preferredFont(forTextStyle: .title2)
+        empty.textColor = .secondaryLabel
+        empty.textAlignment = .center
+        empty.accessibilityIdentifier = "impress.chat.poc.empty"
+        transcript.backgroundView = empty
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: "合成压力样本", image: UIImage(systemName: "chart.bar.xaxis"),
+            primaryAction: nil, menu: UIMenu(children: [100, 1_000, 5_000].map { size in
+                UIAction(title: String(size) + " 条消息") { [weak self] _ in
+                    self?.loadSyntheticHistory(count: size)
+                }
+            }))
+        NotificationCenter.default.addObserver(self,
+            selector: #selector(refreshDynamicType),
+            name: UIContentSizeCategory.didChangeNotification, object: nil)
         navigationItem.largeTitleDisplayMode = .never
 
         transcript.backgroundColor = .clear
@@ -162,11 +183,50 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         showRows()
     }
 
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    @objc private func refreshDynamicType() {
+        // Reconfigure visible items, including already stable blocks.
+        var snapshot = dataSource.snapshot()
+        snapshot.reconfigureItems(snapshot.itemIdentifiers)
+        dataSource.apply(snapshot, animatingDifferences: false)
+    }
+
+    private func loadSyntheticHistory(count: Int) {
+        playback?.cancel()
+        playback = nil
+        turns = []
+        turns.reserveCapacity(count)
+        let longParagraph = "这一条消息包含中文、Unicode 🧠 与结构化的历史上下文。"
+        for index in 0..<count {
+            if index % 2 == 0 {
+                turns.append(Turn(id: UUID(), isUser: true,
+                    text: "合成提问 #" + String(index) + "：" + longParagraph, stream: nil))
+            } else {
+                var engine = ImpressChatPOCStream()
+                engine.start()
+                engine.append("## 第 " + String(index) + " 条回复\n\n" +
+                    longParagraph + "\n\n")
+                engine.finish()
+                turns.append(Turn(id: UUID(), isUser: false, text: "", stream: engine))
+            }
+        }
+        scrollMode = .followingBottom
+        publishedIDs = []
+        rows = [:]
+        var empty = NSDiffableDataSourceSnapshot<Int, String>()
+        empty.appendSections([0])
+        dataSource.apply(empty, animatingDifferences: false)
+        showRows()
+        updateAction()
+    }
+
     func textViewDidChange(_ textView: UITextView) {
         let measured = textView.sizeThatFits(
             CGSize(width: max(1, textView.bounds.width), height: .greatestFiniteMagnitude)).height
         height?.constant = min(148, max(44, measured))
         textView.isScrollEnabled = measured > 148
+        updateAction()
     }
 
     @objc private func sendOrStop() {
@@ -182,15 +242,20 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
             return
         }
         let value = input.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return }
-        turns.append(Turn(id: UUID(), isUser: true, text: value, stream: nil))
+        if value.isEmpty {
+            // Explicit regenerate after Stop/failure. The old partial answer
+            // stays intact; we append a new attempt without duplicating input.
+            guard canRegenerate else { return }
+        } else {
+            turns.append(Turn(id: UUID(), isUser: true, text: value, stream: nil))
+        }
         var model = ImpressChatPOCStream()
         model.start()
         turns.append(Turn(id: UUID(), isUser: false, text: "", stream: model))
         input.text = ""
         textViewDidChange(input)
         input.resignFirstResponder()
-        followingBottom = true
+        scrollMode = .followingBottom
         showRows()
         updateAction()
 
@@ -282,7 +347,22 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         guard let i = turns.indices.last, var stream = turns[i].stream else { return }
         stream.append(text)
         turns[i].stream = stream
-        showRows()
+        // Up to 30Hz view commits, independent from transport events.
+        // All tokens update the model immediately; no visible updates are lost.
+        let now = CFAbsoluteTimeGetCurrent()
+        if now - lastRenderedAt >= 1.0 / 30.0 {
+            lastRenderedAt = now
+            showRows()
+        } else if !isRenderingQueued {
+            isRenderingQueued = true
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 34_000_000)
+                guard let self else { return }
+                self.isRenderingQueued = false
+                self.lastRenderedAt = CFAbsoluteTimeGetCurrent()
+                self.showRows()
+            }
+        }
     }
 
     private func finish() {
@@ -294,11 +374,20 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         showRows()
     }
 
+    private var canRegenerate: Bool {
+        guard let stream = turns.last?.stream else { return false }
+        return stream.phase == .stopped || stream.phase == .failed
+    }
+
     private func updateAction() {
         let running = playback != nil
-        action.setImage(UIImage(systemName: running ? "stop.circle.fill" : "arrow.up.circle.fill"),
-                        for: .normal)
-        action.accessibilityLabel = running ? "停止生成" : "发送"
+        let retry = !running && input.text.trimmingCharacters(
+            in: .whitespacesAndNewlines).isEmpty && canRegenerate
+        let symbol = running ? "stop.circle.fill" :
+            (retry ? "arrow.clockwise.circle.fill" : "arrow.up.circle.fill")
+        action.setImage(UIImage(systemName: symbol), for: .normal)
+        action.accessibilityLabel = running ? "停止生成" :
+            (retry ? "重新生成" : "发送")
         action.accessibilityValue = running ? "SSE 增量事件：" + String(receivedDeltas) : nil
     }
 
@@ -342,14 +431,26 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
             return (id, attributes.frame.minY - transcript.contentOffset.y)
         }
         rows = fresh
-        var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
-        snapshot.appendSections([0])
-        snapshot.appendItems(identifiers)
-        snapshot.reconfigureItems(changed)
+        transcript.backgroundView?.isHidden = !identifiers.isEmpty
+        var snapshot = dataSource.snapshot()
+        if identifiers == publishedIDs {
+            if changed.isEmpty { return }
+            snapshot.reconfigureItems(changed)
+        } else if publishedIDs.count <= identifiers.count &&
+                    Array(identifiers.prefix(publishedIDs.count)) == publishedIDs {
+            snapshot.appendItems(Array(identifiers.dropFirst(publishedIDs.count)))
+            if !changed.isEmpty { snapshot.reconfigureItems(changed) }
+        } else {
+            snapshot = NSDiffableDataSourceSnapshot<Int, String>()
+            snapshot.appendSections([0])
+            snapshot.appendItems(identifiers)
+            if !changed.isEmpty { snapshot.reconfigureItems(changed) }
+        }
+        publishedIDs = identifiers
         dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
             guard let self else { return }
             self.transcript.layoutIfNeeded()
-            if self.followingBottom {
+            if self.scrollMode == .followingBottom {
                 if let index = identifiers.indices.last {
                     self.transcript.scrollToItem(at: IndexPath(item: index, section: 0),
                                                   at: .bottom, animated: false)
@@ -367,12 +468,18 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
     }
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
-        followingBottom = false
+        scrollMode = .readingHistory
     }
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate: Bool) {
-        let remaining = scrollView.contentSize.height -
-            (scrollView.contentOffset.y + scrollView.bounds.height)
-        if remaining < 64 { followingBottom = true }
+        if !willDecelerate { updateFollowMode(scrollView) }
+    }
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        updateFollowMode(scrollView)
+    }
+    private func updateFollowMode(_ scroll: UIScrollView) {
+        let remaining = scroll.contentSize.height -
+            (scroll.contentOffset.y + scroll.bounds.height)
+        scrollMode = remaining < 64 ? .followingBottom : .readingHistory
     }
 }
 
