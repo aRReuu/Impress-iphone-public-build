@@ -1,4 +1,4 @@
-name: Impress V3.1 P0-P2 Public Build
+name: Impress V1.1 Development QA
 
 on:
   push:
@@ -8,6 +8,12 @@ on:
     paths-ignore:
       - '**/*.md'
   workflow_dispatch:
+    inputs:
+      release_candidate:
+        description: 'Explicitly approved full-app unsigned IPA release candidate (never on push)'
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -181,6 +187,7 @@ jobs:
           # Native XCTest already ran in the separate signed Debug test step.
           xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone-AltStore -configuration Release -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/ImpressReleaseSim" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee out/release-simulator-build.log
       - name: Compile unsigned Debug iPhoneOS arm64
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_candidate }}
         shell: bash
         run: |
           set -euo pipefail
@@ -188,6 +195,7 @@ jobs:
           # Match the previously successful unsigned ARM64 AltStore CI settings.
           xcodebuild -workspace aReuImpress-iPhone.xcworkspace -scheme aReuImpress-iPhone-AltStore -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/ImpressPhone" IPHONEOS_DEPLOYMENT_TARGET=26.0 CODE_SIGNING_ALLOWED=NO CODE_SIGN_ENTITLEMENTS= ENABLE_DEBUG_DYLIB=NO build 2>&1 | tee out/iphoneos-arm64-build.log
       - name: Package and hash unsigned iPhoneOS IPA
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_candidate }}
         shell: bash
         run: |
           set -euo pipefail
@@ -262,10 +270,10 @@ jobs:
               report["ipa_sha256"] + "  " + ipa.name + "\n")
           print(json.dumps(report, indent=2))
           PY
-      - name: Upload IPA, logs and XCTest evidence
+      - name: Upload QA logs and optional explicit release artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: impress-v3-p0p2-unsigned-iphoneos-and-evidence
+          name: impress-v11-qa-evidence${{ inputs.release_candidate && '-with-explicit-ipa' || '' }}
           path: out/
           retention-days: 14
