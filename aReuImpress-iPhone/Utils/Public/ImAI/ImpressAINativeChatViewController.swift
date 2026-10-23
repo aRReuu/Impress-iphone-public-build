@@ -1425,6 +1425,8 @@ final class ImpressAINativeChatViewController: UIViewController,
         let priorSave = saveChain
         requestTask = Task {
             await priorSave?.value
+            // Shared by success and failure paths; partial responses survive errors.
+            var assistantID: UUID?
             do {
                 try Task.checkCancellation()
                 // Re-check the authorized Vault and content SHA immediately
@@ -1471,7 +1473,6 @@ final class ImpressAINativeChatViewController: UIViewController,
                 // Production sends consume the same provider-normalized SSE events
                 // already validated by the offline Chat POC. A terminal event alone
                 // may mark a reply completed; partial EOF and cancellation may not.
-                var assistantID: UUID?
                 var terminalReceived = false
                 var lastCheckpoint = Date.distantPast
                 func appendChunk(_ text: String) {
