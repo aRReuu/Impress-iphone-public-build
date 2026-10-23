@@ -373,16 +373,23 @@ final class ImpressChatPOCMathCell: UICollectionViewCell, WKNavigationDelegate {
             });
             return document.querySelectorAll('.katex').length;
             """
-        web.callAsyncJavaScript(javascript,
-            arguments: ["markdown": current, "css": css],
-            in: nil, contentWorld: .page) { [weak self] result in
-                guard let self, self.renderEpoch == epoch,
-                      case .success(let value) = result,
+        // iOS 26+ exposes this as an async throws API rather than the old
+        // completion-handler overload. Each render is tied to the reuse epoch.
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let value = try await self.web.callAsyncJavaScript(javascript,
+                    arguments: ["markdown": current, "css": css],
+                    in: nil, contentWorld: .page)
+                guard self.renderEpoch == epoch,
                       let renderedCount = value as? NSNumber,
                       renderedCount.intValue > 0 else { return }
                 self.web.isHidden = false
                 self.fallback.isHidden = true
+            } catch {
+                // Preserve the selectable TeX fallback; no false render PASS.
             }
+        }
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
