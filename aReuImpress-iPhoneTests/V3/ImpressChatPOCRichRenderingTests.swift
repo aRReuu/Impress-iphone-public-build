@@ -295,6 +295,10 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
             return (user + kernel, Double(usage.ru_maxrss) / (1024 * 1024))
         }
         for messageCount in [0, 100, 1_000, 5_000] {
+            // NSLog flushes even if the simulator kills a pathological load.
+            // This separates the data-source phase from the actual layout
+            // without weakening the 5,000-message coverage or its assertions.
+            NSLog("CHAT_SCALE_BEGIN messages=%d", messageCount)
             let viewport = ImpressChatProductionTranscript(
                 frame: CGRect(x: 0, y: 0, width: 390, height: 700))
             let window = UIWindow(frame: viewport.bounds)
@@ -312,18 +316,30 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
             let baseline = resourceSample()
             let start = CFAbsoluteTimeGetCurrent()
             viewport.update(messages)
+            NSLog("CHAT_SCALE_APPLY_REQUESTED messages=%d", messageCount)
             let applied = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-                viewport.layoutIfNeeded()
-                return collection.numberOfItems(inSection: 0) == messageCount
+                return collection.numberOfSections > 0 &&
+                    collection.numberOfItems(inSection: 0) == messageCount
             }, object: nil)
+            // A repeated layoutIfNeeded inside this polling predicate caused
+            // thousands of full-pass layouts; measure one visible layout after
+            // the actual snapshot has committed instead.
             let outcome = XCTWaiter.wait(for: [applied], timeout: 25)
+            NSLog("CHAT_SCALE_APPLY_FINISHED messages=%d result=%d",
+                  messageCount, outcome.rawValue)
+            let firstLayoutStart = CFAbsoluteTimeGetCurrent()
+            if outcome == .completed { viewport.layoutIfNeeded() }
+            let firstLayoutMilliseconds =
+                (CFAbsoluteTimeGetCurrent() - firstLayoutStart) * 1_000
             let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1_000
             let measured = resourceSample()
             let cpuDelta = (measured?.cpuMilliseconds ?? 0) -
                 (baseline?.cpuMilliseconds ?? 0)
             print("CHAT_SIMULATOR_TRANSCRIPT_LOAD messages=\(messageCount)" +
                   " rows=\(collection.numberOfItems(inSection: 0))" +
-                  " elapsed_ms=\(Int(elapsed)) cpu_ms=\(Int(cpuDelta))" +
+                  " elapsed_ms=\(Int(elapsed))" +
+                  " initial_visible_layout_ms=\(Int(firstLayoutMilliseconds))" +
+                  " cpu_ms=\(Int(cpuDelta))" +
                   " peak_process_rss_mib=\(Int(measured?.peakRSSMiB ?? 0))" +
                   " platform=simulator")
             XCTAssertEqual(outcome, .completed,

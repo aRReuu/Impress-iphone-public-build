@@ -331,9 +331,14 @@ final class ImpressChatProductionTranscript: UIView,
             snapshot.appendItems(identifiers)
         }
         refreshAll = false
+        // A large, entirely new history has no useful animated diff. Building
+        // thousands of insertion transitions needlessly stresses self-sizing
+        // layouts; retain the identical stable IDs via a reload-data snapshot.
+        let initialLargeHistory = identifiers.count >= 1_000 &&
+            oldIDs.isDisjoint(with: identifiers)
         publishedIDs = identifiers
         snapshotInFlight = true
-        dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
+        let finished: () -> Void = { [weak self] in
             guard let self else { return }
             self.collection.layoutIfNeeded()
             if let focus = self.requestedFocus,
@@ -362,6 +367,12 @@ final class ImpressChatProductionTranscript: UIView,
                 self.snapshotNeedsRefresh = false
                 self.renderLatest()
             }
+        }
+        if initialLargeHistory {
+            dataSource.applySnapshotUsingReloadData(snapshot, completion: finished)
+        } else {
+            dataSource.apply(snapshot, animatingDifferences: false,
+                             completion: finished)
         }
     }
 
