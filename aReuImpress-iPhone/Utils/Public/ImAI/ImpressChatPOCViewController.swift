@@ -46,6 +46,10 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
     private var turns: [Turn] = []
     private var rows: [String: Row] = [:]
     private var playback: Task<Void, Never>?
+    /// XCTest-injected stream uses the same domain events as HTTP transport,
+    /// with zero network and no changes to production sessions.
+    private var injectedStream: ((String) async throws ->
+        AsyncThrowingStream<ImpressChatPOCOutput, Error>)?
     private enum ScrollMode { case followingBottom, readingHistory, keyboardTransition, restoring }
     private var scrollMode: ScrollMode = .followingBottom
     private var publishedIDs: [String] = []
@@ -277,6 +281,15 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         localMaterials.addSyntheticPreviewForTest(title)
     }
 
+    func injectOfflineDomainStreamForTest(_ producer: @escaping (String) async throws ->
+        AsyncThrowingStream<ImpressChatPOCOutput, Error>) {
+        injectedStream = producer
+    }
+
+    var testVisibleStreamPhase: ImpressChatPOCPhase? {
+        turns.last?.stream?.phase
+    }
+
     private func showLocalThumbnails(_ previews: [ImpressChatPOCLocalPreview]) {
         thumbnailRow.arrangedSubviews.forEach { view in
             thumbnailRow.removeArrangedSubview(view)
@@ -346,6 +359,8 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
             return
         }
         let value = input.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let requestedText = value.isEmpty ?
+            (turns.last(where: { $0.isUser })?.text ?? "") : value
         if value.isEmpty {
             // Explicit regenerate after Stop/failure. The old partial answer
             // stays intact; we append a new attempt without duplicating input.
@@ -362,6 +377,40 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         scrollMode = .followingBottom
         showRows()
         updateAction()
+
+        // The source of typed domain events is independent of the view
+        // container. Injected tests exercise the same adapter used by
+        // future approved provider streams, with no network or model charge.
+        if let provider = injectedStream {
+            playback = Task { [weak self] in
+                guard let self else { return }
+                do {
+                    let events = try await provider(requestedText)
+                    for try await event in events {
+                        try Task.checkCancellation()
+                        switch event {
+                        case .delta(let content):
+                            self.receivedDeltas += 1
+                            self.append(content)
+                        case .completed:
+                            self.finish()
+                            return
+                        case .failed:
+                            self.failStream()
+                            return
+                        }
+                    }
+                    // A disconnected provider cannot finalize partial text.
+                    self.failStream()
+                } catch is CancellationError {
+                    // Stop already froze the draft; no completion is written.
+                } catch {
+                    self.failStream()
+                }
+            }
+            updateAction()
+            return
+        }
 
         // Replay genuine fragmented OpenAI-format SSE byte frames. This
         // exercises the EXACT offline UTF-8/SSE/terminal decoder used by the
