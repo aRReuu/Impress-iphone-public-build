@@ -49,7 +49,12 @@ final class ImpressAIHTTPStreamingIntegrationTests: XCTestCase {
         let request = try XCTUnwrap(OfflineSSEProtocol.capturedRequest)
         XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "text/event-stream")
         XCTAssertEqual(request.httpMethod, "POST")
-        let data = try XCTUnwrap(request.httpBody)
+        // URLProtocol may receive a POST body as a non-rewindable stream.
+        // Inspect the exact request builder used by converseStream instead.
+        let prepared = try await client.debugPreparedStreamRequest(
+            route: route, system: "仅离线测试",
+            turns: [ImpressAIChatTurn(role: .user, text: "请解释")])
+        let data = try XCTUnwrap(prepared.httpBody)
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertEqual(body["stream"] as? Bool, true)
         XCTAssertEqual(body["model"] as? String,

@@ -501,9 +501,11 @@ actor ImpressAIHTTPClient {
     /// silently upgrades paid models, or marks a lost socket as completed.
     /// The renderer can consume this stream without changing WCDB schema.
     /// All automated tests inject a zero-network URLProtocol fixture.
-    func converseStream(route: ImpressAIResolvedRoute, system: String,
-                        turns: [ImpressAIChatTurn]) async throws
-        -> AsyncThrowingStream<ImpressChatPOCOutput, Error> {
+    /// One validated wire request per explicit Send. Private in production;
+    /// the Debug-only projection allows zero-network payload assertions.
+    private func makeConverseStreamRequest(
+        route: ImpressAIResolvedRoute, system: String, turns: [ImpressAIChatTurn]
+    ) throws -> (URLRequest, ImpressChatPOCProviderProtocol) {
         guard !turns.isEmpty, turns.last?.role == .user, turns.count <= 20,
               system.utf8.count <= 4_000,
               turns.allSatisfy({
@@ -567,6 +569,21 @@ actor ImpressAIHTTPClient {
         }
         wireRequest.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         wireRequest.timeoutInterval = 90
+        return (wireRequest, protocolID)
+    }
+
+    #if DEBUG
+    func debugPreparedStreamRequest(route: ImpressAIResolvedRoute, system: String,
+                                    turns: [ImpressAIChatTurn]) throws -> URLRequest {
+        try makeConverseStreamRequest(route: route, system: system, turns: turns).0
+    }
+    #endif
+
+    func converseStream(route: ImpressAIResolvedRoute, system: String,
+                        turns: [ImpressAIChatTurn]) async throws
+        -> AsyncThrowingStream<ImpressChatPOCOutput, Error> {
+        let (wireRequest, protocolID) = try makeConverseStreamRequest(
+            route: route, system: system, turns: turns)
         let currentSession = session
         return AsyncThrowingStream { continuation in
             let transportTask = Task {
