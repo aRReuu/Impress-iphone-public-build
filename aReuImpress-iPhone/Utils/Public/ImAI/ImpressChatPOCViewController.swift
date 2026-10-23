@@ -171,6 +171,11 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
                                for: .touchUpInside)
         thumbnailScroller.showsHorizontalScrollIndicator = false
         thumbnailScroller.isHidden = true
+        // UIScrollView has no intrinsic height inside a vertical UIStackView.
+        // Lower priority permits a hidden arrangedSubview to collapse to zero.
+        let previewHeight = thumbnailScroller.heightAnchor.constraint(equalToConstant: 56)
+        previewHeight.priority = .defaultHigh
+        previewHeight.isActive = true
         thumbnailRow.axis = .horizontal
         thumbnailRow.spacing = 6
         thumbnailRow.translatesAutoresizingMaskIntoConstraints = false
