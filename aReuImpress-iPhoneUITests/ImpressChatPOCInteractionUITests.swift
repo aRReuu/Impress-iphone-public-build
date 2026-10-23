@@ -67,6 +67,26 @@ final class ImpressChatPOCInteractionUITests: XCTestCase {
         XCTAssertEqual(control.label, "发送")
         XCTAssertTrue(app.collectionViews["impress.chat.poc.transcript"].exists)
     }
+    func testSingleOfflineWebComparatorOpensWithSameFixture() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-ImpressChatPOC", "-AppleLanguages", "(zh-Hans)"]
+        app.launch()
+        let control = app.buttons["Web 对照"]
+        XCTAssertTrue(control.waitForExistence(timeout: 25))
+        control.tap()
+        let web = app.webViews["impress.chat.poc.single-web-control"]
+        XCTAssertTrue(web.waitForExistence(timeout: 25),
+                      "The comparison must load a real, single offline WKWebView")
+        let report = app.staticTexts["impress.chat.poc.web-report"]
+        XCTAssertTrue(report.waitForExistence(timeout: 20))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "chat-poc-single-offline-web-ab-control"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        XCTAssertTrue(report.label.contains("对照") ||
+                      report.label.contains("实验"))
+    }
+
     private func waitForLabel(_ element: XCUIElement, _ expected: String,
                               timeout: TimeInterval) -> Bool {
         let predicate = NSPredicate(format: "label == %@", expected)
