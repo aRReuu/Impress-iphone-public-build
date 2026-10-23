@@ -421,6 +421,10 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
         // exercises the EXACT offline UTF-8/SSE/terminal decoder used by the
         // Core tests; it is no longer a fake substring typing animation.
         let frames = makeOfflineFrames(for: fixture)
+        // Test-only deterministic slow SSE; normal POC stays responsive.
+        let controlledStopReplay = ProcessInfo.processInfo.arguments
+            .contains("-ImpressChatPOCControlledStopReplay")
+        let replayDelay: UInt64 = controlledStopReplay ? 950_000_000 : 22_000_000
         receivedDeltas = 0
         playback = Task { [weak self] in
             guard let self else { return }
@@ -428,7 +432,7 @@ final class ImpressChatPOCViewController: UIViewController, UITextViewDelegate, 
             do {
                 for bytes in frames {
                     try Task.checkCancellation()
-                    try await Task.sleep(nanoseconds: 22_000_000)
+                    try await Task.sleep(nanoseconds: replayDelay)
                     try Task.checkCancellation()
                     for output in try transport.append(bytes) {
                         switch output {

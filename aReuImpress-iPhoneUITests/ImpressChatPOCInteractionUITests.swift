@@ -6,7 +6,8 @@ final class ImpressChatPOCInteractionUITests: XCTestCase {
 
     func testOfflineChatRendererSendStreamHistoryAndStop() throws {
         let app = XCUIApplication()
-        app.launchArguments += ["-ImpressChatPOC", "-AppleLanguages", "(zh-Hans)"]
+        app.launchArguments += ["-ImpressChatPOC", "-ImpressChatPOCControlledStopReplay",
+                                "-AppleLanguages", "(zh-Hans)"]
         app.launch()
         let transcript = app.collectionViews["impress.chat.poc.transcript"]
         XCTAssertTrue(transcript.waitForExistence(timeout: 30))
@@ -19,7 +20,10 @@ final class ImpressChatPOCInteractionUITests: XCTestCase {
         XCTAssertTrue(transcript.cells.firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["impress.chat.poc.send-stop"].waitForExistence(timeout: 10))
         transcript.swipeDown()
-        control.tap() // While the long offline fixture is still streaming.
+        XCTAssertTrue(waitForLabel(control, "停止生成", timeout: 10),
+                      "Must verify active streaming before stopping")
+        control.tap()
+        XCTAssertTrue(waitForLabel(control, "重新生成", timeout: 10))
         XCTAssertEqual(control.label, "重新生成",
                        "A stopped answer must be retained and explicitly retryable")
         let shot = XCTAttachment(screenshot: app.screenshot())
@@ -30,7 +34,8 @@ final class ImpressChatPOCInteractionUITests: XCTestCase {
     }    
     func testStopRetainsPartialAndAllowsExplicitRegeneration() throws {
         let app = XCUIApplication()
-        app.launchArguments += ["-ImpressChatPOC", "-AppleLanguages", "(zh-Hans)"]
+        app.launchArguments += ["-ImpressChatPOC", "-ImpressChatPOCControlledStopReplay",
+                                "-AppleLanguages", "(zh-Hans)"]
         app.launch()
         let input = app.textViews["impress.chat.poc.input"]
         XCTAssertTrue(input.waitForExistence(timeout: 25))
@@ -38,11 +43,11 @@ final class ImpressChatPOCInteractionUITests: XCTestCase {
         input.typeText("Retry scenario")
         let action = app.buttons["impress.chat.poc.send-stop"]
         action.tap()
-        XCTAssertTrue(action.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForLabel(action, "停止生成", timeout: 10))
         action.tap()
-        XCTAssertEqual(action.label, "重新生成")
+        XCTAssertTrue(waitForLabel(action, "重新生成", timeout: 10))
         action.tap()
-        XCTAssertEqual(action.label, "停止生成")
+        XCTAssertTrue(waitForLabel(action, "停止生成", timeout: 10))
     }
 
     func testFullOfflineSSEReplayMustReachExplicitCompletion() throws {
@@ -62,4 +67,11 @@ final class ImpressChatPOCInteractionUITests: XCTestCase {
         XCTAssertEqual(control.label, "发送")
         XCTAssertTrue(app.collectionViews["impress.chat.poc.transcript"].exists)
     }
+    private func waitForLabel(_ element: XCUIElement, _ expected: String,
+                              timeout: TimeInterval) -> Bool {
+        let predicate = NSPredicate(format: "label == %@", expected)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
 }
