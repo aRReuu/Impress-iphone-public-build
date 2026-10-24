@@ -1641,15 +1641,21 @@ final class ImpressV11NavigationUITests: XCTestCase {
         XCTAssertTrue(persistedSession.waitForExistence(timeout: 20),
             "Completed discussion must remain in persisted local history")
 
-        // The previous check proved only that *a* row survived. Select the
-        // original card-origin discussion by its explicit user prompt after
-        // note re-entry/cold launch: the note's empty session is not proof.
-        // All operations below use the real history selector and receipt UI.
+        // The previous check proved only that *a* row survived. Exercise
+        // the actual built-in local history SEARCH to locate the exact original
+        // card prompt across note re-entry and process death; a visible row
+        // without that message or a new empty note session is not sufficient.
+        // This also avoids assuming every unfiltered history row is onscreen.
+        let historySearch = app.searchFields.firstMatch
+        XCTAssertTrue(historySearch.waitForExistence(timeout: 12),
+            "Conversation history must expose native full-text search")
+        historySearch.tap()
+        historySearch.typeText("请根据所选来源明确推导")
         let exactHistory = sessions.cells.matching(
             identifier: "impress.ai.chat.history-row").matching(
                 NSPredicate(format: "label CONTAINS %@", "请根据所选来源明确推导")).firstMatch
         XCTAssertTrue(exactHistory.waitForExistence(timeout: 15),
-            "The exact original card discussion must survive the note round trip")
+            "The persisted original card message must be found by real history search")
         exactHistory.tap()
         let restoredQuestion = app.textViews.matching(
             identifier: "impress.ai.chat.message-body").matching(

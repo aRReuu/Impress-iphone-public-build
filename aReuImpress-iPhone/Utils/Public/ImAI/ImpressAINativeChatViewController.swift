@@ -2306,6 +2306,12 @@ final class ImpressChatSessionHistoryViewController: UITableViewController,
         cell.backgroundColor = ImpressV3Appearance.surface
         cell.accessoryType = session.sessionID == currentSessionID
             ? .checkmark : .disclosureIndicator
+        // Make the actual preview searchable by VoiceOver and XCTest. UIKit
+        // does not consistently synthesize the cell's accessibility label
+        // from UIListContentConfiguration on every iOS runtime. The row must
+        // expose its own persisted message text, not only a generic ID.
+        cell.accessibilityLabel = hit.preview + " · " +
+            (session.sourceDisplayName ?? session.sourceIdentity)
         cell.accessibilityIdentifier = "impress.ai.chat.history-row"
         return cell
     }
