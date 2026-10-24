@@ -279,6 +279,8 @@ final class ImpressAINativeChatViewController: UIViewController,
     private let localAttachmentHint = UILabel()
     private var localAttachmentHeight: NSLayoutConstraint?
     private var acknowledgedTextOnlyPreviews = false
+    // Frozen only after a real Send confirmation. No bytes reach WCDB/backup.
+    private var approvedImagesForSend: [ImpressAIImagePayload]?
     // Existing bounded system picker implementation becomes a real production
     // composer preview. Its data never enters WCDB or provider payloads.
     private lazy var localAttachments = ImpressChatPOCLocalAttachments(presenting: self)
@@ -518,6 +520,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         materialButton.showsMenuAsPrimaryAction = true
         localAttachments.onChange = { [weak self] _ in
             self?.acknowledgedTextOnlyPreviews = false
+            self?.approvedImagesForSend = nil
             self?.updateLocalPreviewStrip()
         }
         var dictation = UIButton.Configuration.plain()
@@ -577,7 +580,8 @@ final class ImpressAINativeChatViewController: UIViewController,
         localAttachmentHint.textColor = .secondaryLabel
         localAttachmentHint.adjustsFontForContentSizeCategory = true
         localAttachmentHint.numberOfLines = 2
-        localAttachmentHint.text = V3L("仅本地预览；模型无法读取附件")
+        localAttachmentHint.text = V3L(
+            "所选材料尚未发送。仅经模型能力确认和逐次批准的图片可上传；其他文件始终只在本地预览。")
         localAttachmentHint.accessibilityIdentifier =
             "impress.ai.chat.local-preview-not-transmitted"
         localAttachmentHint.isHidden = true
@@ -1374,20 +1378,6 @@ final class ImpressAINativeChatViewController: UIViewController,
         let text = messageInput.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf8.count <= 12_000,
               !sending, !restoring else { return }
-        if !localAttachments.items.isEmpty && !acknowledgedTextOnlyPreviews {
-            let prompt = UIAlertController(title: V3L("附件尚未接入模型"),
-                message: V3L("当前相册、文件和照片只能本地预览。继续只会发送输入文字及另外明确授权的笔记材料；模型不会看到这些附件。"),
-                preferredStyle: .alert)
-            prompt.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
-            prompt.addAction(UIAlertAction(title: V3L("仅发送文字"),
-                style: .default) { [weak self] _ in
-                    guard let self else { return }
-                    self.acknowledgedTextOnlyPreviews = true
-                    self.submitMessage()
-                })
-            present(prompt, animated: true)
-            return
-        }
         let omitted = ImpressChatWindowPolicy.omittedCompletedCount(in: history)
         if omitted > 0 && !acknowledgedBoundedContext {
             let alert = UIAlertController(title: V3L("确认有限对话上下文"),
@@ -1527,8 +1517,57 @@ final class ImpressAINativeChatViewController: UIViewController,
 
     private func performSend(_ message: String, route: ImpressAIResolvedRoute) {
         guard !sending, !restoring else { return }
-        // Text-only approval is per request; no preview data ever enters
-        // system prompt, turn serialization, WCDB or the SSE transport.
+        if !localAttachments.items.isEmpty && !acknowledgedTextOnlyPreviews &&
+           approvedImagesForSend == nil {
+            let available = localAttachments.imagePayloadsForExplicitSend()
+            let canSendImages = route.model.supportsImageInput == true &&
+                !ImpressAIOpenCodeFreeQA.isQAProfile(route.connection) &&
+                available != nil
+            let alert = UIAlertController(
+                title: V3L("确认本次附件发送范围"),
+                message: canSendImages
+                    ? V3L("将向以下服务商和模型发送所选图片：") + "\n" +
+                      route.connection.title + " · " + route.model.identifier +
+                      "\n" + V3L("图片只在本次请求发送，不加入以后自动上传的上下文。")
+                    : V3L("当前选择包含无法传输的文件，或当前模型没有明确启用图片能力。未经支持和批准的材料不会上传。"),
+                preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            alert.addAction(UIAlertAction(title: V3L("仅发送文字"),
+                style: .default) { [weak self] _ in
+                    guard let self else { return }
+                    self.acknowledgedTextOnlyPreviews = true
+                    self.performSend(message, route: route)
+                })
+            if canSendImages, let available {
+                alert.addAction(UIAlertAction(
+                    title: V3L("批准发送") + " " + String(available.count) +
+                        V3L(" 张图片"),
+                    style: .default) { [weak self] _ in
+                    guard let self else { return }
+                    self.approvedImagesForSend = available
+                    self.performSend(message, route: route)
+                })
+            }
+            present(alert, animated: true)
+            return
+        }
+        let authorizedImages = approvedImagesForSend ?? []
+        // A changed or removed local preview invalidates earlier permission.
+        if !authorizedImages.isEmpty {
+            guard route.model.supportsImageInput == true,
+                  !ImpressAIOpenCodeFreeQA.isQAProfile(route.connection),
+                  let current = localAttachments.imagePayloadsForExplicitSend(),
+                  current.count == authorizedImages.count,
+                  zip(current, authorizedImages).allSatisfy({ pair in
+                      pair.0.jpeg == pair.1.jpeg &&
+                          pair.0.displayName == pair.1.displayName
+                  }) else {
+                approvedImagesForSend = nil
+                showTransientStatus(V3L("附件或模型已改变；图片授权失效，请重新确认。"))
+                return
+            }
+        }
+        approvedImagesForSend = nil
         acknowledgedTextOnlyPreviews = false
         draftDebounce?.cancel()
         sending = true
@@ -1562,7 +1601,16 @@ final class ImpressAINativeChatViewController: UIViewController,
         history.append(WCDBV3ChatMessage(
             messageID: messageID, role: .user, text: message,
             status: .pending, providerID: providerID,
-            modelIdentifier: modelName, promptSnapshot: prompt))
+            modelIdentifier: modelName, promptSnapshot: prompt,
+            approvedImages: authorizedImages.isEmpty ? nil :
+                authorizedImages.map {
+                    WCDBV3ChatImageApproval(
+                        name: String($0.displayName
+                            .replacingOccurrences(of: "\n", with: " ")
+                            .replacingOccurrences(of: "\r", with: " ")
+                            .prefix(24)),
+                        jpegBytes: $0.jpeg.count)
+                }))
         messageInput.text = ""
         privacyLabel.text = V3L("正在请求模型…")
         sendButton.isEnabled = true
@@ -1662,7 +1710,8 @@ final class ImpressAINativeChatViewController: UIViewController,
                     terminalReceived = true
                 } else {
                     let events = try await ImpressAIHTTPClient.shared.converseStream(
-                        route: route, system: system, turns: turns)
+                        route: route, system: system, turns: turns,
+                        images: authorizedImages)
                     for try await event in events {
                         try Task.checkCancellation()
                         switch event {
@@ -1674,7 +1723,8 @@ final class ImpressAINativeChatViewController: UIViewController,
                 }
                 #else
                 let events = try await ImpressAIHTTPClient.shared.converseStream(
-                    route: route, system: system, turns: turns)
+                    route: route, system: system, turns: turns,
+                        images: authorizedImages)
                 for try await event in events {
                     try Task.checkCancellation()
                     switch event {
@@ -1696,7 +1746,11 @@ final class ImpressAINativeChatViewController: UIViewController,
                 history[assistantIndex].status = .completed
                 activeProviderID = providerID
                 requestFailure = nil
-                privacyLabel.text = V3L("对话已保存至本机；更新内容仍需预览确认。")
+                privacyLabel.text = authorizedImages.isEmpty
+                    ? V3L("对话已保存至本机；更新内容仍需预览确认。")
+                    : V3L("已批准图片随本次请求提交。模型的实际视觉能力以服务商为准。")
+                // The temporary image bytes are not retained in chat history.
+                if !authorizedImages.isEmpty { localAttachments.clear() }
             } catch {
                 let cancelled = Task.isCancelled || error is CancellationError
                 if let index = history.firstIndex(where: { $0.messageID == messageID }) {
@@ -1765,6 +1819,11 @@ final class ImpressAINativeChatViewController: UIViewController,
     }
 
     private func activateSession(_ session: WCDBV3ChatSession) {
+        if storedSession?.sessionID != session.sessionID,
+           !localAttachments.items.isEmpty {
+            // Unsent picker selections do not grant another session authority.
+            localAttachments.clear()
+        }
         transcript.activateConversation(session.sessionID)
         storedSession = session
         acknowledgedBoundedContext = false
@@ -1850,6 +1909,7 @@ final class ImpressAINativeChatViewController: UIViewController,
         draftDebounce?.cancel()
         // The DB tombstone rejects any previously queued asynchronous writes.
         storedSession = nil
+        localAttachments.clear()
         history = []
         pendingDuplex = nil
         previousDuplex = []

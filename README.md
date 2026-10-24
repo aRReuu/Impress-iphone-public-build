@@ -68,3 +68,8 @@ V3 WCDB为卡片/FSRS/Chat唯一权威；内容revision与调度revision独立�
 经真实日志核查：`d2652ba4e4af1c5981f5901fe56cc35667e0e53f` / [Run39984006889](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39984006889) 已获 Portable Core/Native XCTest 219/219/XCUITest 20/20/Debug+Release Simulator/unsigned ARM64 全绿；IPA 打包因门禁被**跳过**。后续 7b8009056aacc1b4a4d208ca210d88204f299eb9 / Run39988645038 的 SSE 回归已见 Portable Core PASS，新增代码的完整 iOS 结论必须按自己的最终 Run 记录。完整 Chat 视觉/权限/性能、官方 Excalidraw SVG A/B、18 步与 F01～13、W01～15 SpringBoard、iPhone13 和整套交付尚未闭账。
 
 **当前硬门禁：所有需求及必要自动化达标前绝不生成 IPA。** 私有仓库、公开 main、AppIcon、真实 Vault 和密钥禁止修改/上传；`ImVaultGuardedWrite.productionWriteEnabled = false`。即使 Debug 合成测试通过，也不能宣称已完成真机验收。
+
+
+## 2026-10-24 · Chat 本地图片发送（待精确 SHA 验证）
+
+在原生 Composer 基础上增加图片请求明确授权：模型设置中手动启用能力，发送前再按图片和服务商批准；相册/拍照/本地图片由有界解码重编码为去元数据 JPEG，OpenAI Chat Completions/Responses、Anthropic、Gemini 按不同 wire 编码，原图片不入 WCDB/备份。非图片文件、免费 QA、未知或未确认视觉能力均保守拒绝图片发送，用户仍能单独选择文字发送。旧会话不迁移，保留已批准图片的本地元数据回执。新 Mock/Native 用例的 CODE_DONE 不等于 TEST_PASS；没有真实 Provider、SpringBoard 和 iPhone13 测试便不能升级设备结论。整体 18 步/ACCEPT/F/U/RDR/W/Excalidraw SVG A/B 未闭账，完成前不得 IPA 打包。

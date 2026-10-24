@@ -15,6 +15,18 @@ struct ImpressChatPOCLocalPreview {
     let source: Origin
     let approximateBytes: Int
     let thumbnail: UIImage?
+    /// In-memory metadata-stripped bounded JPEG, never WCDB or Vault bytes.
+    let jpegData: Data?
+
+    init(id: UUID, title: String, source: Origin, approximateBytes: Int,
+         thumbnail: UIImage?, jpegData: Data? = nil) {
+        self.id = id
+        self.title = title
+        self.source = source
+        self.approximateBytes = approximateBytes
+        self.thumbnail = thumbnail
+        self.jpegData = jpegData
+    }
 }
 
 /// Explicit, bounded UIKit system pickers. These items never enter SSE,
@@ -53,12 +65,46 @@ final class ImpressChatPOCLocalAttachments: NSObject,
         onChange?(items)
     }
 
+    func clear() {
+        items.removeAll()
+        onChange?(items)
+    }
+
+    /// Nil means mixed/unsupported selections or over-limit: fail closed.
+    /// Returned payloads are immutable copies for one explicit Send only.
+    func imagePayloadsForExplicitSend() -> [ImpressAIImagePayload]? {
+        guard !items.isEmpty, items.count <= 3,
+              items.allSatisfy({ $0.jpegData != nil }) else { return nil }
+        let payloads = items.compactMap { item -> ImpressAIImagePayload? in
+            guard let bytes = item.jpegData else { return nil }
+            return ImpressAIImagePayload(jpeg: bytes, displayName: item.title)
+        }
+        guard payloads.count == items.count,
+              payloads.reduce(0, { $0 + $1.jpeg.count }) <= 1_200_000 else {
+            return nil
+        }
+        return payloads
+    }
+
     #if DEBUG
     /// Deterministic unit fixture: never reads or persists device resources.
     func addSyntheticPreviewForTest(_ name: String) {
         insert(ImpressChatPOCLocalPreview(
             id: UUID(), title: name, source: .file, approximateBytes: 100,
             thumbnail: nil))
+    }
+
+    func addSyntheticImageForTest(_ name: String) {
+        let painter = UIGraphicsImageRenderer(size: CGSize(width: 12, height: 12))
+        let image = painter.image { context in
+            UIColor.systemBlue.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 12, height: 12))
+        }
+        guard let data = image.jpegData(compressionQuality: 0.7),
+              let prepared = Self.boundedSendableJPEG(from: data) else { return }
+        insert(ImpressChatPOCLocalPreview(id: UUID(), title: name,
+            source: .photo, approximateBytes: prepared.jpeg.count,
+            thumbnail: prepared.thumbnail, jpegData: prepared.jpeg))
     }
     #endif
 
@@ -119,14 +165,14 @@ final class ImpressChatPOCLocalAttachments: NSObject,
                 [weak self] bytes, _ in
                 Task { @MainActor [weak self] in
                     guard let self, let bytes, bytes.count <= self.maxItemBytes,
-                          let image = Self.boundedThumbnail(from: bytes) else {
+                          let preview = Self.boundedSendableJPEG(from: bytes) else {
                         self?.showNotice("图片超过安全大小或无法预览。")
                         return
                     }
                     self.insert(ImpressChatPOCLocalPreview(
                         id: UUID(), title: provider.suggestedName ?? "本地图片",
-                        source: .photo, approximateBytes: bytes.count,
-                        thumbnail: image))
+                        source: .photo, approximateBytes: preview.jpeg.count,
+                        thumbnail: preview.thumbnail, jpegData: preview.jpeg))
                 }
             }
         }
@@ -147,10 +193,22 @@ final class ImpressChatPOCLocalAttachments: NSObject,
                 showNotice("文件超过安全大小或不可读取。")
                 continue
             }
-            insert(ImpressChatPOCLocalPreview(
-                id: UUID(), title: String(url.lastPathComponent.prefix(100)),
-                source: .file, approximateBytes: size.intValue,
-                thumbnail: nil))
+            let name = String(url.lastPathComponent.prefix(100))
+            // No arbitrary document/PDF serialization. Only a verified local
+            // raster may enter an explicitly approved image request.
+            let supported = ["jpg", "jpeg", "png", "heic"].contains(
+                url.pathExtension.lowercased())
+            if supported, let bytes = try? Data(contentsOf: url),
+               let preview = Self.boundedSendableJPEG(from: bytes) {
+                insert(ImpressChatPOCLocalPreview(
+                    id: UUID(), title: name, source: .file,
+                    approximateBytes: preview.jpeg.count,
+                    thumbnail: preview.thumbnail, jpegData: preview.jpeg))
+            } else {
+                insert(ImpressChatPOCLocalPreview(
+                    id: UUID(), title: name, source: .file,
+                    approximateBytes: size.intValue, thumbnail: nil))
+            }
         }
     }
 
@@ -161,17 +219,43 @@ final class ImpressChatPOCLocalAttachments: NSObject,
         guard let image = info[.originalImage] as? UIImage,
               let bytes = image.jpegData(compressionQuality: 0.72),
               bytes.count <= maxItemBytes,
-              let thumb = Self.boundedThumbnail(from: bytes) else {
+              let preview = Self.boundedSendableJPEG(from: bytes) else {
             showNotice("照片无法安全预览。")
             return
         }
         insert(ImpressChatPOCLocalPreview(
             id: UUID(), title: "本地拍摄照片", source: .camera,
-            approximateBytes: bytes.count, thumbnail: thumb))
+            approximateBytes: preview.jpeg.count,
+            thumbnail: preview.thumbnail, jpegData: preview.jpeg))
     }
 
     func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
         picker.dismiss(animated: true)
+    }
+
+    private static func boundedSendableJPEG(from bytes: Data)
+        -> (thumbnail: UIImage, jpeg: Data)? {
+        guard let thumb = boundedThumbnail(from: bytes),
+              let image = CGImageSourceCreateWithData(bytes as CFData, nil) else {
+            return nil
+        }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: 1_280,
+            kCGImageSourceCreateThumbnailWithTransform: true
+        ]
+        guard let raster = CGImageSourceCreateThumbnailAtIndex(
+            image, 0, options as CFDictionary) else { return nil }
+        // This re-encode strips EXIF/GPS, fixes orientation and bounds raster
+        // memory before any wire data is made. Never use the original bytes.
+        let safe = UIImage(cgImage: raster)
+        for quality: CGFloat in [0.68, 0.48, 0.30] {
+            if let jpeg = safe.jpegData(compressionQuality: quality),
+               jpeg.count <= 400_000 {
+                return (thumb, jpeg)
+            }
+        }
+        return nil
     }
 
     private static func boundedThumbnail(from bytes: Data) -> UIImage? {

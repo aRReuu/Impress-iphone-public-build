@@ -208,11 +208,15 @@ public struct ImpressAIModel: Codable, Equatable, Sendable {
     /// Some compatible gateways accept prompt-enforced JSON but reject
     /// response_format. Still require strict local output validation.
     public var jsonMode: ImpressAIJSONMode?
+    /// Explicit per-model opt-in, disabled for old/unknown models.
+    /// No remote inference from provider or model names.
+    public var supportsImageInput: Bool?
 
     public init(id: UUID = UUID(), connectionID: UUID, identifier: String,
                 jsonVerified: Bool = false, toolsVerified: Bool = false, enabled: Bool = true,
                 protocolOverride: ImpressAIProtocol? = nil,
-                jsonMode: ImpressAIJSONMode? = nil) {
+                jsonMode: ImpressAIJSONMode? = nil,
+                supportsImageInput: Bool? = nil) {
         self.id = id
         self.connectionID = connectionID
         self.identifier = identifier
@@ -221,6 +225,7 @@ public struct ImpressAIModel: Codable, Equatable, Sendable {
         self.enabled = enabled
         self.protocolOverride = protocolOverride
         self.jsonMode = jsonMode
+        self.supportsImageInput = supportsImageInput
     }
 }
 

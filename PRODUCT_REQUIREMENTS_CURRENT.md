@@ -442,3 +442,8 @@
 以已核验的代码与 CI 为事实：集成 `d2652ba4e4af1c5981f5901fe56cc35667e0e53f` 的 [Run #39984006889](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39984006889) 全部 Jobs SUCCESS；原生 XCTest 219/219、XCUITest 20/20（含连续 Chat→双目标审批→重启）均真实执行；Debug/Release Simulator 与 unsigned ARM64 均通过，**IPA package SKIPPED**。不把这些子测试升级为 18 步、F01～F13 或真机全面 PASS。
 
 后续生产 SSE、KaTeX 真实 DOM/生命周期、故障恢复及 Excalidraw 代码以精确集成 SHA 的 CI 结果为准；富文本视觉、5,000 历史性能、官方 Excalidraw SVG A/B、整套 RDR/U/ACCEPT/F/Widget 与 iPhone 13 人工实测尚未闭账，分别标记 NOT_RUN / DEVICE_BLOCKED。系统相册/文件/相机目前具备**本地预览**，不得将此写为 Provider 已接收真正多模态附件。**全部必要验收达标前禁止生成 IPA**，本轮不允许改私库、公开 main、AppIcon、真实 Vault；`ImVaultGuardedWrite.productionWriteEnabled = false`。
+
+
+## 2026-10-24 · Chat 图片单次授权发送：增量执行口径
+
+本次延续已冻结「+ → 相册/文件/拍照」与来源权限。正式 Chat 允许在**用户手动确认模型支持图片**、每次发送再次确认具体服务商与所选图片后，发送本地经解码验证、尺寸受限、重编码移除 EXIF/GPS 的 JPEG。传输仅限当前轮用户输入，不把历史图片随上下文反复上传；OpenAI Chat Completions / Responses、Anthropic Messages、Gemini 分别采用各自协议的真实图片字段。任何旧模型配置默认**不支持图片**；免费 QA 连接、未确认模型、超过尺寸、混入不支持文件的选择必须拒绝图片发送，只能在用户主动选择「仅发送文字」后继续。附件选择 ≠ 单次发送授权 ≠ URLSession 实际发出 ≠ 模型确实理解图像；WCDB 仅保存经同意的图片名称、大小等收据元数据，不保存私密像素。PDF/其他文件继续本地预览，不能伪装已发送。即使此代码通过 Native Mock，也不代表真实 Provider 能力或 iPhone13 成功；按具体测试逐条 TEST_PASS / DEVICE_BLOCKED。仍不得提前生成 IPA，正式 Vault 禁写。

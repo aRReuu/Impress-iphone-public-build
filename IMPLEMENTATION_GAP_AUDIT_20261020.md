@@ -185,3 +185,8 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 ## 2026-10-24 · 正式 Chat 跨会话滚动位置隔离增量
 
 核对生产 `ImpressChatProductionTranscript` 与 `ImpressAINativeChatViewController.activateSession`：此前滚动状态仅有全局 `scrollMode`，未以 WCDB sessionID 隔离，切换非空 A/B 会话可能继承上一会话的阅读偏移，返回 A 也没有稳定锚点。针对该具体缺口引入仅内存的 `sessionID → stable rowID + viewport delta` 位置记录、首次底部跟随、搜索定位优先、异步旧 snapshot 完成隔离及删除会话清理；不改 WCDB/FSRS/来源/批准链路。新增真实 Native UIKit 回归用例；**CODE_DONE / TEST_NOT_RUN（提交时）**，须等精确 SHA 的 CI。跨冷启动的滚动位置持久化不是本补丁的通过宣称；高频 SSE 压力与设备性能另测。仍无 IPA。
+
+
+## 2026-10-24 · Chat 图片发送链路（本轮代码，CI 待实测）
+
+经复核此前 Composer 的「本地 Picker/预览」没有任何经过用户同意的多模态请求。新增独立模型能力显式开关（历史模型 nil 即拒发，变更协议重新禁用）、按请求确认图片与服务商、照片读取时 1280 像素上限/JPEG 重编码去元数据、每张上限 400 KB/最多 3 张、文本和图片同轮发送的各协议序列化。免费 QA 通道和无法安全解析/混入 PDF 的选择不会上传；原生 WCDB 仅保存授权图片的名称与大小供 UI 回执，不保存字节；原生旧会话 JSON 保持兼容。源码与合成 Mock 已补，但**不能把 CODE_DONE / TEST_NOT_RUN 冒充新 SHA TEST_PASS**；真实图片是否被模型接收/正确视觉理解仍依具体账户模型与设备验证，失败/取消后不能假装远端完全未接收。完整的缩略图私有持久化、图片跨设备备份以及任意 PDF 原始文件发送均未完成，严禁将本补丁称为「完整多模态交付」。生产 Vault 一律禁写；IPA 继续禁包。

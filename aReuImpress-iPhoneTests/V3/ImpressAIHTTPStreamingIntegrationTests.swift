@@ -269,4 +269,122 @@ final class ImpressAIHTTPStreamingIntegrationTests: XCTestCase {
             "The already delivered partial response must remain visible")
     }
 
+
+    func testImageInputRequiresExplicitModelConsentAndSafeJPEG() async throws {
+        let connection = ImpressAIConnection(title: "Synthetic offline",
+            provider: .openAI, apiProtocol: .chatCompletions,
+            baseURL: URL(string: "https://impress-fixture.invalid/v1")!,
+            authentication: .noAuthentication)
+        let model = ImpressAIModel(connectionID: connection.id,
+            identifier: "fake-vision-model")
+        let client = ImpressAIHTTPClient(
+            session: URLSession(configuration: .ephemeral))
+        let turns = [ImpressAIChatTurn(role: .user, text: "Describe")]
+        let jpeg = ImpressAIImagePayload(
+            jpeg: Data([0xFF, 0xD8, 0xFF, 0x00, 0xFF, 0xD9]),
+            displayName: "synthetic.jpg")
+        do {
+            _ = try await client.debugPreparedStreamRequest(
+                route: ImpressAIResolvedRoute(connection: connection, model: model),
+                system: "Synthetic", turns: turns, images: [jpeg])
+            XCTFail("No model-capability consent: no image can leave the app")
+        } catch ImpressAIServiceError.unsupportedImageInput {}
+        var opted = model
+        opted.supportsImageInput = true
+        let route = ImpressAIResolvedRoute(connection: connection, model: opted)
+        for invalid in [
+            ImpressAIImagePayload(jpeg: Data("not-a-jpeg".utf8),
+                                  displayName: "bad"),
+            ImpressAIImagePayload(jpeg: Data(repeating: 0xFF, count: 400_001),
+                                  displayName: "too-big")
+        ] {
+            do {
+                _ = try await client.debugPreparedStreamRequest(route: route,
+                    system: "Synthetic", turns: turns, images: [invalid])
+                XCTFail("Malformed or oversized image must fail before network")
+            } catch ImpressAIServiceError.unsupportedImageInput {}
+        }
+        let qaConnection = ImpressAIOpenCodeFreeQA.connection()
+        let qaModel = ImpressAIModel(connectionID: qaConnection.id,
+            identifier: ImpressAIOpenCodeFreeQA.preferredModelID,
+            supportsImageInput: true)
+        do {
+            _ = try await client.debugPreparedStreamRequest(
+                route: ImpressAIResolvedRoute(connection: qaConnection, model: qaModel),
+                system: "QA", turns: turns, images: [jpeg])
+            XCTFail("Anonymous free QA cannot be silently promoted to image usage")
+        } catch ImpressAIServiceError.unsupportedImageInput {}
+        let legacy = try JSONEncoder().encode(model)
+        let restored = try JSONDecoder().decode(ImpressAIModel.self, from: legacy)
+        XCTAssertNil(restored.supportsImageInput,
+            "Old persisted model entries must decode with image sending disabled")
+    }
+
+    func testEachProviderUsesItsOwnImageWireShapeWithoutSendingHistoryImages() async throws {
+        // Only mock prepared URLRequests; no actual provider or paid model is called.
+        let photo = ImpressAIImagePayload(
+            jpeg: Data([0xFF, 0xD8, 0xFF, 0x00, 0xFF, 0xD9]),
+            displayName: "consented.jpg")
+        let encoded = photo.jpeg.base64EncodedString()
+        let client = ImpressAIHTTPClient(
+            session: URLSession(configuration: .ephemeral))
+        let turns = [ImpressAIChatTurn(role: .user, text: "Earlier"),
+                     ImpressAIChatTurn(role: .assistant, text: "Previous"),
+                     ImpressAIChatTurn(role: .user, text: "What is shown?")]
+        for (provider, wire) in [
+            (ImpressAIProvider.openAI, ImpressAIProtocol.chatCompletions),
+            (.openAI, .responses), (.anthropic, .anthropicMessages),
+            (.gemini, .geminiGenerateContent)
+        ] {
+            let connection = ImpressAIConnection(title: "Offline",
+                provider: provider, apiProtocol: wire,
+                baseURL: URL(string: "https://impress-fixture.invalid/v1")!,
+                authentication: .noAuthentication)
+            let model = ImpressAIModel(connectionID: connection.id,
+                identifier: "synthetic-vision", supportsImageInput: true)
+            let route = ImpressAIResolvedRoute(connection: connection, model: model)
+            let req = try await client.debugPreparedStreamRequest(
+                route: route, system: "No private data", turns: turns,
+                images: [photo])
+            let bytes = try XCTUnwrap(req.httpBody)
+            let payload = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+            XCTAssertTrue(String(data: bytes, encoding: .utf8)?
+                .contains(encoded) == true)
+            switch wire {
+            case .chatCompletions:
+                let rows = try XCTUnwrap(payload["messages"] as? [[String: Any]])
+                XCTAssertEqual(rows[1]["content"] as? String, "Earlier")
+                let parts = try XCTUnwrap(rows.last?["content"] as? [[String: Any]])
+                XCTAssertEqual(parts.first?["text"] as? String, "What is shown?")
+                let image = try XCTUnwrap(parts.last?["image_url"] as? [String: String])
+                XCTAssertEqual(image["url"], "data:image/jpeg;base64," + encoded)
+            case .responses:
+                let rows = try XCTUnwrap(payload["input"] as? [[String: Any]])
+                XCTAssertEqual(rows[0]["content"] as? String, "Earlier")
+                let parts = try XCTUnwrap(rows.last?["content"] as? [[String: Any]])
+                XCTAssertEqual(parts.last?["image_url"] as? String,
+                               "data:image/jpeg;base64," + encoded)
+                XCTAssertEqual(payload["store"] as? Bool, false)
+            case .anthropicMessages:
+                let rows = try XCTUnwrap(payload["messages"] as? [[String: Any]])
+                XCTAssertEqual(rows[0]["content"] as? String, "Earlier")
+                let parts = try XCTUnwrap(rows.last?["content"] as? [[String: Any]])
+                let src = try XCTUnwrap(parts.last?["source"] as? [String: String])
+                XCTAssertEqual(src["media_type"], "image/jpeg")
+                XCTAssertEqual(src["data"], encoded)
+            case .geminiGenerateContent:
+                let rows = try XCTUnwrap(payload["contents"] as? [[String: Any]])
+                let parts = try XCTUnwrap(rows.last?["parts"] as? [[String: Any]])
+                let inline = try XCTUnwrap(parts.last?["inlineData"] as? [String: String])
+                XCTAssertEqual(inline["mimeType"], "image/jpeg")
+                XCTAssertEqual(inline["data"], encoded)
+            }
+            let ordinary = try await client.debugPreparedStreamRequest(
+                route: route, system: "No private data", turns: turns)
+            XCTAssertFalse(String(data: try XCTUnwrap(ordinary.httpBody),
+                encoding: .utf8)?.contains(encoded) ?? false,
+                "Text-only existing requests must remain text-only")
+        }
+    }
 }

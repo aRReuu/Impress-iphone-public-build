@@ -410,6 +410,7 @@ final class ImpressAIConnectionEditor: UITableViewController {
                         for i in reg.models.indices where reg.models[i].connectionID == self.connectionID {
                             reg.models[i].jsonVerified = false
                             reg.models[i].toolsVerified = false
+                            reg.models[i].supportsImageInput = nil
                         }
                     }
                 } catch {
@@ -451,6 +452,7 @@ final class ImpressAIConnectionEditor: UITableViewController {
                         where reg.models[i].connectionID == self.connectionID {
                         reg.models[i].jsonVerified = false
                         reg.models[i].toolsVerified = false
+                        reg.models[i].supportsImageInput = nil
                     }
                 }
             }
@@ -625,7 +627,8 @@ final class ImpressAIModelsViewController: UITableViewController, UISearchResult
         let wire = (m.protocolOverride ?? connection?.apiProtocol)?.rawValue ?? ""
         let mode = (m.jsonMode ?? .native).rawValue
         ui.secondaryText = wire + " · " + mode + " · " +
-            (m.jsonVerified ? V3L("JSON 测试已通过") : V3L("尚未验证 JSON 输出"))
+            (m.jsonVerified ? V3L("JSON 测试已通过") : V3L("尚未验证 JSON 输出")) +
+            (m.supportsImageInput == true ? V3L(" · 图片输入已手动启用") : "")
         ui.image = UIImage(systemName: m.jsonVerified ? "checkmark.shield" : "questionmark.circle")
         ui.imageProperties.tintColor = ImpressV3Appearance.listIconTint
         ui.imageProperties.maximumSize = CGSize(width: 20, height: 20)
@@ -657,6 +660,11 @@ final class ImpressAIModelsViewController: UITableViewController, UISearchResult
         a.addAction(UIAlertAction(title: V3L("JSON 输出模式"), style: .default) { [weak self] _ in
             self?.chooseJSONMode(model)
         })
+        a.addAction(UIAlertAction(title: model.supportsImageInput == true
+            ? V3L("关闭图片输入") : V3L("确认此模型支持图片输入"),
+            style: .default) { [weak self] _ in
+                self?.changeImageCapability(model)
+            })
         a.addAction(UIAlertAction(title: V3L("作为出题模型"), style: .default) { [weak self] _ in
             self?.setRoute(.questionGeneration, modelID: model.id)
         })
@@ -676,6 +684,28 @@ final class ImpressAIModelsViewController: UITableViewController, UISearchResult
         a.popoverPresentationController?.sourceRect = tableView.rectForRow(at: indexPath)
         present(a, animated: true)
     }
+    private func changeImageCapability(_ model: ImpressAIModel) {
+        guard let c = connection else { return }
+        if model.supportsImageInput == true {
+            applyModelChange(model.id) { $0.supportsImageInput = nil }
+            return
+        }
+        guard !ImpressAIOpenCodeFreeQA.isQAProfile(c) else {
+            showError(ImpressAIServiceError.unsupportedImageInput)
+            return
+        }
+        let alert = UIAlertController(
+            title: V3L("为模型启用图片输入？"),
+            message: V3L("仅在确认该模型和当前协议支持图片后启用。每次发送仍需批准所选图片。未知文件类型不上传；此设置不能证明模型已理解图像。"),
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("我已确认模型能力"),
+                                      style: .default) { [weak self] _ in
+            self?.applyModelChange(model.id) { $0.supportsImageInput = true }
+        })
+        present(alert, animated: true)
+    }
+
     private func chooseModelProtocol(_ model: ImpressAIModel) {
         guard let c = connection else { return }
         let sheet = UIAlertController(title: V3L("模型协议"), message: nil,
@@ -683,6 +713,7 @@ final class ImpressAIModelsViewController: UITableViewController, UISearchResult
         let defaultAction = UIAlertAction(title: V3L("沿用连接协议"), style: .default) { [weak self] _ in
             self?.applyModelChange(model.id) {
                 $0.protocolOverride = nil
+                $0.supportsImageInput = nil
                 $0.jsonVerified = false
                 $0.toolsVerified = false
             }
@@ -693,6 +724,7 @@ final class ImpressAIModelsViewController: UITableViewController, UISearchResult
             sheet.addAction(UIAlertAction(title: wire.rawValue, style: .default) { [weak self] _ in
                 self?.applyModelChange(model.id) {
                     $0.protocolOverride = wire
+                    $0.supportsImageInput = nil
                     $0.jsonVerified = false
                     $0.toolsVerified = false
                 }

@@ -7,6 +7,7 @@ import ImpressReviewCore
 enum ImpressAIServiceError: LocalizedError {
     case configuration, credential, invalidURL, unauthorized, forbidden, status(Int), response, tooLarge, emptyModelList
     case freeModelOnly, rateLimited, keychainOSStatus(Int)
+    case unsupportedImageInput
     var errorDescription: String? {
         switch self {
         case .configuration: return V3L("请先在设置中配置并测试 AI 出题模型。")
@@ -20,6 +21,8 @@ enum ImpressAIServiceError: LocalizedError {
         case .status(let code): return "AI API 请求失败（HTTP \(code)），原始数据未改变。"
         case .response: return V3L("模型没有返回可用文本，或回复格式不兼容。请检查模型及协议。")
         case .tooLarge: return V3L("请求或响应超出安全长度限制。")
+        case .unsupportedImageInput:
+            return V3L("当前模型/协议未确认支持图片，或图片不符合安全格式；图片未发送。")
         case .emptyModelList: return V3L("服务商未返回模型列表，请手动输入模型 ID。")
         }
     }
@@ -183,6 +186,12 @@ struct ImpressAIChatTurn: Sendable {
     let text: String
 }
 
+/// Ephemeral JPEG only: never persisted, backed up, or silently retried.
+struct ImpressAIImagePayload: Sendable {
+    let jpeg: Data
+    let displayName: String
+}
+
 actor ImpressAIHTTPClient {
     static let shared = ImpressAIHTTPClient()
     private let session: URLSession
@@ -215,7 +224,8 @@ actor ImpressAIHTTPClient {
 
     private func request(_ connection: ImpressAIConnection, path: String,
                          method: String, wireProtocol: ImpressAIProtocol,
-                         body: [String: Any]? = nil) throws -> URLRequest {
+                         body: [String: Any]? = nil,
+                         maxJSONBytes: Int = 90_000) throws -> URLRequest {
         try connection.effectiveEndpoints.validate()
         guard wireProtocol == .geminiGenerateContent ||
               ImpressAIEndpointPaths.safePath(path) else {
@@ -252,7 +262,7 @@ actor ImpressAIHTTPClient {
         }
         if let body {
             let data = try JSONSerialization.data(withJSONObject: body)
-            guard data.count <= 90_000 else { throw ImpressAIServiceError.tooLarge }
+            guard data.count <= maxJSONBytes else { throw ImpressAIServiceError.tooLarge }
             result.httpBody = data
             result.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
@@ -504,7 +514,8 @@ actor ImpressAIHTTPClient {
     /// One validated wire request per explicit Send. Private in production;
     /// the Debug-only projection allows zero-network payload assertions.
     private func makeConverseStreamRequest(
-        route: ImpressAIResolvedRoute, system: String, turns: [ImpressAIChatTurn]
+        route: ImpressAIResolvedRoute, system: String, turns: [ImpressAIChatTurn],
+        images: [ImpressAIImagePayload] = []
     ) throws -> (URLRequest, ImpressChatPOCProviderProtocol) {
         guard !turns.isEmpty, turns.last?.role == .user, turns.count <= 20,
               system.utf8.count <= 4_000,
@@ -519,6 +530,22 @@ actor ImpressAIHTTPClient {
         let connection = route.connection
         let wire = route.effectiveProtocol
         let model = route.model.identifier
+        // No model-name heuristic. Explicitly approved image bytes only.
+        // The QA free lane cannot be silently promoted to a vision endpoint.
+        if !images.isEmpty {
+            guard route.model.supportsImageInput == true,
+                  !ImpressAIOpenCodeFreeQA.isQAProfile(connection),
+                  images.count <= 3,
+                  images.reduce(0, { $0 + $1.jpeg.count }) <= 1_200_000,
+                  images.allSatisfy({
+                      $0.jpeg.count >= 5 && $0.jpeg.count <= 400_000 &&
+                      $0.jpeg.starts(with: [0xFF, 0xD8, 0xFF]) &&
+                      $0.jpeg.suffix(2).elementsEqual([0xFF, 0xD9])
+                  }) else {
+                throw ImpressAIServiceError.unsupportedImageInput
+            }
+        }
+        let encodedImages = images.map { $0.jpeg.base64EncodedString() }
         let endpointPath: String
         let payload: [String: Any]
         let protocolID: ImpressChatPOCProviderProtocol
@@ -527,22 +554,51 @@ actor ImpressAIHTTPClient {
         case .responses:
             endpointPath = connection.effectiveEndpoints.responsesPath
             protocolID = .openAIResponses
+            let input: [[String: Any]] = turns.enumerated().map { index, turn in
+                guard index == turns.count - 1, !images.isEmpty else {
+                    return ["role": turn.role.rawValue, "content": turn.text]
+                }
+                var parts: [[String: Any]] = [
+                    ["type": "input_text", "text": turn.text]
+                ]
+                parts += encodedImages.map { ["type": "input_image",
+                    "image_url": "data:image/jpeg;base64," + $0] }
+                return ["role": turn.role.rawValue, "content": parts]
+            }
             payload = ["model": model, "instructions": system,
-                       "input": turns.map { ["role": $0.role.rawValue, "content": $0.text] },
-                       "store": false, "stream": true, "max_output_tokens": 1400]
+                       "input": input, "store": false, "stream": true,
+                       "max_output_tokens": 1400]
         case .chatCompletions:
             endpointPath = connection.effectiveEndpoints.chatPath
             protocolID = .openAIChat
-            let messages = [["role": "system", "content": system]] +
-                turns.map { ["role": $0.role.rawValue, "content": $0.text] }
+            var messages: [[String: Any]] = [["role": "system", "content": system]]
+            messages += turns.enumerated().map { index, turn in
+                guard index == turns.count - 1, !images.isEmpty else {
+                    return ["role": turn.role.rawValue, "content": turn.text]
+                }
+                var parts: [[String: Any]] = [["type": "text", "text": turn.text]]
+                parts += encodedImages.map { ["type": "image_url",
+                    "image_url": ["url": "data:image/jpeg;base64," + $0]] }
+                return ["role": turn.role.rawValue, "content": parts]
+            }
             payload = ["model": model, "messages": messages, "stream": true]
         case .anthropicMessages:
             endpointPath = connection.effectiveEndpoints.messagesPath
             protocolID = .anthropicMessages
             payload = ["model": model, "system": system, "max_tokens": 1400,
                        "stream": true,
-                       "messages": turns.map {
-                           ["role": $0.role.rawValue, "content": $0.text]
+                       "messages": turns.enumerated().map { index, turn
+                           -> [String: Any] in
+                           guard index == turns.count - 1, !images.isEmpty else {
+                               return ["role": turn.role.rawValue, "content": turn.text]
+                           }
+                           var parts: [[String: Any]] = [
+                               ["type": "text", "text": turn.text]
+                           ]
+                           parts += encodedImages.map { ["type": "image",
+                               "source": ["type": "base64", "media_type": "image/jpeg",
+                                          "data": $0]] }
+                           return ["role": turn.role.rawValue, "content": parts]
                        }]
         case .geminiGenerateContent:
             let allowed = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))
@@ -550,13 +606,22 @@ actor ImpressAIHTTPClient {
             endpointPath = "models/" + safeModel + ":streamGenerateContent"
             protocolID = .geminiGenerateContent
             payload = ["systemInstruction": ["parts": [["text": system]]],
-                       "contents": turns.map { item in
-                           ["role": item.role == .assistant ? "model" : "user",
-                            "parts": [["text": item.text]]]
+                       "contents": turns.enumerated().map { index, item
+                           -> [String: Any] in
+                           var parts: [[String: Any]] = [["text": item.text]]
+                           if index == turns.count - 1 {
+                               parts += encodedImages.map {
+                                   ["inlineData": ["mimeType": "image/jpeg",
+                                                   "data": $0]]
+                               }
+                           }
+                           return ["role": item.role == .assistant ? "model" : "user",
+                                   "parts": parts]
                        }]
         }
         var wireRequest = try request(connection, path: endpointPath,
-                                      method: "POST", wireProtocol: wire, body: payload)
+                                      method: "POST", wireProtocol: wire, body: payload,
+                                      maxJSONBytes: images.isEmpty ? 90_000 : 2_200_000)
         if wire == .geminiGenerateContent {
             guard let url = wireRequest.url,
                   var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
@@ -574,16 +639,19 @@ actor ImpressAIHTTPClient {
 
     #if DEBUG
     func debugPreparedStreamRequest(route: ImpressAIResolvedRoute, system: String,
-                                    turns: [ImpressAIChatTurn]) throws -> URLRequest {
-        try makeConverseStreamRequest(route: route, system: system, turns: turns).0
+                                    turns: [ImpressAIChatTurn],
+                                    images: [ImpressAIImagePayload] = []) throws -> URLRequest {
+        try makeConverseStreamRequest(
+            route: route, system: system, turns: turns, images: images).0
     }
     #endif
 
     func converseStream(route: ImpressAIResolvedRoute, system: String,
-                        turns: [ImpressAIChatTurn]) async throws
+                        turns: [ImpressAIChatTurn],
+                        images: [ImpressAIImagePayload] = []) async throws
         -> AsyncThrowingStream<ImpressChatPOCOutput, Error> {
         let (wireRequest, protocolID) = try makeConverseStreamRequest(
-            route: route, system: system, turns: turns)
+            route: route, system: system, turns: turns, images: images)
         let currentSession = session
         return AsyncThrowingStream { continuation in
             let transportTask = Task {

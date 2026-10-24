@@ -312,8 +312,20 @@ final class ImpressChatProductionTranscript: UIView,
             if message.role == .user {
                 let id = "user-" + prefix
                 identifiers.append(id)
+                // Show only a metadata receipt, never a claim the remote model
+                // actually perceived the image or has retained its pixels.
+                // WCDB message.text remains the exact sent user text, and raw
+                // images are never added to subsequent request history.
+                let imageNotice: String
+                if let images = message.approvedImages, !images.isEmpty {
+                    let names = images.map { $0.name }.joined(separator: "、")
+                    imageNotice = "\n\n" + V3L("已批准图片") + " · " +
+                        String(images.count) + "\n" + names
+                } else {
+                    imageNotice = ""
+                }
                 nextRows[id] = Row(messageID: message.messageID, user: true,
-                    text: message.text, kind: .paragraph, headingLevel: 0,
+                    text: message.text + imageNotice, kind: .paragraph, headingLevel: 0,
                     stable: true, completed: completed, isStatus: false, isActions: false)
             } else {
                 for block in blocks(for: message) {

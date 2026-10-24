@@ -257,6 +257,17 @@ public enum WCDBV3ChatMessageRole: String, Codable, Sendable {
 public enum WCDBV3ChatMessageStatus: String, Codable, Sendable {
     case pending, completed, failed, cancelled
 }
+/// Receipt of explicit image approval; not proof of remote model perception.
+/// Never stores image bytes, local paths or provider authentication.
+public struct WCDBV3ChatImageApproval: Codable, Equatable, Sendable {
+    public let name: String
+    public let jpegBytes: Int
+    public init(name: String, jpegBytes: Int) {
+        self.name = name
+        self.jpegBytes = jpegBytes
+    }
+}
+
 public struct WCDBV3ChatMessage: Codable, Equatable, Sendable {
     public let messageID: UUID
     public var role: WCDBV3ChatMessageRole
@@ -268,12 +279,16 @@ public struct WCDBV3ChatMessage: Codable, Equatable, Sendable {
     public var providerID: UUID?
     public var modelIdentifier: String?
     public var promptSnapshot: String?
+    /// Optional for legacy WCDB JSON. Only human-approved image metadata.
+    /// Images are not auto-included in subsequent remote history windows.
+    public var approvedImages: [WCDBV3ChatImageApproval]?
 
     public init(messageID: UUID = UUID(), role: WCDBV3ChatMessageRole,
                 text: String, status: WCDBV3ChatMessageStatus,
                 createdAt: Date = Date(),
                 providerID: UUID? = nil, modelIdentifier: String? = nil,
-                promptSnapshot: String? = nil) {
+                promptSnapshot: String? = nil,
+                approvedImages: [WCDBV3ChatImageApproval]? = nil) {
         self.messageID = messageID
         self.role = role
         self.text = text
@@ -282,6 +297,7 @@ public struct WCDBV3ChatMessage: Codable, Equatable, Sendable {
         self.providerID = providerID
         self.modelIdentifier = modelIdentifier
         self.promptSnapshot = promptSnapshot
+        self.approvedImages = approvedImages
     }
 }
 
@@ -1266,7 +1282,16 @@ public actor ReviewWCDBRepository: ReviewRepository {
                   })
               } ?? true,
               Set(session.messages.map(\.messageID)).count == session.messages.count,
-              session.messages.allSatisfy({ !$0.text.isEmpty || $0.status != .completed })
+              session.messages.allSatisfy({ !$0.text.isEmpty || $0.status != .completed }),
+              session.messages.allSatisfy({ message in
+                  let photos = message.approvedImages ?? []
+                  return (message.role == .user || photos.isEmpty) &&
+                      photos.count <= 3 &&
+                      photos.allSatisfy {
+                          !$0.name.isEmpty && $0.name.utf8.count <= 100 &&
+                          $0.jpegBytes > 0 && $0.jpegBytes <= 400_000
+                      }
+              })
         else { throw WCDBV3ChatStorageError.invalidRecord }
         let bytes = try JSONEncoder().encode(session)
         // A clear error avoids runaway SQLite/image-sized context archives.

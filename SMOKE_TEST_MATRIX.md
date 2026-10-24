@@ -384,3 +384,8 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 ## 2026-10-24 · Chat 会话隔离滚动锚点施工（本次代码提交，CI 待验证）
 
 在既有 U18 / CHAT-SPIKE-C 下增加 `testSwitchingChatSessionsRestoresOwnHistoryAnchorWithoutCrossSessionJump`：用同一真实 UICollectionView 在两个各 120 条、独立 messageID 的 WCDB 合成历史之间切换，验证 A 上滑位置 → B 首次自动跟随底部 → A 原锚点恢复 → B 独立底部。搜索显式定位优先于普通锚点；被删除会话不得保留 UI 锚点。此用例属于 Native UIKit 层，**提交时状态 CODE_DONE / TEST_NOT_RUN**，需绑定新 Run 才能记 PASS。冷启动跨进程位置存储、iPhone13 键盘/VoiceOver/高频流式滚动仍 NOT_RUN/DEVICE_BLOCKED。原有 18 步及 F01～13/U/RDR/W 全矩阵不因此自动结案。IPA 继续禁止。
+
+
+## 2026-10-24 · Chat 图片授权/多协议专项（CODE_DONE，等待新 SHA CI）
+
+归属于 CHAT-04/06/07、UI-02、U18 等既有需求，不新加主需求编号。Native 零网络测试 `testImageInputRequiresExplicitModelConsentAndSafeJPEG` 验证默认拒绝、畸形/超大拒绝、免费 QA 禁止图片；`testEachProviderUsesItsOwnImageWireShapeWithoutSendingHistoryImages` 验证 Chat Completions / Responses / Anthropic / Gemini 分别真实序列化，只有本轮包含图片、前文和普通请求始终文字。`testSyntheticApprovedImagesRemainTransientAndMixedFilesFailClosed` 验证实际 UI 预览内存 JPEG、文件混合选择拒传、发送后清除；`testHistoricalUserImageApprovalIsMetadataOnlyAndBackwardCompatible` 验证旧 WCDB JSON 兼容和新授权收据不存原图，原生 Transcript 显示收据。以上在提交时仅 CODE_DONE / TEST_NOT_RUN，CI 通过才记精确 SHA 的 TEST_PASS。真实设备 Picker 相机/Files/iCloud、提供商视觉理解、图片历史缩略图跨重启和网络失败重试仍 NOT_RUN / DEVICE_BLOCKED。完整 ACCEPT/F/U/RDR/W 门禁不因本节放宽，禁止提前生成 IPA。
