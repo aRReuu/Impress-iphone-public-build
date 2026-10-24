@@ -418,3 +418,7 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 ## 2026-10-24 · F06 真实原卡逆向事务中断候选（TEST_NOT_RUN）
 
 保留已有 `testF06InverseCardCommittedBeforeReceiptColdStartReadback` Native 证据，新增 `testF06ProcessDeathAfterCardUndoReconcilesWithoutSecondInverse` 真 UI：合成隔离 Vault 创建原卡 → Chat 人工审核仅原卡 → 原卡 WCDB 内容 CAS 成功 → 人工打开已执行对象的安全撤销/完整逆向 Diff → 明确批准 → DEBUG 且 synthetic 来源匹配时在 **WCDB inverse 更新已持久化、Chat 撤销回执尚未持久化** 的真实窗口执行 SIGKILL → 原进程数据冷启动 → 禁止重新确认和重复撤销 → 由 UI「核查中断」仅通过 contentRevision+2 与完整原问答双重一致性核实为 reverted，截取实际 UI 附件。此方案只覆盖 F06 的**原卡逆向**窗口，源笔记逆向进程强杀及设备/并发窗口仍待验证。此处记录候选 CODE_DONE / TEST_NOT_RUN，不视为 TEST_PASS，也不改变生产 Vault 写入门禁和最终 IPA 门禁。
+
+## 2026-10-24 · F06 笔记原字节逆向进程中断候选（CODE_DONE / TEST_NOT_RUN）
+
+继 F06 原卡逆向 SIGKILL 候选之后，新增原笔记逆向合成 QA Vault 进程级测试 `testF06ProcessDeathAfterNoteUndoReconcilesExactSourceBytes`：真实 UI 选来源 → 人工审核独立笔记 Diff → QA 写入回执 → 通过「安全撤销」审核逆向 Diff → 明确确认 → 原文件字节已由 guarded QA writer 写回之后/Chat `.undoing` 回执持久化之前以 DEBUG synthetic-only 精确开关强杀 → 冷启同一源和 Chat → 禁止重复撤销与正向写回 → UI 只读核实文件真实 SHA/批准快照后记 `reverted`，保留 XCUITest 截图。代码故障点额外要求 `qaCopy`、测试 Fixture 开启及 Vault ID 精确匹配，无正式 Vault 权限扩展。此处仅候选，尚未发布/测试；不宣称 F06 完整验收或最终 IPA 门禁通过。

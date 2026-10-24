@@ -930,6 +930,168 @@ final class ImpressV11NavigationUITests: XCTestCase {
         self.add(evidence)
     }
 
+    /// F06 note inverse must cross a *real* process boundary: the isolated QA
+    /// Markdown is restored by the authorized coordinated writer, but Chat
+    /// continues to hold the persisted .undoing intent until exact SHA readback.
+    func testF06ProcessDeathAfterNoteUndoReconcilesExactSourceBytes() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ImpressV11SyntheticVault",
+            "-ImpressV11FaultF06AfterNoteUndo", "-AppleLanguages", "(zh-Hans)"]
+        app.launchEnvironment["IMPRESS_V11_FIXTURE_ID"] = UUID().uuidString
+        app.launch()
+        let tabs = app.tabBars.firstMatch
+        XCTAssertTrue(tabs.waitForExistence(timeout: 30))
+        tabs.buttons.element(boundBy: 1).tap()
+        let folder = app.cells.matching(identifier: "impress.notes.folder-row")
+            .matching(NSPredicate(format: "label == %@", "Study")).firstMatch
+        XCTAssertTrue(folder.waitForExistence(timeout: 30))
+        folder.tap()
+        let note = app.cells.matching(identifier: "impress.notes.file-row")
+            .matching(NSPredicate(format: "label == %@", "Impress_E2E_Proof")).firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 20))
+        note.tap()
+        XCTAssertTrue(app.webViews["impress.notes.markdown-webview"]
+            .waitForExistence(timeout: 40))
+        app.buttons["更多笔记操作"].tap()
+        app.buttons["根据笔记生成卡片"].tap()
+        XCTAssertTrue(app.navigationBars["生成综合问题"].waitForExistence(timeout: 15))
+        app.navigationBars.buttons["生成"].tap()
+        let generate = app.alerts["模拟器合成出题"]
+        XCTAssertTrue(generate.waitForExistence(timeout: 12))
+        generate.buttons["生成"].tap()
+        XCTAssertTrue(app.navigationBars["问题候选池"].waitForExistence(timeout: 20))
+        XCTAssertGreaterThanOrEqual(app.tables.cells.count, 2)
+        app.tables.cells.element(boundBy: 1).tap()
+        let addCard = app.navigationBars.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "加入")).firstMatch
+        XCTAssertTrue(addCard.waitForExistence(timeout: 12))
+        addCard.tap()
+        let approveNewCard = app.alerts["加入卡片集？"]
+        XCTAssertTrue(approveNewCard.waitForExistence(timeout: 12))
+        approveNewCard.buttons["确认加入"].tap()
+        let savedCard = app.alerts["卡片已添加"]
+        XCTAssertTrue(savedCard.waitForExistence(timeout: 30))
+        savedCard.buttons["完成"].tap()
+
+        tabs.buttons.element(boundBy: 0).tap()
+        let reveal = app.buttons["impress.review.reveal-answer"]
+        XCTAssertTrue(reveal.waitForExistence(timeout: 25))
+        reveal.tap()
+        let discuss = app.buttons["impress.review.ai-discussion"]
+        XCTAssertTrue(discuss.waitForExistence(timeout: 15))
+        discuss.tap()
+        let info = app.alerts["关于讨论"]
+        if info.waitForExistence(timeout: 2) { info.buttons["知道了"].tap() }
+        let input = app.textViews["impress.ai.chat.input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 20))
+        input.tap()
+        input.typeText("F06 合成源文件已恢复但撤销回执未写，禁止重放")
+        app.buttons["impress.ai.chat.send"].tap()
+        let material = app.alerts["是否附带当前卡片？"]
+        if material.waitForExistence(timeout: 8) {
+            material.buttons["附带当前卡片"].tap()
+        }
+        let more = app.buttons["impress.ai.chat.reply-more"].firstMatch
+        XCTAssertTrue(more.waitForExistence(timeout: 30))
+        more.tap()
+        let change = app.buttons["统一预览笔记与原卡修订"]
+        XCTAssertTrue(change.waitForExistence(timeout: 12))
+        change.tap()
+        let editNote = app.buttons["impress.duplex.edit-note"]
+        XCTAssertTrue(editNote.waitForExistence(timeout: 15))
+        tapVisible(editNote, in: app)
+        let sectionAction = app.buttons["指定原章节并编辑 AI 建议"]
+        XCTAssertTrue(sectionAction.waitForExistence(timeout: 15))
+        sectionAction.tap()
+        let chapters = app.tables["impress.duplex.note-section-picker"]
+        XCTAssertTrue(chapters.waitForExistence(timeout: 15))
+        XCTAssertGreaterThanOrEqual(chapters.cells.count, 2)
+        chapters.cells.element(boundBy: 1).tap()
+        let editor = app.textViews["impress.duplex.section-replacement"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 15))
+        editor.tap()
+        editor.typeText("\n## F06_ReverseProof\n完整来源文件先写入，待人工撤销并强杀。")
+        app.buttons["impress.duplex.save-section-draft"].tap()
+        let preview = app.buttons["impress.duplex.preview"]
+        tapVisible(preview, in: app)
+        let diff = app.textViews["impress.duplex.full-diff"]
+        XCTAssertTrue(diff.waitForExistence(timeout: 20))
+        let noteToggle = app.switches["impress.duplex.select-note"]
+        let cardToggle = app.switches["impress.duplex.select-card"]
+        XCTAssertTrue(noteToggle.exists && cardToggle.exists)
+        XCTAssertTrue(noteToggle.isEnabled)
+        if String(describing: noteToggle.value ?? "") == "0" { noteToggle.tap() }
+        if cardToggle.isEnabled && String(describing: cardToggle.value ?? "") == "1" {
+            cardToggle.tap()
+        }
+        let confirm = app.buttons["impress.duplex.confirm"]
+        XCTAssertTrue(confirm.isEnabled)
+        confirm.tap()
+        let consent = app.alerts["确认这两个目标的所选修改？"]
+        XCTAssertTrue(consent.waitForExistence(timeout: 15))
+        consent.buttons["确认执行"].tap()
+        let applied = app.alerts["所选修改已处理"]
+        XCTAssertTrue(applied.waitForExistence(timeout: 30),
+            "Actual isolated QA Markdown must be committed before note undo")
+        applied.buttons["确定"].tap()
+
+        let undo = app.navigationBars.buttons["安全撤销"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 15))
+        undo.tap()
+        let undoNote = app.buttons["撤销笔记改动"]
+        XCTAssertTrue(undoNote.waitForExistence(timeout: 15))
+        undoNote.tap()
+        let inversePreview = app.textViews["impress.duplex.undo.full-diff"]
+        XCTAssertTrue(inversePreview.waitForExistence(timeout: 20))
+        XCTAssertTrue(String(describing: inversePreview.value ?? "").contains("SHA-256:"))
+        let inverse = app.buttons["impress.duplex.undo.confirm"]
+        XCTAssertTrue(inverse.isEnabled)
+        inverse.tap()
+        let inverseConsent = app.alerts["确认撤销这个目标？"]
+        XCTAssertTrue(inverseConsent.waitForExistence(timeout: 12))
+        inverseConsent.buttons["确认撤销"].tap()
+        let death = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.state == .notRunning
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [death], timeout: 35), .completed,
+            "Only durable isolated QA note inverse may terminate test process")
+
+        app.launchArguments.removeAll { $0 == "-ImpressV11FaultF06AfterNoteUndo" }
+        app.launch()
+        XCTAssertTrue(tabs.waitForExistence(timeout: 30))
+        tabs.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(reveal.waitForExistence(timeout: 30))
+        reveal.tap()
+        XCTAssertTrue(discuss.waitForExistence(timeout: 15))
+        discuss.tap()
+        XCTAssertTrue(more.waitForExistence(timeout: 25))
+        more.tap()
+        XCTAssertTrue(change.waitForExistence(timeout: 15))
+        change.tap()
+        XCTAssertTrue(preview.waitForExistence(timeout: 20))
+        tapVisible(preview, in: app)
+        let recovered = app.textViews["impress.duplex.full-diff"]
+        XCTAssertTrue(recovered.waitForExistence(timeout: 20))
+        XCTAssertTrue(String(describing: recovered.value ?? "").contains("undoing"))
+        XCTAssertFalse(app.buttons["impress.duplex.confirm"].isEnabled)
+        XCTAssertFalse(app.navigationBars.buttons["安全撤销"].isEnabled)
+        let reconcile = app.buttons["impress.duplex.reconcile-interrupted"]
+        XCTAssertTrue(reconcile.waitForExistence(timeout: 15))
+        XCTAssertTrue(reconcile.isEnabled)
+        reconcile.tap()
+        let verdict = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let text = String(describing: recovered.value ?? "")
+            return text.contains("撤销中断核查") && text.contains("reverted")
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [verdict], timeout: 30), .completed,
+            "Only the exact restored original source SHA may close note inverse")
+        XCTAssertFalse(app.switches["impress.duplex.select-note"].isEnabled)
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "Impress-V1.1-F06-original-bytes-note-inverse-process-death"
+        evidence.lifetime = .keepAlways
+        self.add(evidence)
+    }
+
     func testContinuousSourceCardChatDoubleTargetApprovalAndRestart() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-ImpressV11SyntheticVault",

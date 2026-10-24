@@ -3630,6 +3630,20 @@ final class ImpressDuplexApprovalController: UIViewController {
                             }
                     }
                 let outcome = try result.get()
+                #if DEBUG
+                // F06 note inverse: deliberately die only after the actual
+                // isolated QA source's original bytes are durable and before
+                // the pending .undoing receipt is saved. A reopen must check
+                // SHA in read-only reconciliation and must not replay writer.
+                if qaCopy && ImpressV11UITestFixture.enabled &&
+                   ProcessInfo.processInfo.arguments.contains(
+                       "-ImpressV11FaultF06AfterNoteUndo"),
+                   id.vaultID == ImpressV11UITestFixture.vaultID,
+                   case .written = outcome {
+                    NSLog("IMPRESS_FAULT_F06_NOTE_UNDONE_RECEIPT_UNSAVED")
+                    _ = Darwin.kill(Darwin.getpid(), SIGKILL)
+                }
+                #endif
                 guard case .unchanged = outcome else {
                     var completed = proposal
                     completed.state.noteStatus = .reverted
