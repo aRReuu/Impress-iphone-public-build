@@ -72,3 +72,7 @@
 ## 2026-10-24 · 历史 CLOSED 自动迁移保护（候选，TEST_NOT_RUN）
 
 发现现有 `checkIn(on:)` 会对**当天已经 CLOSED** 的旧版自定义/情绪记录自动执行阅读迁移，使读取结果出现未记录的阅读项，和存储层不可变历史相矛盾。最小代码修复仅允许仍为 OPEN 的旧日记录迁移，`CalibrationDayCheckIn.migratedToReading` 同样拒绝将 CLOSED 历史转换成 OPEN。新增 Portable `testReadingIDAndLegacyCustomAreDistinctAndMigratedOnlyExplicitly` 的 CLOSED 保真与 OPEN 迁移双断言、原生 `testClosedLegacyTodayRemainsClosedWhileOpenLegacyMigratesSafely` 的实际 JSON 历史回读、幂等保存、拒绝覆写和 OPEN 可迁移测试。保留老数据与今日 x/4、同源 Widget，不触及 Vault/FSRS/正式签名。此批候选提交未发布到开发分支、未启动新 CI；必须基于最终实际 SHA 的成功运行后才写 TEST_PASS。
+
+## 2026-10-24 · Widget 异常快照分数边界（候选，NOT_RUN）
+
+发现共享数据 `CalibrationWidgetSnapshot.isValid` 只验证日历/评估数，却允许不可能的巨大净分；Widget 后续直接使用这些分值绘制固定 -5/0/+5 纵轴，会产生可见图形越界。最小修复在共享快照读取门禁加入 **-5…+5 或 nil** 验证（四项 ±1，已有额外 ±1 最多一次）；合成回归增加 -6/+6/极端整数拒绝、合法两端及全部豁免 nil 通过，原先测试中的“未来日期虽然语法有效但不能渲染”改为合法边界 5 继续验证未来拦截，不降低语义断言。无网络、无新计分方案、不更改原始历史、FSRS 或生产 Vault。此批候选需精确提交 CI 后才能标记 TEST_PASS。

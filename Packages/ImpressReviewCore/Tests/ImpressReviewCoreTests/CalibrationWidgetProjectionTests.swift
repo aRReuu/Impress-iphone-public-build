@@ -209,6 +209,40 @@ final class CalibrationWidgetProjectionTests: XCTestCase {
         XCTAssertEqual(year.tickLabels.first, "1月")
     }
 
+    func testSharedWidgetRejectsScoresOutsideActualFourGoalAndAdjustmentRange() throws {
+        let now = date(2026, 10, 21)
+        let empty = CalibrationWidgetProjection.snapshot(
+            from: [], at: now, calendar: calendar)
+        func make(_ score: Int) -> CalibrationWidgetSnapshot {
+            CalibrationWidgetSnapshot(
+                schemaVersion: empty.schemaVersion, generatedAt: empty.generatedAt,
+                timeZoneID: empty.timeZoneID, calendarID: empty.calendarID,
+                days: [CalibrationWidgetDay(
+                    dayID: "2026-10-21", assessedCount: 4,
+                    state: .finalized, netScore: score)])
+        }
+        // Four behaviors +/-1 plus at most one independent bonus/penalty.
+        XCTAssertTrue(make(-5).isValid)
+        XCTAssertTrue(make(5).isValid)
+        for impossible in [-1_000_000, -6, 6, 1_000_000] {
+            let snapshot = make(impossible)
+            XCTAssertFalse(snapshot.isValid,
+                "Invalid shared data cannot feed out-of-range Cartesian geometry")
+            XCTAssertNil(CalibrationWidgetProjection.overview(
+                from: snapshot, at: now, calendar: calendar))
+            XCTAssertNil(CalibrationWidgetProjection.cartesianPlot(
+                from: snapshot, period: .week, at: now, calendar: calendar))
+        }
+        // All four excused still legitimately represents finalized nil score.
+        let excused = CalibrationWidgetSnapshot(
+            schemaVersion: empty.schemaVersion, generatedAt: empty.generatedAt,
+            timeZoneID: empty.timeZoneID, calendarID: empty.calendarID,
+            days: [CalibrationWidgetDay(
+                dayID: "2026-10-21", assessedCount: 4,
+                state: .finalized, netScore: nil)])
+        XCTAssertTrue(excused.isValid)
+    }
+
     func testPlausibleSharedSnapshotCannotDrawFutureCalendarScores() throws {
         let now = date(2026, 10, 21)
         let empty = CalibrationWidgetProjection.snapshot(from: [], at: now, calendar: calendar)
@@ -216,7 +250,7 @@ final class CalibrationWidgetProjectionTests: XCTestCase {
         // in shared cache; a Widget must not reveal them as completed history.
         let future = [
             CalibrationWidgetDay(dayID: "2026-10-22", assessedCount: 4,
-                                 state: .finalized, netScore: 19),
+                                 state: .finalized, netScore: 5),
             CalibrationWidgetDay(dayID: "2026-12-01", assessedCount: 4,
                                  state: .finalized, netScore: -4)
         ]

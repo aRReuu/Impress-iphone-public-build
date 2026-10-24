@@ -44,7 +44,10 @@ public struct CalibrationWidgetSnapshot: Codable, Equatable, Sendable {
                   (1...9999).contains(year), (1...12).contains(month),
                   (1...31).contains(dayOfMonth),
                   seen.insert(day.dayID).inserted,
-                  (0...4).contains(day.assessedCount) else { return false }
+                  (0...4).contains(day.assessedCount),
+                  day.netScore.map({ (-5...5).contains($0) }) ?? true else {
+                return false
+            }
             var gregorian = Calendar(identifier: .gregorian)
             gregorian.timeZone = TimeZone(secondsFromGMT: 0)!
             guard let date = gregorian.date(from: DateComponents(
