@@ -470,6 +470,45 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 
+
+    /// F01: a stale original-card CAS must never be re-approved from the
+    /// historical proposal. Recover with a fresh source/content review.
+    @MainActor
+    func testF01ConflictingCardCannotBeConfirmedAgainFromStaleApprovalUI() throws {
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
+            calculator: FSRS6ReviewCalculator())
+        let proposal = WCDBV3DuplexProposal(
+            sourceMessageID: UUID(), noteIdentity: nil,
+            noteBaseDigest: nil, noteEditedDigest: nil,
+            cardID: UUID(), cardReviewRevision: 0, cardContentRevision: 0,
+            cardBaseQuestion: "Old", cardBaseAnswer: "Prior",
+            cardEditedQuestion: "Outdated AI edit", cardEditedAnswer: "Stale",
+            state: ImDuplexApprovalState(noteSelected: false, cardSelected: true,
+                cardStatus: .conflict))
+        let page = ImpressDuplexApprovalController(repository: repo,
+            proposal: proposal, saveProposal: { _ in
+                XCTFail("Conflicted target requires fresh review")
+                return false
+            })
+        page.loadViewIfNeeded()
+        let card = try XCTUnwrap(allSubviews(page.view)
+            .compactMap { $0 as? UISwitch }
+            .first { $0.accessibilityIdentifier == "impress.duplex.select-card" })
+        XCTAssertTrue(card.isOn, "Keep the historical selection visible")
+        XCTAssertFalse(card.isEnabled, "Expired card consent is not a retry")
+        let confirm = try XCTUnwrap(allSubviews(page.view)
+            .compactMap { $0 as? UIButton }
+            .first { $0.accessibilityIdentifier == "impress.duplex.confirm" })
+        XCTAssertFalse(confirm.isEnabled)
+        confirm.sendActions(for: .touchUpInside)
+        XCTAssertNil(page.presentedViewController)
+        let diff = try XCTUnwrap(allSubviews(page.view)
+            .compactMap { $0 as? UITextView }
+            .first { $0.accessibilityIdentifier == "impress.duplex.full-diff" })
+        XCTAssertTrue(diff.text.contains("重新核查并创建新提案"))
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
     /// F06 inverse crash window: a visible controller must not let a user
     /// accidentally replay an in-flight inverse, erase its audit status or
     /// confirm a new forward write. A read-only reconciliation remains available.

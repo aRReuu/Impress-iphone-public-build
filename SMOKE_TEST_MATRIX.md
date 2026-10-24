@@ -438,3 +438,14 @@ F05 逆向补证（CODE_DONE / TEST_NOT_RUN）：`ImpressDuplexUndoReviewControl
 ## 2026-10-24 · CHAT-05 生产发送前多级许可竞争（候选，TEST_NOT_RUN）
 
 源码审计发现正式 `ImpressAINativeChatViewController` 在点击发送到首个上下文确认、跨 Provider 同意、来源范围确认、附件本次上传同意之间，`sending` 尚未置位；快速二次点击 Send 可以尝试重叠授权弹窗。修正将“待确认许可”与“网络正在执行”明确分离：`sendConsentPending` 首触达同步上锁并禁用发送按钮，覆盖有限上下文、缺模型引导、切 Provider、材料选择和图片/仅文字授权；取消恢复草稿/按钮，实际同意后仍执行原权限、来源 SHA、WCDB 和 URLSession 门禁，停止按钮仅用于真正发送中的请求。新增真实 Native UIKit 窗口回归 `testNativeChatRapidSendPresentsOnlyOneBoundedContextConsent`，通过 18 条本地已完成消息触发真实历史裁剪许可，用连续按钮和直接 selector 验证仅一个确认弹窗且尚未开始 HTTP。代码状态为 PREPARED / CI_NOT_RUN；不宣称所有 Provider、多模态、18 步与设备验收完成，不调用任何收费模型、不改正式 Vault 写门禁。
+
+
+## 2026-10-24 · F01/F02 双目标部分成功：真实 UI 故障注入候选（CI 待验）
+
+经生产源码核查，审批控制器过去在目标进入 conflict 后仍允许复选旧批准并显示确认操作，而且 confirmChanges 在收集目标时忽略了 UISwitch.isEnabled。新补丁将冲突目标改为必须从最新原卡/原文重新核查、重新生成提案；已应用的另一个独立目标不会因为这次冲突而重放。新增 Native UIKit 回归 testF01ConflictingCardCannotBeConfirmedAgainFromStaleApprovalUI，验证冲突不可重批准而历史选择与来源记录仍可见。
+
+新增仅限 #if DEBUG、真实合成 Fixture 身份、显式测试启动参数的两条生产事务故障注入：
+- F01：QA 测试 Markdown 先通过 guarded writer 实际写回；随后合成外部合法编辑在 WCDB 中赢得原卡内容 CAS，使历史批准原卡发生真正 contentConflict。真实 XCUITest testF01RealPartialNoteSuccessCardConflictRetainsColdStartFacts 必须从笔记目录、候选审核、原卡、Chat 已完成回复、双目标人工 Diff/许可一路操作，经停止与冷启动核对真实原字节和持久回执，冲突旧批准按钮不可再启用。
+- F02：通过既有生产 Vault 写入门禁拒绝 QA 笔记写入，允许独立原卡 CAS 正常落盘。真实 XCUITest testF02RealPartialNoteDenialCardSuccessRetainsColdStartFacts 要求笔记原字节不变、卡片 applied、重开仍保留两份事实，且不会把生产 Vault 写锁改成 true。
+
+此处是未发布候选代码与测试，状态 PREPARED / TEST_NOT_RUN；合成拒权不冒充 iCloud 或 Files 真机撤权。只有检查同一 SHA 的实际 CI 测试日志后才可升级 TEST_PASS，完整十八步、其余 F 窗口、ACCEPT/U/RDR/W 和设备验收仍独立，IPA 按门禁禁包，productionWriteEnabled = false。

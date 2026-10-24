@@ -1112,6 +1112,218 @@ final class ImpressV11NavigationUITests: XCTestCase {
         self.add(evidence)
     }
 
+
+    /// F01 real UI: actual disposable Markdown write first, then a concurrent
+    /// legal WCDB card content CAS. Both facts survive process termination.
+    func testF01RealPartialNoteSuccessCardConflictRetainsColdStartFacts() throws {
+        try verifyRealPartialDuplex(
+            fault: "-ImpressV11FaultF01AfterNoteCardConflict",
+            expectedNote: "applied", expectedCard: "conflict",
+            sourceShouldContainApprovedEdit: true)
+    }
+
+    /// F02 real UI: production Vault guard refuses a synthetic source write
+    /// while the independently approved WCDB card is still committed.
+    func testF02RealPartialNoteDenialCardSuccessRetainsColdStartFacts() throws {
+        try verifyRealPartialDuplex(
+            fault: "-ImpressV11FaultF02DenyNote",
+            expectedNote: "failed", expectedCard: "applied",
+            sourceShouldContainApprovedEdit: false)
+    }
+
+    private func verifyRealPartialDuplex(
+        fault: String, expectedNote: String, expectedCard: String,
+        sourceShouldContainApprovedEdit: Bool) throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ImpressV11SyntheticVault", fault,
+            "-AppleLanguages", "(zh-Hans)"
+        ]
+        app.launchEnvironment["IMPRESS_V11_FIXTURE_ID"] = UUID().uuidString
+        app.launch()
+        let tabs = app.tabBars.firstMatch
+        XCTAssertTrue(tabs.waitForExistence(timeout: 30))
+        tabs.buttons.element(boundBy: 1).tap()
+        let folder = app.cells.matching(identifier: "impress.notes.folder-row")
+            .matching(NSPredicate(format: "label == %@", "Study")).firstMatch
+        XCTAssertTrue(folder.waitForExistence(timeout: 30))
+        folder.tap()
+        let note = app.cells.matching(identifier: "impress.notes.file-row")
+            .matching(NSPredicate(format: "label == %@", "Impress_E2E_Proof")).firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 20))
+        note.tap()
+        XCTAssertTrue(app.webViews["impress.notes.markdown-webview"]
+            .waitForExistence(timeout: 40))
+
+        // Generate, reject one candidate, then explicitly import ONE card.
+        app.buttons["更多笔记操作"].tap()
+        app.buttons["根据笔记生成卡片"].tap()
+        XCTAssertTrue(app.navigationBars["生成综合问题"].waitForExistence(timeout: 15))
+        app.navigationBars.buttons["生成"].tap()
+        let generate = app.alerts["模拟器合成出题"]
+        XCTAssertTrue(generate.waitForExistence(timeout: 12))
+        generate.buttons["生成"].tap()
+        XCTAssertTrue(app.navigationBars["问题候选池"].waitForExistence(timeout: 20))
+        XCTAssertGreaterThanOrEqual(app.tables.cells.count, 2)
+        app.tables.cells.element(boundBy: 1).tap()
+        let importButton = app.navigationBars.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "加入")).firstMatch
+        XCTAssertTrue(importButton.waitForExistence(timeout: 12))
+        importButton.tap()
+        let importConsent = app.alerts["加入卡片集？"]
+        XCTAssertTrue(importConsent.waitForExistence(timeout: 12))
+        importConsent.buttons["确认加入"].tap()
+        let saved = app.alerts["卡片已添加"]
+        XCTAssertTrue(saved.waitForExistence(timeout: 30))
+        saved.buttons["完成"].tap()
+
+        tabs.buttons.element(boundBy: 0).tap()
+        let reveal = app.buttons["impress.review.reveal-answer"]
+        XCTAssertTrue(reveal.waitForExistence(timeout: 25))
+        reveal.tap()
+        let discuss = app.buttons["impress.review.ai-discussion"]
+        XCTAssertTrue(discuss.waitForExistence(timeout: 15))
+        discuss.tap()
+        let intro = app.alerts["关于讨论"]
+        if intro.waitForExistence(timeout: 2) { intro.buttons["知道了"].tap() }
+        let input = app.textViews["impress.ai.chat.input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 20))
+        input.tap()
+        input.typeText("合成 F01/F02 双目标部分成功与真实冷启动回读")
+        app.buttons["impress.ai.chat.send"].tap()
+        let context = app.alerts["是否附带当前卡片？"]
+        if context.waitForExistence(timeout: 8) {
+            context.buttons["附带当前卡片"].tap()
+        }
+        let more = app.buttons["impress.ai.chat.reply-more"].firstMatch
+        XCTAssertTrue(more.waitForExistence(timeout: 30))
+        more.tap()
+        let openProposal = app.buttons["统一预览笔记与原卡修订"]
+        XCTAssertTrue(openProposal.waitForExistence(timeout: 12))
+        openProposal.tap()
+
+        // Both targets must really be changed by a reviewed AI proposal and
+        // a separately edited original section; a bare no-op is not F01/F02.
+        let adopt = app.buttons["impress.duplex.use-suggestion"]
+        XCTAssertTrue(adopt.waitForExistence(timeout: 20))
+        tapVisible(adopt, in: app)
+        let noteEdit = app.buttons["impress.duplex.edit-note"]
+        XCTAssertTrue(noteEdit.waitForExistence(timeout: 15))
+        tapVisible(noteEdit, in: app)
+        let sectionAction = app.buttons["指定原章节并编辑 AI 建议"]
+        XCTAssertTrue(sectionAction.waitForExistence(timeout: 15))
+        sectionAction.tap()
+        let sections = app.tables["impress.duplex.note-section-picker"]
+        XCTAssertTrue(sections.waitForExistence(timeout: 15))
+        XCTAssertGreaterThanOrEqual(sections.cells.count, 2)
+        sections.cells.element(boundBy: 1).tap()
+        let editor = app.textViews["impress.duplex.section-replacement"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 15))
+        editor.tap()
+        let marker = "F01_F02_Approved_Source_Change"
+        editor.typeText("\n## " + marker +
+                        "\n这是已人工确认的合成资料修改。")
+        app.buttons["impress.duplex.save-section-draft"].tap()
+        let preview = app.buttons["impress.duplex.preview"]
+        tapVisible(preview, in: app)
+        let diff = app.textViews["impress.duplex.full-diff"]
+        XCTAssertTrue(diff.waitForExistence(timeout: 20))
+        XCTAssertTrue(String(describing: diff.value ?? "").contains("Vault ID:"))
+        let noteSwitch = app.switches["impress.duplex.select-note"]
+        let cardSwitch = app.switches["impress.duplex.select-card"]
+        XCTAssertTrue(noteSwitch.isEnabled && cardSwitch.isEnabled,
+            "Both independent targets must be authorizable before execution")
+        let approve = app.buttons["impress.duplex.confirm"]
+        XCTAssertTrue(approve.isEnabled)
+        approve.tap()
+        let finalConsent = app.alerts["确认这两个目标的所选修改？"]
+        XCTAssertTrue(finalConsent.waitForExistence(timeout: 12))
+        finalConsent.buttons["确认执行"].tap()
+        let partial = app.alerts["存在未完成的修改"]
+        XCTAssertTrue(partial.waitForExistence(timeout: 40),
+            "F01/F02 cannot report full success when one target failed")
+        partial.buttons["确定"].tap()
+        func assertStatuses() {
+            let detail = String(describing: diff.value ?? "")
+            let parts = detail.components(separatedBy: "cardID:")
+            XCTAssertGreaterThanOrEqual(parts.count, 2)
+            XCTAssertTrue(parts[0].contains("状态：" + expectedNote),
+                "Actual note outcome must retain its own durable status")
+            XCTAssertTrue(parts.dropFirst().joined(separator: "cardID:")
+                .contains("状态：" + expectedCard),
+                "Actual card CAS outcome must retain its own durable status")
+        }
+        assertStatuses()
+        if sourceShouldContainApprovedEdit {
+            XCTAssertFalse(noteSwitch.isEnabled, "F01 applied note is immutable")
+            XCTAssertFalse(cardSwitch.isEnabled,
+                "F01 conflicting card requires NEW human review")
+            XCTAssertFalse(approve.isEnabled,
+                "A conflicting old consent may not be confirmed again")
+        } else {
+            XCTAssertTrue(noteSwitch.isEnabled,
+                "F02 failed note may be re-reviewed independently")
+            XCTAssertFalse(cardSwitch.isEnabled,
+                "F02 successful card may not be applied again")
+        }
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "Impress-V1.1-" + expectedNote + "-" + expectedCard +
+            "-actual-partial-receipts"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+
+        // Reopen the exact WCDB + disposable source; do not use a test reset.
+        app.terminate()
+        app.launchArguments.removeAll { $0 == fault }
+        app.launch()
+        XCTAssertTrue(tabs.waitForExistence(timeout: 30))
+        tabs.buttons.element(boundBy: 1).tap()
+        XCTAssertTrue(folder.waitForExistence(timeout: 30))
+        folder.tap()
+        XCTAssertTrue(note.waitForExistence(timeout: 20))
+        note.tap()
+        XCTAssertTrue(app.webViews["impress.notes.markdown-webview"]
+            .waitForExistence(timeout: 30))
+        app.buttons["更多笔记操作"].tap()
+        app.buttons["查看 Markdown 源码"].tap()
+        let source = app.textViews.firstMatch
+        XCTAssertTrue(source.waitForExistence(timeout: 15))
+        XCTAssertEqual(String(describing: source.value ?? "").contains(marker),
+            sourceShouldContainApprovedEdit,
+            "Read the real persisted QA Markdown, not the Chat draft")
+
+        // Reopen the same originating card session via visible navigation and
+        // verify that neither successful target is replayed on cold start.
+        var backs = 0
+        while !tabs.exists && backs < 5 {
+            let back = app.navigationBars.buttons.element(boundBy: 0)
+            XCTAssertTrue(back.waitForExistence(timeout: 12))
+            back.tap()
+            backs += 1
+        }
+        XCTAssertTrue(tabs.waitForExistence(timeout: 15))
+        tabs.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(reveal.waitForExistence(timeout: 30))
+        reveal.tap()
+        XCTAssertTrue(discuss.waitForExistence(timeout: 15))
+        discuss.tap()
+        XCTAssertTrue(more.waitForExistence(timeout: 25))
+        more.tap()
+        XCTAssertTrue(openProposal.waitForExistence(timeout: 15))
+        openProposal.tap()
+        XCTAssertTrue(diff.waitForExistence(timeout: 20))
+        assertStatuses()
+        if expectedCard == "conflict" {
+            XCTAssertFalse(app.buttons["impress.duplex.confirm"].isEnabled,
+                "Restart may not reauthorize an obsolete card CAS")
+        }
+        let cold = XCTAttachment(screenshot: app.screenshot())
+        cold.name = "Impress-V1.1-" + expectedNote + "-" + expectedCard +
+            "-cold-restart-source-and-receipt"
+        cold.lifetime = .keepAlways
+        add(cold)
+    }
+
     func testContinuousSourceCardChatDoubleTargetApprovalAndRestart() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-ImpressV11SyntheticVault",

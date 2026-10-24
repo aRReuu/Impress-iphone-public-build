@@ -3007,9 +3007,9 @@ final class ImpressDuplexApprovalController: UIViewController {
         noteToggle.addTarget(self, action: #selector(updateConfirmation), for: .valueChanged)
         cardToggle.addTarget(self, action: #selector(updateConfirmation), for: .valueChanged)
         noteToggle.isEnabled = proposal.noteIdentity != nil &&
-            ![.applied, .undoing, .reverted].contains(proposal.state.noteStatus)
+            ![.conflict, .applied, .undoing, .reverted].contains(proposal.state.noteStatus)
         cardToggle.isEnabled = proposal.cardID != nil &&
-            ![.applied, .undoing, .reverted].contains(proposal.state.cardStatus)
+            ![.conflict, .applied, .undoing, .reverted].contains(proposal.state.cardStatus)
 
         ImpressV3Appearance.styleQuietButton(confirm,
             title: V3L("确认执行所选修改"), symbol: "checkmark.shield")
@@ -3137,6 +3137,10 @@ final class ImpressDuplexApprovalController: UIViewController {
                           "\n" + V3L("原答案：") + "\n" + (proposal.cardBaseAnswer ?? "") +
                           "\n" + V3L("新答案：") + "\n" + (proposal.cardEditedAnswer ?? ""))
         }
+        if proposal.state.noteStatus == .conflict ||
+           proposal.state.cardStatus == .conflict {
+            pieces.append(V3L("冲突目标的旧批准已失效。请回到最新来源重新核查并创建新提案；已经应用的独立目标不会重放。"))
+        }
         if let receipt = proposal.noteReceipt {
             pieces.append("\n" + V3L("笔记回执：") + receipt)
         }
@@ -3148,9 +3152,9 @@ final class ImpressDuplexApprovalController: UIViewController {
         // Invalid or missing private bytes must disable the note control,
         // while an independently reviewed card may remain approvable.
         noteToggle.isEnabled = proposal.noteIdentity != nil && notePreviewValid &&
-            ![.applying, .applied, .undoing, .reverted].contains(proposal.state.noteStatus)
+            ![.conflict, .applying, .applied, .undoing, .reverted].contains(proposal.state.noteStatus)
         cardToggle.isEnabled = proposal.cardID != nil &&
-            ![.applying, .applied, .undoing, .reverted].contains(proposal.state.cardStatus)
+            ![.conflict, .applying, .applied, .undoing, .reverted].contains(proposal.state.cardStatus)
         let interrupted = proposal.state.noteStatus == .applying ||
             proposal.state.cardStatus == .applying
         reconcileBarItem?.isEnabled = !committing && (interrupted ||
@@ -3186,9 +3190,9 @@ final class ImpressDuplexApprovalController: UIViewController {
         guard !committing, !executionConsentPending, confirm.isEnabled,
               proposal.state.noteStatus != .applying,
               proposal.state.cardStatus != .applying else { return }
-        let noteChosen = (noteToggle.isOn && notePreviewValid) ||
+        let noteChosen = (noteToggle.isOn && noteToggle.isEnabled && notePreviewValid) ||
             (proposal.state.noteSelected && proposal.state.noteStatus == .applied)
-        let cardChosen = cardToggle.isOn ||
+        let cardChosen = (cardToggle.isOn && cardToggle.isEnabled) ||
             (proposal.state.cardSelected && proposal.state.cardStatus == .applied)
         guard noteChosen || cardChosen else { return }
         // Gate repeat taps before UIKit begins presenting the consent sheet.
@@ -3260,11 +3264,23 @@ final class ImpressDuplexApprovalController: UIViewController {
                         continuation.resume(returning: (try? result.get()) == true)
                     }
                 }
+                #if DEBUG
+                // F02: test the actual production deny-write guard while the
+                // source is an authorized disposable fixture. Card CAS remains
+                // independently permitted after this note refusal.
+                let faultDenyQACopy = qaAuthorized &&
+                    ImpressV11UITestFixture.enabled &&
+                    id.vaultID == ImpressV11UITestFixture.vaultID &&
+                    ProcessInfo.processInfo.arguments.contains(
+                        "-ImpressV11FaultF02DenyNote")
+                #else
+                let faultDenyQACopy = false
+                #endif
                 let result: Result<ImVaultCommitOutcome, Error> =
                     await withCheckedContinuation { continuation in
                         ImVaultGuardedWrite.commitAuthorized(
                             draft: draft, userConfirmedDiff: true,
-                            deviceQATestCopyConfirmed: qaAuthorized) { r in
+                            deviceQATestCopyConfirmed: qaAuthorized && !faultDenyQACopy) { r in
                                 continuation.resume(returning: r)
                             }
                     }
@@ -3348,6 +3364,31 @@ final class ImpressDuplexApprovalController: UIViewController {
                             .first(where: { $0.cardID == id }) else {
                         throw ReviewWCDBError.missingCard
                     }
+                    #if DEBUG
+                    // F01: a legal external card edit wins the real WCDB CAS
+                    // AFTER the QA Markdown write, BEFORE this proposed card
+                    // update. The original proposal must retain note success,
+                    // reject the stale card version and never replay the note.
+                    if ImpressV11UITestFixture.enabled,
+                       ProcessInfo.processInfo.arguments.contains(
+                           "-ImpressV11FaultF01AfterNoteCardConflict"),
+                       proposal.state.noteStatus == .applied,
+                       let noteIdentity = proposal.noteIdentity,
+                       let link = card.sourceNotePath,
+                       let sourceID = try? ImpressBatchSourceKey.decode(link),
+                       sourceID == noteIdentity,
+                       sourceID.vaultID == ImpressV11UITestFixture.vaultID {
+                        try await repository.updateManagedCard(
+                            WCDBV3CardInput(cardID: id,
+                                question: "F01 外部合法内容修改",
+                                answerText: card.answerText, choices: card.choices,
+                                correctIndices: card.correctIndices, cardType: card.cardType,
+                                imageData: card.imageData, sourceNotePath: card.sourceNotePath),
+                            expectedRevision: queue.revision,
+                            expectedContentRevision: revision, origin: .manual)
+                        NSLog("IMPRESS_FAULT_F01_NOTE_APPLIED_CARD_EXTERNAL_CAS")
+                    }
+                    #endif
                     try await repository.updateManagedCard(
                         WCDBV3CardInput(cardID: id, question: replacement,
                             answerText: proposal.cardEditedAnswer, choices: card.choices,
