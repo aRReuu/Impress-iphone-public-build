@@ -301,6 +301,79 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
         XCTAssertEqual(collection.numberOfItems(inSection: 0), 0)
     }
 
+    func testSwitchingChatSessionsRestoresOwnHistoryAnchorWithoutCrossSessionJump() throws {
+        // Real UICollectionView snapshots with independent WCDB message IDs.
+        // A session switch cannot inherit the former conversation's top offset.
+        let viewport = ImpressChatProductionTranscript(
+            frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        let window = UIWindow(frame: viewport.bounds)
+        let root = UIViewController()
+        window.rootViewController = root
+        root.view.addSubview(viewport)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        let collection = try XCTUnwrap(
+            descendants(of: viewport, as: UICollectionView.self).first)
+        let firstID = UUID(), secondID = UUID()
+        func fixture(_ prefix: String) -> [WCDBV3ChatMessage] {
+            (0..<120).map { index in
+                WCDBV3ChatMessage(messageID: UUID(), role: .user,
+                    text: "\(prefix)-\(index)", status: .completed)
+            }
+        }
+        let first = fixture("FIRST"), second = fixture("SECOND")
+        func shows(_ token: String) -> Bool {
+            viewport.layoutIfNeeded()
+            return collection.visibleCells
+                .flatMap { descendants(of: $0, as: UITextView.self) }
+                .contains { $0.text == token }
+        }
+        func assertVisible(_ token: String) {
+            let expectation = XCTNSPredicateExpectation(
+                predicate: NSPredicate { _, _ in shows(token) }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 12),
+                .completed, "The active transcript must display \(token)")
+        }
+        viewport.activateConversation(firstID)
+        viewport.update(first)
+        assertVisible("FIRST-119")
+
+        // Simulate the result of a real user history drag via the delegate:
+        // the archived visible row and relative viewport offset are authoritative.
+        viewport.scrollViewWillBeginDragging(collection)
+        collection.scrollToItem(at: IndexPath(item: 8, section: 0),
+                                at: .top, animated: false)
+        viewport.layoutIfNeeded()
+        viewport.scrollViewDidEndDragging(collection, willDecelerate: false)
+        let oldTop = try XCTUnwrap(collection.indexPathsForVisibleItems.min()?.item)
+        XCTAssertLessThan(oldTop, 20)
+
+        viewport.activateConversation(secondID)
+        viewport.update(second)
+        assertVisible("SECOND-119")
+        XCTAssertGreaterThan(try XCTUnwrap(
+            collection.indexPathsForVisibleItems.min()?.item), 95,
+            "A new conversation should follow its own latest message")
+
+        viewport.activateConversation(firstID)
+        viewport.update(first)
+        let returned = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                viewport.layoutIfNeeded()
+                return shows("FIRST-8") &&
+                    (collection.indexPathsForVisibleItems.min()?.item ?? 120) < 20
+            }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [returned], timeout: 12), .completed,
+            "Returning to a prior conversation restores its history reading anchor")
+        let restoredTop = try XCTUnwrap(collection.indexPathsForVisibleItems.min()?.item)
+        XCTAssertLessThanOrEqual(abs(restoredTop - oldTop), 3)
+
+        // The second conversation retains its own bottom-follow position.
+        viewport.activateConversation(secondID)
+        viewport.update(second)
+        assertVisible("SECOND-119")
+    }
+
     func testProductionTranscriptScaleLogsActualSimulatorLoadTime() throws {
         // Genuine UIKit/Diffable transactions, not parser counters. Values
         // are measured in the CI simulator; no iPhone13 FPS claim follows.

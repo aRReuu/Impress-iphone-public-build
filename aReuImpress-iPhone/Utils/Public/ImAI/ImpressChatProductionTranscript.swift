@@ -30,6 +30,16 @@ final class ImpressChatProductionTranscript: UIView,
         case followingBottom, readingHistory, keyboardTransition, restoring
     }
 
+    private struct SessionAnchor {
+        let rowID: String
+        let distanceFromViewportTop: CGFloat
+    }
+
+    private enum SessionPosition {
+        case followingBottom
+        case reading(SessionAnchor)
+    }
+
     var menuForMessage: ((UUID) -> UIMenu?)?
     private let collection: UICollectionView
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
@@ -44,6 +54,11 @@ final class ImpressChatProductionTranscript: UIView,
     private var renderQueued = false
     private var lastRenderedAt: CFAbsoluteTime = 0
     private var requestedFocus: UUID?
+    // Transient viewport state only. WCDB remains the sole conversation source.
+    // Never carry an unrelated session's offset or explicit search focus across.
+    private var activeConversationID: UUID?
+    private var savedSessionPositions: [UUID: SessionPosition] = [:]
+    private var pendingSessionPosition: SessionPosition?
     private var refreshAll = false
 
     override init(frame: CGRect) {
@@ -160,6 +175,47 @@ final class ImpressChatProductionTranscript: UIView,
     }
 
     func followNewestMessage() {
+        scrollMode = .followingBottom
+        pendingSessionPosition = nil
+    }
+
+    private func visibleSessionAnchor() -> SessionAnchor? {
+        guard let index = collection.indexPathsForVisibleItems.sorted().first,
+              let id = dataSource.itemIdentifier(for: index),
+              let attributes = collection.layoutAttributesForItem(at: index) else {
+            return nil
+        }
+        return SessionAnchor(rowID: id,
+            distanceFromViewportTop: attributes.frame.minY -
+                collection.contentOffset.y)
+    }
+
+    /// Called before swapping WCDB histories, including cold-start restore.
+    /// One conversation's reading anchor never becomes another's scroll state.
+    func activateConversation(_ id: UUID) {
+        guard activeConversationID != id else { return }
+        if let old = activeConversationID {
+            let reading = scrollMode == .readingHistory ||
+                (scrollMode == .keyboardTransition &&
+                 modeBeforeKeyboard == .readingHistory)
+            if reading, let anchor = visibleSessionAnchor() {
+                savedSessionPositions[old] = .reading(anchor)
+            } else if scrollMode == .followingBottom {
+                savedSessionPositions[old] = .followingBottom
+            }
+        }
+        activeConversationID = id
+        requestedFocus = nil
+        pendingSessionPosition = savedSessionPositions[id] ?? .followingBottom
+        scrollMode = .restoring
+    }
+
+    func forgetConversation(_ id: UUID) {
+        savedSessionPositions.removeValue(forKey: id)
+        guard activeConversationID == id else { return }
+        activeConversationID = nil
+        pendingSessionPosition = nil
+        requestedFocus = nil
         scrollMode = .followingBottom
     }
 
@@ -317,6 +373,7 @@ final class ImpressChatProductionTranscript: UIView,
             // committed. Otherwise the no-op guard skips the first snapshot
             // and the collection permanently reports zero sections.
             if changed.isEmpty && !refreshAll && requestedFocus == nil &&
+                pendingSessionPosition == nil &&
                 !previous.sectionIdentifiers.isEmpty { return }
             if !newKinds.isEmpty { snapshot.reloadItems(newKinds) }
             let reconfigured = refreshAll
@@ -342,8 +399,17 @@ final class ImpressChatProductionTranscript: UIView,
             oldIDs.isDisjoint(with: identifiers)
         publishedIDs = identifiers
         snapshotInFlight = true
+        let snapshotConversationID = activeConversationID
         let finished: () -> Void = { [weak self] in
             guard let self else { return }
+            // A session may switch while UIKit commits the previous snapshot.
+            // Ignore that old completion; render the latest session instead.
+            guard self.activeConversationID == snapshotConversationID else {
+                self.snapshotInFlight = false
+                self.snapshotNeedsRefresh = false
+                self.renderLatest()
+                return
+            }
             self.collection.layoutIfNeeded()
             if let focus = self.requestedFocus,
                let index = identifiers.firstIndex(where: {
@@ -353,7 +419,39 @@ final class ImpressChatProductionTranscript: UIView,
                     at: IndexPath(item: index, section: 0),
                     at: .centeredVertically, animated: false)
                 self.requestedFocus = nil
+                self.pendingSessionPosition = nil
                 self.scrollMode = .readingHistory
+            } else if let position = self.pendingSessionPosition {
+                self.pendingSessionPosition = nil
+                switch position {
+                case .followingBottom:
+                    self.scrollMode = .followingBottom
+                    self.scrollToBottom()
+                case .reading(let anchor):
+                    if let index = identifiers.firstIndex(of: anchor.rowID) {
+                        let item = IndexPath(item: index, section: 0)
+                        self.collection.scrollToItem(at: item, at: .top,
+                                                     animated: false)
+                        self.collection.layoutIfNeeded()
+                        if let frame = self.collection.layoutAttributesForItem(at: item) {
+                            let minimum = -self.collection.adjustedContentInset.top
+                            let maximum = max(minimum, self.collection.contentSize.height -
+                                self.collection.bounds.height +
+                                self.collection.adjustedContentInset.bottom)
+                            let target = min(maximum, max(minimum,
+                                frame.frame.minY - anchor.distanceFromViewportTop))
+                            self.collection.setContentOffset(
+                                CGPoint(x: self.collection.contentOffset.x, y: target),
+                                animated: false)
+                        }
+                        self.scrollMode = .readingHistory
+                    } else {
+                        // A deleted/edited anchor cannot point to another
+                        // conversation or silently invent a replacement row.
+                        self.scrollMode = .followingBottom
+                        self.scrollToBottom()
+                    }
+                }
             } else if self.scrollMode == .followingBottom {
                 self.scrollToBottom()
             } else if let (id, dy) = visibleAnchor,

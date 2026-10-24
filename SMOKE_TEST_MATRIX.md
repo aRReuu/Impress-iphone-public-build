@@ -380,3 +380,7 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 `7b8009056aacc1b4a4d208ca210d88204f299eb9` 的 Run [#39988645038](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/39988645038) Portable Core SUCCESS，实际执行 SSE 残缺 EOF/最终 CR、>256KB 合法批次、切片 Data 四项回归；其它 Jobs 最终 PASS/FAIL 必须据其独立结果再登记，不能提前沿用旧 Run。
 
 仍保持 **NOT_RUN/DEVICE_BLOCKED**：18 步尚未包含全部 F01～F13 系统强杀、断点注入及 ZIP 回档；ACCEPT-01～12 全项独立 UI/设备边界；U01～21、RDR-01～22 全组合；Excalidraw 官方 SVG A/B；5,000 历史 CPU/内存/帧率与 iPhone13 视觉；Widget SpringBoard 六布局、App Group/证书、真实系统通知与 Files/iCloud 撤权。未闭账前禁止 IPA，不弱化断言，也不把源层测试冒充完整 UI E2E。
+
+## 2026-10-24 · Chat 会话隔离滚动锚点施工（本次代码提交，CI 待验证）
+
+在既有 U18 / CHAT-SPIKE-C 下增加 `testSwitchingChatSessionsRestoresOwnHistoryAnchorWithoutCrossSessionJump`：用同一真实 UICollectionView 在两个各 120 条、独立 messageID 的 WCDB 合成历史之间切换，验证 A 上滑位置 → B 首次自动跟随底部 → A 原锚点恢复 → B 独立底部。搜索显式定位优先于普通锚点；被删除会话不得保留 UI 锚点。此用例属于 Native UIKit 层，**提交时状态 CODE_DONE / TEST_NOT_RUN**，需绑定新 Run 才能记 PASS。冷启动跨进程位置存储、iPhone13 键盘/VoiceOver/高频流式滚动仍 NOT_RUN/DEVICE_BLOCKED。原有 18 步及 F01～13/U/RDR/W 全矩阵不因此自动结案。IPA 继续禁止。

@@ -1765,6 +1765,7 @@ final class ImpressAINativeChatViewController: UIViewController,
     }
 
     private func activateSession(_ session: WCDBV3ChatSession) {
+        transcript.activateConversation(session.sessionID)
         storedSession = session
         acknowledgedBoundedContext = false
         pendingDuplex = session.pendingDuplex
@@ -1844,6 +1845,7 @@ final class ImpressAINativeChatViewController: UIViewController,
     }
 
     private func handleDeletedDiscussion(_ id: UUID) {
+        transcript.forgetConversation(id)
         guard storedSession?.sessionID == id else { return }
         draftDebounce?.cancel()
         // The DB tombstone rejects any previously queued asynchronous writes.

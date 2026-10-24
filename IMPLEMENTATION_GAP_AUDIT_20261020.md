@@ -181,3 +181,7 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 **本轮新修复**：7b8009056aacc1b4a4d208ca210d88204f299eb9，SSE 缓冲由“大 HTTP 读取”限制更正为“未完成帧”限制，并拒绝 EOF 非法终止；Run39988645038 的 Portable Core PASS，新 iOS Jobs 尚需独立最终结果。后续补充的 KaTeX 实际 DOM/Cell 复用和失败回复冷启稳定性、Excalidraw 端点几何防护仍必须等对应最终集成 SHA 的 CI 才能从 CODE_DONE 升到 TEST_PASS。
 
 **仍未闭合**：OpenAI Responses/Anthropic/Gemini/DeepSeek/GLM/自定义 Provider 能力矩阵的完整真实流与合法截断；复杂 Chat 富文本视觉/代码/行内公式/滚动/5,000 历史 CPU 内存；附件真实多模态传输（现为本地预览，模型不可读）；Excalidraw 官方 SVG 视觉 A/B 与完整图形交互；RDR/U/F/ACCEPT/W 逐项完整故障和真实设备回归。未得到 iPhone13 数据前保留 DEVICE_BLOCKED；禁止在此次任务门禁未满足时打包 IPA。
+
+## 2026-10-24 · 正式 Chat 跨会话滚动位置隔离增量
+
+核对生产 `ImpressChatProductionTranscript` 与 `ImpressAINativeChatViewController.activateSession`：此前滚动状态仅有全局 `scrollMode`，未以 WCDB sessionID 隔离，切换非空 A/B 会话可能继承上一会话的阅读偏移，返回 A 也没有稳定锚点。针对该具体缺口引入仅内存的 `sessionID → stable rowID + viewport delta` 位置记录、首次底部跟随、搜索定位优先、异步旧 snapshot 完成隔离及删除会话清理；不改 WCDB/FSRS/来源/批准链路。新增真实 Native UIKit 回归用例；**CODE_DONE / TEST_NOT_RUN（提交时）**，须等精确 SHA 的 CI。跨冷启动的滚动位置持久化不是本补丁的通过宣称；高频 SSE 压力与设备性能另测。仍无 IPA。
