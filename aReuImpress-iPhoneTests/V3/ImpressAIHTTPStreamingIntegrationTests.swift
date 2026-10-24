@@ -349,8 +349,14 @@ final class ImpressAIHTTPStreamingIntegrationTests: XCTestCase {
             let bytes = try XCTUnwrap(req.httpBody)
             let payload = try XCTUnwrap(
                 JSONSerialization.jsonObject(with: bytes) as? [String: Any])
-            XCTAssertTrue(String(data: bytes, encoding: .utf8)?
-                .contains(encoded) == true)
+            // JSONSerialization may escape "/" as "\/" in base64, although
+            // the parsed transport field contains the unmodified JPEG bytes.
+            // Canonicalize only JSON solidus escapes, and assert the exact
+            // approved content occurs once rather than weakening its check.
+            let canonical = try XCTUnwrap(String(data: bytes, encoding: .utf8))
+                .replacingOccurrences(of: "\\/", with: "/")
+            XCTAssertEqual(canonical.components(separatedBy: encoded).count - 1, 1,
+                "One approved JPEG must occur exactly once in its outbound request")
             switch wire {
             case .chatCompletions:
                 let rows = try XCTUnwrap(payload["messages"] as? [[String: Any]])
