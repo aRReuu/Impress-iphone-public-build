@@ -5,8 +5,9 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "build": "node build.mjs"
-  },
+    "build": "node build.mjs",
+    "qa:test:geometry": "node --test test-inline-excalidraw-geometry.mjs"
+  }
   "dependencies": {
     "markdown-it": "14.1.0",
     "katex": "0.16.22",

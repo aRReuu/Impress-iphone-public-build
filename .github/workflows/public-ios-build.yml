@@ -111,6 +111,7 @@ jobs:
           set -euo pipefail
           cd Scripts/DiagramReader
           npm install --no-audit --no-fund --ignore-scripts
+          npm run qa:test:geometry 2>&1 | tee ../../out/excalidraw-inline-geometry-tests.log
           npm run build
           test -s ../../aReuImpress-iPhone/Resources/DiagramReader/reader.js
           test -s ../../aReuImpress-iPhone/Resources/MarkdownReader/reader.js

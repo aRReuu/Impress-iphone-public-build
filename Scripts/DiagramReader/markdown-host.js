@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
 import katex from "katex";
+import { inlineArrowheadGeometry } from "./inline-excalidraw-geometry.mjs";
 
 const root = document.getElementById("reader");
 const style = document.getElementById("impress-reading-css");
@@ -222,19 +223,55 @@ function drawNativeGeometry(host,encoded,kind) {
   for(const e of list) {
     const n=e.raw,x=e.x+dx,y=e.y+dy,w=e.w,h=e.h;
     const color=safeColor(isCanvas?n.color:n.strokeColor);
-    const attrs={stroke:color,"stroke-width":isCanvas?1.6:Math.min(20,Math.max(0.5,val(n.strokeWidth,1.5))),
-      fill:safeColor(n.backgroundColor,"transparent")};
+    const width=isCanvas?1.6:Math.min(20,Math.max(0.5,
+      n.strokeWidth==null?1.5:val(n.strokeWidth,1.5)));
+    const opacity=isCanvas||n.opacity==null?1:
+      Math.min(1,Math.max(0,val(n.opacity,100)/100));
+    const dash=n.strokeStyle==="dashed"?"8 8":
+      n.strokeStyle==="dotted"?"1 6":"none";
+    const attrs={stroke:color,"stroke-width":width,
+      fill:safeColor(n.backgroundColor,"transparent"),
+      opacity,"stroke-dasharray":isCanvas?"none":dash,
+      "stroke-linecap":n.strokeStyle==="dotted"?"round":"butt"};
+    const decorated=[];
     let shape;
     if(n.type==="ellipse")shape=svgMake(svg,"ellipse",{cx:x+w/2,cy:y+h/2,rx:w/2,ry:h/2,...attrs});
     else if(n.type==="diamond")shape=svgMake(svg,"polygon",{points:(x+w/2)+","+y+" "+(x+w)+","+(y+h/2)+" "+(x+w/2)+","+(y+h)+" "+x+","+(y+h/2),...attrs});
     else if(["line","arrow","freedraw"].includes(n.type)&&Array.isArray(n.points)) {
-      const pts=n.points.slice(0,1200).filter(p=>Array.isArray(p)&&p.length>=2)
-        .map(p=>(x+val(p[0]))+","+(y+val(p[1]))).join(" ");
-      shape=svgMake(svg,"polyline",{points:pts,fill:"none",stroke:color,"stroke-width":attrs["stroke-width"]});
-    } else if(n.type!=="text")shape=svgMake(svg,"rect",{x,y,width:w,height:h,rx:4,...attrs,
-      "stroke-dasharray":n.type==="group"?"7 5":"none"});
-    if(shape&&!isCanvas&&Number.isFinite(Number(n.angle)))
-      shape.setAttribute("transform","rotate("+(val(n.angle)*180/Math.PI)+" "+(x+w/2)+" "+(y+h/2)+")");
+      const points=n.points.slice(0,1200).filter(p=>Array.isArray(p)&&p.length>=2)
+        .map(p=>[x+val(p[0]),y+val(p[1])]);
+      shape=svgMake(svg,"polyline",{points:points.map(p=>p.join(",")).join(" "),
+        fill:"none",stroke:color,"stroke-width":width,opacity,
+        "stroke-dasharray":dash,"stroke-linecap":attrs["stroke-linecap"]});
+      if(!isCanvas && n.type==="arrow" && points.length>=2) {
+        const endings=[["start",n.startArrowhead,points[0],points[1]],
+          ["end",n.endArrowhead,points[points.length-1],points[points.length-2]]];
+        for(const [side,style,tip,neighbor] of endings) {
+          const result=inlineArrowheadGeometry(style,tip,neighbor,width);
+          if(!result)continue;
+          decorated.push(svgMake(svg,"path",{d:result.d,
+            "data-arrowhead":side,stroke:color,
+            "stroke-width":width,
+            "stroke-linecap":"round","stroke-linejoin":"round",
+            fill:result.filled?color:"none",opacity}));
+        }
+      }
+    } else if(n.type!=="text") {
+      const customRadius=n.roundness && Number.isFinite(n.roundness.value)
+        ? Math.max(0,n.roundness.value) : 32;
+      const radius=n.type==="rectangle"&&n.roundness?.type===3
+        ?Math.min(customRadius,Math.min(w,h)/2):
+        n.type==="rectangle"&&[1,2].includes(n.roundness?.type)
+          ?Math.min(w,h)*0.25:
+          n.type==="rectangle"||n.type==="frame"?0:4;
+      shape=svgMake(svg,"rect",{x,y,width:w,height:h,rx:radius,...attrs,
+        "stroke-dasharray":n.type==="group"?"7 5":attrs["stroke-dasharray"]});
+    }
+    if(shape&&!isCanvas&&Number.isFinite(Number(n.angle))) {
+      const transform="rotate("+(val(n.angle)*180/Math.PI)+" "+(x+w/2)+" "+(y+h/2)+")";
+      shape.setAttribute("transform",transform);
+      for(const mark of decorated)mark.setAttribute("transform",transform);
+    }
     if(n.type==="text"||isCanvas)
       textAt(svg,x+8,y+20,n.text||n.label||n.file||n.url||"",w-16);
     if(n.type==="image")textAt(svg,x+6,y+21,"图像在独立图纸页查看",w-12);

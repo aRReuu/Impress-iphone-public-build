@@ -199,3 +199,8 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 ## 2026-10-24 · Excalidraw 箭头视觉缺口（增量补正）
 
 上一版本无论序列化样式，一律在任意 arrow 的最后一端画固定 V，且箭头头部复用虚线线段路径；导致无端点、三角、圆点、横杠、菱形等图纸误显。现添加可选 `startArrowhead/endArrowhead` 源属性、独立 CAShapeLayer 端点路径与合成 UIKit 回归，仍共用源 ID/图层/旋转/选择和无网络只读范围。未知头部样式安全不渲染，不得猜测；源中 null/省略属性不冒充已确认为其他形状。其高保真结论必须在实测 Native CI 和官方 SVG A/B 后定案。本轮不升级 `RDR-13/15/22` 总体验收，不改变 Vault 生产写入开关与打包门禁。
+
+
+## 2026-10-24 · Markdown 正文内嵌图纸的二次渲染链修正
+
+源码审计确定同一 Excalidraw 来源有两条用户可见的只读路径：独立原生图纸页和 Markdown 正文离线 SVG 预览。只完善原生而保留嵌入页固定 rx=4、无箭头头部、不尊重 dashed/dotted/opacity，会导致用户在同一来源看到相互矛盾的图纸。本增量复用显式源属性语义，在内嵌 JS 中用纯确定性 endpoint 函数生成安全 SVG path（不拼未经处理的外部 HTML，不访问 URL），并让 Node 单测进入同一 CI。模型侧权限、来源 SHA/IDs、Vault 写入门禁与生产权限未改变。版本不含官方 SVG A/B 结论，也不承诺全部字体、bound text 和粗糙曲线达到官方像素一致；状态严格 CODE_DONE / TEST_NOT_RUN，待 Run 证明。

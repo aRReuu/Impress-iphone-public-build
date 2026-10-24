@@ -398,3 +398,8 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 ## 2026-10-24 · Excalidraw 真实箭头端点几何回归（本次代码，等待 CI）
 
 新增 `ImpressExcalidrawRenderingIntegrationTests.testSerializedArrowheadsHaveIndependentGeometryAndRespectNoHead`，使用完全合成、无私密来源的 Excalidraw 图纸验证独立 start/end 样式（dot/triangle/bar/diamond_outline/none）、不从虚线继承破折、与原形状共同旋转和透明度，Source ElementID 与选择材料 JSON 中不混入未选元素。这是可运行的 Native UIKit 几何验收，不是官方 `exportScene(svg)` 视觉像素 A/B，仍须同一 Fixture 生成官方 SVG、截图与原生视图对照，RDR-13/15/22、字体与曲线粗糙笔触、真机仍 NOT_RUN/DEVICE_BLOCKED。本次提交时 CODE_DONE / TEST_NOT_RUN，必须以新 SHA+Run 实际运行结果升级，禁止提前 IPA。
+
+
+## 2026-10-24 · RDR 正文内嵌 Excalidraw 与原生样式一致性增量（测试尚未执行）
+
+前一轮只修复独立的 `ImpressExcalidrawNativeView`。本增量把源序列化 `startArrowhead/endArrowhead` 的无端点、箭头、三角、圆点、横杠、菱形及实/空样式同步到 `Scripts/DiagramReader/markdown-host.js` 的离线 SVG 内嵌路径；修复线段与端点各自的 dash/opacity/rotation 语义以及 rectangle 的圆角类型，来源结构仍由授权本地 `drawNativeGeometry` 生成而非执行外部 SVG/JS。新增纯逻辑 Node 单测 `test-inline-excalidraw-geometry.mjs`，主开发 CI 的离线阅读器构建步骤在打包脚本前执行。此时 **CODE_DONE / TEST_NOT_RUN**，只有新 SHA Run 的明确通过才能升级相应子用例。仍缺官方 Excalidraw SVG 与 Native 的同 Fixture 视觉 A/B、真实 iPhone13 外观、bound text/曲线/粗糙笔触比较。RDR-01～22、ACCEPT/F/UI/W 总矩阵不能据此标为全 PASS；完整验收前禁止 IPA。
