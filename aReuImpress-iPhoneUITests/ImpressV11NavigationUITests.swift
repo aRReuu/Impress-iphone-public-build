@@ -731,6 +731,14 @@ final class ImpressV11NavigationUITests: XCTestCase {
         execute.tap()
         let approval = app.alerts["确认这两个目标的所选修改？"]
         XCTAssertTrue(approval.waitForExistence(timeout: 15))
+        XCTAssertFalse(execute.isEnabled,
+            "F05: presenting final consent must lock duplicate execution taps")
+        approval.buttons["取消"].tap()
+        XCTAssertTrue(execute.isEnabled,
+            "Cancelling F05 consent must restore an independently reviewed target")
+        execute.tap()
+        XCTAssertTrue(approval.waitForExistence(timeout: 15))
+        XCTAssertFalse(execute.isEnabled)
         approval.buttons["确认执行"].tap()
         let killed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             app.state == .notRunning
@@ -883,6 +891,8 @@ final class ImpressV11NavigationUITests: XCTestCase {
         inverse.tap()
         let inverseConsent = app.alerts["确认撤销这个目标？"]
         XCTAssertTrue(inverseConsent.waitForExistence(timeout: 12))
+        XCTAssertFalse(inverse.isEnabled,
+            "F05 inverse consent must immediately lock the repeated undo tap")
         inverseConsent.buttons["确认撤销"].tap()
         let killed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             app.state == .notRunning
@@ -1049,6 +1059,8 @@ final class ImpressV11NavigationUITests: XCTestCase {
         inverse.tap()
         let inverseConsent = app.alerts["确认撤销这个目标？"]
         XCTAssertTrue(inverseConsent.waitForExistence(timeout: 12))
+        XCTAssertFalse(inverse.isEnabled,
+            "F05 note inverse must not accept another overlapping undo consent")
         inverseConsent.buttons["确认撤销"].tap()
         let death = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             app.state == .notRunning
