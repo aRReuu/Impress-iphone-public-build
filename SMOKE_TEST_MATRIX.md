@@ -452,3 +452,9 @@ F05 逆向补证（CODE_DONE / TEST_NOT_RUN）：`ImpressDuplexUndoReviewControl
 
 
 补充 F01 交付关键路径：只禁用 .conflict 旧按钮会造成业务死路，因为旧的 pendingDuplex 在未完成时仍占用唯一活动提案。本批同步把冲突与真正执行中断（.applying/.undoing）严格区分：前者通过 Chat 可见“目标版本存在冲突”弹窗明确选择“查看旧提案”或“重新核查最新版本”，后者仍只允许原只读核查。仅在本人明确选择新提案后，先等待本地存储链、确认活动提案身份，再把完整旧部分成功记录移动到 duplexHistory 并通过 WCDB 会话 CAS 落盘，失败原样恢复旧 pending；之后以最新原卡内容版本进入独立可编辑页面，绝不自动执行。F01 真 XCUITest 补证最新原卡变更可见，以及旧 applied/conflict 回执在历史入口仍可达。全流程仍待精确 SHA 的真 CI/真机独立验收。
+
+## 2026-10-24 · F01/F02 exact-SHA XCUITest failure and recovery-navigation correction
+
+Actual published SHA 9ac0fd5745129d1b106136c666ebae3d784bbdfa / [Run #40101090702](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/40101090702) **FAILED**: Portable Core PASS, Native XCTest **248/248 PASS**, real-process XCUITest **24/26 PASS (F01/F02 fail)** at ImpressV11NavigationUITests.swift:1321; Release Simulator and unsigned ARM64 **SKIPPED** following UI failures, IPA **SKIPPED**.
+
+Both new fault tests verified initial target receipts before failure at a shared cold-start navigation assumption: openDuplexReview restores into ImpressDuplexChangeController, where user must tap visible impress.duplex.preview to reach Approval; tests incorrectly expected impress.duplex.full-diff directly in Change. Corrected tests explicitly wait for enabled Preview and tap it before checking original F01/F02 durable receipts, old approval lock, fresh review, and historical archive; no assertions removed, no changes to production CAS/Vault security. **Correction code remains CI_NOT_RUN until a newer exact-SHA run passes.**

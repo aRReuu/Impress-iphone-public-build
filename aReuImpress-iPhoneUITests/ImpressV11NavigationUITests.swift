@@ -1318,6 +1318,18 @@ final class ImpressV11NavigationUITests: XCTestCase {
             XCTAssertTrue(conflictPrompt.buttons["重新核查最新版本"].exists)
             conflictPrompt.buttons["查看旧提案"].tap()
         }
+        // A cold-start recovery opens the existing Change screen, not the
+        // Approval screen. Reach the immutable receipt by the same visible
+        // Preview action used in production; do not bypass any UI or CAS gate.
+        let restoredPreview = app.buttons["impress.duplex.preview"]
+        XCTAssertTrue(restoredPreview.waitForExistence(timeout: 20),
+            "The pending proposal must reopen its visible Change screen")
+        let enabledPreview = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "enabled == true"),
+            object: restoredPreview)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabledPreview], timeout: 20),
+            .completed, "Recovered approval preview must be enabled after load")
+        tapVisible(restoredPreview, in: app)
         XCTAssertTrue(diff.waitForExistence(timeout: 20))
         assertStatuses()
         if expectedCard == "conflict" {
