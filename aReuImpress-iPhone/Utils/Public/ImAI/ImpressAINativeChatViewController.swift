@@ -215,6 +215,9 @@ final class ImpressAINativeChatViewController: UIViewController,
     private var storedSession: WCDBV3ChatSession?
     private var pendingDuplex: WCDBV3DuplexProposal?
     private var previousDuplex: [WCDBV3DuplexProposal] = []
+    // Archiving an unresolved but NON-INFLIGHT conflict requires one
+    // explicit human decision and an atomic WCDB session CAS.
+    private var startingFreshConflictReview = false
     private var contextReferences: [WCDBV3ChatContextReference] = []
     private var history: [WCDBV3ChatMessage] = []
     private var requestFailure: String?
@@ -1150,8 +1153,8 @@ final class ImpressAINativeChatViewController: UIViewController,
     }
 
     private func openDuplexReview(sourceMessageID: UUID?) {
-        guard !sending && !restoring, sourceIdentity != nil,
-              let repo = chatRepository else { return }
+        guard !sending && !restoring && !startingFreshConflictReview,
+              sourceIdentity != nil, let repo = chatRepository else { return }
         // A foreign session's immutable entry card/note is NOT the proposal
         // target. Reopen its real source before authoring any new proposal.
         guard !isForeignSession else {
@@ -1162,11 +1165,68 @@ final class ImpressAINativeChatViewController: UIViewController,
             present(alert, animated: true)
             return
         }
-        // Never replace an unfinished two-target operation with an unrelated
-        // Chat suggestion: resume the recorded partial receipt first.
+        // Never replace an in-flight write with another suggestion. A real
+        // CONFLICT differs: the old approved version cannot be retried, but
+        // the user must be able to make an independent fresh-version proposal.
+        // Archive the full old partial receipt only after separate consent
+        // and an atomic local Chat CAS. No target is modified by this action.
         if let p = pendingDuplex, !p.state.completed {
-            showDuplexEditor(repository: repo, cardID: p.cardID,
-                contentRevision: nil, messageID: p.sourceMessageID, recovering: p)
+            let hasConflict = p.state.noteStatus == .conflict ||
+                p.state.cardStatus == .conflict
+            let inFlight = [p.state.noteStatus, p.state.cardStatus].contains {
+                $0 == .applying || $0 == .undoing
+            }
+            if hasConflict && !inFlight {
+                let alert = UIAlertController(title: V3L("目标版本存在冲突"),
+                    message: V3L("旧提案的成功、失败和冲突回执均会保留。重新核查将归档旧提案，再读取当前原卡/原笔记创建一份全新人工审批；绝不会自动重试旧批准。"),
+                    preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+                alert.addAction(UIAlertAction(title: V3L("查看旧提案"), style: .default) {
+                    [weak self] _ in
+                    self?.showDuplexEditor(repository: repo, cardID: p.cardID,
+                        contentRevision: nil, messageID: p.sourceMessageID,
+                        recovering: p)
+                })
+                alert.addAction(UIAlertAction(title: V3L("重新核查最新版本"),
+                    style: .default) { [weak self] _ in
+                    guard let self, !self.startingFreshConflictReview else { return }
+                    self.startingFreshConflictReview = true
+                    Task { [weak self] in
+                        guard let self else { return }
+                        defer { self.startingFreshConflictReview = false }
+                        await self.saveChain?.value
+                        guard !self.sending && !self.restoring,
+                              let current = self.pendingDuplex,
+                              current.proposalID == p.proposalID,
+                              (current.state.noteStatus == .conflict ||
+                               current.state.cardStatus == .conflict),
+                              ![current.state.noteStatus, current.state.cardStatus]
+                                  .contains(where: { $0 == .applying || $0 == .undoing })
+                        else { return }
+                        if let identity = current.noteIdentity,
+                           ImVaultReadOnlyProbe.shared.authorizedVaultID != identity.vaultID {
+                            self.showProblem(ImVaultSyncFailure.wrongVault)
+                            return
+                        }
+                        let previous = self.previousDuplex
+                        self.previousDuplex.append(current)
+                        self.pendingDuplex = nil
+                        guard await self.persistLocal() else {
+                            self.pendingDuplex = current
+                            self.previousDuplex = previous
+                            return
+                        }
+                        self.showDuplexEditor(repository: repo, cardID: current.cardID,
+                            contentRevision: nil, messageID: current.sourceMessageID,
+                            recovering: nil)
+                    }
+                })
+                present(alert, animated: true)
+            } else {
+                showDuplexEditor(repository: repo, cardID: p.cardID,
+                    contentRevision: nil, messageID: p.sourceMessageID,
+                    recovering: p)
+            }
             return
         }
         if sourceCardID == nil, let identity = noteDraftTarget {

@@ -1311,6 +1311,13 @@ final class ImpressV11NavigationUITests: XCTestCase {
         more.tap()
         XCTAssertTrue(openProposal.waitForExistence(timeout: 15))
         openProposal.tap()
+        let conflictPrompt = app.alerts["目标版本存在冲突"]
+        if expectedCard == "conflict" {
+            XCTAssertTrue(conflictPrompt.waitForExistence(timeout: 15),
+                "A conflicting prior approval cannot silently become executable")
+            XCTAssertTrue(conflictPrompt.buttons["重新核查最新版本"].exists)
+            conflictPrompt.buttons["查看旧提案"].tap()
+        }
         XCTAssertTrue(diff.waitForExistence(timeout: 20))
         assertStatuses()
         if expectedCard == "conflict" {
@@ -1322,6 +1329,54 @@ final class ImpressV11NavigationUITests: XCTestCase {
             "-cold-restart-source-and-receipt"
         cold.lifetime = .keepAlways
         add(cold)
+
+        if expectedCard == "conflict" {
+            // Fresh review must be reachable WITHOUT replacing the archived
+            // partial-success receipt and WITHOUT reusing old card content.
+            // Back from Approval -> Change -> the existing production Chat.
+            for _ in 0..<2 {
+                let back = app.navigationBars.buttons.element(boundBy: 0)
+                XCTAssertTrue(back.waitForExistence(timeout: 12))
+                back.tap()
+            }
+            XCTAssertTrue(more.waitForExistence(timeout: 15))
+            more.tap()
+            XCTAssertTrue(openProposal.waitForExistence(timeout: 12))
+            openProposal.tap()
+            XCTAssertTrue(conflictPrompt.waitForExistence(timeout: 15))
+            conflictPrompt.buttons["重新核查最新版本"].tap()
+            let currentQuestion = app.textViews["impress.duplex.question"]
+            XCTAssertTrue(currentQuestion.waitForExistence(timeout: 25))
+            XCTAssertTrue(String(describing: currentQuestion.value ?? "")
+                .contains("F01 外部合法内容修改"),
+                "Fresh proposal must use latest actual WCDB card content")
+            XCTAssertTrue(currentQuestion.isEnabled,
+                "Conflicting old consent must not leave a read-only editor")
+            let newReview = XCTAttachment(screenshot: app.screenshot())
+            newReview.name = "Impress-F01-explicit-fresh-card-content-review"
+            newReview.lifetime = .keepAlways
+            add(newReview)
+
+            let back = app.navigationBars.buttons.element(boundBy: 0)
+            XCTAssertTrue(back.waitForExistence(timeout: 12))
+            back.tap()
+            XCTAssertTrue(more.waitForExistence(timeout: 15))
+            more.tap()
+            let receiptHistory = app.buttons["查看修订记录与逐项回执"]
+            XCTAssertTrue(receiptHistory.waitForExistence(timeout: 12))
+            receiptHistory.tap()
+            let history = app.tables["impress.duplex.receipt-history"]
+            XCTAssertTrue(history.waitForExistence(timeout: 15))
+            XCTAssertGreaterThanOrEqual(history.cells.count, 1,
+                "Archiving a conflicted proposal must preserve its prior receipts")
+            history.cells.element(boundBy: 0).tap()
+            let previous = app.textViews["impress.duplex.receipt-detail"]
+            XCTAssertTrue(previous.waitForExistence(timeout: 15))
+            let oldReceipt = String(describing: previous.value ?? "")
+            XCTAssertTrue(oldReceipt.contains("状态：applied"))
+            XCTAssertTrue(oldReceipt.contains("状态：conflict"))
+            XCTAssertTrue(oldReceipt.contains("此页为历史回执，不自动重试"))
+        }
     }
 
     func testContinuousSourceCardChatDoubleTargetApprovalAndRestart() throws {

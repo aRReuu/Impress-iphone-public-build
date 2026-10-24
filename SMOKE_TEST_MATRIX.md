@@ -449,3 +449,6 @@ F05 逆向补证（CODE_DONE / TEST_NOT_RUN）：`ImpressDuplexUndoReviewControl
 - F02：通过既有生产 Vault 写入门禁拒绝 QA 笔记写入，允许独立原卡 CAS 正常落盘。真实 XCUITest testF02RealPartialNoteDenialCardSuccessRetainsColdStartFacts 要求笔记原字节不变、卡片 applied、重开仍保留两份事实，且不会把生产 Vault 写锁改成 true。
 
 此处是未发布候选代码与测试，状态 PREPARED / TEST_NOT_RUN；合成拒权不冒充 iCloud 或 Files 真机撤权。只有检查同一 SHA 的实际 CI 测试日志后才可升级 TEST_PASS，完整十八步、其余 F 窗口、ACCEPT/U/RDR/W 和设备验收仍独立，IPA 按门禁禁包，productionWriteEnabled = false。
+
+
+补充 F01 交付关键路径：只禁用 .conflict 旧按钮会造成业务死路，因为旧的 pendingDuplex 在未完成时仍占用唯一活动提案。本批同步把冲突与真正执行中断（.applying/.undoing）严格区分：前者通过 Chat 可见“目标版本存在冲突”弹窗明确选择“查看旧提案”或“重新核查最新版本”，后者仍只允许原只读核查。仅在本人明确选择新提案后，先等待本地存储链、确认活动提案身份，再把完整旧部分成功记录移动到 duplexHistory 并通过 WCDB 会话 CAS 落盘，失败原样恢复旧 pending；之后以最新原卡内容版本进入独立可编辑页面，绝不自动执行。F01 真 XCUITest 补证最新原卡变更可见，以及旧 applied/conflict 回执在历史入口仍可达。全流程仍待精确 SHA 的真 CI/真机独立验收。
