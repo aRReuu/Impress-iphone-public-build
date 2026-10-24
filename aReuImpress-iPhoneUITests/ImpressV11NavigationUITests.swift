@@ -469,6 +469,14 @@ final class ImpressV11NavigationUITests: XCTestCase {
         importButton.tap()
         let approval = app.alerts["加入卡片集？"]
         XCTAssertTrue(approval.waitForExistence(timeout: 10))
+        XCTAssertFalse(importButton.isEnabled,
+            "Pending card-import consent must disable duplicate taps")
+        approval.buttons["取消"].tap()
+        XCTAssertTrue(importButton.isEnabled,
+            "Cancelled consent must restore import without inserting cards")
+        importButton.tap()
+        XCTAssertTrue(approval.waitForExistence(timeout: 10))
+        XCTAssertFalse(importButton.isEnabled)
         approval.buttons["确认加入"].tap()
         let done = app.alerts["卡片已添加"]
         XCTAssertTrue(done.waitForExistence(timeout: 20))

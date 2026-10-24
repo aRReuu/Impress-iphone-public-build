@@ -413,6 +413,9 @@ final class ImpressAIQuestionPoolViewController: UITableViewController {
     private let document: ImVaultRawDocument
     private var pool: ImpressAIQuestionPool
     private var committing = false
+    // ACCEPT-01: presenting an import authorization is already a pending
+    // operation. Lock at first touch, before the user accepts or WCDB writes.
+    private var importConsentPending = false
 
     init(document: ImVaultRawDocument, pool: ImpressAIQuestionPool) {
         self.document = document
@@ -437,7 +440,8 @@ final class ImpressAIQuestionPoolViewController: UITableViewController {
     private func updateImportButton() {
         let count = pool.candidates.filter { $0.selected && $0.issues.isEmpty }.count
         navigationItem.rightBarButtonItem?.title = "\(V3L("加入")) \(count) \(V3L("张"))"
-        navigationItem.rightBarButtonItem?.isEnabled = count > 0 && !committing
+        navigationItem.rightBarButtonItem?.isEnabled =
+            count > 0 && !committing && !importConsentPending
     }
     override func numberOfSections(in tableView: UITableView) -> Int { 1 }
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -520,18 +524,26 @@ final class ImpressAIQuestionPoolViewController: UITableViewController {
         return UISwipeActionsConfiguration(actions: [action])
     }
     @objc private func confirmImport() {
-        guard !committing else { return }
+        guard !committing, !importConsentPending else { return }
         pool = ImpressAIQuestionValidator.audit(pool)
         tableView.reloadData()
         do { _ = try ImpressAIQuestionValidator.validatedSelection(pool) }
         catch { showFailure(error); return }
         let count = pool.candidates.filter { $0.selected }.count
+        importConsentPending = true
+        updateImportButton()
         let alert = UIAlertController(title: V3L("加入卡片集？"),
            message: "\(count) \(V3L("张问答卡片将进入 FSRS 复习。Obsidian 原文不会修改。"))",
            preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel) { [weak self] _ in
+            self?.importConsentPending = false
+            self?.updateImportButton()
+        })
         alert.addAction(UIAlertAction(title: V3L("确认加入"), style: .default) { [weak self] _ in
-            self?.performImport()
+            guard let self else { return }
+            self.importConsentPending = false
+            // performImport synchronously acquires the durable-write gate.
+            self.performImport()
         })
         present(alert, animated: true)
     }

@@ -4449,6 +4449,66 @@ final class ImpressAICustomAPIUITests: XCTestCase {
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 
+    /// ACCEPT-01: the candidate pool must not queue two independent final
+    /// consent sheets before its WCDB batch insertion lock becomes active.
+    /// A synthetic document is displayed only; no real Vault or model call.
+    @MainActor
+    func testQuestionPoolRapidImportTapPresentsSingleConsentBeforeAnyWrite() throws {
+        let identity = try ImVaultFileIdentity(
+            vaultID: "qa-import-" + UUID().uuidString,
+            relativePath: "Study/Mechanics.md")
+        let markdown = "# Mechanics\nNet force is mass times acceleration.\n"
+        let bytes = Data(markdown.utf8)
+        let document = ImVaultRawDocument(
+            identity: identity, sourceBytes: bytes, markdown: markdown,
+            digest: ImVaultDigest.sha256(bytes))
+        let section = try XCTUnwrap(
+            ImpressAISectionExtractor.sections(in: markdown).first)
+        let source = ImpressAISource(vaultID: identity.vaultID,
+            relativePath: identity.relativePath,
+            documentSHA256: document.digest, heading: section.heading)
+        let excerpt = ImpressAIExcerpt(id: section.id, source: source,
+            text: section.text, sectionHeading: section.heading)
+        let pool = ImpressAIQuestionPool(source: source, excerpts: [excerpt],
+            requestedCount: 1, modelProfileID: UUID(), candidates: [
+                ImpressAIQuestionCandidate(
+                    question: "What does F = ma describe?",
+                    answer: "Net force, mass and acceleration.",
+                    dimension: .mechanism, evidenceIDs: [excerpt.id])
+            ])
+        XCTAssertEqual(try ImpressAIQuestionValidator.validatedSelection(
+            ImpressAIQuestionValidator.audit(pool)).count, 1)
+        let page = ImpressAIQuestionPoolViewController(
+            document: document, pool: pool)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = UINavigationController(rootViewController: page)
+        window.makeKeyAndVisible()
+        defer {
+            page.dismiss(animated: false)
+            window.isHidden = true
+        }
+        page.loadViewIfNeeded()
+        let item = try XCTUnwrap(page.navigationItem.rightBarButtonItem)
+        let action = try XCTUnwrap(item.action)
+        XCTAssertTrue(item.isEnabled)
+        XCTAssertTrue(UIApplication.shared.sendAction(
+            action, to: item.target, from: item, for: nil))
+        XCTAssertFalse(item.isEnabled,
+            "The first import tap must lock consent before the modal resolves")
+        let sheet = try XCTUnwrap(page.presentedViewController as? UIAlertController)
+        XCTAssertEqual(sheet.title, V3L("加入卡片集？"))
+        // Directly dispatch again even though UIKit has already disabled the
+        // bar item: the controller itself must reject a duplicate callback.
+        XCTAssertTrue(UIApplication.shared.sendAction(
+            action, to: item.target, from: item, for: nil))
+        XCTAssertTrue(page.presentedViewController === sheet,
+            "A second tap must not replace or queue another approval sheet")
+        XCTAssertEqual(sheet.actions.filter {
+            $0.title == V3L("确认加入")
+        }.count, 1)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
     func testPendingAIQuestionPoolRoundtripAndVaultIsolation() throws {
         let vault = "qa-pool-" + UUID().uuidString
         let identity = try ImVaultFileIdentity(vaultID: vault,

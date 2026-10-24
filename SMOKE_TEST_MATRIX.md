@@ -428,3 +428,8 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 审计发现原 `ImpressDuplexApprovalController.confirmChanges` 在首次弹出“确认这两个目标的所选修改？”时尚未设置 `committing`，极快重复点击可能竞争创建多份确认窗口，即使后端 CAS 最终拒绝第二次执行。增加独立 `executionConsentPending`，从首触达至取消/最终执行完成始终禁重复许可和确认按钮，取消恢复可操作性，持久化 CAS 保留。原生回归 `testF05RapidConfirmationGatesSecondConsentBeforeAnyWrite` 通过真实 UIKit window 的连续 sendActions 验证仅一个批准窗口且用户最终确认前零存储写入；仍需完整 XCUITest 重复确认和异步竞争/幂等证据，不能据此宣称 F05 全部通过。该修复仅在后续精确 SHA CI 成功后可标 TEST_PASS；生产 Vault 门禁保持关闭。
 
 F05 逆向补证（CODE_DONE / TEST_NOT_RUN）：`ImpressDuplexUndoReviewController.askUndo` 过去只有“执行中”锁定，点击“确认撤销”弹窗前无法防双触达。补 `consentPending` 自首触达锁定按钮，取消还原，确认后立即转到原有 `applying` 锁；原生 `testF05RapidUndoConsentIsSingleAndHasNoPrematureSideEffects` 在实际 UIKit window 核实只有一份逆向确认、未获最终确认绝无 inverse 执行。旧可靠 CAS / F06 只读恢复不变，需新 SHA 运行证据。
+
+
+## 2026-10-24 · ACCEPT-01 问题候选池重复导入授权门禁（新候选，CI 待验证）
+
+审计发现候选池只有在最终「确认加入」之后才设置 `committing`，首次「加入 N 张」点击到系统确认弹窗出现期间没有锁定第二次点击，与 F05 同类，可排队多份用户授权并使成功后的旧弹窗继续尝试导入。此批直接修复现有 `ImpressAIQuestionPoolViewController`：在首触达且选材合法后同步设置 `importConsentPending` 并禁用导航按钮；取消恢复，确认后立即进入已有 `committing`/来源版本核查/WCDB 事务门禁，绝不绕过 CAS 或复用旧授权。增加 Native UIKit 的两次 selector 调用单弹窗断言与现有真实 XCUITest 候选池的「取消→可再次确认→正常导入」断言。**CODE_DONE / NATIVE_AND_UI_CI_NOT_RUN**，须在发布后的精确 SHA 和日志确认；原 ACCEPT-01、完整18步、F01～F13 等门禁未闭账。正式 Vault 写入禁令不变。
