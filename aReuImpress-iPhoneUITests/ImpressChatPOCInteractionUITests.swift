@@ -56,8 +56,11 @@ final class ImpressChatPOCInteractionUITests: XCTestCase {
         app.launch()
         let input = app.textViews["impress.chat.poc.input"]
         XCTAssertTrue(input.waitForExistence(timeout: 25))
-        input.tap()
-        input.typeText("Explain")
+        // On a cold iOS Simulator keyboard service, a successful UIKit tap
+        // does not yet prove that this UITextView owns keyboard focus.
+        // Require the real responder before synthesizing typed input; repeat
+        // the visible tap if keyboard startup temporarily drops first responder.
+        focusAndType("Explain", into: input)
         let control = app.buttons["impress.chat.poc.send-stop"]
         control.tap()
         XCTAssertTrue(app.textViews.matching(
@@ -91,6 +94,27 @@ final class ImpressChatPOCInteractionUITests: XCTestCase {
         screenshot.name = "chat-poc-single-offline-web-ab-control"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+
+    /// UI-only keyboard readiness check: no launch flag, text injection, or
+    /// skipped stream/terminal assertions. A genuinely non-focusable input
+    /// still fails after bounded user-visible tap attempts.
+    private func focusAndType(_ text: String, into input: XCUIElement) {
+        let keyboardFocus = NSPredicate(format: "hasKeyboardFocus == true")
+        var focused = false
+        for _ in 0..<3 {
+            input.tap()
+            let ready = XCTNSPredicateExpectation(
+                predicate: keyboardFocus, object: input)
+            if XCTWaiter.wait(for: [ready], timeout: 8) == .completed {
+                focused = true
+                break
+            }
+        }
+        XCTAssertTrue(focused, "Chat composer must accept real keyboard focus")
+        input.typeText(text)
+        XCTAssertEqual(input.value as? String, text,
+            "Synthesized keyboard input must be present before SSE send")
     }
 
     private func waitForLabel(_ element: XCUIElement, _ expected: String,
