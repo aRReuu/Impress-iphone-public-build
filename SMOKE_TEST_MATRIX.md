@@ -414,3 +414,7 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 继 F03 独立 QA 文件回执中断后，增加 `testF04ProcessDeathAfterCardCommitReconcilesWithoutSecondVersion`：通过真实 UI 在合成 Vault 生成原卡、完成 AI 回复、人工采纳答案建议，只选择原卡、逐项核对并批准；DEBUG 且精确确认来源为本测试 Vault 时，WCDB `updateManagedCard` 成功后、Chat 回执保存前强杀进程。重启保留同一数据，打开原 Chat 提案只读核查现有 cardID、内容版本与批准版本一致，禁止第二次编辑及 FSRS 评分。源笔记无修改、旧会话可恢复。属于**准备提交的代码/测试**，绝不把尚未执行的 Run 记为 UI PASS。完整 F01～13 及真实设备验收另计；生产 Vault 禁写、不提前打包。
 
 **F11×F04 target guard:** `testF11MissingApprovedDraftDisablesNoteCommitFromApprovalUI` now asserts an invalid/missing approved source disables the actual note UISwitch (not only Confirm), while F04's independent card pathway remains available. Exact-SHA Native/UI evidence is required; test assertion was strengthened, not deleted.
+
+## 2026-10-24 · F06 真实原卡逆向事务中断候选（TEST_NOT_RUN）
+
+保留已有 `testF06InverseCardCommittedBeforeReceiptColdStartReadback` Native 证据，新增 `testF06ProcessDeathAfterCardUndoReconcilesWithoutSecondInverse` 真 UI：合成隔离 Vault 创建原卡 → Chat 人工审核仅原卡 → 原卡 WCDB 内容 CAS 成功 → 人工打开已执行对象的安全撤销/完整逆向 Diff → 明确批准 → DEBUG 且 synthetic 来源匹配时在 **WCDB inverse 更新已持久化、Chat 撤销回执尚未持久化** 的真实窗口执行 SIGKILL → 原进程数据冷启动 → 禁止重新确认和重复撤销 → 由 UI「核查中断」仅通过 contentRevision+2 与完整原问答双重一致性核实为 reverted，截取实际 UI 附件。此方案只覆盖 F06 的**原卡逆向**窗口，源笔记逆向进程强杀及设备/并发窗口仍待验证。此处记录候选 CODE_DONE / TEST_NOT_RUN，不视为 TEST_PASS，也不改变生产 Vault 写入门禁和最终 IPA 门禁。

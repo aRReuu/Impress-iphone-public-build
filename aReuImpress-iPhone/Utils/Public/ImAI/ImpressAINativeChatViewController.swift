@@ -3691,6 +3691,21 @@ final class ImpressDuplexApprovalController: UIViewController {
                             imageData: current.imageData, sourceNotePath: current.sourceNotePath),
                         expectedRevision: queue.revision,
                         expectedContentRevision: revision + 1, origin: .restored)
+                    #if DEBUG
+                    // F06 inverse crash window: only a synthetic fixture card.
+                    // The restored WCDB content is durable but the .undoing
+                    // intent has not yet received its Chat receipt. Reboot
+                    // must verify revision+2 without a second inverse write.
+                    if ImpressV11UITestFixture.enabled,
+                       ProcessInfo.processInfo.arguments.contains(
+                           "-ImpressV11FaultF06AfterCardUndo"),
+                       let link = current.sourceNotePath,
+                       let sourceID = try? ImpressBatchSourceKey.decode(link),
+                       sourceID.vaultID == ImpressV11UITestFixture.vaultID {
+                        NSLog("IMPRESS_FAULT_F06_CARD_UNDONE_RECEIPT_UNSAVED")
+                        _ = Darwin.kill(Darwin.getpid(), SIGKILL)
+                    }
+                    #endif
                 }
                 var completed = proposal
                 completed.state.cardStatus = .reverted

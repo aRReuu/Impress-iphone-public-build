@@ -777,6 +777,159 @@ final class ImpressV11NavigationUITests: XCTestCase {
         add(evidence)
     }
 
+    /// F06 injects a true DEBUG-only SIGKILL after the card's real WCDB
+    /// inverse transaction but before the durable Chat inverse receipt.
+    /// Reopened UI must reconcile the original content version without replay.
+    func testF06ProcessDeathAfterCardUndoReconcilesWithoutSecondInverse() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ImpressV11SyntheticVault",
+            "-ImpressV11FaultF06AfterCardUndo", "-AppleLanguages", "(zh-Hans)"]
+        app.launchEnvironment["IMPRESS_V11_FIXTURE_ID"] = UUID().uuidString
+        app.launch()
+        let tabs = app.tabBars.firstMatch
+        XCTAssertTrue(tabs.waitForExistence(timeout: 30))
+        tabs.buttons.element(boundBy: 1).tap()
+        let folder = app.cells.matching(identifier: "impress.notes.folder-row")
+            .matching(NSPredicate(format: "label == %@", "Study")).firstMatch
+        XCTAssertTrue(folder.waitForExistence(timeout: 30))
+        folder.tap()
+        let note = app.cells.matching(identifier: "impress.notes.file-row")
+            .matching(NSPredicate(format: "label == %@", "Impress_E2E_Proof")).firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 20))
+        note.tap()
+        XCTAssertTrue(app.webViews["impress.notes.markdown-webview"]
+            .waitForExistence(timeout: 40))
+        app.buttons["更多笔记操作"].tap()
+        app.buttons["根据笔记生成卡片"].tap()
+        XCTAssertTrue(app.navigationBars["生成综合问题"].waitForExistence(timeout: 15))
+        app.navigationBars.buttons["生成"].tap()
+        let generation = app.alerts["模拟器合成出题"]
+        XCTAssertTrue(generation.waitForExistence(timeout: 12))
+        generation.buttons["生成"].tap()
+        XCTAssertTrue(app.navigationBars["问题候选池"].waitForExistence(timeout: 20))
+        XCTAssertGreaterThanOrEqual(app.tables.cells.count, 2)
+        app.tables.cells.element(boundBy: 1).tap()
+        let importCard = app.navigationBars.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "加入")).firstMatch
+        XCTAssertTrue(importCard.waitForExistence(timeout: 12))
+        importCard.tap()
+        let consent = app.alerts["加入卡片集？"]
+        XCTAssertTrue(consent.waitForExistence(timeout: 12))
+        consent.buttons["确认加入"].tap()
+        let saved = app.alerts["卡片已添加"]
+        XCTAssertTrue(saved.waitForExistence(timeout: 30))
+        saved.buttons["完成"].tap()
+
+        tabs.buttons.element(boundBy: 0).tap()
+        let reveal = app.buttons["impress.review.reveal-answer"]
+        XCTAssertTrue(reveal.waitForExistence(timeout: 25))
+        reveal.tap()
+        let discussion = app.buttons["impress.review.ai-discussion"]
+        XCTAssertTrue(discussion.waitForExistence(timeout: 15))
+        discussion.tap()
+        let guide = app.alerts["关于讨论"]
+        if guide.waitForExistence(timeout: 2) { guide.buttons["知道了"].tap() }
+        let input = app.textViews["impress.ai.chat.input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 20))
+        input.tap()
+        input.typeText("F06 合成逆向修改已提交但回执强杀")
+        app.buttons["impress.ai.chat.send"].tap()
+        let sourceConsent = app.alerts["是否附带当前卡片？"]
+        if sourceConsent.waitForExistence(timeout: 8) {
+            sourceConsent.buttons["附带当前卡片"].tap()
+        }
+        let more = app.buttons["impress.ai.chat.reply-more"].firstMatch
+        XCTAssertTrue(more.waitForExistence(timeout: 30))
+        more.tap()
+        let createDiff = app.buttons["统一预览笔记与原卡修订"]
+        XCTAssertTrue(createDiff.waitForExistence(timeout: 12))
+        createDiff.tap()
+        let adopt = app.buttons["impress.duplex.use-suggestion"]
+        XCTAssertTrue(adopt.waitForExistence(timeout: 15))
+        tapVisible(adopt, in: app)
+        let preview = app.buttons["impress.duplex.preview"]
+        tapVisible(preview, in: app)
+        let diff = app.textViews["impress.duplex.full-diff"]
+        XCTAssertTrue(diff.waitForExistence(timeout: 20))
+        let noteToggle = app.switches["impress.duplex.select-note"]
+        let cardToggle = app.switches["impress.duplex.select-card"]
+        XCTAssertTrue(noteToggle.exists && cardToggle.exists)
+        XCTAssertFalse(noteToggle.isEnabled,
+            "Only the reviewed card is eligible for this inverse test")
+        XCTAssertTrue(cardToggle.isEnabled)
+        if String(describing: cardToggle.value ?? "") == "0" { cardToggle.tap() }
+        let confirm = app.buttons["impress.duplex.confirm"]
+        XCTAssertTrue(confirm.isEnabled)
+        confirm.tap()
+        let approval = app.alerts["确认这两个目标的所选修改？"]
+        XCTAssertTrue(approval.waitForExistence(timeout: 15))
+        approval.buttons["确认执行"].tap()
+        let approved = app.alerts["所选修改已处理"]
+        XCTAssertTrue(approved.waitForExistence(timeout: 30))
+        approved.buttons["确定"].tap()
+
+        let undo = app.navigationBars.buttons["安全撤销"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 12))
+        XCTAssertTrue(undo.isEnabled)
+        undo.tap()
+        let undoCard = app.buttons["撤销原卡改动"]
+        XCTAssertTrue(undoCard.waitForExistence(timeout: 12))
+        undoCard.tap()
+        let inversePreview = app.textViews["impress.duplex.undo.full-diff"]
+        XCTAssertTrue(inversePreview.waitForExistence(timeout: 20))
+        XCTAssertTrue(String(describing: inversePreview.value ?? "").contains("cardID:"))
+        let inverse = app.buttons["impress.duplex.undo.confirm"]
+        XCTAssertTrue(inverse.isEnabled)
+        inverse.tap()
+        let inverseConsent = app.alerts["确认撤销这个目标？"]
+        XCTAssertTrue(inverseConsent.waitForExistence(timeout: 12))
+        inverseConsent.buttons["确认撤销"].tap()
+        let killed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.state == .notRunning
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [killed], timeout: 35), .completed,
+            "The process must die only after the actual inverse content commit")
+
+        app.launchArguments.removeAll { $0 == "-ImpressV11FaultF06AfterCardUndo" }
+        app.launch()
+        XCTAssertTrue(tabs.waitForExistence(timeout: 30))
+        tabs.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(reveal.waitForExistence(timeout: 30))
+        reveal.tap()
+        XCTAssertTrue(discussion.waitForExistence(timeout: 15))
+        discussion.tap()
+        XCTAssertTrue(more.waitForExistence(timeout: 25))
+        more.tap()
+        XCTAssertTrue(createDiff.waitForExistence(timeout: 15))
+        createDiff.tap()
+        XCTAssertTrue(preview.waitForExistence(timeout: 20))
+        tapVisible(preview, in: app)
+        let recoveryDiff = app.textViews["impress.duplex.full-diff"]
+        XCTAssertTrue(recoveryDiff.waitForExistence(timeout: 20))
+        XCTAssertTrue(String(describing: recoveryDiff.value ?? "").contains("undoing"),
+            "Committed inverse must retain the original interrupted receipt")
+        XCTAssertFalse(app.buttons["impress.duplex.confirm"].isEnabled,
+            "Interrupted inverse must not permit a new forward write")
+        XCTAssertFalse(app.navigationBars.buttons["安全撤销"].isEnabled,
+            "The same inverse cannot be authorized again before readback")
+        let reconcile = app.buttons["impress.duplex.reconcile-interrupted"]
+        XCTAssertTrue(reconcile.waitForExistence(timeout: 15))
+        XCTAssertTrue(reconcile.isEnabled)
+        reconcile.tap()
+        let verified = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let value = String(describing: recoveryDiff.value ?? "")
+            return value.contains("撤销中断核查") && value.contains("reverted")
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [verified], timeout: 30), .completed,
+            "The exact WCDB original content at revision+2 must prove F06")
+        XCTAssertFalse(app.switches["impress.duplex.select-card"].isEnabled,
+            "Verified inverse must not remain a selectable pending card")
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "Impress-V1.1-F06-card-inverse-actual-SIGKILL-readback"
+        evidence.lifetime = .keepAlways
+        self.add(evidence)
+    }
+
     func testContinuousSourceCardChatDoubleTargetApprovalAndRestart() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-ImpressV11SyntheticVault",
