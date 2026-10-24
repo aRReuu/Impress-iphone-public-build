@@ -458,3 +458,12 @@ F05 逆向补证（CODE_DONE / TEST_NOT_RUN）：`ImpressDuplexUndoReviewControl
 Actual published SHA 9ac0fd5745129d1b106136c666ebae3d784bbdfa / [Run #40101090702](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/40101090702) **FAILED**: Portable Core PASS, Native XCTest **248/248 PASS**, real-process XCUITest **24/26 PASS (F01/F02 fail)** at ImpressV11NavigationUITests.swift:1321; Release Simulator and unsigned ARM64 **SKIPPED** following UI failures, IPA **SKIPPED**.
 
 Both new fault tests verified initial target receipts before failure at a shared cold-start navigation assumption: openDuplexReview restores into ImpressDuplexChangeController, where user must tap visible impress.duplex.preview to reach Approval; tests incorrectly expected impress.duplex.full-diff directly in Change. Corrected tests explicitly wait for enabled Preview and tap it before checking original F01/F02 durable receipts, old approval lock, fresh review, and historical archive; no assertions removed, no changes to production CAS/Vault security. **Correction code remains CI_NOT_RUN until a newer exact-SHA run passes.**
+
+
+## 2026-10-25 · P0-B 冷启动后真正选回原 Chat + 双目标历史回执（新代码，待精确 SHA CI）
+
+前序 `6065d422d6f27371f1957c90feb64ad2bbb8f064` / [Run #40106028536](https://github.com/aRReuu/Impress-iphone-public-build/actions/runs/40106028536) 的真实日志：Portable Core 与 Debug/Release Simulator、unsigned iPhoneOS ARM64 构建成功；Native XCTest **248/248**、真实 XCUITest **26/26**（含 F01/F02）成功，IPA 步骤 **SKIPPED**。这些是**旧 SHA 的执行结果**。
+
+新发现原有 `testContinuousSourceCardChatDoubleTargetApprovalAndRestart` 只断言历史列表里“存在某行”，并未从重启后笔记入口**选回具体卡片来源的原聊天**，也没有回读该聊天中独立保留的笔记 applied 与原卡 reverted 历史回执。若会话选择错误、正文丢失或分目标回执被重置，旧断言仍可通过。新增真实 XCUITest 可见操作：以唯一合成提问检索、点击确切历史会话、核对原问题与 completed 回复、进入回复 More 的「查看修订记录与逐项回执」、打开只读回执详情、分别验证笔记 applied/原卡 reverted 和不自动重试声明，再通过原生返回继续同一原卡 FSRS 评分及再次冷启动。只使用独立合成 Vault/Mock；不绕过 UI，不读取用户隐私或发网络请求，不删除旧测试。
+
+**状态：新增断言必须在新提交的完整 exact-SHA Actions 日志通过后才能记 XCUITEST_PASS。** 它也不替代完整 18 步、所有 F01–F13 强杀交错、ZIP 恢复或真机签名/App Group/Widget/Files 等 DEVICE_BLOCKED 子项；生产 Vault 写入门禁保持关闭。

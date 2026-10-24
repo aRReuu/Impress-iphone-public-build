@@ -1641,6 +1641,55 @@ final class ImpressV11NavigationUITests: XCTestCase {
         XCTAssertTrue(persistedSession.waitForExistence(timeout: 20),
             "Completed discussion must remain in persisted local history")
 
+        // The previous check proved only that *a* row survived. Select the
+        // original card-origin discussion by its explicit user prompt after
+        // note re-entry/cold launch: the note's empty session is not proof.
+        // All operations below use the real history selector and receipt UI.
+        let exactHistory = sessions.cells.matching(
+            identifier: "impress.ai.chat.history-row").matching(
+                NSPredicate(format: "label CONTAINS %@", "请根据所选来源明确推导")).firstMatch
+        XCTAssertTrue(exactHistory.waitForExistence(timeout: 15),
+            "The exact original card discussion must survive the note round trip")
+        exactHistory.tap()
+        let restoredQuestion = app.textViews.matching(
+            identifier: "impress.ai.chat.message-body").matching(
+                NSPredicate(format: "value CONTAINS %@", "请根据所选来源明确推导")).firstMatch
+        XCTAssertTrue(restoredQuestion.waitForExistence(timeout: 20),
+            "Opening the persisted session must restore the approved original prompt")
+        let restoredAnswer = app.textViews.matching(
+            identifier: "impress.ai.chat.message-body").matching(
+                NSPredicate(format: "value CONTAINS %@", "合成模型回复")).firstMatch
+        XCTAssertTrue(restoredAnswer.waitForExistence(timeout: 20),
+            "History selection must restore the complete model reply, not just a title")
+        let restoredActions = app.buttons["impress.ai.chat.reply-more"].firstMatch
+        XCTAssertTrue(restoredActions.waitForExistence(timeout: 15),
+            "A cold-restored completed answer must still expose receipt navigation")
+        restoredActions.tap()
+        let receiptHistoryAction = app.buttons["查看修订记录与逐项回执"]
+        XCTAssertTrue(receiptHistoryAction.waitForExistence(timeout: 12),
+            "Cold-restored completed reply must retain its audited proposal receipts")
+        receiptHistoryAction.tap()
+        let savedReceipts = app.tables["impress.duplex.receipt-history"]
+        XCTAssertTrue(savedReceipts.waitForExistence(timeout: 15))
+        XCTAssertGreaterThanOrEqual(savedReceipts.cells.count, 1,
+            "Approval receipts must not be lost while switching source identities")
+        savedReceipts.cells.element(boundBy: 0).tap()
+        let historicalDetail = app.textViews["impress.duplex.receipt-detail"]
+        XCTAssertTrue(historicalDetail.waitForExistence(timeout: 15))
+        let preservedFacts = String(describing: historicalDetail.value ?? "")
+        XCTAssertTrue(preservedFacts.contains("applied"),
+            "The human-approved Markdown write must still be recorded after restart")
+        XCTAssertTrue(preservedFacts.contains("reverted"),
+            "The card's separate approved undo must not erase the note receipt")
+        XCTAssertTrue(preservedFacts.contains("此页为历史回执，不自动重试"),
+            "Viewing a historical receipt must never be an implicit retry")
+        let historyProof = XCTAttachment(screenshot: app.screenshot())
+        historyProof.name = "Impress-V1.1-original-Chat-session-and-dual-CAS-receipt-after-restart"
+        historyProof.lifetime = .keepAlways
+        add(historyProof)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
         // P0-B step 13/18: return from the same persisted Chat session to the
         // same reviewed original card (after approved note edit + card undo).
         // A swipe is the only normal route to an FSRS event, and MUST require
