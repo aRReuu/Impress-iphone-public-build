@@ -389,3 +389,8 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 ## 2026-10-24 · Chat 图片授权/多协议专项（CODE_DONE，等待新 SHA CI）
 
 归属于 CHAT-04/06/07、UI-02、U18 等既有需求，不新加主需求编号。Native 零网络测试 `testImageInputRequiresExplicitModelConsentAndSafeJPEG` 验证默认拒绝、畸形/超大拒绝、免费 QA 禁止图片；`testEachProviderUsesItsOwnImageWireShapeWithoutSendingHistoryImages` 验证 Chat Completions / Responses / Anthropic / Gemini 分别真实序列化，只有本轮包含图片、前文和普通请求始终文字。`testSyntheticApprovedImagesRemainTransientAndMixedFilesFailClosed` 验证实际 UI 预览内存 JPEG、文件混合选择拒传、发送后清除；`testHistoricalUserImageApprovalIsMetadataOnlyAndBackwardCompatible` 验证旧 WCDB JSON 兼容和新授权收据不存原图，原生 Transcript 显示收据。以上在提交时仅 CODE_DONE / TEST_NOT_RUN，CI 通过才记精确 SHA 的 TEST_PASS。真实设备 Picker 相机/Files/iCloud、提供商视觉理解、图片历史缩略图跨重启和网络失败重试仍 NOT_RUN / DEVICE_BLOCKED。完整 ACCEPT/F/U/RDR/W 门禁不因本节放宽，禁止提前生成 IPA。
+
+
+## 2026-10-24 · Excalidraw 圆角 / 描边样式真实 UIKit 回归（本次源码实施，CI 待验证）
+
+已有原生阅读器使用固定 4pt 圆角错误覆盖原图中的 sharp rectangle。本批代码依 Excalidraw 官方开源常量 `ROUNDNESS.LEGACY=1`、`PROPORTIONAL_RADIUS=2`、`ADAPTIVE_RADIUS=3`，将序列化的 `roundness` 映射到原生路径；`strokeStyle` 的 solid/dashed/dotted 映射到 CAShapeLayer。新增 `testSerializedExcalidrawRoundnessAndDashStylesReachRealShapePaths` 合成图形验证真路径与点划样式。当前状态 **CODE_DONE / TEST_NOT_RUN**，须以精确提交 SHA 的 CI 结果决定 TEST_PASS。官方 SVG `exportToSvg` 的相同图纸真实 A/B、字体/roughness/大画布/真机像素验收仍未完成。

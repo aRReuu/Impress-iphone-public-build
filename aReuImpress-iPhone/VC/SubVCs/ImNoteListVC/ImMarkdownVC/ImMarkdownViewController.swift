@@ -2431,6 +2431,15 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
                 // alpha accumulating where stroke and fill overlap.
                 shape.opacity = Float((element.opacity ?? 100) / 100)
                 shape.lineWidth = CGFloat(min(24, max(0.5, element.strokeWidth ?? 1.5)))
+                // Match native SVG stroke style semantics; artwork color and
+                // opacity remain authored rather than inherited system tint.
+                switch element.strokeStyle {
+                case "dashed": shape.lineDashPattern = [8, 8]
+                case "dotted":
+                    shape.lineDashPattern = [1, 6]
+                    shape.lineCap = .round
+                default: shape.lineDashPattern = nil
+                }
                 control.layer.addSublayer(shape)
             }
             if element.type == "text" {
@@ -2666,8 +2675,25 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
                              size: CGSize) -> UIBezierPath? {
         let bounds = CGRect(origin: .zero, size: size)
         switch element.type {
-        case "rectangle", "frame":
-            return UIBezierPath(roundedRect: bounds, cornerRadius: 4)
+        case "rectangle":
+            let radius: CGFloat
+            switch element.roundness?.type {
+            case 3:
+                // Official ADAPTIVE_RADIUS = 32 pt, bounded by half the
+                // narrow side (optional saved radius is respected).
+                let authored = element.roundness?.value ?? 32
+                radius = CGFloat(min(max(0, authored),
+                                     min(element.width, element.height) / 2))
+            case 1, 2:
+                // Legacy / PROPORTIONAL_RADIUS = 1/4 of shorter edge.
+                radius = 0.25 * min(bounds.width, bounds.height)
+            default:
+                // An explicit or absent sharp rectangle must remain sharp.
+                radius = 0
+            }
+            return UIBezierPath(roundedRect: bounds, cornerRadius: radius)
+        case "frame":
+            return UIBezierPath(rect: bounds)
         case "ellipse":
             return UIBezierPath(ovalIn: bounds)
         case "diamond":

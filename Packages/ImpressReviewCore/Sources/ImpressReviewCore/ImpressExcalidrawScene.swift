@@ -9,6 +9,12 @@ public enum ImpressExcalidrawReadError: Error, Equatable {
          duplicateID, invalidGeometry, tooLarge, emptySelection
 }
 
+/// Serialized Excalidraw rounding algorithm, not a generic UIKit radius.
+public struct ImpressExcalidrawRoundness: Codable, Sendable, Equatable {
+    public let type: Int
+    public let value: Double?
+}
+
 public struct ImpressExcalidrawElement: Codable, Sendable, Equatable {
     public let id: String
     public let type: String
@@ -20,6 +26,8 @@ public struct ImpressExcalidrawElement: Codable, Sendable, Equatable {
     public let strokeColor: String?
     public let backgroundColor: String?
     public let strokeWidth: Double?
+    public let strokeStyle: String?
+    public let roundness: ImpressExcalidrawRoundness?
     public let opacity: Double?
     public let text: String?
     /// Native Excalidraw typography and bound-text metadata.

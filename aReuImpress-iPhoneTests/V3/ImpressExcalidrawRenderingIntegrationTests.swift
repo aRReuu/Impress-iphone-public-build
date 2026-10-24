@@ -104,4 +104,46 @@ final class ImpressExcalidrawRenderingIntegrationTests: XCTestCase {
         XCTAssertEqual(style.minimumLineHeight, 26 * 1.6, accuracy: 0.5)
     }
 
+
+    @MainActor
+    func testSerializedExcalidrawRoundnessAndDashStylesReachRealShapePaths() throws {
+        // Types 1/2/3 and nil are official serialized source semantics.
+        // No user Vault, network, SVG scripts or fixture images are loaded.
+        let drawing = """
+        {"type":"excalidraw","elements":[
+          {"id":"sharp","type":"rectangle","x":0,"y":0,"width":160,"height":120,
+           "strokeStyle":"solid","backgroundColor":"#dddddd"},
+          {"id":"round","type":"rectangle","x":170,"y":0,"width":160,"height":120,
+           "roundness":{"type":3},"strokeStyle":"dashed","backgroundColor":"#eeeeee"},
+          {"id":"proportional","type":"rectangle","x":340,"y":0,"width":160,"height":120,
+           "roundness":{"type":2},"strokeStyle":"dotted"},
+          {"id":"frame","type":"frame","x":0,"y":130,"width":160,"height":120}]}
+        """
+        let scene = try ImpressExcalidrawScene.parse(Data(drawing.utf8),
+            format: .excalidrawJSON)
+        let reader = try ImpressExcalidrawNativeView(source: scene)
+        let buttons = reader.subviews.flatMap(\.subviews)
+            .compactMap { $0 as? UIButton }
+        func shape(_ id: String) throws -> CAShapeLayer {
+            let button = try XCTUnwrap(buttons.first {
+                $0.accessibilityIdentifier == "impress.excalidraw.element." + id
+            })
+            return try XCTUnwrap(button.layer.sublayers?
+                .compactMap { $0 as? CAShapeLayer }.first)
+        }
+        let sharp = try shape("sharp")
+        let round = try shape("round")
+        let proportional = try shape("proportional")
+        let frame = try shape("frame")
+        let corner = CGPoint(x: 2, y: 2)
+        XCTAssertTrue(try XCTUnwrap(sharp.path).contains(corner),
+            "Nil roundness means true sharp corners; the old unconditional 4pt radius was wrong")
+        XCTAssertFalse(try XCTUnwrap(round.path).contains(corner))
+        XCTAssertFalse(try XCTUnwrap(proportional.path).contains(corner))
+        XCTAssertTrue(try XCTUnwrap(frame.path).contains(corner))
+        XCTAssertNil(sharp.lineDashPattern)
+        XCTAssertEqual(round.lineDashPattern, [8, 8])
+        XCTAssertEqual(proportional.lineDashPattern, [1, 6])
+        XCTAssertEqual(proportional.lineCap, .round)
+    }
 }
