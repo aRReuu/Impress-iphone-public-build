@@ -628,7 +628,7 @@ final class ImpressV11NavigationUITests: XCTestCase {
         let evidence = XCTAttachment(screenshot: app.screenshot())
         evidence.name = "Impress-V1.1-F03-real-process-death-and-readonly-reconciliation"
         evidence.lifetime = .keepAlways
-        add(evidence)
+        self.add(evidence)
         // Only the already-written note is immutable. The original card has
         // not been written in this F03 window, so it may legitimately remain
         // separately approvable after a fresh review/confirmation. Do not
