@@ -106,6 +106,71 @@ final class ImpressExcalidrawRenderingIntegrationTests: XCTestCase {
 
 
     @MainActor
+    func testSerializedArrowheadsHaveIndependentGeometryAndRespectNoHead() throws {
+        // Synthetic source, identical geometry but distinct authored endpoints.
+        let drawing = """
+        {"type":"excalidraw","elements":[
+          {"id":"first","type":"arrow","x":0,"y":0,"width":150,"height":60,
+           "points":[[0,0],[150,60]],"startArrowhead":"dot",
+           "endArrowhead":"triangle","opacity":55,"strokeStyle":"dashed",
+           "strokeColor":"#224466"},
+          {"id":"plain","type":"arrow","x":0,"y":90,"width":150,"height":60,
+           "points":[[0,0],[150,60]],"startArrowhead":"none",
+           "endArrowhead":"none","strokeColor":"#224466"},
+          {"id":"third","type":"arrow","x":0,"y":180,"width":150,"height":60,
+           "points":[[0,0],[150,60]],"startArrowhead":"bar",
+           "endArrowhead":"diamond_outline","strokeColor":"#224466"}]}
+        """
+        let scene = try ImpressExcalidrawScene.parse(Data(drawing.utf8),
+            format: .excalidrawJSON)
+        let first = try XCTUnwrap(scene.elements.first)
+        XCTAssertEqual(first.startArrowhead, "dot")
+        XCTAssertEqual(first.endArrowhead, "triangle")
+        let excerpt = try scene.selection(ids: ["first"]).textContextJSON()
+        XCTAssertTrue(excerpt.contains("triangle"))
+        XCTAssertFalse(excerpt.contains("diamond_outline"),
+            "Unselected diagram elements must never enter Chat source excerpts")
+        let reader = try ImpressExcalidrawNativeView(source: scene)
+        let buttons = reader.subviews.flatMap(\.subviews)
+            .compactMap { $0 as? UIButton }
+        func layers(_ id: String) throws -> [CAShapeLayer] {
+            let button = try XCTUnwrap(buttons.first {
+                $0.accessibilityIdentifier == "impress.excalidraw.element." + id
+            })
+            return button.layer.sublayers?.compactMap { $0 as? CAShapeLayer } ?? []
+        }
+        let image = try layers("first")
+        XCTAssertEqual(image.count, 3)
+        XCTAssertEqual(image[0].lineDashPattern, [8, 8])
+        let start = try XCTUnwrap(image.first {
+            $0.name == "impress.excalidraw.arrowhead.start"
+        })
+        let end = try XCTUnwrap(image.first {
+            $0.name == "impress.excalidraw.arrowhead.end"
+        })
+        XCTAssertEqual(start.opacity, 0.55, accuracy: 0.001)
+        XCTAssertEqual(end.opacity, 0.55, accuracy: 0.001)
+        XCTAssertNil(start.lineDashPattern)
+        XCTAssertNil(end.lineDashPattern)
+        XCTAssertNotNil(start.path)
+        XCTAssertNotNil(end.path)
+        XCTAssertGreaterThan(try XCTUnwrap(end.path).boundingBox.width, 0)
+        XCTAssertGreaterThan(try XCTUnwrap(start.path).boundingBox.height, 0)
+        let empty = try layers("plain")
+        XCTAssertEqual(empty.count, 1,
+            "An explicit 'none' arrow end cannot inherit a default V head")
+        let alternate = try layers("third")
+        XCTAssertEqual(alternate.count, 3)
+        XCTAssertNotNil(alternate.first {
+            $0.name == "impress.excalidraw.arrowhead.start"
+        })
+        XCTAssertNotNil(alternate.first {
+            $0.name == "impress.excalidraw.arrowhead.end"
+        })
+        // This is a native geometry test, not an official SVG pixel A/B.
+    }
+
+    @MainActor
     func testSerializedExcalidrawRoundnessAndDashStylesReachRealShapePaths() throws {
         // Types 1/2/3 and nil are official serialized source semantics.
         // No user Vault, network, SVG scripts or fixture images are loaded.

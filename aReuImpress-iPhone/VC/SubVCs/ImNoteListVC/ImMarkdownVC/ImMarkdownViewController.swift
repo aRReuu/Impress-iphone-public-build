@@ -2441,6 +2441,37 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
                 default: shape.lineDashPattern = nil
                 }
                 control.layer.addSublayer(shape)
+                if element.type == "arrow", let points = element.points,
+                   points.count >= 2 {
+                    // Preserve independent start/end arrowhead geometry.
+                    // Their paint is not affected by the line dash pattern,
+                    // and their layers rotate together with the parent element.
+                    let width = shape.lineWidth
+                    let ends: [(String, String?, [Double], [Double])] = [
+                        ("start", element.startArrowhead, points[0], points[1]),
+                        ("end", element.endArrowhead,
+                         points[points.count - 1], points[points.count - 2])
+                    ]
+                    for (side, style, tip, neighbor) in ends {
+                        guard let style, tip.count >= 2, neighbor.count >= 2,
+                              let head = Self.arrowheadPath(
+                                style: style,
+                                tip: CGPoint(x: tip[0], y: tip[1]),
+                                neighbor: CGPoint(x: neighbor[0], y: neighbor[1]),
+                                strokeWidth: width) else { continue }
+                        let decoration = CAShapeLayer()
+                        decoration.name = "impress.excalidraw.arrowhead." + side
+                        decoration.path = head.path.cgPath
+                        decoration.strokeColor = stroke.cgColor
+                        decoration.fillColor = head.filled
+                            ? stroke.cgColor : UIColor.clear.cgColor
+                        decoration.lineWidth = width
+                        decoration.lineJoin = .round
+                        decoration.lineCap = .round
+                        decoration.opacity = shape.opacity
+                        control.layer.addSublayer(decoration)
+                    }
+                }
             }
             if element.type == "text" {
                 // UIKit UIButton title layout clipped multiline/bound labels
@@ -2671,6 +2702,66 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
                        blue: CGFloat(value & 255) / 255, alpha: 1)
     }
 
+    /// Supports authored Excalidraw endpoints without a second renderer or
+    /// default V marker. Unknown styles safely omit only that decoration.
+    private static func arrowheadPath(style: String, tip: CGPoint,
+                                      neighbor: CGPoint, strokeWidth: CGFloat)
+        -> (path: UIBezierPath, filled: Bool)? {
+        let dx = tip.x - neighbor.x
+        let dy = tip.y - neighbor.y
+        let norm = hypot(dx, dy)
+        guard norm.isFinite, norm > 0.001 else { return nil }
+        let direction = CGVector(dx: dx / norm, dy: dy / norm)
+        let normal = CGVector(dx: -direction.dy, dy: direction.dx)
+        let length = min(24, max(10, 10 + strokeWidth * 2))
+        let halfWidth = length * 0.46
+        let base = CGPoint(x: tip.x - direction.dx * length,
+                           y: tip.y - direction.dy * length)
+        let left = CGPoint(x: base.x + normal.dx * halfWidth,
+                           y: base.y + normal.dy * halfWidth)
+        let right = CGPoint(x: base.x - normal.dx * halfWidth,
+                            y: base.y - normal.dy * halfWidth)
+        let path = UIBezierPath()
+        switch style {
+        case "arrow":
+            path.move(to: left)
+            path.addLine(to: tip)
+            path.addLine(to: right)
+            return (path, false)
+        case "triangle", "triangle_outline":
+            path.move(to: tip)
+            path.addLine(to: left)
+            path.addLine(to: right)
+            path.close()
+            return (path, style == "triangle")
+        case "dot", "circle", "circle_outline":
+            let radius = length * 0.30
+            path.append(UIBezierPath(ovalIn: CGRect(
+                x: tip.x - radius, y: tip.y - radius,
+                width: radius * 2, height: radius * 2)))
+            return (path, style == "dot" || style == "circle")
+        case "bar":
+            path.move(to: CGPoint(
+                x: tip.x + normal.dx * halfWidth,
+                y: tip.y + normal.dy * halfWidth))
+            path.addLine(to: CGPoint(
+                x: tip.x - normal.dx * halfWidth,
+                y: tip.y - normal.dy * halfWidth))
+            return (path, false)
+        case "diamond", "diamond_outline":
+            let far = CGPoint(x: tip.x - direction.dx * length * 2,
+                              y: tip.y - direction.dy * length * 2)
+            path.move(to: tip)
+            path.addLine(to: left)
+            path.addLine(to: far)
+            path.addLine(to: right)
+            path.close()
+            return (path, style == "diamond")
+        default:
+            return nil
+        }
+    }
+
     private static func path(for element: ImpressExcalidrawElement,
                              size: CGSize) -> UIBezierPath? {
         let bounds = CGRect(origin: .zero, size: size)
@@ -2712,18 +2803,8 @@ final class ImpressExcalidrawNativeView: UIScrollView, UIScrollViewDelegate {
             for point in points.dropFirst() where point.count >= 2 {
                 path.addLine(to: CGPoint(x: point[0], y: point[1]))
             }
-            if element.type == "arrow", let last = points.last,
-               let before = points.dropLast().last, last.count >= 2,
-               before.count >= 2 {
-                let angle = atan2(last[1] - before[1], last[0] - before[0])
-                let end = CGPoint(x: last[0], y: last[1])
-                let radius = 10.0
-                path.move(to: CGPoint(x: end.x - cos(angle - .pi / 6) * radius,
-                                      y: end.y - sin(angle - .pi / 6) * radius))
-                path.addLine(to: end)
-                path.addLine(to: CGPoint(x: end.x - cos(angle + .pi / 6) * radius,
-                                        y: end.y - sin(angle + .pi / 6) * radius))
-            }
+            // Arrowheads are independent layers: a dashed line must never
+            // turn a filled terminal triangle into several dotted fragments.
             return path
         default: return nil
         }

@@ -27,6 +27,10 @@ public struct ImpressExcalidrawElement: Codable, Sendable, Equatable {
     public let backgroundColor: String?
     public let strokeWidth: Double?
     public let strokeStyle: String?
+    /// Arrow endpoint styles live in the serialized source; never infer a
+    /// filled triangle/dot from an ordinary line. Nil is read-only legacy data.
+    public let startArrowhead: String?
+    public let endArrowhead: String?
     public let roundness: ImpressExcalidrawRoundness?
     public let opacity: Double?
     public let text: String?

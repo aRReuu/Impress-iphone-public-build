@@ -394,3 +394,7 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 ## 2026-10-24 · Excalidraw 圆角 / 描边样式真实 UIKit 回归（本次源码实施，CI 待验证）
 
 已有原生阅读器使用固定 4pt 圆角错误覆盖原图中的 sharp rectangle。本批代码依 Excalidraw 官方开源常量 `ROUNDNESS.LEGACY=1`、`PROPORTIONAL_RADIUS=2`、`ADAPTIVE_RADIUS=3`，将序列化的 `roundness` 映射到原生路径；`strokeStyle` 的 solid/dashed/dotted 映射到 CAShapeLayer。新增 `testSerializedExcalidrawRoundnessAndDashStylesReachRealShapePaths` 合成图形验证真路径与点划样式。当前状态 **CODE_DONE / TEST_NOT_RUN**，须以精确提交 SHA 的 CI 结果决定 TEST_PASS。官方 SVG `exportToSvg` 的相同图纸真实 A/B、字体/roughness/大画布/真机像素验收仍未完成。
+
+## 2026-10-24 · Excalidraw 真实箭头端点几何回归（本次代码，等待 CI）
+
+新增 `ImpressExcalidrawRenderingIntegrationTests.testSerializedArrowheadsHaveIndependentGeometryAndRespectNoHead`，使用完全合成、无私密来源的 Excalidraw 图纸验证独立 start/end 样式（dot/triangle/bar/diamond_outline/none）、不从虚线继承破折、与原形状共同旋转和透明度，Source ElementID 与选择材料 JSON 中不混入未选元素。这是可运行的 Native UIKit 几何验收，不是官方 `exportScene(svg)` 视觉像素 A/B，仍须同一 Fixture 生成官方 SVG、截图与原生视图对照，RDR-13/15/22、字体与曲线粗糙笔触、真机仍 NOT_RUN/DEVICE_BLOCKED。本次提交时 CODE_DONE / TEST_NOT_RUN，必须以新 SHA+Run 实际运行结果升级，禁止提前 IPA。
