@@ -403,3 +403,8 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 ## 2026-10-24 · RDR 正文内嵌 Excalidraw 与原生样式一致性增量（测试尚未执行）
 
 前一轮只修复独立的 `ImpressExcalidrawNativeView`。本增量把源序列化 `startArrowhead/endArrowhead` 的无端点、箭头、三角、圆点、横杠、菱形及实/空样式同步到 `Scripts/DiagramReader/markdown-host.js` 的离线 SVG 内嵌路径；修复线段与端点各自的 dash/opacity/rotation 语义以及 rectangle 的圆角类型，来源结构仍由授权本地 `drawNativeGeometry` 生成而非执行外部 SVG/JS。新增纯逻辑 Node 单测 `test-inline-excalidraw-geometry.mjs`，主开发 CI 的离线阅读器构建步骤在打包脚本前执行。此时 **CODE_DONE / TEST_NOT_RUN**，只有新 SHA Run 的明确通过才能升级相应子用例。仍缺官方 Excalidraw SVG 与 Native 的同 Fixture 视觉 A/B、真实 iPhone13 外观、bound text/曲线/粗糙笔触比较。RDR-01～22、ACCEPT/F/UI/W 总矩阵不能据此标为全 PASS；完整验收前禁止 IPA。
+
+
+## 2026-10-24 · F03 真实进程中断注入：源码已集成，等待新 SHA CI
+
+`ImpressV11NavigationUITests.testF03ProcessDeathAfterQAWriteReconcilesViaVisibleUI` 是计划中的**真实进程级 XCUITest**：从合成已授权 Vault → UI 生成卡片 → Reveal → Chat → 独立笔记局部 Diff → 人工确认 → Debug 独立 QA 文件协调写入成功，立即在回执持久化前通过仅 synthetic fixture 生效的 SIGKILL 中断 App → 同一真实数据库/QA Vault 重启 → 从原卡返回 Chat → 打开原提案的「核查中断」，比对实际文件 SHA 再将其状态标为已执行，而绝不重放 writer。该注入只在 `#if DEBUG`、`ImpressV11UITestFixture.enabled`、真实 QA 文件获许可、显式 `-ImpressV11FaultF03AfterNoteCommit` 同时满足时执行。无真实用户资料/收费请求/正式 Vault 写入。本批提交的实现状态为 **CODE_DONE / TEST_NOT_RUN**，只有在对应集成 SHA 的实际 XCUITest 成功后才能记为 UI TEST_PASS；Native 单测不代替进程级测试。其余 F01～13 UI/设备故障仍独立追踪。

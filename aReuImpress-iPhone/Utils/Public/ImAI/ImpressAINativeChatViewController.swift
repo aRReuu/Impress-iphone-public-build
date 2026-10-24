@@ -1,5 +1,8 @@
 import UIKit
 import ImpressReviewCore
+#if DEBUG
+import Darwin
+#endif
 
 /// Reuse the editable Settings → Prompt Library as the single authoring
 /// authority. Only a template UUID (never its private text) is kept as a local
@@ -3208,6 +3211,19 @@ final class ImpressDuplexApprovalController: UIViewController {
                     let receipt = ImVaultWriteReceiptText.present(
                         .success(outcome), testCopy: qaAuthorized)
                     proposal.noteReceipt = receipt.title + " · " + receipt.detail
+                    #if DEBUG
+                    // Synthetic fixture ONLY. Exercise the real F03 boundary:
+                    // coordinated Markdown bytes are already durable, while
+                    // WCDB still holds the preceding .applying intent.
+                    // Force a genuine process death before saving this receipt;
+                    // reboot/reconciliation must never replay the writer.
+                    if qaAuthorized && ImpressV11UITestFixture.enabled &&
+                       ProcessInfo.processInfo.arguments.contains(
+                           "-ImpressV11FaultF03AfterNoteCommit") {
+                        NSLog("IMPRESS_FAULT_F03_NOTE_COMMITTED_RECEIPT_UNSAVED")
+                        _ = Darwin.kill(Darwin.getpid(), SIGKILL)
+                    }
+                    #endif
                 case .failure(let error):
                     if case ImVaultSyncFailure.conflict = error {
                         proposal.state.noteStatus = .conflict

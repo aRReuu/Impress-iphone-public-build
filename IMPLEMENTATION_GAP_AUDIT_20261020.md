@@ -204,3 +204,8 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 ## 2026-10-24 · Markdown 正文内嵌图纸的二次渲染链修正
 
 源码审计确定同一 Excalidraw 来源有两条用户可见的只读路径：独立原生图纸页和 Markdown 正文离线 SVG 预览。只完善原生而保留嵌入页固定 rx=4、无箭头头部、不尊重 dashed/dotted/opacity，会导致用户在同一来源看到相互矛盾的图纸。本增量复用显式源属性语义，在内嵌 JS 中用纯确定性 endpoint 函数生成安全 SVG path（不拼未经处理的外部 HTML，不访问 URL），并让 Node 单测进入同一 CI。模型侧权限、来源 SHA/IDs、Vault 写入门禁与生产权限未改变。版本不含官方 SVG A/B 结论，也不承诺全部字体、bound text 和粗糙曲线达到官方像素一致；状态严格 CODE_DONE / TEST_NOT_RUN，待 Run 证明。
+
+
+## 2026-10-24 · F03 原写入后回执丢失的进程窗口待验
+
+已识别当前 Native `testF03FileWrittenButReceiptMissingColdStartReconciliation` 只覆盖注入后的仓储状态与回读逻辑，并未真实启动后强杀 App。为补齐既有 F03，DEBUG-only 故障点设在 `ImpressDuplexApprovalController.execute` 协调写入成功与 `saveProposal` 之间，限定完全合成隔离 QA Vault，连接 `testF03ProcessDeathAfterQAWriteReconcilesViaVisibleUI` 连续人工 UI 流程与冷启只读核查。严格按新集成 SHA 的真实 XCUITest 判定 TEST_PASS；代码已施工但提交时仍为 CODE_DONE / TEST_NOT_RUN，完整 F03 和其它故障矩阵不自动闭账。生产 `ImVaultGuardedWrite.productionWriteEnabled = false` 永久不变。
