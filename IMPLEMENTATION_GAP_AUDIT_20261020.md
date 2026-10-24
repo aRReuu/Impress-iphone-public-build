@@ -209,3 +209,9 @@ G1实际UI与历史功能，G2复杂格式和选材，G3双向闭环，G4同SHA�
 ## 2026-10-24 · F03 原写入后回执丢失的进程窗口待验
 
 已识别当前 Native `testF03FileWrittenButReceiptMissingColdStartReconciliation` 只覆盖注入后的仓储状态与回读逻辑，并未真实启动后强杀 App。为补齐既有 F03，DEBUG-only 故障点设在 `ImpressDuplexApprovalController.execute` 协调写入成功与 `saveProposal` 之间，限定完全合成隔离 QA Vault，连接 `testF03ProcessDeathAfterQAWriteReconcilesViaVisibleUI` 连续人工 UI 流程与冷启只读核查。严格按新集成 SHA 的真实 XCUITest 判定 TEST_PASS；代码已施工但提交时仍为 CODE_DONE / TEST_NOT_RUN，完整 F03 和其它故障矩阵不自动闭账。生产 `ImVaultGuardedWrite.productionWriteEnabled = false` 永久不变。
+
+## 2026-10-24 · F04 真实 WCDB 内容提交/Chat 回执丢失窗口
+
+现有 Native F04 只验证可模拟的中断状态核对，没有由 XCUITest 真正杀死应用。追加严格 `#if DEBUG` + `ImpressV11UITestFixture.enabled` + 合成 Vault 来源 ID + 精确 launch argument 的故障点：当原卡内容 CAS 事务已经成功，但 Chat 提案回执尚未落盘时真实 SIGKILL。UI 启动后必须保留 durable `.applying`，仅用现有 `ImDuplexInterruptedRecovery.cardStatus` 比对卡 ID/内容版本/原新字段，并将实际事实记录为 applied，**绝不调用第二次更新或评分**。此增量施工后仍需实际新 SHA XCUITest 才能记 TEST_PASS；F04 实设备中断/并发窗口与所有 F01～13 总体要求仍未闭账。
+
+**F11/F04 UI safety adjustment:** The approval screen now disables the note-target switch when the exact private ApprovedDraft is absent or the byte-faithful Diff is incomplete, not merely the final confirmation button. An independently reviewed card target remains eligible. Native regression extends the existing F11 test; F04 UI test also asserts the missing note-target is disabled. New tests remain TEST_NOT_RUN until the exact final CI.

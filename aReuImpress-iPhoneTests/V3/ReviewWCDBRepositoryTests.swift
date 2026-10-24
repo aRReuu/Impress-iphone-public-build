@@ -341,6 +341,11 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
             $0 as? UIButton
         }.first(where: { $0.accessibilityIdentifier == "impress.duplex.confirm" }))
         XCTAssertFalse(confirm.isEnabled)
+        let noteToggle = try XCTUnwrap(allSubviews(page.view)
+            .compactMap { $0 as? UISwitch }
+            .first(where: { $0.accessibilityIdentifier == "impress.duplex.select-note" }))
+        XCTAssertFalse(noteToggle.isEnabled,
+            "Missing approved source bytes must not expose an enabled note target")
         XCTAssertNil(try ImVaultPrivateStore.approvedDraft(identity: identity,
             baseDigest: proposal.noteBaseDigest,
             editedDigest: proposal.noteEditedDigest))

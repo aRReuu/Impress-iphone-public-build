@@ -3096,7 +3096,10 @@ final class ImpressDuplexApprovalController: UIViewController {
             pieces.append("\n" + V3L("卡片回执：") + receipt)
         }
         preview.text = pieces.joined(separator: "\n")
-        noteToggle.isEnabled = proposal.noteIdentity != nil &&
+        // A source identity alone is not an approved editable draft.
+        // Invalid or missing private bytes must disable the note control,
+        // while an independently reviewed card may remain approvable.
+        noteToggle.isEnabled = proposal.noteIdentity != nil && notePreviewValid &&
             ![.applying, .applied, .undoing, .reverted].contains(proposal.state.noteStatus)
         cardToggle.isEnabled = proposal.cardID != nil &&
             ![.applying, .applied, .undoing, .reverted].contains(proposal.state.cardStatus)
@@ -3292,6 +3295,21 @@ final class ImpressDuplexApprovalController: UIViewController {
                             imageData: card.imageData, sourceNotePath: card.sourceNotePath),
                         expectedRevision: queue.revision,
                         expectedContentRevision: revision, origin: .approvedAI)
+                    #if DEBUG
+                    // F04: on a synthetic source-backed card only, deliberately
+                    // terminate after the real WCDB content transaction and
+                    // before durable Chat approval receipt. Never injected for
+                    // a real user card or in a Release build.
+                    if ImpressV11UITestFixture.enabled,
+                       ProcessInfo.processInfo.arguments.contains(
+                           "-ImpressV11FaultF04AfterCardCommit"),
+                       let link = card.sourceNotePath,
+                       let sourceID = try? ImpressBatchSourceKey.decode(link),
+                       sourceID.vaultID == ImpressV11UITestFixture.vaultID {
+                        NSLog("IMPRESS_FAULT_F04_CARD_COMMITTED_RECEIPT_UNSAVED")
+                        _ = Darwin.kill(Darwin.getpid(), SIGKILL)
+                    }
+                    #endif
                     proposal.state.cardStatus = .applied
                     proposal.cardReceipt = V3L("原卡已按确认内容更新；cardID 与 FSRS 历史保留。")
                 }

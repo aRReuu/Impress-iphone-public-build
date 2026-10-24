@@ -408,3 +408,9 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 ## 2026-10-24 · F03 真实进程中断注入：源码已集成，等待新 SHA CI
 
 `ImpressV11NavigationUITests.testF03ProcessDeathAfterQAWriteReconcilesViaVisibleUI` 是计划中的**真实进程级 XCUITest**：从合成已授权 Vault → UI 生成卡片 → Reveal → Chat → 独立笔记局部 Diff → 人工确认 → Debug 独立 QA 文件协调写入成功，立即在回执持久化前通过仅 synthetic fixture 生效的 SIGKILL 中断 App → 同一真实数据库/QA Vault 重启 → 从原卡返回 Chat → 打开原提案的「核查中断」，比对实际文件 SHA 再将其状态标为已执行，而绝不重放 writer。该注入只在 `#if DEBUG`、`ImpressV11UITestFixture.enabled`、真实 QA 文件获许可、显式 `-ImpressV11FaultF03AfterNoteCommit` 同时满足时执行。无真实用户资料/收费请求/正式 Vault 写入。本批提交的实现状态为 **CODE_DONE / TEST_NOT_RUN**，只有在对应集成 SHA 的实际 XCUITest 成功后才能记为 UI TEST_PASS；Native 单测不代替进程级测试。其余 F01～13 UI/设备故障仍独立追踪。
+
+## 2026-10-24 · F04 真实进程层故障候选（CODE_DONE / TEST_NOT_RUN）
+
+继 F03 独立 QA 文件回执中断后，增加 `testF04ProcessDeathAfterCardCommitReconcilesWithoutSecondVersion`：通过真实 UI 在合成 Vault 生成原卡、完成 AI 回复、人工采纳答案建议，只选择原卡、逐项核对并批准；DEBUG 且精确确认来源为本测试 Vault 时，WCDB `updateManagedCard` 成功后、Chat 回执保存前强杀进程。重启保留同一数据，打开原 Chat 提案只读核查现有 cardID、内容版本与批准版本一致，禁止第二次编辑及 FSRS 评分。源笔记无修改、旧会话可恢复。属于**准备提交的代码/测试**，绝不把尚未执行的 Run 记为 UI PASS。完整 F01～13 及真实设备验收另计；生产 Vault 禁写、不提前打包。
+
+**F11×F04 target guard:** `testF11MissingApprovedDraftDisablesNoteCommitFromApprovalUI` now asserts an invalid/missing approved source disables the actual note UISwitch (not only Confirm), while F04's independent card pathway remains available. Exact-SHA Native/UI evidence is required; test assertion was strengthened, not deleted.
