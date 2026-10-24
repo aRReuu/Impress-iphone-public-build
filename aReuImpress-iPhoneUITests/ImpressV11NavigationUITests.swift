@@ -1540,6 +1540,25 @@ final class ImpressV11NavigationUITests: XCTestCase {
         approve.tap()
         let finalConsent = app.alerts["确认这两个目标的所选修改？"]
         XCTAssertTrue(finalConsent.waitForExistence(timeout: 12))
+        // F05 real UI: pending human consent must close the tap race before
+        // any note or card transaction. Cancelling must restore eligibility
+        // without leaving either target in an applied/in-flight state.
+        XCTAssertFalse(approve.isEnabled,
+            "A visible first consent must disable a duplicate confirmation")
+        XCTAssertEqual(app.alerts.matching(
+            identifier: "确认这两个目标的所选修改？").count, 1,
+            "Rapid or repeated approval must never stack consent sheets")
+        finalConsent.buttons["取消"].tap()
+        let consentCancelled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "enabled == true"), object: approve)
+        XCTAssertEqual(XCTWaiter.wait(for: [consentCancelled], timeout: 10), .completed,
+            "Cancelling F05 consent must restore approval without writing")
+        XCTAssertTrue(noteToggle.isEnabled && cardToggle.isEnabled,
+            "No note or original-card state may be consumed by a cancelled dialog")
+        approve.tap()
+        XCTAssertTrue(finalConsent.waitForExistence(timeout: 12))
+        XCTAssertFalse(approve.isEnabled,
+            "The renewed F05 consent must also prevent duplicate submissions")
         finalConsent.buttons["确认执行"].tap()
         let applied = app.alerts["所选修改已处理"]
         XCTAssertTrue(applied.waitForExistence(timeout: 30),
@@ -1547,6 +1566,14 @@ final class ImpressV11NavigationUITests: XCTestCase {
         applied.buttons["确定"].tap()
         let receipt = String(describing: fullDiff.value ?? "")
         XCTAssertTrue(receipt.contains("applied"))
+        // F05 post-commit: both targets are now consumed. They must remain
+        // disabled rather than permitting a second CAS or a second consent.
+        XCTAssertFalse(approve.isEnabled,
+            "An already-applied proposal cannot be submitted a second time")
+        XCTAssertFalse(noteToggle.isEnabled,
+            "The approved Markdown target must never be offered again")
+        XCTAssertFalse(cardToggle.isEnabled,
+            "The committed card revision must never be offered again")
         // Keep the actual inverse-review route available, without silently
         // undoing a user-approved write or conflating an offer with an undo.
         let safeUndo = app.navigationBars.buttons["安全撤销"]
