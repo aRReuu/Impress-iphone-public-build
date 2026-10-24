@@ -422,3 +422,7 @@ Run [#39648988015](https://github.com/aRReuu/Impress-iphone-public-build/actions
 ## 2026-10-24 · F06 笔记原字节逆向进程中断候选（CODE_DONE / TEST_NOT_RUN）
 
 继 F06 原卡逆向 SIGKILL 候选之后，新增原笔记逆向合成 QA Vault 进程级测试 `testF06ProcessDeathAfterNoteUndoReconcilesExactSourceBytes`：真实 UI 选来源 → 人工审核独立笔记 Diff → QA 写入回执 → 通过「安全撤销」审核逆向 Diff → 明确确认 → 原文件字节已由 guarded QA writer 写回之后/Chat `.undoing` 回执持久化之前以 DEBUG synthetic-only 精确开关强杀 → 冷启同一源和 Chat → 禁止重复撤销与正向写回 → UI 只读核实文件真实 SHA/批准快照后记 `reverted`，保留 XCUITest 截图。代码故障点额外要求 `qaCopy`、测试 Fixture 开启及 Vault ID 精确匹配，无正式 Vault 权限扩展。此处仅候选，尚未发布/测试；不宣称 F06 完整验收或最终 IPA 门禁通过。
+
+## 2026-10-24 · F05 双击确认的首触达 UI 门禁（候选，NOT_RUN）
+
+审计发现原 `ImpressDuplexApprovalController.confirmChanges` 在首次弹出“确认这两个目标的所选修改？”时尚未设置 `committing`，极快重复点击可能竞争创建多份确认窗口，即使后端 CAS 最终拒绝第二次执行。增加独立 `executionConsentPending`，从首触达至取消/最终执行完成始终禁重复许可和确认按钮，取消恢复可操作性，持久化 CAS 保留。原生回归 `testF05RapidConfirmationGatesSecondConsentBeforeAnyWrite` 通过真实 UIKit window 的连续 sendActions 验证仅一个批准窗口且用户最终确认前零存储写入；仍需完整 XCUITest 重复确认和异步竞争/幂等证据，不能据此宣称 F05 全部通过。该修复仅在后续精确 SHA CI 成功后可标 TEST_PASS；生产 Vault 门禁保持关闭。

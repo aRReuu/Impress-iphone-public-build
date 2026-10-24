@@ -352,6 +352,52 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 
+    /// F05 first-tap gate: a rapid second tap must not enqueue a second
+    /// authorization sheet or call the durable proposal writer. The actual
+    /// card CAS and FSRS isolation remain guarded by repository tests.
+    @MainActor
+    func testF05RapidConfirmationGatesSecondConsentBeforeAnyWrite() throws {
+        let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),
+            calculator: FSRS6ReviewCalculator())
+        let proposal = WCDBV3DuplexProposal(
+            sourceMessageID: UUID(), noteIdentity: nil,
+            noteBaseDigest: nil, noteEditedDigest: nil,
+            cardID: UUID(), cardReviewRevision: 0, cardContentRevision: 0,
+            cardBaseQuestion: "Before", cardBaseAnswer: "Original",
+            cardEditedQuestion: "After", cardEditedAnswer: "Reviewed",
+            state: ImDuplexApprovalState(noteSelected: false, cardSelected: true))
+        let page = ImpressDuplexApprovalController(
+            repository: repo, proposal: proposal, saveProposal: { _ in
+                XCTFail("No persistent mutation before final human confirmation")
+                return false
+            })
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = UINavigationController(rootViewController: page)
+        window.makeKeyAndVisible()
+        defer {
+            page.dismiss(animated: false)
+            window.isHidden = true
+        }
+        page.loadViewIfNeeded()
+        let confirm = try XCTUnwrap(allSubviews(page.view).compactMap {
+            $0 as? UIButton
+        }.first(where: { $0.accessibilityIdentifier == "impress.duplex.confirm" }))
+        XCTAssertTrue(confirm.isEnabled)
+        confirm.sendActions(for: .touchUpInside)
+        XCTAssertFalse(confirm.isEnabled,
+            "The first consent request must immediately gate all duplicate taps")
+        let firstSheet = try XCTUnwrap(page.presentedViewController as? UIAlertController)
+        XCTAssertEqual(firstSheet.title, V3L("确认这两个目标的所选修改？"))
+        confirm.sendActions(for: .touchUpInside)
+        XCTAssertFalse(confirm.isEnabled)
+        XCTAssertTrue(page.presentedViewController === firstSheet,
+            "A second tap must never replace or duplicate pending consent")
+        XCTAssertEqual(firstSheet.actions.filter {
+            $0.title == V3L("确认执行")
+        }.count, 1)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
     @MainActor
     func testF06InterruptedApprovalBlocksDiscardAndForwardConfirmation() throws {
         let repo = try ReviewWCDBRepository(databasePath: temporaryPath(),

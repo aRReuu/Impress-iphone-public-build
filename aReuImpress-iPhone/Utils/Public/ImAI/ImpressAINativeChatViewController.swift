@@ -2922,6 +2922,10 @@ final class ImpressDuplexApprovalController: UIViewController {
     private var discardBarItem: UIBarButtonItem?
     private var notePreviewValid = false
     private var committing = false
+    // F05: a confirmation alert is an in-flight authorization, not an
+    // opportunity to present multiple dialogs and schedule competing writes.
+    // Keep the UI gated from the first tap through persisted execution.
+    private var executionConsentPending = false
 
     init(repository: ReviewWCDBRepository, proposal: WCDBV3DuplexProposal,
          saveProposal: @escaping @MainActor (WCDBV3DuplexProposal) async -> Bool) {
@@ -3126,7 +3130,7 @@ final class ImpressDuplexApprovalController: UIViewController {
     }
 
     @objc private func updateConfirmation() {
-        confirm.isEnabled = !committing &&
+        confirm.isEnabled = !committing && !executionConsentPending &&
             proposal.state.noteStatus != .applying &&
             proposal.state.cardStatus != .applying &&
             !proposal.state.needsNoteUndo && !proposal.state.needsCardUndo &&
@@ -3135,7 +3139,7 @@ final class ImpressDuplexApprovalController: UIViewController {
     }
 
     @objc private func confirmChanges() {
-        guard !committing,
+        guard !committing, !executionConsentPending, confirm.isEnabled,
               proposal.state.noteStatus != .applying,
               proposal.state.cardStatus != .applying else { return }
         let noteChosen = (noteToggle.isOn && notePreviewValid) ||
@@ -3143,6 +3147,10 @@ final class ImpressDuplexApprovalController: UIViewController {
         let cardChosen = cardToggle.isOn ||
             (proposal.state.cardSelected && proposal.state.cardStatus == .applied)
         guard noteChosen || cardChosen else { return }
+        // Gate repeat taps before UIKit begins presenting the consent sheet.
+        // The saved proposal CAS remains the independent durable safeguard.
+        executionConsentPending = true
+        updateConfirmation()
         // The two selection bits belong to this exact saved proposal, not a
         // mutable UI draft. A new material revision needs a NEW proposal.
         var selected = proposal
@@ -3157,11 +3165,19 @@ final class ImpressDuplexApprovalController: UIViewController {
             message: targets + "\n\n" +
                 V3L("来源冲突时停止覆盖；可能部分成功。正式 Vault 写入仍锁定，只有独立 Debug QA 副本获授权后能实际修改文件。"),
             preferredStyle: .alert)
-        consent.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        consent.addAction(UIAlertAction(title: V3L("取消"), style: .cancel) {
+            [weak self] _ in
+            self?.executionConsentPending = false
+            self?.updateConfirmation()
+        })
         consent.addAction(UIAlertAction(title: V3L("确认执行"), style: .destructive) {
             [weak self] _ in
             guard let self else { return }
-            Task { await self.execute(selected) }
+            Task {
+                await self.execute(selected)
+                self.executionConsentPending = false
+                self.updateConfirmation()
+            }
         })
         present(consent, animated: true)
     }
