@@ -313,7 +313,11 @@ final class ImpressChatProductionTranscript: UIView,
         var snapshot = previous
         if snapshot.sectionIdentifiers.isEmpty { snapshot.appendSections([0]) }
         if identifiers == publishedIDs {
-            if changed.isEmpty && !refreshAll && requestedFocus == nil { return }
+            // Even an initially empty conversation needs its first section
+            // committed. Otherwise the no-op guard skips the first snapshot
+            // and the collection permanently reports zero sections.
+            if changed.isEmpty && !refreshAll && requestedFocus == nil &&
+                !previous.sectionIdentifiers.isEmpty { return }
             if !newKinds.isEmpty { snapshot.reloadItems(newKinds) }
             let reconfigured = refreshAll
                 ? identifiers.filter { !changedKinds.contains($0) } : ordinaryChanges

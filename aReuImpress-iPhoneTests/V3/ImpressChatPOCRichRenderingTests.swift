@@ -280,6 +280,27 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
         }
     }
 
+    func testProductionTranscriptEmptyHistoryCommitsInitialSection() throws {
+        // Regression: an empty first update must still install the section.
+        // This is a real UIKit/Diffable transaction, not a parser-only check.
+        let viewport = ImpressChatProductionTranscript(
+            frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        let window = UIWindow(frame: viewport.bounds)
+        let root = UIViewController()
+        window.rootViewController = root
+        root.view.addSubview(viewport)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        let collection = try XCTUnwrap(
+            descendants(of: viewport, as: UICollectionView.self).first)
+        viewport.update([])
+        let applied = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            collection.numberOfSections == 1
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [applied], timeout: 8), .completed)
+        XCTAssertEqual(collection.numberOfItems(inSection: 0), 0)
+    }
+
     func testProductionTranscriptScaleLogsActualSimulatorLoadTime() throws {
         // Genuine UIKit/Diffable transactions, not parser counters. Values
         // are measured in the CI simulator; no iPhone13 FPS claim follows.
