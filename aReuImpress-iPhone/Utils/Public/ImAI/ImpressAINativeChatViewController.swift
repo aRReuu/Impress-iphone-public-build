@@ -227,6 +227,9 @@ final class ImpressAINativeChatViewController: UIViewController,
     private var acknowledgedBoundedContext = false
     private var restoring = false
     private var sending = false
+    /// An on-screen consent sheet is not yet a network request. Lock before
+    /// presenting it so rapid Send callbacks cannot queue extra approvals.
+    private var sendConsentPending = false
     private var saveChain: Task<Void, Never>?
     private var requestTask: Task<Void, Never>?
     private var draftDebounce: Task<Void, Never>?
@@ -761,8 +764,8 @@ final class ImpressAINativeChatViewController: UIViewController,
         updateComposerHeight()
         updateAttachmentPresentation()
         let content = textView.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        sendButton.isEnabled = sending || (!restoring && !content.isEmpty &&
-            content.utf8.count <= 12_000)
+        sendButton.isEnabled = sending || (!restoring && !sendConsentPending &&
+            !content.isEmpty && content.utf8.count <= 12_000)
         sendButton.configuration?.image = UIImage(systemName: sending ? "stop.fill" : "arrow.up")
         sendButton.accessibilityLabel = sending ? V3L("停止生成") : V3L("发送消息")
         guard !restoring else { return }
@@ -1367,6 +1370,18 @@ final class ImpressAINativeChatViewController: UIViewController,
         }
     }
 
+    private func presentSendConsent(_ sheet: UIAlertController) {
+        guard !sendConsentPending else { return }
+        sendConsentPending = true
+        sendButton.isEnabled = false
+        present(sheet, animated: true)
+    }
+
+    private func resolveSendConsent() {
+        sendConsentPending = false
+        textViewDidChange(messageInput)
+    }
+
     @objc private func submitOrStopMessage() {
         if sending {
             // Cancels the in-flight Task/URLSession request; never executes a
@@ -1380,20 +1395,24 @@ final class ImpressAINativeChatViewController: UIViewController,
     @objc private func submitMessage() {
         let text = messageInput.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf8.count <= 12_000,
-              !sending, !restoring else { return }
+              !sending, !restoring, !sendConsentPending else { return }
         let omitted = ImpressChatWindowPolicy.omittedCompletedCount(in: history)
         if omitted > 0 && !acknowledgedBoundedContext {
             let alert = UIAlertController(title: V3L("确认有限对话上下文"),
                 message: V3L("本次仅向云端模型发送最近 16 条已完成对话及当前输入；更早的消息仍完整保存在本机，不代表模型已经读过。") +
                     "\n" + V3L("本次未传送的早期消息条数：") + String(omitted),
                 preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel) {
+                [weak self] _ in self?.resolveSendConsent()
+            })
             alert.addAction(UIAlertAction(title: V3L("确认此会话的发送范围"),
                 style: .default) { [weak self] _ in
-                self?.acknowledgedBoundedContext = true
-                self?.submitMessage()
+                guard let self else { return }
+                self.resolveSendConsent()
+                self.acknowledgedBoundedContext = true
+                self.submitMessage()
             })
-            present(alert, animated: true)
+            presentSendConsent(alert)
             return
         }
         #if DEBUG
@@ -1432,13 +1451,17 @@ final class ImpressAINativeChatViewController: UIViewController,
             }
             let alert = UIAlertController(title: V3L("无法使用当前对话模型"),
                 message: explanation, preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel) {
+                [weak self] _ in self?.resolveSendConsent()
+            })
             alert.addAction(UIAlertAction(title: V3L("打开 AI 服务"),
                 style: .default) { [weak self] _ in
-                    self?.navigationController?.pushViewController(
+                    guard let self else { return }
+                    self.resolveSendConsent()
+                    self.navigationController?.pushViewController(
                         ImpressAISettingsViewController(), animated: true)
                 })
-            present(alert, animated: true)
+            presentSendConsent(alert)
             return
         }
 
@@ -1448,12 +1471,16 @@ final class ImpressAINativeChatViewController: UIViewController,
                 title: V3L("切换 AI 服务商"),
                 message: V3L("此次请求会把近期对话材料发送给新服务商，是否同意？"),
                 preferredStyle: .alert)
-            warning.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            warning.addAction(UIAlertAction(title: V3L("取消"), style: .cancel) {
+                [weak self] _ in self?.resolveSendConsent()
+            })
             warning.addAction(UIAlertAction(title: V3L("同意并发送"),
                                             style: .default) { [weak self] _ in
-                self?.chooseSourceContext(text, route: route)
+                guard let self else { return }
+                self.resolveSendConsent()
+                self.chooseSourceContext(text, route: route)
             })
-            present(warning, animated: true)
+            presentSendConsent(warning)
             return
         }
         chooseSourceContext(text, route: route)
@@ -1469,10 +1496,13 @@ final class ImpressAINativeChatViewController: UIViewController,
                     ? V3L("只有确认后，才会发送当前卡片的问题与答案。")
                     : V3L("只有确认后，才会发送本次明确载入的笔记材料。过长笔记不会自动发送全文。"),
                 preferredStyle: .alert)
-            confirm.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            confirm.addAction(UIAlertAction(title: V3L("取消"), style: .cancel) {
+                [weak self] _ in self?.resolveSendConsent()
+            })
             confirm.addAction(UIAlertAction(title: V3L("仅发送输入内容"),
                                             style: .default) { [weak self] _ in
                 guard let self else { return }
+                self.resolveSendConsent()
                 self.contextChoiceMade = true
                 self.contextConsentGranted = false
                 self.includeCardContext = false
@@ -1483,6 +1513,7 @@ final class ImpressAINativeChatViewController: UIViewController,
                 ? V3L("附带当前卡片") : V3L("附带本次笔记材料"),
                                             style: .default) { [weak self] _ in
                 guard let self else { return }
+                self.resolveSendConsent()
                 if let key = self.sourceIdentity {
                     if self.noteIdentity != nil && self.sourceAnswer == nil &&
                        self.contextReferences.isEmpty {
@@ -1512,14 +1543,14 @@ final class ImpressAINativeChatViewController: UIViewController,
                 self.includeCardContext = true
                 self.performSend(text, route: route)
             })
-            present(confirm, animated: true)
+            presentSendConsent(confirm)
         } else {
             performSend(text, route: route)
         }
     }
 
     private func performSend(_ message: String, route: ImpressAIResolvedRoute) {
-        guard !sending, !restoring else { return }
+        guard !sending, !restoring, !sendConsentPending else { return }
         if !localAttachments.items.isEmpty && !acknowledgedTextOnlyPreviews &&
            approvedImagesForSend == nil {
             let available = localAttachments.imagePayloadsForExplicitSend()
@@ -1534,10 +1565,13 @@ final class ImpressAINativeChatViewController: UIViewController,
                       "\n" + V3L("图片只在本次请求发送，不加入以后自动上传的上下文。")
                     : V3L("当前选择包含无法传输的文件，或当前模型没有明确启用图片能力。未经支持和批准的材料不会上传。"),
                 preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+            alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel) {
+                [weak self] _ in self?.resolveSendConsent()
+            })
             alert.addAction(UIAlertAction(title: V3L("仅发送文字"),
                 style: .default) { [weak self] _ in
                     guard let self else { return }
+                    self.resolveSendConsent()
                     self.acknowledgedTextOnlyPreviews = true
                     self.performSend(message, route: route)
                 })
@@ -1547,11 +1581,12 @@ final class ImpressAINativeChatViewController: UIViewController,
                         V3L(" 张图片"),
                     style: .default) { [weak self] _ in
                     guard let self else { return }
+                    self.resolveSendConsent()
                     self.approvedImagesForSend = available
                     self.performSend(message, route: route)
                 })
             }
-            present(alert, animated: true)
+            presentSendConsent(alert)
             return
         }
         let authorizedImages = approvedImagesForSend ?? []

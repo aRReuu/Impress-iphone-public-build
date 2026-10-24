@@ -4372,6 +4372,85 @@ final class ImpressV3BatchPreviewIntegrationTests: XCTestCase {
 // must not create API keys, send network requests or alter the real Vault.
 @MainActor
 final class ImpressAICustomAPIUITests: XCTestCase {
+    /// CHAT-05 / SAFE-08: consent is a separate pre-network state. Two
+    /// rapid Send callbacks cannot create two competing remote scope prompts.
+    @MainActor
+    func testNativeChatRapidSendPresentsOnlyOneBoundedContextConsent() async throws {
+        let priorIntro = UserDefaults.standard.object(
+            forKey: "ImpressV11ChatIntroductionSeen")
+        UserDefaults.standard.set(true, forKey: "ImpressV11ChatIntroductionSeen")
+        defer {
+            if let priorIntro {
+                UserDefaults.standard.set(priorIntro,
+                    forKey: "ImpressV11ChatIntroductionSeen")
+            } else {
+                UserDefaults.standard.removeObject(
+                    forKey: "ImpressV11ChatIntroductionSeen")
+            }
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "impress-chat-consent-" + UUID().uuidString)
+        let repo = try ReviewWCDBRepository(
+            databasePath: root.path, calculator: FSRS6ReviewCalculator())
+        let source = "chat:consent-fixture:" + UUID().uuidString
+        var session = WCDBV3ChatSession(sourceIdentity: source)
+        session.messages = (0..<18).map { index in
+            WCDBV3ChatMessage(role: .user,
+                text: "Completed local history item " + String(index),
+                status: .completed)
+        }
+        try await repo.saveChatSession(session, expectedRevision: nil)
+        XCTAssertEqual(ImpressChatWindowPolicy.omittedCompletedCount(
+            in: session.messages), 2)
+        let chat = ImpressAINativeChatViewController(
+            repository: repo, sourceKey: source)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = UINavigationController(rootViewController: chat)
+        window.makeKeyAndVisible()
+        defer {
+            chat.dismiss(animated: false)
+            window.isHidden = true
+        }
+        chat.loadViewIfNeeded()
+        func descendants(_ view: UIView) -> [UIView] {
+            [view] + view.subviews.flatMap { descendants($0) }
+        }
+        let collection = try XCTUnwrap(descendants(chat.view)
+            .compactMap { $0 as? UICollectionView }.first)
+        for _ in 0..<100 {
+            if collection.numberOfSections > 0,
+               collection.numberOfItems(inSection: 0) >= 18 { break }
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        XCTAssertGreaterThanOrEqual(collection.numberOfItems(inSection: 0), 18,
+            "The real stored history must load before triggering the consent gate")
+        let input = try XCTUnwrap(descendants(chat.view)
+            .compactMap { $0 as? UITextView }.first {
+                $0.accessibilityIdentifier == "impress.ai.chat.input"
+            })
+        input.text = "Synthetic consent race; do not contact any provider."
+        chat.textViewDidChange(input)
+        let send = try XCTUnwrap(descendants(chat.view)
+            .compactMap { $0 as? UIButton }.first {
+                $0.accessibilityIdentifier == "impress.ai.chat.send"
+            })
+        XCTAssertTrue(send.isEnabled)
+        send.sendActions(for: .touchUpInside)
+        XCTAssertFalse(send.isEnabled,
+            "The first tap must synchronously disable Send while consent is pending")
+        let alert = try XCTUnwrap(chat.presentedViewController as? UIAlertController)
+        XCTAssertEqual(alert.title, V3L("确认有限对话上下文"))
+        // Force the callback despite disabled UIKit controls. The controller's
+        // internal gate must protect against stale/double-dispatched events.
+        XCTAssertTrue(UIApplication.shared.sendAction(
+            NSSelectorFromString("submitOrStopMessage"),
+            to: chat, from: send, for: nil))
+        XCTAssertTrue(chat.presentedViewController === alert)
+        XCTAssertEqual(alert.actions.count, 2)
+        XCTAssertFalse(send.isEnabled)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
     func testNativeChatHasPrivacyDisclosureAndSendIsInitiallyDisabled() {
         let conversation = ImpressAINativeChatViewController()
         conversation.loadViewIfNeeded()

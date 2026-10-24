@@ -433,3 +433,8 @@ F05 逆向补证（CODE_DONE / TEST_NOT_RUN）：`ImpressDuplexUndoReviewControl
 ## 2026-10-24 · ACCEPT-01 问题候选池重复导入授权门禁（新候选，CI 待验证）
 
 审计发现候选池只有在最终「确认加入」之后才设置 `committing`，首次「加入 N 张」点击到系统确认弹窗出现期间没有锁定第二次点击，与 F05 同类，可排队多份用户授权并使成功后的旧弹窗继续尝试导入。此批直接修复现有 `ImpressAIQuestionPoolViewController`：在首触达且选材合法后同步设置 `importConsentPending` 并禁用导航按钮；取消恢复，确认后立即进入已有 `committing`/来源版本核查/WCDB 事务门禁，绝不绕过 CAS 或复用旧授权。增加 Native UIKit 的两次 selector 调用单弹窗断言与现有真实 XCUITest 候选池的「取消→可再次确认→正常导入」断言。**CODE_DONE / NATIVE_AND_UI_CI_NOT_RUN**，须在发布后的精确 SHA 和日志确认；原 ACCEPT-01、完整18步、F01～F13 等门禁未闭账。正式 Vault 写入禁令不变。
+
+
+## 2026-10-24 · CHAT-05 生产发送前多级许可竞争（候选，TEST_NOT_RUN）
+
+源码审计发现正式 `ImpressAINativeChatViewController` 在点击发送到首个上下文确认、跨 Provider 同意、来源范围确认、附件本次上传同意之间，`sending` 尚未置位；快速二次点击 Send 可以尝试重叠授权弹窗。修正将“待确认许可”与“网络正在执行”明确分离：`sendConsentPending` 首触达同步上锁并禁用发送按钮，覆盖有限上下文、缺模型引导、切 Provider、材料选择和图片/仅文字授权；取消恢复草稿/按钮，实际同意后仍执行原权限、来源 SHA、WCDB 和 URLSession 门禁，停止按钮仅用于真正发送中的请求。新增真实 Native UIKit 窗口回归 `testNativeChatRapidSendPresentsOnlyOneBoundedContextConsent`，通过 18 条本地已完成消息触发真实历史裁剪许可，用连续按钮和直接 selector 验证仅一个确认弹窗且尚未开始 HTTP。代码状态为 PREPARED / CI_NOT_RUN；不宣称所有 Provider、多模态、18 步与设备验收完成，不调用任何收费模型、不改正式 Vault 写门禁。
