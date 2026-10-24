@@ -68,3 +68,7 @@
 原生 `ImpressCalibrationLocalStore` 已是 actor、保存前检查历史 CLOSED 状态、支持同值幂等、拒绝不同日结修改；`ImpressCalibrationIntegrationTests` 明确包含 `testClosedDayRejectsDifferentLedgerWritesAndPreservesDurability`、`testSimultaneousClosedDayCommitsSerializeWithoutLastWriterWins`、`testFailedDurableWriteLeavesPreviousClosedLedgerIntact`、`testCartesianRendererHasIdenticalUIKitAndWidgetImagePaths`、`testCartesianGappedMultiIsolatesAreVisibleInSixWidgetCanvases`。上述专项在 d265 / Run39984006889 的 **219/219 Native XCTest PASS** 范围内真实执行。四项/今日 x/4、旧五项兼容与共享笛卡尔绘图原则不变。
 
 这些测试不能替代实际 SpringBoard 的六种 Widget 视觉、App Group 正式签名、跨时区提醒停推和 iPhone13 重启表现；对应 W01～W15 仍按单项 TEST_PASS/NOT_RUN/DEVICE_BLOCKED 分类。禁止因此提前生成 IPA。
+
+## 2026-10-24 · 历史 CLOSED 自动迁移保护（候选，TEST_NOT_RUN）
+
+发现现有 `checkIn(on:)` 会对**当天已经 CLOSED** 的旧版自定义/情绪记录自动执行阅读迁移，使读取结果出现未记录的阅读项，和存储层不可变历史相矛盾。最小代码修复仅允许仍为 OPEN 的旧日记录迁移，`CalibrationDayCheckIn.migratedToReading` 同样拒绝将 CLOSED 历史转换成 OPEN。新增 Portable `testReadingIDAndLegacyCustomAreDistinctAndMigratedOnlyExplicitly` 的 CLOSED 保真与 OPEN 迁移双断言、原生 `testClosedLegacyTodayRemainsClosedWhileOpenLegacyMigratesSafely` 的实际 JSON 历史回读、幂等保存、拒绝覆写和 OPEN 可迁移测试。保留老数据与今日 x/4、同源 Widget，不触及 Vault/FSRS/正式签名。此批候选提交未发布到开发分支、未启动新 CI；必须基于最终实际 SHA 的成功运行后才写 TEST_PASS。

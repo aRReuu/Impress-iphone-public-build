@@ -160,6 +160,91 @@ final class ImpressCalibrationIntegrationTests: XCTestCase {
         XCTAssertEqual(history.count, 1)
     }
 
+    /// A legacy CLOSED day remains closed even when read on the same local
+    /// date after the four-item reading migration. Its stored bytes are not
+    /// silently replaced by a new pending reading assessment.
+    func testClosedLegacyTodayRemainsClosedWhileOpenLegacyMigratesSafely() async throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cal-legacy-closed-" + UUID().uuidString,
+                                    isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder,
+                                                withIntermediateDirectories: true)
+        let today = Date()
+        let dayID = CalibrationDayCheckIn.dayID(for: today)
+        var day = try CalibrationDayCheckIn(dayID: dayID, goals: CalibrationGoals())
+        for kind in CalibrationIndicator.behaviorIndicators {
+            try day.setOutcome(.completed, for: kind)
+        }
+        try day.setMood(nil, assessed: true)
+
+        var oldDay = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(day)) as? [String: Any])
+        var tasks = try XCTUnwrap(oldDay["assessments"] as? [[String: Any]])
+        let fourth = try XCTUnwrap(tasks.firstIndex {
+            ($0["taskID"] as? String) == CalibrationIndicator.reading.rawValue
+        })
+        tasks[fourth]["taskID"] = CalibrationIndicator.custom.rawValue
+        oldDay["assessments"] = tasks
+        var oldTargets = try XCTUnwrap(oldDay["goalsSnapshot"] as? [String: Any])
+        oldTargets.removeValue(forKey: "reading")
+        oldTargets["custom"] = "曾经批准的自定义目标"
+        oldDay["goalsSnapshot"] = oldTargets
+
+        let activeGoals = CalibrationGoals(reading: "今天的新阅读目标")
+        let goalsJSON = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(activeGoals)) as? [String: Any])
+        func archive(_ entry: [String: Any]) throws -> Data {
+            try JSONSerialization.data(withJSONObject: [
+                "version": 1, "goals": goalsJSON, "days": [dayID: entry]
+            ], options: [.sortedKeys])
+        }
+
+        let storageURL = folder.appendingPathComponent("closed.json")
+        let original = try archive(oldDay)
+        try original.write(to: storageURL, options: .atomic)
+        let closedStore = ImpressCalibrationLocalStore(storageURL: storageURL)
+        let closed = try await closedStore.checkIn(on: today)
+        XCTAssertTrue(closed.isLegacyDay)
+        XCTAssertTrue(closed.isComplete,
+            "A CLOSED legacy day must never reopen as an unrecorded reading")
+        XCTAssertEqual(closed.outcome(for: .custom), .completed)
+        XCTAssertTrue(closed.pendingIndicators.isEmpty)
+        XCTAssertEqual(try closed.finalizedScore().netScore, 4)
+        XCTAssertEqual(closed.goalsSnapshot.custom, "曾经批准的自定义目标")
+
+        try await closedStore.save(closed) // Idempotent, never rewrites bytes.
+        let afterRetry = try await closedStore.archiveData()
+        XCTAssertEqual(afterRetry, original)
+        var attemptedOverwrite = closed
+        try attemptedOverwrite.setOutcome(.missed, for: .custom)
+        do {
+            try await closedStore.save(attemptedOverwrite)
+            XCTFail("No changed value may overwrite a CLOSED legacy day")
+        } catch ImpressCalibrationStoreError.closedDayImmutable {
+            // Expected.
+        }
+        let finalClosed = try await closedStore.archiveData()
+        XCTAssertEqual(finalClosed, original)
+
+        // The distinct old OPEN state is still eligible for the supported
+        // today's-day migration. Do not solve CLOSED by disabling migration.
+        var oldOpenDay = oldDay
+        oldOpenDay["moodAssessed"] = false
+        let openURL = folder.appendingPathComponent("open.json")
+        try archive(oldOpenDay).write(to: openURL, options: .atomic)
+        let openStore = ImpressCalibrationLocalStore(storageURL: openURL)
+        let migrated = try await openStore.checkIn(on: today)
+        XCTAssertFalse(migrated.isLegacyDay)
+        XCTAssertFalse(migrated.isComplete)
+        XCTAssertEqual(migrated.goalsSnapshot.reading, "今天的新阅读目标")
+        XCTAssertEqual(migrated.outcome(for: .reading), .unrecorded)
+        XCTAssertEqual(migrated.retiredCustomAssessment?.outcome, .completed)
+        try await openStore.save(migrated)
+        let persisted = try await openStore.checkIn(on: today)
+        XCTAssertEqual(persisted, migrated)
+    }
+
     func testClosedDayRejectsDifferentLedgerWritesAndPreservesDurability() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cal-closed-" + UUID().uuidString, isDirectory: true)

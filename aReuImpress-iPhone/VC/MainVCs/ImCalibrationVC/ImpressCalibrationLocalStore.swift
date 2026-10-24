@@ -55,7 +55,7 @@ actor ImpressCalibrationLocalStore {
         let dayID = CalibrationDayCheckIn.dayID(for: date, calendar: calendar)
         if let stored = state.days[dayID] {
             let todayID = CalibrationDayCheckIn.dayID(for: Date(), calendar: calendar)
-            return stored.isLegacyDay && dayID == todayID
+            return stored.isLegacyDay && !stored.isComplete && dayID == todayID
                 ? try stored.migratedToReading(goals: state.goals) : stored
         }
         return try CalibrationDayCheckIn(dayID: dayID, goals: state.goals)

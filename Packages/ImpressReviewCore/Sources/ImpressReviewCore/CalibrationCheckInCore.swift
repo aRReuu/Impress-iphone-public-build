@@ -113,7 +113,10 @@ public struct CalibrationDayCheckIn: Codable, Equatable, Sendable {
     /// Only today's legacy day may migrate; history stays on the old scheme.
     /// The former fourth assessment is archived, NEVER scored as reading.
     public func migratedToReading(goals: CalibrationGoals) throws -> Self {
-        guard isLegacyDay else { return self }
+        // A completed legacy day is durable history, even when it is today's day.
+        // Converting its retired custom outcome into an unrecorded reading
+        // would falsely reopen a CLOSED record that the store must reject.
+        guard isLegacyDay && !isComplete else { return self }
         try goals.validate()
         var result = self
         result.goalsSnapshot.reading = goals.reading

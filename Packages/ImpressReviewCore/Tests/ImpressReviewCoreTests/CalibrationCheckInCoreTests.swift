@@ -66,7 +66,20 @@ final class CalibrationCheckInCoreTests: XCTestCase {
         XCTAssertEqual(legacy.outcome(for: .custom), .completed)
         XCTAssertTrue(legacy.isComplete)
         XCTAssertEqual(try legacy.finalizedScore().netScore, 1)
-        let converted = try legacy.migratedToReading(
+        let stillClosed = try legacy.migratedToReading(
+            goals: CalibrationGoals(reading: "新阅读目标"))
+        XCTAssertEqual(stillClosed, legacy,
+            "Already CLOSED legacy assessments remain historical facts")
+
+        // An unfinished legacy day may migrate to the new fourth input.
+        // Mood was previously part of the legacy closeout gate; without an
+        // assessed mood the old day is OPEN even when its four tasks are set.
+        var unfinishedJSON = object
+        unfinishedJSON["moodAssessed"] = false
+        let unfinished = try JSONDecoder().decode(CalibrationDayCheckIn.self,
+            from: JSONSerialization.data(withJSONObject: unfinishedJSON))
+        XCTAssertFalse(unfinished.isComplete)
+        let converted = try unfinished.migratedToReading(
             goals: CalibrationGoals(reading: "新阅读目标"))
         XCTAssertFalse(converted.isLegacyDay)
         XCTAssertEqual(converted.outcome(for: .reading), .unrecorded)
