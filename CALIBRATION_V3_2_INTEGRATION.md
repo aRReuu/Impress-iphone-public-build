@@ -76,3 +76,8 @@
 ## 2026-10-24 · Widget 异常快照分数边界（候选，NOT_RUN）
 
 发现共享数据 `CalibrationWidgetSnapshot.isValid` 只验证日历/评估数，却允许不可能的巨大净分；Widget 后续直接使用这些分值绘制固定 -5/0/+5 纵轴，会产生可见图形越界。最小修复在共享快照读取门禁加入 **-5…+5 或 nil** 验证（四项 ±1，已有额外 ±1 最多一次）；合成回归增加 -6/+6/极端整数拒绝、合法两端及全部豁免 nil 通过，原先测试中的“未来日期虽然语法有效但不能渲染”改为合法边界 5 继续验证未来拦截，不降低语义断言。无网络、无新计分方案、不更改原始历史、FSRS 或生产 Vault。此批候选需精确提交 CI 后才能标记 TEST_PASS。
+
+
+## 2026-10-24 · W07 共享快照四项覆盖状态一致性修复（新 SHA 待 CI）
+
+直接审计 `CalibrationWidgetSnapshot.isValid` 发现旧 `.partial` 校验误接受 `assessedCount == 4` 且 `netScore == nil`，与同文件投影生成规则“四项明确评估就是 `.finalized`（即使全豁免无数值）”相矛盾。此处只将部分状态限定为 1～3 项，保留 `.finalized` 四项和全豁免 nil 的合法表示；损坏共享数据安全拒绝，不自动写回账本。新 Core 回归 `testWidgetSharedSnapshotRejectsContradictoryFourAssessedPartialState` 同时验证无图表、合法 3 项及合法 4 项两种情况。当前为 CODE_DONE / CI_PENDING，不冒充 SpringBoard 或设备 PASS；生产 Vault 门禁不变。

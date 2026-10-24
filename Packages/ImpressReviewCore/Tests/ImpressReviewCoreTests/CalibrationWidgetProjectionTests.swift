@@ -374,4 +374,29 @@ final class CalibrationWidgetProjectionTests: XCTestCase {
     }
 
 
+    func testWidgetSharedSnapshotRejectsContradictoryFourAssessedPartialState() throws {
+        let now = date(2026, 10, 21)
+        let base = CalibrationWidgetProjection.snapshot(
+            from: [], at: now, calendar: calendar)
+        func make(_ count: Int, state: CalibrationWidgetDayState,
+                  score: Int? = nil) -> CalibrationWidgetSnapshot {
+            CalibrationWidgetSnapshot(
+                schemaVersion: base.schemaVersion, generatedAt: base.generatedAt,
+                timeZoneID: base.timeZoneID, calendarID: base.calendarID,
+                days: [CalibrationWidgetDay(
+                    dayID: "2026-10-21", assessedCount: count,
+                    state: state, netScore: score)])
+        }
+        let contradictory = make(4, state: .partial)
+        XCTAssertFalse(contradictory.isValid,
+            "Four assessed behaviors cannot be partial under B-scheme coverage")
+        XCTAssertNil(CalibrationWidgetProjection.overview(
+            from: contradictory, at: now, calendar: calendar))
+        XCTAssertNil(CalibrationWidgetProjection.cartesianPlot(
+            from: contradictory, period: .week, at: now, calendar: calendar))
+        XCTAssertTrue(make(3, state: .partial).isValid)
+        XCTAssertTrue(make(4, state: .finalized).isValid)
+        XCTAssertTrue(make(4, state: .finalized, score: 0).isValid)
+    }
+
 }

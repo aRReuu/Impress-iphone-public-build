@@ -59,7 +59,7 @@ public struct CalibrationWidgetSnapshot: Codable, Equatable, Sendable {
             case .unrecorded:
                 guard day.assessedCount == 0, day.netScore == nil else { return false }
             case .partial:
-                guard (1...4).contains(day.assessedCount), day.netScore == nil else {
+                guard (1...3).contains(day.assessedCount), day.netScore == nil else {
                     return false
                 }
             case .finalized:
