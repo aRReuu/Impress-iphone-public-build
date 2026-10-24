@@ -463,14 +463,32 @@ final class ImpressChatPOCRichRenderingTests: XCTestCase {
 
         func assertReply(_ message: WCDBV3ChatMessage) throws {
             viewport.update([message])
+            // A diffable snapshot may commit while the previous reply footer
+            // remains offscreen. Assert that the *exact* stable actions row is
+            // present, then make that row visible before testing its live
+            // buttons; never mistake an unrelated reused cell for this reply.
+            let actionRowID = "actions-" + message.messageID.uuidString
             let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
                 viewport.layoutIfNeeded()
+                guard let source = collection.dataSource
+                        as? UICollectionViewDiffableDataSource<Int, String>,
+                      let index = source.indexPath(for: actionRowID),
+                      index.section < collection.numberOfSections,
+                      index.item < collection.numberOfItems(inSection: index.section)
+                else { return false }
+                if !collection.indexPathsForVisibleItems.contains(index) {
+                    collection.scrollToItem(at: index, at: .bottom, animated: false)
+                    viewport.layoutIfNeeded()
+                }
                 return collection.visibleCells.contains {
                     $0 is ImpressChatReplyActionsCell &&
                     $0.accessibilityValue == message.messageID.uuidString
                 }
             }, object: nil)
-            XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 8), .completed)
+            let outcome = XCTWaiter.wait(for: [ready], timeout: 15)
+            XCTAssertEqual(outcome, .completed,
+                "Expected visible footer bound to \(actionRowID); an offscreen " +
+                "or different reply must not satisfy the Copy/More verification")
             let actions = try XCTUnwrap(collection.visibleCells.first {
                 $0 is ImpressChatReplyActionsCell &&
                 $0.accessibilityValue == message.messageID.uuidString
