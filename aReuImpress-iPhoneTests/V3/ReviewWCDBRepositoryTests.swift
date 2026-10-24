@@ -435,6 +435,41 @@ final class ReviewWCDBRepositoryTests: XCTestCase {
         XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
     }
 
+    /// A deliberate inverse should never offer two overlapping consent
+    /// sheets even if the same accessible control fires twice in one run loop.
+    @MainActor
+    func testF05RapidUndoConsentIsSingleAndHasNoPrematureSideEffects() throws {
+        let page = ImpressDuplexUndoReviewController(
+            content: "Synthetic cardID: fixed\nSource SHA-256: reviewed") {
+                XCTFail("An inverse requires a separate final user confirmation")
+                return .failure(WCDBV3ChatStorageError.conflict)
+            }
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = UINavigationController(rootViewController: page)
+        window.makeKeyAndVisible()
+        defer {
+            page.dismiss(animated: false)
+            window.isHidden = true
+        }
+        page.loadViewIfNeeded()
+        let button = try XCTUnwrap(allSubviews(page.view).compactMap {
+            $0 as? UIButton
+        }.first(where: { $0.accessibilityIdentifier == "impress.duplex.undo.confirm" }))
+        XCTAssertTrue(button.isEnabled)
+        button.sendActions(for: .touchUpInside)
+        XCTAssertFalse(button.isEnabled,
+            "The inverse review must disable a second consent immediately")
+        let single = try XCTUnwrap(page.presentedViewController as? UIAlertController)
+        XCTAssertEqual(single.title, V3L("确认撤销这个目标？"))
+        button.sendActions(for: .touchUpInside)
+        XCTAssertTrue(page.presentedViewController === single,
+            "The first and only inverse consent must remain current")
+        XCTAssertEqual(single.actions.filter {
+            $0.title == V3L("确认撤销")
+        }.count, 1)
+        XCTAssertFalse(ImVaultGuardedWrite.productionWriteEnabled)
+    }
+
     /// F06 inverse crash window: a visible controller must not let a user
     /// accidentally replay an in-flight inverse, erase its audit status or
     /// confirm a new forward write. A read-only reconciliation remains available.

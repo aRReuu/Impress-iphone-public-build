@@ -2821,6 +2821,8 @@ final class ImpressDuplexUndoReviewController: UIViewController {
     private let onConfirm: UndoAction
     private let button = UIButton(type: .system)
     private var applying = false
+    // F05: inverse confirmation is also a single outstanding human consent.
+    private var consentPending = false
 
     init(content: String, onConfirm: @escaping UndoAction) {
         self.content = content
@@ -2868,14 +2870,21 @@ final class ImpressDuplexUndoReviewController: UIViewController {
     }
 
     @objc private func askUndo() {
-        guard !applying else { return }
+        guard !applying, !consentPending else { return }
+        consentPending = true
+        button.isEnabled = false
         let alert = UIAlertController(title: V3L("确认撤销这个目标？"),
             message: V3L("撤销也会重新验证当前内容版本；若别人已合法修改，必须停止。不会删除 FSRS 历史或自动重放。"),
             preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel))
+        alert.addAction(UIAlertAction(title: V3L("取消"), style: .cancel) {
+            [weak self] _ in
+            self?.consentPending = false
+            self?.button.isEnabled = true
+        })
         alert.addAction(UIAlertAction(title: V3L("确认撤销"), style: .destructive) {
             [weak self] _ in
             guard let self else { return }
+            self.consentPending = false
             self.applying = true
             self.button.isEnabled = false
             Task {
